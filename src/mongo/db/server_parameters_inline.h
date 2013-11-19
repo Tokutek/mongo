@@ -1,6 +1,11 @@
 // server_parameters_inline.h
 
+#include <errno.h>
+#include <stdint.h>
+#include <stdlib.h>
+
 #include "mongo/util/stringutils.h"
+#include "mongo/base/units.h"
 
 namespace mongo {
 
@@ -28,6 +33,29 @@ namespace mongo {
     template<>
     inline Status ExportedServerParameter<int>::setFromString( const string& str ) {
         return set( atoi(str.c_str() ) );
+    }
+
+    template<>
+    inline Status ExportedServerParameter<uint32_t>::setFromString( const string& str ) {
+        unsigned long int val = strtoul(str.c_str(), NULL, 0);
+        if (val == ULONG_MAX) {
+            return Status(ErrorCodes::BadValue, strerror(errno));
+        }
+        return set( val );
+    }
+
+    template<>
+    inline Status ExportedServerParameter<uint64_t>::setFromString( const string& str ) {
+        unsigned long long int val = strtoull(str.c_str(), NULL, 0);
+        if (val == ULLONG_MAX) {
+            return Status(ErrorCodes::BadValue, strerror(errno));
+        }
+        return set( atoi(str.c_str() ) );
+    }
+
+    template<>
+    inline Status ExportedServerParameter<BytesQuantity<uint64_t> >::setFromString( const string& str ) {
+        return set(BytesQuantity<uint64_t>::fromString(str));
     }
 
     template<>
@@ -62,6 +90,11 @@ namespace mongo {
         vector<string> v;
         splitStringDelim( str, &v, ',' );
         return set( v );
+    }
+
+    template<>
+    inline void ExportedServerParameter<BytesQuantity<uint64_t> >::append( BSONObjBuilder& b, const string& name ) {
+        b.append( name, (long long) *_value );
     }
 
 

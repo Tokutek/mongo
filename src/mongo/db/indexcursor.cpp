@@ -220,6 +220,7 @@ namespace mongo {
         _boundsIterator->prepDive();
         _startKey = _bounds->startKey();
         _endKey = _bounds->endKey();
+        _endKeyInclusive = _bounds->endKeyInclusive();
         TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         initializeDBC();
     }
@@ -269,16 +270,6 @@ namespace mongo {
 
     bool IndexCursor::forward() const {
         return _direction > 0;
-    }
-
-    bool IndexCursor::reverseMinMaxBoundsOrder(const Ordering &ordering, const int direction) {
-        // Only the first field's direction matters, because this function is only called
-        // to possibly reverse bounds ordering with min/max key, which is single field.
-        const bool ascending = !ordering.descending(1);
-        const bool forward = direction > 0;
-        // We need to reverse the order if exactly one of the query or the index are descending.  If
-        // both are descending, the normal order is fine.
-        return ascending != forward;
     }
 
     void IndexCursor::_prelockRange(const BSONObj &startKey, const BSONObj &endKey) {
@@ -380,8 +371,8 @@ namespace mongo {
     // Until that happens, we'll only enable prefetching if we think its worth it.
     // For simple start/end key cursors, it's always worth it, because it's
     // just one call to prelock. For bounds-based cursors, it is _probably_
-    // worth it as long as the bounds vector doesn't soley contain point
-    // intervals ($in, $or with equality). Most secondary indexes have
+    // worth it as long as the bounds vector isn't prefixed by a point
+    // interval ($in, $or with equality). Most secondary indexes have
     // cardinality such that points (excluding appended PK) all fit in a
     // single basement node (64k of data, about), so prefetching wouldn't
     // have done anything. For non-points, we can't make any guess as to
@@ -389,7 +380,7 @@ namespace mongo {
     void IndexCursor::prelock() {
         if (cc().txn().serializable() ||
             cc().opSettings().getQueryCursorMode() != DEFAULT_LOCK_CURSOR ||
-            _bounds == NULL || !_bounds->containsOnlyPointIntervals()) {
+            _bounds == NULL || !_bounds->prefixedByPointInterval()) {
             if ( _bounds != NULL ) {
                 _prelockBounds();
             } else {
@@ -421,21 +412,18 @@ namespace mongo {
     }
 
     int IndexCursor::cursor_flags() {
-        if (_prelock) {
-            QueryCursorMode mode = cc().opSettings().getQueryCursorMode();
-            switch ( mode ) {
-                // These flags determine the type of lock. Serializable
-                // gets you a read lock. Both serializable and rmw gets
-                // you a write lock.
-                case WRITE_LOCK_CURSOR:
-                    return DB_SERIALIZABLE | DB_RMW;
-                case READ_LOCK_CURSOR:
-                    return DB_SERIALIZABLE;
-                default:
-                    return 0;
-            }
+        QueryCursorMode mode = cc().opSettings().getQueryCursorMode();
+        switch ( mode ) {
+            // These flags determine the type of lock. Serializable
+            // gets you a read lock. Both serializable and rmw gets
+            // you a write lock.
+            case WRITE_LOCK_CURSOR:
+                return DB_SERIALIZABLE | DB_RMW;
+            case READ_LOCK_CURSOR:
+                return DB_SERIALIZABLE;
+            default:
+                return 0;
         }
-        return 0;
     }
 
     int IndexCursor::getf_flags() {
@@ -675,13 +663,12 @@ again:      while ( !allInclusive && ok() ) {
         if ( !ok() ) {
             return;
         }
-        if ( !_endKey.isEmpty() ) {
-            const int cmp = _endKey.woCompare( _currKey, _ordering );
-            const int sign = cmp == 0 ? 0 : (cmp > 0 ? 1 : -1);
-            if ( (sign != 0 && sign != _direction) || (sign == 0 && !_endKeyInclusive) ) {
-                _ok = false;
-                TOKULOG(3) << toString() << ": checkEnd() stopping @ curr, end: " << _currKey << _endKey << endl;
-            }
+        dassert(!_endKey.isEmpty());
+        const int cmp = _endKey.woCompare( _currKey, _ordering );
+        const int sign = cmp == 0 ? 0 : (cmp > 0 ? 1 : -1);
+        if ( (sign != 0 && sign != _direction) || (sign == 0 && !_endKeyInclusive) ) {
+            _ok = false;
+            TOKULOG(3) << toString() << ": checkEnd() stopping @ curr, end: " << _currKey << _endKey << endl;
         }
     }
 
@@ -823,5 +810,108 @@ again:      while ( !allInclusive && ok() ) {
             return _bounds->obj();
         }
     }    
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
+    IndexCountCursor::IndexCountCursor( NamespaceDetails *d, const IndexDetails &idx,
+                                        const BSONObj &startKey, const BSONObj &endKey,
+                                        const bool endKeyInclusive ) :
+        IndexCursor(d, idx, startKey, endKey, endKeyInclusive, 1, 0),
+        _bufferedRowCount(0),
+        _exhausted(false),
+        _endSKeyPrefix(_endKey, NULL) {
+        TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
+        checkAssumptionsAndInit();
+    }
+
+    IndexCountCursor::IndexCountCursor( NamespaceDetails *d, const IndexDetails &idx,
+                                        const shared_ptr< FieldRangeVector > &bounds ) :
+        // This will position the cursor correctly using bounds, which will do the right
+        // thing based on bounds->start/endKey() and bounds->start/endKeyInclusive()
+        IndexCursor(d, idx, bounds, false, 1, 0),
+        _bufferedRowCount(0),
+        _exhausted(false),
+        _endSKeyPrefix(_endKey, NULL) {
+        TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
+        dassert(_startKey == bounds->startKey());
+        dassert(_endKey == bounds->endKey());
+        dassert(_endKeyInclusive == bounds->endKeyInclusive());
+        checkAssumptionsAndInit();
+    }
+
+    void IndexCountCursor::checkAssumptionsAndInit() {
+        verify(forward()); // only need to count forward
+        verify(_prelock); // should be no case where we decide not to prelock/prefetch
+        if ( ok() ) {
+            // ok() at this point means the IndexCursor constructor found
+            // a single matching row. We note that with a buffered row
+            // count of 1.
+            _bufferedRowCount = 1;
+        }
+    }
+
+    int IndexCountCursor::count_cursor_getf(const DBT *key, const DBT *val, void *extra) {
+        struct count_cursor_getf_extra *info = reinterpret_cast<struct count_cursor_getf_extra *>(extra);
+        try {
+            // Initializes a storage key that will ignore the appended primary key.
+            // This is useful because we only want to compare the secondary key prefix.
+            const storage::Key sKey(reinterpret_cast<char *>(key->data), false);
+            const int c = sKey.woCompare(info->endSKeyPrefix, info->ordering);
+            TOKULOG(5) << "count getf got " << sKey.key() << ", c = " << c << endl;
+            if (c > 0 || (c == 0 && !info->endKeyInclusive)) {
+                // out of bounds, count is finished.
+                dassert(!info->exhausted);
+                info->exhausted = true;
+                return 0;
+            }
+            info->bufferedRowCount++;
+            return TOKUDB_CURSOR_CONTINUE;
+        } catch (const std::exception &ex) {
+            info->saveException(ex);
+        }
+        return -1;
+    }
+
+    bool IndexCountCursor::countMoreRows() {
+        // no rows buffered for count, that's why we're counting more here.
+        verify(_bufferedRowCount == 0);
+        // should not have already tried + failed at counting more rows.
+        verify(!_exhausted);
+
+        DBC *cursor = _cursor.dbc();
+        struct count_cursor_getf_extra extra(_bufferedRowCount, _exhausted,
+                                             _endSKeyPrefix, _ordering, _endKeyInclusive);
+        const int r = cursor->c_getf_next(cursor, getf_flags(), count_cursor_getf, &extra);
+        if (r != 0 && r != DB_NOTFOUND) {
+            extra.throwException();
+            storage::handle_ydb_error(r);
+        }
+        return _bufferedRowCount > 0;
+    }
+
+    bool IndexCountCursor::advance() {
+        killCurrentOp.checkForInterrupt();
+        if ( ok() ) {
+            dassert(_bufferedRowCount > 0);
+            _ok = --_bufferedRowCount > 0;
+            if ( !ok() && !_exhausted ) {
+                _ok = countMoreRows();
+            }
+            if ( ok() ) {
+                ++_nscanned;
+            }
+        }
+        return ok();
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
+    IndexScanCountCursor::IndexScanCountCursor( NamespaceDetails *d, const IndexDetails &idx ) :
+        IndexCountCursor( d, idx,
+                          ScanCursor::startKey(idx.keyPattern(), 1), 
+                          ScanCursor::endKey(idx.keyPattern(), 1),
+                          true ) {
+        verify(forward());
+    }
 
 } // namespace mongo

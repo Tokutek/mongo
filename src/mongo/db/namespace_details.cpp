@@ -39,6 +39,7 @@
 #include "mongo/db/oplog.h"
 #include "mongo/db/relock.h"
 #include "mongo/db/txn_context.h"
+#include "mongo/db/oplog_helpers.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/update.h"
@@ -140,24 +141,60 @@ namespace mongo {
     }
 
     class IndexedCollection : public NamespaceDetails {
-    public:
-        IndexedCollection(const StringData &ns, const BSONObj &options) :
-            NamespaceDetails(ns, fromjson("{\"_id\":1}"), options) {
-        }
-        IndexedCollection(const BSONObj &serialized) :
-            NamespaceDetails(serialized) {
+    private:
+        BSONObj determinePrimaryKey(const BSONObj &options) {
+            const BSONObj idPattern = BSON("_id" << 1);
+            BSONObj pkPattern = idPattern;
+            if (options["primaryKey"].ok()) {
+                uassert(17209, "defined primary key must be an object", options["primaryKey"].type() == Object);
+                pkPattern = options["primaryKey"].Obj();
+                bool pkPatternLast = false;
+                for (BSONObjIterator i(pkPattern); i.more(); ) {
+                    const BSONElement e = i.next();
+                    if (!i.more()) {
+                        // This is the last element. Needs to be _id: 1
+                        pkPatternLast = e.wrap() == idPattern;
+                    }
+                }
+                uassert(17203, "defined primary key must end in _id: 1", pkPatternLast);
+                uassert(17204, "defined primary key cannot be sparse", !options["sparse"].trueValue());
+            }
+            return pkPattern;
         }
 
-        // regular collections are eligble for queryIdHack(), see ops/query.cpp
+        const bool _idPrimaryKey;
+
+    public:
+        IndexedCollection(const StringData &ns, const BSONObj &options) :
+            NamespaceDetails(ns, determinePrimaryKey(options), options),
+            // determinePrimaryKey() was called, so whatever the pk is, it
+            // exists in _indexes. Thus, we know we have an _id primary key
+            // if we can find an index with pattern "_id: 1" at this point.
+            _idPrimaryKey(findIndexByKeyPattern(BSON("_id" << 1)) >= 0) {
+            const int idxNo = findIndexByKeyPattern(BSON("_id" << 1));
+            if (idxNo < 0) {
+                // create a unique, non-clustering _id index here.
+                BSONObj info = indexInfo(BSON("_id" << 1), true, false);
+                createIndex(info);
+            }
+            verify(_idPrimaryKey == idx(findIndexByKeyPattern(BSON("_id" << 1))).clustering());
+        }
+        IndexedCollection(const BSONObj &serialized) :
+            NamespaceDetails(serialized),
+            _idPrimaryKey(idx(findIndexByKeyPattern(BSON("_id" << 1))).clustering()) {
+        }
+
+        // regular collections are eligble for queryByIdHack() as long
+        // as they have a clusteirng _id index. see ops/query.cpp
         bool mayFindById() const {
             dassert(hasIdIndex());
-            return true;
+            return _idPrimaryKey;
         }
 
         // finds an objectl by _id field, which in the case of indexed collections
         // is the primary key.
         bool findById(const BSONObj &query, BSONObj &result) const {
-            dassert(query["_id"].ok());
+            dassert(mayFindById() && query["_id"].ok());
             const bool found = findByPK(query["_id"].wrap(""), result);
             getPKIndex().noteQuery(found ? 1 : 0, 0);
             return found;
@@ -166,13 +203,49 @@ namespace mongo {
         // inserts an object into this namespace, taking care of secondary indexes if they exist
         void insertObject(BSONObj &obj, uint64_t flags) {
             obj = addIdField(obj);
-            BSONObj pk = obj["_id"].wrap(""); // TODO: .wrap() is a malloc/copy, let's try not to do that.
-            insertIntoIndexes(pk, obj, flags);
+            const BSONObj pk = extractPrimaryKey(obj);
+
+            // We skip unique checks if the primary key is something other than the _id index.
+            // Any other PK is guaranteed to contain the _id somewhere in its pattern, so
+            // we know that PK is unique since a unique key on _id must exist.
+            insertIntoIndexes(pk, obj, flags | (!_idPrimaryKey ? NO_PK_UNIQUE_CHECKS : 0));
         }
 
-        void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj, uint64_t flags) {
-            newObj = inheritIdField(oldObj, newObj);
-            NamespaceDetails::updateObject(pk, oldObj, newObj, flags);
+        void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
+                          const bool logop, const bool fromMigrate,
+                          uint64_t flags = 0) {
+            const BSONObj newObjWithId = inheritIdField(oldObj, newObj);
+
+            if (_idPrimaryKey) {
+                NamespaceDetails::updateObject(pk, oldObj, newObjWithId, logop, fromMigrate, flags | NO_PK_UNIQUE_CHECKS);
+            } else {
+                const BSONObj newPK = extractPrimaryKey(newObjWithId);
+                dassert(newPK.nFields() == pk.nFields());
+                if (newPK != pk) {
+                    // Primary key has changed - that means all indexes will be affected.
+                    deleteFromIndexes(pk, oldObj, flags);
+                    insertIntoIndexes(newPK, newObjWithId, flags);
+                    if (logop) {
+                        OpLogHelpers::logDelete(_ns.c_str(), oldObj, fromMigrate);
+                        OpLogHelpers::logInsert(_ns.c_str(), newObjWithId);
+                    }
+                } else {
+                    // Skip unique checks on the primary key - we know it did not change.
+                    NamespaceDetails::updateObject(pk, oldObj, newObjWithId, logop, fromMigrate, flags | NO_PK_UNIQUE_CHECKS);
+                }
+            }
+        }
+
+        // Overridden to optimize the case where we have an _id primary key.
+        BSONObj extractPrimaryKey(const BSONObj &obj) {
+            if (_idPrimaryKey) {
+                const BSONElement &e = obj["_id"];
+                dassert(e.ok() && e.type() != Array &&
+                        e.type() != RegEx && e.type() != Undefined); // already checked in ops/insert.cpp
+                return e.wrap("");
+            } else {
+                return NamespaceDetails::extractPrimaryKey(obj);
+            }
         }
     };
 
@@ -180,6 +253,8 @@ namespace mongo {
     public:
         OplogCollection(const StringData &ns, const BSONObj &options) :
             IndexedCollection(ns, options) {
+            uassert(17206, "must not define a primary key for the oplog",
+                           !options["primaryKey"].ok());
         } 
         // Important: BulkLoadedCollection relies on this constructor
         // doing nothing more than calling the parent IndexedCollection
@@ -205,7 +280,7 @@ namespace mongo {
     class NaturalOrderCollection : public NamespaceDetails {
     public:
         NaturalOrderCollection(const StringData &ns, const BSONObj &options) :
-            NamespaceDetails(ns, fromjson("{\"$_\":1}"), options),
+            NamespaceDetails(ns, BSON("$_" << 1), options),
             _nextPK(0) {
         }
         NaturalOrderCollection(const BSONObj &serialized) :
@@ -299,11 +374,10 @@ namespace mongo {
         }
     };
 
+    BSONObj oldSystemUsersKeyPattern;
+    BSONObj extendedSystemUsersKeyPattern;
+    std::string extendedSystemUsersIndexName;
     namespace {
-        BSONObj oldSystemUsersKeyPattern;
-        BSONObj extendedSystemUsersKeyPattern;
-        std::string extendedSystemUsersIndexName;
-
         MONGO_INITIALIZER(AuthIndexKeyPatterns)(InitializerContext*) {
             oldSystemUsersKeyPattern = BSON(AuthorizationManager::USER_NAME_FIELD_NAME << 1);
             extendedSystemUsersKeyPattern = BSON(AuthorizationManager::USER_NAME_FIELD_NAME << 1 <<
@@ -344,13 +418,14 @@ namespace mongo {
             IndexedCollection(ns, options) {
             BSONObj info = extendedSystemUsersIndexInfo(ns);
             createIndex(info);
+            uassert(17207, "must not define a primary key for the system.users collection",
+                           !options["primaryKey"].ok());
         }
         SystemUsersCollection(const BSONObj &serialized) :
             IndexedCollection(serialized) {
             int idx = findIndexByKeyPattern(extendedSystemUsersKeyPattern);
             if (idx < 0) {
-                const StringData ns = serialized["ns"].Stringdata();
-                BSONObj info = extendedSystemUsersIndexInfo(ns);
+                BSONObj info = extendedSystemUsersIndexInfo(_ns);
                 createIndex(info);
                 addIndexToCatalog(info);
             }
@@ -391,7 +466,7 @@ namespace mongo {
             if (mayIndexId) {
                 const BSONElement e = options["autoIndexId"];
                 if (!e.ok() || e.trueValue()) {
-                    BSONObj info = indexInfo(fromjson("{\"_id\":1}"), true, false);
+                    BSONObj info = indexInfo(BSON("_id" << 1), true, false);
                     createIndex(info);
                 }
             }
@@ -454,7 +529,7 @@ namespace mongo {
 
         // run an insertion where the PK is specified
         // Can come from the applier thread on a slave or a cloner 
-        void insertObjectIntoCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
+        void insertObjectIntoCappedWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
             SimpleMutex::scoped_lock lk(_mutex);
             long long pkVal = pk[""].Long();
             if (pkVal >= _nextPK.load()) {
@@ -470,14 +545,14 @@ namespace mongo {
 
         }
 
-        void insertObjectIntoCappedAndLogOps(BSONObj &obj, uint64_t flags) {
-            obj = addIdField(obj);
+        void insertObjectIntoCappedAndLogOps(const BSONObj &obj, uint64_t flags) {
+            const BSONObj objWithId = addIdField(obj);
             uassert( 16774 , str::stream() << "document is larger than capped size "
-                     << obj.objsize() << " > " << _maxSize, obj.objsize() <= _maxSize );
+                     << objWithId.objsize() << " > " << _maxSize, objWithId.objsize() <= _maxSize );
 
             const BSONObj pk = getNextPK();
-            checkUniqueAndInsert(pk, obj, flags | NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE, false);
-            OpLogHelpers::logInsertForCapped(_ns.c_str(), pk, obj, &cc().txn());
+            checkUniqueAndInsert(pk, objWithId, flags | NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE, false);
+            OpLogHelpers::logInsertForCapped(_ns.c_str(), pk, objWithId);
             checkGorged(obj, true);
         }
 
@@ -493,18 +568,20 @@ namespace mongo {
 
         // run a deletion where the PK is specified
         // Can come from the applier thread on a slave
-        void deleteObjectFromCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
+        void deleteObjectFromCappedWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
             _deleteObject(pk, obj, flags);
             // just make it easy and invalidate this
             _lastDeletedPK = BSONObj();
         }
 
-        void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj, uint64_t flags) {
-            newObj = inheritIdField(oldObj, newObj);
-            long long diff = newObj.objsize() - oldObj.objsize();
+        void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
+                          const bool logop, const bool fromMigrate,
+                          uint64_t flags) {
+            const BSONObj newObjWithId = inheritIdField(oldObj, newObj);
+            long long diff = newObjWithId.objsize() - oldObj.objsize();
             uassert( 10003 , "failing update: objects in a capped ns cannot grow", diff <= 0 );
 
-            NamespaceDetails::updateObject(pk, oldObj, newObj, flags);
+            NamespaceDetails::updateObject(pk, oldObj, newObjWithId, logop, fromMigrate, flags);
             if (diff < 0) {
                 _currentSize.addAndFetch(diff);
             }
@@ -597,7 +674,7 @@ namespace mongo {
                     BSONObjSet keys;
                     idx.getKeysFromObject(obj, keys);
                     for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
-                        idx.uniqueCheck(*ki, &pk);
+                        idx.uniqueCheck(*ki, pk);
                     }
                 }
             }
@@ -659,7 +736,7 @@ namespace mongo {
                     trimmedBytes += oldestPK.objsize();
                     
                     if (logop) {
-                        OpLogHelpers::logDeleteForCapped(_ns.c_str(), oldestPK, oldestObj, &cc().txn());
+                        OpLogHelpers::logDeleteForCapped(_ns.c_str(), oldestPK, oldestObj);
                     }
                     
                     // Delete the object, reload the current objects/size
@@ -712,11 +789,11 @@ namespace mongo {
             CappedCollection(serialized) {
         }
 
-        void insertObjectIntoCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
+        void insertObjectIntoCappedWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
             msgasserted( 16847, "bug: The profile collection should not have replicated inserts." );
         }
 
-        void insertObjectIntoCappedAndLogOps(BSONObj &obj, uint64_t flags) {
+        void insertObjectIntoCappedAndLogOps(const BSONObj &obj, uint64_t flags) {
             msgasserted( 16848, "bug: The profile collection should not not log inserts." );
         }
 
@@ -724,11 +801,13 @@ namespace mongo {
             _insertObject(obj, flags);
         }
 
-        void deleteObjectFromCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
+        void deleteObjectFromCappedWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
             msgasserted( 16849, "bug: The profile collection should not have replicated deletes." );
         }
 
-        void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj, uint64_t flags) {
+        void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
+                          const bool logop, const bool fromMigrate,
+                          uint64_t flags = 0) {
             msgasserted( 16850, "bug: The profile collection should not be updated." );
         }
 
@@ -805,7 +884,7 @@ namespace mongo {
 
         void insertObject(BSONObj &obj, uint64_t flags = 0) {
             obj = addIdField(obj);
-            BSONObj pk = obj["_id"].wrap("");
+            const BSONObj pk = extractPrimaryKey(obj);
 
             storage::Key sPK(pk, NULL);
             DBT key = storage::dbt_make(sPK.buf(), sPK.size());
@@ -816,7 +895,9 @@ namespace mongo {
         void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags = 0) {
             uasserted( 16865, "Cannot delete from a collection under-going bulk load." );
         }
-        void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj, uint64_t flags = 0) {
+        void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
+                          const bool logop, const bool fromMigrate,
+                          uint64_t flags = 0) {
             uasserted( 16866, "Cannot update a collection under-going bulk load." );
         }
         void empty() {
@@ -825,7 +906,7 @@ namespace mongo {
         void optimizeAll() {
             uasserted( 16895, "Cannot optimize a collection under-going bulk load." );
         }
-        void optimizePK(const BSONObj &leftPK, const BSONObj &rightPK) {
+        void optimizePK(const BSONObj &leftPK, const BSONObj &rightPK, uint64_t* loops_run) {
             uasserted( 16921, "Cannot optimize a collection under-going bulk load." );
         }
         bool dropIndexes(const StringData& ns, const StringData& name, string &errmsg,
@@ -859,14 +940,16 @@ namespace mongo {
     /* ------------------------------------------------------------------------- */
 
     BSONObj NamespaceDetails::indexInfo(const BSONObj &keyPattern, bool unique, bool clustering) const {
-        // Can only create the _id and $_ indexes internally.
-        dassert(keyPattern.nFields() == 1);
-        dassert(keyPattern["_id"].ok() || keyPattern["$_"].ok());
-
         BSONObjBuilder b;
         b.append("ns", _ns);
         b.append("key", keyPattern);
-        b.append("name", keyPattern["_id"].ok() ? "_id_" : "$_");
+        if (keyPattern == BSON("_id" << 1)) {
+            b.append("name", "_id_");
+        } else if (keyPattern == BSON("$_" << 1)) {
+            b.append("name", "$_");
+        } else {
+            b.append("name", "primaryKey");
+        }
         if (unique) {
             b.appendBool("unique", true);
         }
@@ -890,18 +973,18 @@ namespace mongo {
         return b.obj();
     }
 
-    static bool isSystemCatalog(const StringData &ns) {
+    bool isSystemCatalog(const StringData &ns) {
         StringData coll = nsToCollectionSubstring(ns);
         return coll == "system.indexes" || coll == "system.namespaces";
     }
-    static bool isProfileCollection(const StringData &ns) {
+    bool isProfileCollection(const StringData &ns) {
         StringData coll = nsToCollectionSubstring(ns);
         return coll == "system.profile";
     }
-    static bool isOplogCollection(const StringData &ns) {
+    bool isOplogCollection(const StringData &ns) {
         return ns == rsoplog;
     }
-    static bool isSystemUsersCollection(const StringData &ns) {
+    bool isSystemUsersCollection(const StringData &ns) {
         StringData coll = nsToCollectionSubstring(ns);
         return coll == "system.users";
     }
@@ -968,10 +1051,29 @@ namespace mongo {
         _multiKeyIndexBits(static_cast<uint64_t>(serialized["multiKeyIndexBits"].Long())),
         _qcWriteCount(0) {
 
+        bool reserialize = false;
         std::vector<BSONElement> index_array = serialized["indexes"].Array();
         for (std::vector<BSONElement>::iterator it = index_array.begin(); it != index_array.end(); it++) {
-            shared_ptr<IndexDetails> idx(IndexDetails::make(it->Obj(), false));
+            const BSONObj &info = it->Obj();
+            shared_ptr<IndexDetails> idx(IndexDetails::make(info, false));
+            if (!idx && cc().upgradingSystemUsers() && isSystemUsersCollection(_ns) &&
+                oldSystemUsersKeyPattern == info["key"].Obj()) {
+                // This was already dropped, but because of #673 we held on to the info.
+                // To fix it, just drop the index info on the floor.
+                LOG(0) << "Incomplete upgrade of " << _ns << " indexes detected.  Repairing." << endl;
+                reserialize = true;
+                size_t idxNum = it - index_array.begin();
+                // Removes the nth bit, and shifts any bits higher than it down a slot.
+                _multiKeyIndexBits = ((_multiKeyIndexBits & ((1ULL << idxNum) - 1)) |
+                                      ((_multiKeyIndexBits >> (idxNum + 1)) << idxNum));
+                _nIndexes--;
+                continue;
+            }
             _indexes.push_back(idx);
+        }
+        if (reserialize) {
+            // Write a clean version of this collection's info to the namespace index, now that we've rectified it.
+            nsindex(_ns)->update_ns(_ns, serialize(), true);
         }
         computeIndexKeys();
     }
@@ -986,6 +1088,7 @@ namespace mongo {
             return shared_ptr<NamespaceDetails>(new SystemCatalogCollection(serialized));
         } else if (isSystemUsersCollection(ns)) {
             massert( 17002, "bug: Should not bulk load the users collection", !bulkLoad );
+            Client::CreatingSystemUsersScope scope;
             return shared_ptr<NamespaceDetails>(new SystemUsersCollection(serialized));
         } else if (isProfileCollection(ns)) {
             massert( 16870, "bug: Should not bulk load the profile collection", !bulkLoad );
@@ -1030,6 +1133,22 @@ namespace mongo {
             indexes_array.append(idx.info());
         }
         return serialize(_ns, _options, _pk, _multiKeyIndexBits, indexes_array.arr());
+    }
+
+    BSONObj NamespaceDetails::extractPrimaryKey(const BSONObj &obj) const {
+        BSONObjSet keys;
+        getPKIndex().getKeysFromObject(obj, keys);
+        uassert(17205, str::stream() << "primary key " << _pk << " cannot be multi-key",
+                       keys.size() == 1); // this enforces no arrays in the primary key
+        const BSONObj pk = keys.begin()->getOwned();
+        for (BSONObjIterator i(pk); i.more(); ) {
+            const BSONElement e = i.next();
+            uassert(17208, "can't use a regex for any portion of the primary key",
+                           e.type() != RegEx);
+            uassert(17210, "can't use undefined for any portion of the primary key",
+                           e.type() != Undefined);
+        }
+        return pk;
     }
 
     void NamespaceDetails::computeIndexKeys() {
@@ -1081,8 +1200,7 @@ namespace mongo {
         try {
             if (key != NULL) {
                 struct findByPKCallbackExtra *info = reinterpret_cast<findByPKCallbackExtra *>(extra);
-                BSONObj obj(reinterpret_cast<char *>(value->data));
-                info->obj = obj.getOwned();
+                info->obj = BSONObj(reinterpret_cast<char *>(value->data)).getOwned();
             }
             return 0;
         } catch (std::exception &e) {
@@ -1151,8 +1269,10 @@ namespace mongo {
 
         for (int i = 0; i < n; i++) {
             const bool isPK = i == 0;
-            const bool prelocked = flags & NamespaceDetails::NO_LOCKTREE;
-            const bool doUniqueChecks = !(flags & NamespaceDetails::NO_UNIQUE_CHECKS);
+            const bool prelocked = flags & NO_LOCKTREE;
+            const bool doUniqueChecks = !(flags & NO_UNIQUE_CHECKS) &&
+                                        !(isPK && (flags & NO_PK_UNIQUE_CHECKS));
+
             IndexDetails &idx = *_indexes[i];
             dbs[i] = idx.db();
 
@@ -1172,7 +1292,7 @@ namespace mongo {
                 idx.getKeysFromObject(obj, idxKeys);
                 if (idx.unique() && doUniqueChecks) {
                     for (BSONObjSet::const_iterator o = idxKeys.begin(); o != idxKeys.end(); ++o) {
-                        idx.uniqueCheck(*o, &pk);
+                        idx.uniqueCheck(*o, pk);
                     }
                 }
                 if (idxKeys.size() > 1) {
@@ -1233,7 +1353,13 @@ namespace mongo {
             IndexDetails &idx = *_indexes[i];
             dbs[i] = idx.db();
             del_flags[i] = DB_DELETE_ANY | (prelocked ? DB_PRELOCKED_WRITE : 0);
-
+            DEV {
+                // for debug builds, remove the DB_DELETE_ANY flag
+                // so that debug builds do a query to make sure the
+                // row is there. It is a nice check to ensure correctness
+                // on debug builds.
+                del_flags[i] &= ~DB_DELETE_ANY;
+            }
             if (!isPK) {
                 BSONObjSet idxKeys;
                 idx.getKeysFromObject(obj, idxKeys);
@@ -1293,7 +1419,8 @@ namespace mongo {
         deleteFromIndexes(pk, obj, flags);
     }
 
-    void NamespaceDetails::updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj, uint64_t flags) {
+    void NamespaceDetails::updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
+                                        const bool logop, const bool fromMigrate, uint64_t flags) {
         TOKULOG(4) << "NamespaceDetails::updateObject pk "
             << pk << ", old " << oldObj << ", new " << newObj << endl;
 
@@ -1321,7 +1448,9 @@ namespace mongo {
         for (int i = 0; i < n; i++) {
             const bool isPK = i == 0;
             const bool prelocked = flags & NamespaceDetails::NO_LOCKTREE;
-            const bool doUniqueChecks = !(flags & NamespaceDetails::NO_UNIQUE_CHECKS);
+            const bool doUniqueChecks = !(flags & NO_UNIQUE_CHECKS) &&
+                                        !(isPK && (flags & NO_PK_UNIQUE_CHECKS));
+
             IndexDetails &idx = *_indexes[i];
             dbs[i] = idx.db();
             update_flags[i] = prelocked ? DB_PRELOCKED_WRITE : 0;
@@ -1348,7 +1477,7 @@ namespace mongo {
                     for (BSONObjSet::iterator o = newIdxKeys.begin(); o != newIdxKeys.end(); ++o) {
                         const BSONObj &k = *o;
                         if (!orderedSetContains(oldIdxKeys, k)) {
-                            idx.uniqueCheck(k, &pk);
+                            idx.uniqueCheck(k, pk);
                         }
                     }
                 }
@@ -1386,6 +1515,10 @@ namespace mongo {
         } else if (r != 0) {
             storage::handle_ydb_error(r);
         }
+
+        if (logop) {
+            OpLogHelpers::logUpdate(_ns.c_str(), pk, oldObj, newObj, fromMigrate);
+        }
     }
 
     void NamespaceDetails::updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, uint64_t flags) {
@@ -1394,6 +1527,8 @@ namespace mongo {
     }
 
     void NamespaceDetails::setIndexIsMultikey(const int idxNum) {
+        // Under no circumstasnces should the primary key become multikey.
+        verify(idxNum > 0);
         dassert(idxNum < NIndexesMax);
         const unsigned long long x = ((unsigned long long) 1) << idxNum;
         if (_multiKeyIndexBits & x) {
@@ -1459,6 +1594,8 @@ namespace mongo {
         _multiKeyIndexBits = ((_multiKeyIndexBits & ((1ULL << idxNum) - 1)) |
                              ((_multiKeyIndexBits >> (idxNum + 1)) << idxNum));
         resetTransient();
+        // Updated whatever in memory structures are necessary, now update the nsindex.
+        nsindex(_ns)->update_ns(_ns, serialize(), true);
     }
 
     // Normally, we cannot drop the _id_ index.
@@ -1469,20 +1606,17 @@ namespace mongo {
         Lock::assertWriteLocked(ns);
         TOKULOG(1) << "dropIndexes " << name << endl;
 
-        NamespaceDetails *d = nsdetails(ns);
-        ClientCursor::invalidate(ns);
-
         const int idxNum = findIndexByName(name);
-        if (_indexBuildInProgress &&
-            (name == "*" || idxNum == (int) _indexes.size() - 1)) {
-            uasserted( 16904, "Cannot drop index: build in progress." );
-        }
+        uassert( 16904, "Cannot drop indexes: a hot index build in progress.",
+                        !_indexBuildInProgress );
+
+        ClientCursor::invalidate(ns);
 
         if (name == "*") {
             result.append("nIndexesWas", (double) _nIndexes);
             for (int i = 0; i < _nIndexes; ) {
                 IndexDetails &idx = *_indexes[i];
-                if (mayDeleteIdIndex || (!idx.isIdIndex() && !d->isPKIndex(idx))) {
+                if (mayDeleteIdIndex || (!idx.isIdIndex() && !isPKIndex(idx))) {
                     dropIndex(i);
                 } else {
                     i++;
@@ -1498,7 +1632,7 @@ namespace mongo {
                 result.append("nIndexesWas", (double) _nIndexes);
                 IndexVector::iterator it = _indexes.begin() + idxNum;
                 IndexDetails *idx = it->get();
-                if ( !mayDeleteIdIndex && (idx->isIdIndex() || d->isPKIndex(*idx)) ) {
+                if ( !mayDeleteIdIndex && (idx->isIdIndex() || isPKIndex(*idx)) ) {
                     errmsg = "may not delete _id or $_ index";
                     return false;
                 }
@@ -1510,8 +1644,6 @@ namespace mongo {
             }
         }
 
-        // Updated whatever in memory structures are necessary, now update the nsindex.
-        nsindex(ns)->update_ns(ns, serialize(), true);
         return true;
     }
 
@@ -1525,15 +1657,16 @@ namespace mongo {
                                   isPK ? NULL : &minKey);
             storage::Key rightSKey(ascending ? maxKey : minKey,
                                    isPK ? NULL : &maxKey);
-            idx.optimize(rightSKey, leftSKey, true);
+            uint64_t loops_run;
+            idx.optimize(rightSKey, leftSKey, true, &loops_run);
         }
     }
 
-    void NamespaceDetails::optimizePK(const BSONObj &leftKey, const BSONObj &rightKey) {
+    void NamespaceDetails::optimizePK(const BSONObj &leftKey, const BSONObj &rightKey, uint64_t* loops_run) {
         IndexDetails &idx = getPKIndex();
         storage::Key leftSKey(leftKey, NULL);
         storage::Key rightSKey(rightKey, NULL);
-        idx.optimize(leftSKey, rightSKey, false);
+        idx.optimize(leftSKey, rightSKey, false, loops_run);
     }
 
     void NamespaceDetails::fillCollectionStats(
@@ -1663,7 +1796,7 @@ namespace mongo {
                 options = b.obj();
             }
             string logNs = cl.toString() + ".$cmd";
-            OpLogHelpers::logCommand(logNs.c_str(), options, &cc().txn());
+            OpLogHelpers::logCommand(logNs.c_str(), options);
         }
         // TODO: Identify error paths for this function
         return true;

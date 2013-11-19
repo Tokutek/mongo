@@ -20,9 +20,9 @@ var testNSProvisionallyExists = function() {
     t = db.loadnsprovexists;
     t.drop();
     begin();
-    s = startParallelShell('db.runCommand({ beginTransaction: 1 });' +
+    s = startParallelShell('db.beginTransaction();' +
                            'db.loadnsprovexists.insert({ prov: 1 });' +
-                           'sleep(2000); db.runCommand({ commitTransaction: 1 })');
+                           'sleep(2000); db.commitTransaction()');
     sleep(1000);
     beginLoadShouldFail('loadnsprovexists', [ ], { });
     commit();
@@ -34,9 +34,9 @@ var testNSProvisionallyDropped = function() {
     t.drop();
     t.insert({ prov: 1 });
     begin();
-    s = startParallelShell('db.runCommand({ beginTransaction: 1 });' +
+    s = startParallelShell('db.beginTransaction();' +
                            'db.loadnsprovdropped.drop(); ' +
-                           'sleep(2000); db.runCommand({ abortTransaction: 1 })');
+                           'sleep(2000); db.rollbackTransaction()');
     sleep(500);
     beginLoadShouldFail('loadnsprovdropped', [ ], { });
     commit();
@@ -142,4 +142,20 @@ var testSystemCatalogOrProfileLoadFails = function() {
     beginLoadShouldFail('system.profile', [ ], { });
     beginLoadShouldFail('system.profile', [ { ns: 'test.system.profile', key: { "$_" : 1 } , name: "$_1" } ], { });
     beginLoadShouldFail('system.profile', [ { ns: 'test.system.profile', key: { "$_" : 1 } , name: "$_1" } ], { capped: true, size: 1024 });
+    commit();
+}();
+
+var testBadPrimaryKeyOptions = function() {
+    t = db.loadbadpk;
+    t.drop();
+
+    begin();
+    beginLoadShouldFail('loadbadpk', [ { ns: "test.loadbadpk", key: { b: 1 }, name: "b_1" } ], { primaryKey: { a: 1 } }); 
+    commit();
+    assert.eq(0, db.system.namespaces.find({ "name": "test.loadbadpk" }).itcount());
+
+    begin();
+    beginLoadShouldFail('loadbadpk', [ { ns: "test.loadbadpk", key: { b: 1 }, name: "b_1" } ], { primaryKey: { _id: 1, a: 1 } }); 
+    commit();
+    assert.eq(0, db.system.namespaces.find({ "name": "test.loadbadpk" }).itcount());
 }();

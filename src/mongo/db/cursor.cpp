@@ -24,12 +24,22 @@
 
 namespace mongo {
 
-    const BSONObj &IndexScanCursor::startKey(const BSONObj &keyPattern, const int direction) {
+    bool ScanCursor::reverseMinMaxBoundsOrder(const Ordering &ordering, const int direction) {
+        // Only the first field's direction matters, because this function is only called
+        // to possibly reverse bounds ordering with min/max key, which is single field.
+        const bool ascending = !ordering.descending(1);
+        const bool forward = direction > 0;
+        // We need to reverse the order if exactly one of the query or the index are descending.  If
+        // both are descending, the normal order is fine.
+        return ascending != forward;
+    }
+
+    const BSONObj &ScanCursor::startKey(const BSONObj &keyPattern, const int direction) {
         // Scans intuitively start at minKey, but may need to be reversed to maxKey.
         return reverseMinMaxBoundsOrder(Ordering::make(keyPattern), direction) ? maxKey : minKey;
     }
 
-    const BSONObj &IndexScanCursor::endKey(const BSONObj &keyPattern, const int direction) {
+    const BSONObj &ScanCursor::endKey(const BSONObj &keyPattern, const int direction) {
         // Scans intuitively end at maxKey, but may need to be reversed to minKey.
         return reverseMinMaxBoundsOrder(Ordering::make(keyPattern), direction) ? minKey : maxKey;
     }
@@ -37,9 +47,22 @@ namespace mongo {
     IndexScanCursor::IndexScanCursor( NamespaceDetails *d, const IndexDetails &idx,
                                       int direction, int numWanted ) :
         IndexCursor( d, idx,
-                     startKey(idx.keyPattern(), direction),
-                     endKey(idx.keyPattern(), direction),
+                     ScanCursor::startKey(idx.keyPattern(), direction),
+                     ScanCursor::endKey(idx.keyPattern(), direction),
                      true, direction, numWanted ) {
+    }
+
+    void IndexScanCursor::checkEnd() {
+        // Nothing to do in the normal case. "Scan" cursors always iterate over
+        // the whole index, so the entire keyspace is in bounds.
+        DEV {
+            verify(!_endKey.isEmpty());
+            const int cmp = _endKey.woCompare( _currKey, _ordering );
+            const int sign = cmp == 0 ? 0 : (cmp > 0 ? 1 : -1);
+            if ( (sign != 0 && sign != _direction) || (sign == 0 && !_endKeyInclusive) ) {
+                msgasserted(17202, "IndexScanCursor has a bad currKey/endKey combination");
+            }
+        }
     }
 
     shared_ptr<Cursor> BasicCursor::make( NamespaceDetails *d, int direction ) {

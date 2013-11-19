@@ -113,8 +113,6 @@ namespace mongo {
 
         /* slaveOk     - if true it is ok if the source of the data is !ismaster.
            useReplAuth - use the credentials we normally use as a replication slave for the cloning
-           snapshot    - use $snapshot mode for copying collections.  note this should not be used when it isn't required, as it will be slower.
-                         for example repairDatabase need not use it.
         */
 
         /** copy the entire database */
@@ -590,7 +588,7 @@ namespace mongo {
                                            std::vector<Privilege>* out) {
             ActionSet actions;
             actions.addAction(ActionType::collectionsExist);
-            out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
+            out->push_back(Privilege(dbname, actions));
         }
         virtual bool run(const string &dbname, BSONObj &jsobj, int, string &errmsg, BSONObjBuilder &result, bool) {
             BSONElement arrElt = jsobj["_collectionsExist"];
@@ -605,17 +603,19 @@ namespace mongo {
                     errmsg = "each collection name must be a string";
                     return false;
                 }
-                if (!checkCollection(dbname, e.Stringdata(), errmsg)) {
+                StringData ns = e.Stringdata();
+                if (nsToDatabaseSubstring(ns) != dbname) {
+                    errmsg = "cannot check collection in another db";
+                    return false;
+                }
+                if (!checkCollection(ns, errmsg)) {
                     return false;
                 }
             }
             return true;
         }
       private:
-        bool checkCollection(const StringData &dbname, const StringData &collname, string &errmsg) {
-            const string ns = collname.startsWith(dbname.toString() + ".")
-                              ? collname.toString()
-                              : dbname.toString() + "." + collname.toString();
+        bool checkCollection(const StringData &ns, string &errmsg) {
             NamespaceDetails *d;
             try {
                 d = nsdetails(ns);

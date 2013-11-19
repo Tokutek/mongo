@@ -79,6 +79,17 @@ namespace mongo {
     void commitBulkLoad(const StringData &ns);
     void abortBulkLoad(const StringData &ns);
 
+    // Because of #673 we need to detect if we're missing this index and to ignore that error.
+    extern BSONObj oldSystemUsersKeyPattern;
+    // These are just exposed for tests.
+    extern BSONObj extendedSystemUsersKeyPattern;
+    extern std::string extendedSystemUsersIndexName;
+
+    bool isSystemCatalog(const StringData &ns);
+    bool isProfileCollection(const StringData &ns);
+    bool isOplogCollection(const StringData &ns);
+    bool isSystemUsersCollection(const StringData &ns);
+
     /* NamespaceDetails : this is the "header" for a namespace that has all its details.
        It is stored in the NamespaceIndex (a TokuMX dictionary named foo.ns, for Database foo).
     */
@@ -88,8 +99,9 @@ namespace mongo {
 
         // Flags for write operations. For performance reasons only. Use with caution.
         static const uint64_t NO_LOCKTREE = 1; // skip acquiring locktree row locks
-        static const uint64_t NO_UNIQUE_CHECKS = 2; // skip uniqueness checks
+        static const uint64_t NO_UNIQUE_CHECKS = 2; // skip uniqueness checks on all keys
         static const uint64_t KEYS_UNAFFECTED_HINT = 4; // an update did not update secondary indexes
+        static const uint64_t NO_PK_UNIQUE_CHECKS = 8; // skip uniqueness checks only on the primary key
 
         // Creates the appropriate NamespaceDetails implementation based on options.
         static shared_ptr<NamespaceDetails> make(const StringData &ns, const BSONObj &options);
@@ -209,6 +221,11 @@ namespace mongo {
         // @return offset in indexes[]
         int findIndexByKeyPattern(const BSONObj& keyPattern) const;
 
+        // @return the smallest (in terms of dataSize, which is key length + value length)
+        //         index in _indexes that is one-to-one with the primary key. specifically,
+        //         the returned index cannot be sparse or multikey.
+        IndexDetails &findSmallestOneToOneIndex() const;
+
         /* Returns the index entry for the first index whose prefix contains
          * 'keyPattern'. If 'requireSingleKey' is true, skip indices that contain
          * array attributes. Otherwise, returns NULL.
@@ -246,6 +263,10 @@ namespace mongo {
         const BSONObj &pkPattern() const {
             return _pk;
         }
+
+        // Extracts and returns an owned BSONObj representing
+        // the primary key portion of the given object.
+        BSONObj extractPrimaryKey(const BSONObj &obj) const;
 
         bool indexBuildInProgress() const {
             return _indexBuildInProgress;
@@ -308,7 +329,7 @@ namespace mongo {
         virtual void optimizeAll();
         // @param left/rightPK [ left, right ] primary key range to run
         // hot optimize on. no optimize message is sent.
-        virtual void optimizePK(const BSONObj &leftPK, const BSONObj &rightPK);
+        virtual void optimizePK(const BSONObj &leftPK, const BSONObj &rightPK, uint64_t* loops_run);
 
         virtual bool dropIndexes(const StringData& ns, const StringData& name, string &errmsg,
                                  BSONObjBuilder &result, bool mayDeleteIdIndex);
@@ -353,7 +374,11 @@ namespace mongo {
         virtual void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags = 0);
 
         // update an object in the namespace by pk, replacing oldObj with newObj
-        virtual void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj, uint64_t flags = 0);
+        //
+        // handles logging
+        virtual void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
+                                  const bool logop, const bool fromMigrate,
+                                  uint64_t flags = 0);
 
         // update an object in the namespace by pk, described by the updateObj's $ operators
         virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, uint64_t flags = 0);
@@ -372,15 +397,15 @@ namespace mongo {
             msgasserted( 16757, "bug: noted an abort, but it wasn't implemented" );
         }
 
-        virtual void insertObjectIntoCappedAndLogOps(BSONObj &obj, uint64_t flags) {
+        virtual void insertObjectIntoCappedAndLogOps(const BSONObj &obj, uint64_t flags) {
             msgasserted( 16775, "bug: should not call insertObjectIntoCappedAndLogOps into non-capped collection" );
         }
 
-        virtual void insertObjectIntoCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
+        virtual void insertObjectIntoCappedWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
             msgasserted( 16772, "bug: should not call insertObjectIntoCappedWithPK into non-capped collection" );
         }
         
-        virtual void deleteObjectFromCappedWithPK(BSONObj& pk, BSONObj& obj, uint64_t flags) {
+        virtual void deleteObjectFromCappedWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
             msgasserted( 16773, "bug: should not call deleteObjectFromCappedWithPK into non-capped collection" );
         }
 
@@ -470,7 +495,7 @@ namespace mongo {
         // The primary index pattern.
         const BSONObj _pk;
 
-        // Each index (including the _id) index has an IndexDetails that describes it.
+        // Every index has an IndexDetails that describes it.
         bool _indexBuildInProgress;
         int _nIndexes;
         typedef std::vector<shared_ptr<IndexDetails> > IndexVector;
@@ -478,7 +503,6 @@ namespace mongo {
 
         unsigned long long _multiKeyIndexBits;
 
-    protected:
         void dropIndex(const int idxNum);
 
     private:
@@ -643,6 +667,26 @@ namespace mongo {
             }
         }
         return -1;
+    }
+
+    inline IndexDetails &NamespaceDetails::findSmallestOneToOneIndex() const {
+        // Default to choosing the primary key index (always at _indexes[0]);
+        int chosenIndex = 0;
+
+        // Check the secondary indexes. Any non-clustering secondary index is
+        // better than using the primary key, since there's no object stored
+        // and the key length can be at most the size of the object.
+        uint64_t smallestIndexSize = std::numeric_limits<uint64_t>::max();
+        for (int i = 1; i < _nIndexes; i++) {
+            const IndexDetails *index = _indexes[i].get();
+            IndexDetails::Stats st = index->getStats();
+            if (!index->sparse() && !isMultikey(i) && st.dataSize < smallestIndexSize) {
+                smallestIndexSize = st.dataSize;
+                chosenIndex = i;
+            }
+        }
+
+        return idx(chosenIndex);
     }
 
     inline const IndexDetails* NamespaceDetails::findIndexByPrefix( const BSONObj &keyPattern ,

@@ -80,6 +80,13 @@ namespace mongo {
         return _creatingSystemUsers == d->name();
     }
 
+    Client::UpgradingSystemUsersScope::UpgradingSystemUsersScope() {
+        cc()._upgradingSystemUsers = true;
+    }
+    Client::UpgradingSystemUsersScope::~UpgradingSystemUsersScope() {
+        cc()._upgradingSystemUsers = false;
+    }
+
     /* each thread which does db operations has a Client object in TLS.
        call this when your thread starts.
     */
@@ -98,7 +105,9 @@ namespace mongo {
         _rootTransactionId(0),
         _shutdown(false),
         _desc(desc),
-        _god(0)
+        _god(0),
+        _creatingSystemUsers(""),
+        _upgradingSystemUsers(false)
     {
         _connectionId = p ? p->connectionId() : 0;
         
@@ -232,21 +241,6 @@ namespace mongo {
             }
         }
         }
-    }
-
-    // invoked from ReadContext
-    Client::Context::Context(const StringData& path, const StringData& ns, Database *db) :
-        _client( currentClient.get() ), 
-        _oldContext( _client->_context ),
-        _path( path.toString() ),
-        _doVersion( true ),
-        _ns( ns.toString() ),
-        _db(db)
-    {
-        verify(_db);
-        checkNotStale();
-        _client->_context = this;
-        _client->_curOp->enter( this );
     }
 
     void Client::Context::_finishInit() {
@@ -476,6 +470,8 @@ namespace mongo {
         idhack = false;
         scanAndOrder = false;
         nupdated = -1;
+        ninserted = -1;
+        ndeleted = -1;
         nmoved = -1;
         fastmod = false;
         fastmodinsert = false;
@@ -537,6 +533,8 @@ namespace mongo {
         OPDEBUG_TOSTRING_HELP_BOOL( scanAndOrder );
         OPDEBUG_TOSTRING_HELP( nmoved );
         OPDEBUG_TOSTRING_HELP( nupdated );
+        OPDEBUG_TOSTRING_HELP( ninserted );
+        OPDEBUG_TOSTRING_HELP( ndeleted );
         OPDEBUG_TOSTRING_HELP_BOOL( fastmod );
         OPDEBUG_TOSTRING_HELP_BOOL( fastmodinsert );
         OPDEBUG_TOSTRING_HELP_BOOL( upsert );
@@ -593,6 +591,8 @@ namespace mongo {
         OPDEBUG_APPEND_BOOL( moved );
         OPDEBUG_APPEND_NUMBER( nmoved );
         OPDEBUG_APPEND_NUMBER( nupdated );
+        OPDEBUG_APPEND_NUMBER( ninserted );
+        OPDEBUG_APPEND_NUMBER( ndeleted );
         OPDEBUG_APPEND_BOOL( fastmod );
         OPDEBUG_APPEND_BOOL( fastmodinsert );
         OPDEBUG_APPEND_BOOL( upsert );

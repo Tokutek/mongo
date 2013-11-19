@@ -103,10 +103,6 @@ namespace mongo {
         return storage::dbt_make(_data, _size);
     }
 
-    int Descriptor::compareKeys(const storage::Key &key1, const storage::Key &key2) const {
-        return key1.woCompare(key2, ordering());
-    }
-
     void Descriptor::generateKeys(const BSONObj &obj, BSONObjSet &keys) const {
         const Header &h(*reinterpret_cast<const Header *>(_data));
         vector<const char *> fields;

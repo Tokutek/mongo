@@ -467,6 +467,7 @@ namespace mongo {
     ReplSetImpl::ReplSetImpl() :
         _replInfoUpdateRunning(false),
         _replOplogPurgeRunning(false),
+        _lastPurgedTS(0),
         _replKeepOplogAliveRunning(false),
         _keepOplogPeriodMillis(600*1000), // 10 minutes
         _replOplogOptimizeRunning(false),
@@ -1034,8 +1035,10 @@ namespace mongo {
 
     // for testing only
     void ReplSetImpl::setKeepOplogAlivePeriod(uint64_t val) {
-        boost::unique_lock<boost::mutex> lock(_keepOplogAliveMutex);
-        _keepOplogPeriodMillis = val;
+        {
+            boost::unique_lock<boost::mutex> lock(_keepOplogAliveMutex);
+            _keepOplogPeriodMillis = val;
+        }
         _keepOplogAliveCond.notify_all();
     }
 
@@ -1049,7 +1052,7 @@ namespace mongo {
             {
                 boost::unique_lock<boost::mutex> lock(_keepOplogAliveMutex);
                 _keepOplogAliveCond.timed_wait(
-                    _keepOplogAliveMutex,
+                    lock,
                     boost::posix_time::milliseconds(_keepOplogPeriodMillis)
                     );
             }
@@ -1057,7 +1060,7 @@ namespace mongo {
             RWLockRecursive::Shared lk(operationLock);
             if (_replBackgroundShouldRun && _isMaster() && GTID::cmp(curr, lastSeenGTID) == 0) {
                 Client::Transaction txn (DB_SERIALIZABLE);
-                OpLogHelpers::logComment(BSON("comment" << "keepOplogAlive"), &cc().txn());
+                OpLogHelpers::logComment(BSON("comment" << "keepOplogAlive"));
                 txn.commit(DB_TXN_NOSYNC);
                 lastSeenGTID = gtidManager->getLiveState();
             }
@@ -1069,10 +1072,20 @@ namespace mongo {
         _replKeepOplogAliveRunning = false;
     }
 
+    GTID ReplSetImpl::getLastPurgedGTID() {
+        return _lastPurgedGTID;
+    }
+
+    uint64_t ReplSetImpl::getLastPurgedTS() {
+        return _lastPurgedTS;
+    }
+
     void ReplSetImpl::changeExpireOplog(uint64_t expireOplogDays, uint64_t expireOplogHours) {
-        boost::unique_lock<boost::mutex> lock(_purgeMutex);
-        cmdLine.expireOplogDays = expireOplogDays;
-        cmdLine.expireOplogHours = expireOplogHours;
+        {
+            boost::unique_lock<boost::mutex> lock(_purgeMutex);
+            cmdLine.expireOplogDays = expireOplogDays;
+            cmdLine.expireOplogHours = expireOplogHours;
+        }
         _purgeCond.notify_all();
     }
 
@@ -1134,6 +1147,7 @@ namespace mongo {
                                     // delete a bunch of entries in bulk
                                     boost::unique_lock<boost::mutex> lock(_purgeMutex);
                                     _lastPurgedGTID = getGTIDFromBSON("_id", curr);
+                                    _lastPurgedTS = ts;
                                     millisToWait = ts - minTime + 1000;
                                 }
                                 break;
@@ -1156,6 +1170,7 @@ namespace mongo {
                         {
                             boost::unique_lock<boost::mutex> lock(_purgeMutex);
                             _lastPurgedGTID = getGTIDFromBSON("_id", docs.back());
+                            _lastPurgedTS = docs.back()["ts"]._numberLong();
                         }
                     }
                     transaction.commit(DB_TXN_NOSYNC);
@@ -1179,14 +1194,15 @@ namespace mongo {
                     // don't sleep and continue with another iteration
                     if (expireMillis == expireOplogMilliseconds()) {
                         _purgeCond.timed_wait(
-                            _purgeMutex,
+                            lock,
                             boost::posix_time::milliseconds(millisToWait)
                             );
                     }
                 }
             }
             else {
-                _purgeCond.wait(_purgeMutex);
+                boost::unique_lock<boost::mutex> lock(_purgeMutex);
+                _purgeCond.wait(lock);
             }
         }        
         cc().shutdown();
@@ -1205,12 +1221,14 @@ namespace mongo {
                     gtid = _lastPurgedGTID;
                 }
                 if (!gtid.isInitial()) {
-                    hotOptimizeOplogTo(gtid);
+                    uint64_t loops_run = 0;
+                    hotOptimizeOplogTo(gtid, &loops_run);
+                    LOG(2) << "hotOptimizeOplog completed running " << loops_run << " loops." << rsLog;
                 }
                 {
                     boost::unique_lock<boost::mutex> lock(_purgeMutex);
                     _purgeCond.timed_wait(
-                        _purgeMutex, 
+                        lock, 
                         boost::posix_time::milliseconds(5000)
                         );                
                 }

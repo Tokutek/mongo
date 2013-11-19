@@ -1,4 +1,4 @@
-// In fast count mode the Matcher is bypassed when matching can be performed by a BtreeCursor and
+// In fast count mode the Matcher is bypassed when matching can be performed by an IndexCursor and
 // its delegate FieldRangeVector.  The tests below check that fast count mode is enabled and
 // implemented appropriately in specific cases.
 //
@@ -65,3 +65,84 @@ assert.eq( 1, t.count( { a:{ $lte:new Date( 1 ) } } ) );
 t.drop();
 t.ensureIndex( { a:1 } );
 assert.throws( function() { t.count( { a:undefined } ); } );
+
+
+// Count using a descending order index.
+t.drop();
+t.ensureIndex( { a:-1 } );
+t.save( { a:1 } );
+t.save( { a:2 } );
+t.save( { a:3 } );
+assert.eq( 1, t.count( { a:{ $gt:2 } } ) );
+assert.eq( 1, t.count( { a:{ $lt:2 } } ) );
+assert.eq( 2, t.count( { a:{ $lte:2 } } ) );
+assert.eq( 2, t.count( { a:{ $lt:3 } } ) );
+
+
+// Count using a compound index.
+t.drop();
+t.ensureIndex( { a:1, b:1 } );
+t.save( { a:1, b:2 } );
+t.save( { a:2, b:1 } );
+t.save( { a:2, b:3 } );
+t.save( { a:3, b:4 } );
+assert.eq( 1, t.count( { a:{ $gt:2 } } ) );
+assert.eq( 1, t.count( { a:{ $lt:2 } } ) );
+assert.eq( 2, t.count( { a:2, b:{ $gt:0 } } ) );
+assert.eq( 1, t.count( { a:2, b:{ $lt:3 } } ) );
+assert.eq( 1, t.count( { a:1, b:{ $lt:3 } } ) );
+
+
+// Count using a compound descending order index.
+t.drop();
+t.ensureIndex( { a:1, b:-1 } );
+t.save( { a:1, b:2 } );
+t.save( { a:2, b:1 } );
+t.save( { a:2, b:3 } );
+t.save( { a:3, b:4 } );
+assert.eq( 1, t.count( { a:{ $gt:2 } } ) );
+assert.eq( 1, t.count( { a:{ $lt:2 } } ) );
+assert.eq( 2, t.count( { a:2, b:{ $gt:0 } } ) );
+assert.eq( 1, t.count( { a:2, b:{ $lt:3 } } ) );
+assert.eq( 1, t.count( { a:1, b:{ $lt:3 } } ) );
+
+
+// Count with a multikey value.
+t.drop();
+t.ensureIndex( { a:1 } );
+t.save( { a:[ 1, 2 ] } );
+assert.eq( 1, t.count( { a:{ $gt:0, $lte:2 } } ) );
+
+
+// Count with a match constraint on an unindexed field.
+t.drop();
+t.ensureIndex( { a:1 } );
+t.save( { a:1, b:1 } );
+t.save( { a:1, b:2 } );
+assert.eq( 1, t.count( { a:1, $where:'this.b == 1' } ) );
+
+// Count when a sparse index is the smallest index by size
+t.drop();
+t.ensureIndex({ a: 1 }, { sparse: true });
+t.ensureIndex({ b: 1, c: 1, d: 1, e: 1 });
+for (i = 0; i < 50; i++) {
+    t.insert({ b: 1, c: 1, d: 1, e: 1 });
+}
+// 'a' index is smaller than 'b,c,d,e' index, therefore a
+// tempting choice for the count() operation.
+assert.lt(t.stats().indexDetails[1].size, t.stats().indexDetails[2].size);
+assert.eq(50, t.count(), "probably used a sparse index for count()");
+
+// Count when a multikey index is the smallest index by size
+t.drop();
+t.ensureIndex({ a: 1 });
+t.ensureIndex({ b: 1, c: 1, d: 1, e: 1 });
+for (i = 0; i < 49; i++) {
+    t.insert({ a: 1, b: 1, c: 1, d: 1, e: 1 });
+}
+t.insert({ a: [ 100, 101, 102, 103, 104 ] }); // 50th insert
+// 'a' index is smaller than 'b,c,d,e' index, therefore a
+// tempting choice for the count() operation.
+assert.lt(t.stats().indexDetails[1].size, t.stats().indexDetails[2].size);
+assert.eq(50, t.count(), "probably used a multikey index for count()");
+

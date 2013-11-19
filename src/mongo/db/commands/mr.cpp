@@ -77,8 +77,8 @@ namespace mongo {
         void JSMapper::map( const BSONObj& o ) {
             Scope * s = _func.scope();
             verify( s );
-            if ( s->invoke( _func.func() , &_params, &o , 0 , true, false, true ) )
-                throw UserException( 9014, str::stream() << "map invoke failed: " + s->getError() );
+            if (s->invoke(_func.func(), &_params, &o, 0, true))
+                uasserted(9014, str::stream() << "map invoke failed: " << s->getError());
         }
 
         /**
@@ -197,7 +197,7 @@ namespace mongo {
 
             Scope * s = _func.scope();
 
-            s->invokeSafe( _func.func() , &args, 0, 0, false, true, true );
+            s->invokeSafe(_func.func(), &args, 0);
             ++numReduces;
 
             if ( s->type( "__returnValue" ) == Array ) {
@@ -626,8 +626,7 @@ namespace mongo {
                     error() << "couldn't cleanup after map reduce: " << e.what() << endl;
                 }
             }
-
-            if (_scope && !_scope->isKillPending()) {
+            if (_scope && !_scope->isKillPending() && _scope->getError().empty()) {
                 // cleanup js objects
                 try {
                     ScriptingFunction cleanup =
@@ -902,9 +901,6 @@ namespace mongo {
                 if ( o.woSortOrder( prev , sortKey ) == 0 ) {
                     // object is same as previous, add to array
                     all.push_back( o );
-                    if ( pm->hits() % 100 == 0 ) {
-                        killCurrentOp.checkForInterrupt();
-                    }
                     continue;
                 }
 
@@ -920,8 +916,6 @@ namespace mongo {
                 all.clear();
                 prev = o;
                 all.push_back( o );
-
-                killCurrentOp.checkForInterrupt();
             }
 
             // reduce and finalize last array
@@ -1419,7 +1413,8 @@ namespace mongo {
 
                     // reduce from each shard for a chunk
                     BSONObj sortKey = BSON( "_id" << 1 );
-                    ParallelSortClusteredCursor cursor( servers , inputNS , Query( query ).sort( sortKey ) );
+                    ParallelSortClusteredCursor cursor(servers, inputNS,
+                            Query(query).sort(sortKey), QueryOption_NoCursorTimeout);
                     cursor.init();
                     int chunkSize = 0;
 

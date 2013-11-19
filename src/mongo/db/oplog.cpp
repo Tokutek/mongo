@@ -21,13 +21,16 @@
 
 #include <vector>
 
+#include "mongo/base/counter.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/repl_block.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/commands.h"
+#include "mongo/db/commands/server_status.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/stats/counters.h"
+#include "mongo/db/stats/timer_stats.h"
 #include "mongo/db/query_optimizer_internal.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/ops/update.h"
@@ -59,6 +62,10 @@ namespace mongo {
         dropCollection(rsoplog, errmsg, out);
         dropCollection(rsOplogRefs, errmsg, out);
         dropCollection(rsReplInfo, errmsg, out);
+    }
+
+    bool oplogFilesOpen() {
+        return (rsOplogDetails != NULL && rsOplogRefsDetails != NULL && replInfoDetails != NULL);
     }
 
     void openOplogFiles() {
@@ -93,7 +100,7 @@ namespace mongo {
         BSONObj bb = b.done();
         // write it to oplog
         LOG(3) << "writing " << bb.toString(false, true) << " to master " << endl;
-        writeEntryToOplog(bb);
+        writeEntryToOplog(bb, true);
     }
 
     // assumes it is locked on entry
@@ -127,7 +134,7 @@ namespace mongo {
         b.append("a", true);
         b.append("ref", oid);
         BSONObj bb = b.done();
-        writeEntryToOplog(bb);
+        writeEntryToOplog(bb, true);
     }
 
     void logOpsToOplogRef(BSONObj o) {
@@ -199,14 +206,29 @@ namespace mongo {
         return found;
     }
 
-    void writeEntryToOplog(BSONObj entry) {
+    static void _writeEntryToOplog(BSONObj entry) {
         verify(rsOplogDetails);
+
         uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
         rsOplogDetails->insertObject(entry, flags);
     }
 
+    void writeEntryToOplog(BSONObj entry, bool recordStats) {
+        if (recordStats) {
+            TimerHolder insertTimer(&oplogInsertStats);
+            oplogInsertBytesStats.increment(entry.objsize());
+            _writeEntryToOplog(entry);
+        } else {
+            _writeEntryToOplog(entry);
+        }
+    }
+
     void writeEntryToOplogRefs(BSONObj o) {
         verify(rsOplogRefsDetails);
+
+        TimerHolder insertTimer(&oplogInsertStats);
+        oplogInsertBytesStats.increment(o.objsize());
+
         uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
         rsOplogRefsDetails->insertObject(o, flags);
     }
@@ -216,7 +238,7 @@ namespace mongo {
         // set the applied bool to false, to let the oplog know that
         // this entry has not been applied to collections
         BSONElementManipulator(op["a"]).setBool(false);
-        writeEntryToOplog(op);
+        writeEntryToOplog(op, true);
     }
 
     // Copy a range of documents to the local oplog.refs collection
@@ -304,12 +326,12 @@ namespace mongo {
             } else {
                 verify(0);
             }
-            // set the applied bool to false, to let the oplog know that
-            // this entry has not been applied to collections
+            // set the applied bool to true, to let the oplog know that
+            // this entry has been applied to collections
             BSONElementManipulator(entry["a"]).setBool(true);
             {
                 Lock::DBRead lk1("local");
-                writeEntryToOplog(entry);
+                writeEntryToOplog(entry, false);
             }
             // If this code fails, it is impossible to recover from
             // because we don't know if the transaction successfully committed
@@ -343,27 +365,41 @@ namespace mongo {
         LOG(3) << "rollback ref " << entry << " oid " << oid << endl;
         long long seq = LLONG_MAX;
         while (1) {
-            BSONObj entry;
+            BSONObj currEntry;
             {
                 Client::ReadContext ctx(rsOplogRefs);
-                // TODO: Should this be using rsOplogRefsDetails, verifying non-null?
-                NamespaceDetails *d = nsdetails(rsOplogRefs);
-                if (d == NULL || !d->findOne(BSON("_id" << BSON("$lt" << BSON("oid" << oid << "seq" << seq))), entry, true)) {
+                verify(rsOplogRefsDetails != NULL);
+                shared_ptr<IndexCursor> c(
+                    IndexCursor::make(
+                        rsOplogRefsDetails,
+                        rsOplogRefsDetails->getPKIndex(),
+                        Helpers::toKeyFormat(BSON( "_id" << BSON("oid" << oid << "seq" << seq))), // right endpoint
+                        Helpers::toKeyFormat(BSON( "_id" << BSON("oid" << oid << "seq" << 0))), // left endpoint
+                        false,
+                        -1 // direction
+                        )
+                    );
+                if (c->ok()) {
+                    currEntry = c->current().copy();
+                }
+                else {
                     break;
                 }
             }
-            BSONElement e = entry.getFieldDotted("_id.seq");
+            BSONElement e = currEntry.getFieldDotted("_id.seq");
             seq = e.Long();
-            BSONElement eOID = entry.getFieldDotted("_id.oid");
+            BSONElement eOID = currEntry.getFieldDotted("_id.oid");
             if (oid != eOID.OID()) {
                 break;
             }
-            LOG(3) << "apply " << entry << " seq=" << seq << endl;
-            rollbackOps(entry["ops"].Array());
+            LOG(3) << "apply " << currEntry << " seq=" << seq << endl;
+            rollbackOps(currEntry["ops"].Array());
+            // decrement seq so next query gets the next value
+            seq--;
         }
     }
 
-    void rollbackTransactionFromOplog(BSONObj entry) {
+    void rollbackTransactionFromOplog(BSONObj entry, bool purgeEntry) {
         bool transactionAlreadyApplied = entry["a"].Bool();
         Client::Transaction transaction(DB_SERIALIZABLE);
         if (transactionAlreadyApplied) {
@@ -377,7 +413,15 @@ namespace mongo {
         }
         {
             Lock::DBRead lk1("local");
-            purgeEntryFromOplog(entry);
+            if (purgeEntry) {
+                purgeEntryFromOplog(entry);
+            }
+            else {
+                // set the applied bool to false, to let the oplog know that
+                // this entry has not been applied to collections
+                BSONElementManipulator(entry["a"]).setBool(false);
+                writeEntryToOplog(entry, false);
+            }
         }
         transaction.commit(DB_TXN_NOSYNC);
     }
@@ -388,8 +432,8 @@ namespace mongo {
             OID oid = entry["ref"].OID();
             Helpers::removeRange(
                 rsOplogRefs,
-                BSON("_id" << BSON("oid" << oid << "seq" << minKey)),
-                BSON("_id" << BSON("oid" << oid << "seq" << maxKey)),
+                BSON("_id" << BSON("oid" << oid << "seq" << 0)),
+                BSON("_id" << BSON("oid" << oid << "seq" << LLONG_MAX)),
                 BSON("_id" << 1),
                 true,
                 false
@@ -408,12 +452,12 @@ namespace mongo {
         return hours * millisPerHour;
     }
 
-    void hotOptimizeOplogTo(GTID gtid) {
+    void hotOptimizeOplogTo(GTID gtid, uint64_t* loops_run) {
         Client::ReadContext ctx(rsoplog);
 
         // do a hot optimize up until gtid;
         BSONObjBuilder q;
         addGTIDToBSON("", gtid, q);
-        rsOplogDetails->optimizePK(minKey, q.done());
+        rsOplogDetails->optimizePK(minKey, q.done(), loops_run);
     }
 }

@@ -51,10 +51,13 @@
 #include "repl/connections.h"
 #include "ops/update.h"
 #include "pcrecpp.h"
+#include "mongo/db/commands/server_status.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/server_parameters.h"
 #include "mongo/db/parsed_query.h"
+#include "mongo/db/stats/timer_stats.h"
+#include "mongo/base/counter.h"
 
 namespace mongo {
 
@@ -70,6 +73,16 @@ namespace mongo {
     const char *replAllDead = 0;
 
     time_t lastForcedResync = 0;
+
+    //The oplog entries inserted
+    TimerStats oplogInsertStats;
+    static ServerStatusMetricField<TimerStats> displayInsertedOplogEntries(
+                                                    "repl.oplog.insert",
+                                                    &oplogInsertStats );
+    Counter64 oplogInsertBytesStats;
+    static ServerStatusMetricField<Counter64> displayInsertedOplogEntryBytes(
+                                                    "repl.oplog.insertBytes",
+                                                    &oplogInsertBytesStats );
 
 } // namespace mongo
 
@@ -91,13 +104,13 @@ namespace mongo {
                 result.append("secondary", false);
                 result.append("info", ReplSet::startupStatusMsg.get());
                 result.append( "isreplicaset" , true );
-                return;
             }
-
-            theReplSet->fillIsMaster(result);
+            else {
+                theReplSet->fillIsMaster(result);
+            }
             return;
         }
-
+        
         if ( replAllDead ) {
             result.append("ismaster", 0);
             string s = string("dead: ") + replAllDead;
@@ -107,6 +120,23 @@ namespace mongo {
             result.appendBool("ismaster", _isMaster() );
         }
     }
+    
+    class ReplicationInfoServerStatus : public ServerStatusSection {
+    public:
+        ReplicationInfoServerStatus() : ServerStatusSection( "repl" ){}
+        bool includeByDefault() const { return true; }
+        
+        BSONObj generateSection(const BSONElement& configElement) const {
+            if ( ! anyReplEnabled() )
+                return BSONObj();
+            
+            int level = configElement.numberInt();
+            
+            BSONObjBuilder result;
+            appendReplicationInfo( result, level );
+            return result.obj();
+        }
+    } replicationInfoServerStatus;
 
     class CmdIsMaster : public Command {
     public:
@@ -190,6 +220,7 @@ namespace mongo {
             setLogTxnToOplog(logTransactionOps);
             setLogTxnRefToOplog(logTransactionOpsRef);
             setLogOpsToOplogRef(logOpsToOplogRef);
+            setOplogInsertStats(&oplogInsertStats, &oplogInsertBytesStats);
             ReplSetCmdline *replSetCmdline = new ReplSetCmdline(cmdLine._replSet);
             boost::thread t( boost::bind( &startReplSets, replSetCmdline) );
 
@@ -215,4 +246,7 @@ namespace mongo {
                     theReplSet && theReplSet->isSecondary() );
         }
     }
+
+    OpCounterServerStatusSection replOpCounterServerStatusSection( "opcountersRepl", &replOpCounters );
+
 } // namespace mongo

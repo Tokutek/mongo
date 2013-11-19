@@ -103,12 +103,6 @@ namespace mongo {
         return _currRunner->cursor()->isMultiKey();
     }
         
-    bool QueryOptimizerCursorImpl::capped() const {
-        // Initial capped wrapping cases (before takeover) are handled internally by a component
-        // ClientCursor.
-        return _takeover ? _takeover->capped() : false;
-    }
-
     long long QueryOptimizerCursorImpl::nscanned() const {
         return _takeover ? _takeover->nscanned() : _nscanned;
     }
@@ -291,7 +285,6 @@ namespace mongo {
                                      const BSONObj &query,
                                      const BSONObj &order,
                                      const QueryPlanSelectionPolicy &planPolicy,
-                                     bool requestMatcher,
                                      const shared_ptr<const ParsedQuery> &parsedQuery,
                                      bool requireOrder,
                                      QueryPlanSummary *singlePlanSummary ) :
@@ -299,7 +292,6 @@ namespace mongo {
     _query( query ),
     _order( order ),
     _planPolicy( planPolicy ),
-    _requestMatcher( requestMatcher ),
     _parsedQuery( parsedQuery ),
     _requireOrder( requireOrder ),
     _singlePlanSummary( singlePlanSummary ) {
@@ -317,25 +309,6 @@ namespace mongo {
         if ( useHints && _parsedQuery ) {
             _argumentsHint = _parsedQuery->getHint();
         }
-        
-        if ( snapshot() ) {
-            NamespaceDetails *d = nsdetails( _ns );
-            if ( d ) {
-                int i = d->findIdIndex();
-                if( i < 0 ) {
-                    if ( !NamespaceString::isSystem(_ns) ) {
-                        log() << "warning: no _id index on $snapshot query, ns:" << _ns << endl;
-                    }
-                }
-                else {
-                    /* [dm] the name of an _id index tends to vary, so we build the hint the hard
-                     way here. probably need a better way to specify "use the _id index" as a hint.
-                     if someone is in the query optimizer please fix this then!
-                     */
-                    _argumentsHint = BSON( "$hint" << d->idx(i).indexName() );
-                }
-            }
-        }
     }
     
     shared_ptr<Cursor> CursorGenerator::shortcutCursor() const {
@@ -347,9 +320,17 @@ namespace mongo {
         if ( _planPolicy.permitOptimalNaturalPlan() && _query.isEmpty() && _order.isEmpty() ) {
             // Table-scan
             NamespaceDetails *d = nsdetails(_ns);
-            return shared_ptr<Cursor>( BasicCursor::make(d) );
+            if ( d != NULL && _planPolicy.requestCountingCursor() ) {
+                // All one-to-one indexes indexes have the same count.
+                //
+                // Utilize an IndexScanCountCursor over the smallest one
+                // of them for best performance.
+                return shared_ptr<Cursor>( new IndexScanCountCursor(d, d->findSmallestOneToOneIndex()) );
+            } else {
+                return shared_ptr<Cursor>( BasicCursor::make(d) );
+            }
         }
-        if ( _planPolicy.permitOptimalIdPlan() && isSimpleIdQuery( _query ) ) {
+        if ( isSimpleIdQuery( _query ) ) {
             NamespaceDetails *d = nsdetails( _ns );
             if ( d ) {
                 int idxNo = d->findIdIndex();
@@ -383,21 +364,25 @@ namespace mongo {
         if ( _singlePlanSummary ) {
             *_singlePlanSummary = singlePlan->summary();
         }
-        shared_ptr<Cursor> single = singlePlan->newCursor();
+
+        bool needMatcher = 
+            // If a matcher is requested or ...
+            _planPolicy.requestMatcher() ||
+            // ... the index ranges do not exactly match the query or ...
+            singlePlan->mayBeMatcherNecessary() ||
+            // ... the matcher must look at the full record
+            singlePlan->matcher()->needRecord();
+
+        // Counting cursors cannot utilize a matcher, so do not request one
+        // if a matcher is needed.
+        shared_ptr<Cursor> single = singlePlan->newCursor( !needMatcher && _planPolicy.requestCountingCursor() );
         if ( !_query.isEmpty() && !single->matcher() ) {
 
             // The query plan must have a matcher.  The matcher's constructor performs some aspects
             // of query validation that should occur before a cursor is returned.
             fassert( 16449, singlePlan->matcher() );
 
-            if ( // If a matcher is requested or ...
-                 _requestMatcher ||
-                 // ... the index ranges do not exactly match the query or ...
-                 singlePlan->mayBeMatcherNecessary() ||
-                 // ... the matcher must look at the full record ...
-                 singlePlan->matcher()->needRecord() ) {
-
-                // ... then set the cursor's matcher to the query plan's matcher.
+            if ( needMatcher ) {
                 single->setMatcher( singlePlan->matcher() );
             }
         }

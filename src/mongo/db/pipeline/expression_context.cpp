@@ -34,13 +34,7 @@ namespace mongo {
     }
 
     void ExpressionContext::checkForInterrupt() {
-        /*
-          Only really check periodically; the check gets a mutex, and could
-          be expensive, at least in relative terms.
-        */
-        if ((++intCheckCounter % 128) == 0) {
-            pStatus->checkForInterrupt();
-        }
+        pStatus->checkForInterrupt();
     }
 
     ExpressionContext* ExpressionContext::clone() {

@@ -81,12 +81,20 @@ namespace mongo {
         // If we could sync from this member.  This doesn't tell us anything about the quality of
         // this member, just if they are a possible sync target.
         bool syncable() const;
+        void recvHeartbeat() {
+            _lastHeartbeatRecv = time(0);
+        }
+        time_t getLastRecvHeartbeat() {
+            return _lastHeartbeatRecv;
+        }
 
     private:
         friend class ReplSetImpl;
         ReplSetConfig::MemberCfg _config;
         const HostAndPort _h;
         HeartbeatInfo _hbinfo;
+        // This is the last time we got a heartbeat request from a given member.
+        time_t _lastHeartbeatRecv;
     };
 
     class Manager : public task::Server {
@@ -355,7 +363,7 @@ namespace mongo {
         /**
          * Find the closest member (using ping time) with a higher latest GTID.
          */
-        Member* getMemberToSyncTo();
+        const Member* getMemberToSyncTo();
         void veto(const string& host, unsigned secs=10);
         bool gotForceSync();
         void goStale(const Member* stale, GTID remoteGTID);
@@ -368,13 +376,14 @@ namespace mongo {
         // for oplog purge thread
         bool _replOplogPurgeRunning;
         boost::mutex _purgeMutex;
-        boost::condition _purgeCond;
+        boost::condition_variable _purgeCond;
         GTID _lastPurgedGTID;
+        uint64_t _lastPurgedTS;
         // for keepOplogAlive
         bool _replKeepOplogAliveRunning;
         uint64_t _keepOplogPeriodMillis;
         boost::mutex _keepOplogAliveMutex;
-        boost::condition _keepOplogAliveCond;
+        boost::condition_variable _keepOplogAliveCond;
         // for optimize oplog thread, uses same _purgeMutex
         bool _replOplogOptimizeRunning;
 
@@ -530,6 +539,8 @@ namespace mongo {
         // for testing
         void setKeepOplogAlivePeriod(uint64_t val);
         void changeExpireOplog(uint64_t expireOplogDays, uint64_t expireOplogHours);
+        GTID getLastPurgedGTID();
+        uint64_t getLastPurgedTS();
     private:
         void _getTargets(list<Target>&, int &configVersion);
         void getTargets(list<Target>&, int &configVersion);
@@ -679,7 +690,7 @@ namespace mongo {
     /** inlines ----------------- */
 
     inline Member::Member(HostAndPort h, unsigned ord, const ReplSetConfig::MemberCfg *c, bool self) :
-        _config(*c), _h(h), _hbinfo(ord) {
+        _config(*c), _h(h), _hbinfo(ord), _lastHeartbeatRecv(0){
         verify(c);
         if( self )
             _hbinfo.health = 1.0;

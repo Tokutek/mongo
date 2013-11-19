@@ -158,9 +158,10 @@ int main( int argc, const char **argv ) {
 
     {
         // hint related tests
-        verify( conn.findOne(ns, "{}")["name"].str() == "sara" );
+        // tokumx doesn't reorder documents just because you updated one, what even is that
+        verify( conn.findOne(ns, "{}")["name"].str() == "eliot" );
 
-        verify( conn.findOne(ns, "{ name : 'eliot' }")["name"].str() == "eliot" );
+        verify( conn.findOne(ns, "{ name : 'sara' }")["name"].str() == "sara" );
         verify( conn.getLastError() == "" );
 
         // nonexistent index test

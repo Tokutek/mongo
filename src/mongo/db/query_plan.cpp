@@ -235,7 +235,7 @@ doneCheckOrder:
         }
     }
 
-    shared_ptr<Cursor> QueryPlan::newCursor() const {
+    shared_ptr<Cursor> QueryPlan::newCursor(const bool requestCountingCursor) const {
 
         if ( _index != NULL && _index->special() ) {
             // hopefully safe to use original query in these contexts - don't think we can mix type
@@ -270,6 +270,14 @@ doneCheckOrder:
                                                           _direction >= 0 ? 1 : -1 ) );
         }
 
+        // A CountingIndexCursor is returned if explicitly requested AND _frv is exactly
+        // represented by a single interval within the index. Because CountingIndexCursors
+        // cannot provide meaningful results for currPK/currKey/current(), we must not
+        // use them for multikey indexes where manual deduplication is required.
+        if (requestCountingCursor && _utility == Optimal && _frv->isSingleInterval() && !isMultiKey()) {
+            return shared_ptr<Cursor>( new IndexCountCursor( _d, *_index, _frv ) );
+        }
+
         if ( _index->special() ) {
             return shared_ptr<Cursor>( IndexCursor::make( _d,
                                                           *_index,
@@ -284,17 +292,6 @@ doneCheckOrder:
                                                       _frv,
                                                       independentRangesSingleIntervalLimit(),
                                                       _direction >= 0 ? 1 : -1 ) );
-    }
-
-    shared_ptr<Cursor> QueryPlan::newReverseCursor() const {
-        if ( willScanTable() ) {
-            const int orderSpec = _order.getIntField( "$natural" );
-            const int direction = orderSpec == INT_MIN ? -1 : -orderSpec;
-            NamespaceDetails *d = nsdetails( _frs.ns() );
-            return shared_ptr<Cursor>( BasicCursor::make( d, direction ) );
-        }
-        massert( 10364, "newReverseCursor() not implemented for indexed plans", false );
-        return shared_ptr<Cursor>();
     }
 
     BSONObj QueryPlan::indexKey() const {

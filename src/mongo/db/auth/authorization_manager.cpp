@@ -95,6 +95,7 @@ namespace {
     MONGO_INITIALIZER(AuthorizationSystemRoles)(InitializerContext* context) {
         // Read role
         readRoleActions.addAction(ActionType::cloneCollectionLocalSource);
+        readRoleActions.addAction(ActionType::collectionsExist);
         readRoleActions.addAction(ActionType::collStats);
         readRoleActions.addAction(ActionType::dbHash);
         readRoleActions.addAction(ActionType::dbStats);
@@ -196,6 +197,7 @@ namespace {
         clusterAdminRoleWriteActions.addAction(ActionType::fsync);
         clusterAdminRoleWriteActions.addAction(ActionType::inprog);
         clusterAdminRoleWriteActions.addAction(ActionType::killop);
+        clusterAdminRoleWriteActions.addAction(ActionType::logReplInfo);
         clusterAdminRoleWriteActions.addAction(ActionType::moveChunk);
         clusterAdminRoleWriteActions.addAction(ActionType::movePrimary);
         clusterAdminRoleWriteActions.addAction(ActionType::removeShard);
@@ -203,6 +205,7 @@ namespace {
         clusterAdminRoleWriteActions.addAction(ActionType::replSetExpireOplog);
         clusterAdminRoleWriteActions.addAction(ActionType::replSetInitiate);
         clusterAdminRoleWriteActions.addAction(ActionType::replSetReconfig);
+        clusterAdminRoleWriteActions.addAction(ActionType::replUndoOplogEntry);
         clusterAdminRoleWriteActions.addAction(ActionType::resync);
         clusterAdminRoleWriteActions.addAction(ActionType::shardCollection);
         clusterAdminRoleWriteActions.addAction(ActionType::shardingState);
@@ -233,7 +236,6 @@ namespace {
 
         // Internal commands
         internalActions.addAction(ActionType::clone);
-        internalActions.addAction(ActionType::collectionsExist);
         internalActions.addAction(ActionType::handshake);
         internalActions.addAction(ActionType::mapReduceShardedFinish);
         internalActions.addAction(ActionType::replSetElect);

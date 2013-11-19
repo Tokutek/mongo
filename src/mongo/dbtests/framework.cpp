@@ -32,6 +32,7 @@
 #include "mongo/db/client.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/instance.h"
+#include "mongo/db/txn_complete_hooks.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/unittest/unittest.h"
 #include "mongo/util/background.h"
@@ -43,8 +44,6 @@ namespace po = boost::program_options;
 namespace mongo {
 
     CmdLine cmdLine;
-
-    extern TxnCompleteHooks _txnCompleteHooks;
 
     namespace dbtests {
 
@@ -223,8 +222,7 @@ namespace mongo {
                 filter = params["filter"].as<string>();
             }
 
-            mongo::setTxnCompleteHooks(&mongo::_txnCompleteHooks);
-            storage::startup();
+            storage::startup(&_txnCompleteHooks);
 
             TestWatchDog twd;
             twd.go();

@@ -35,7 +35,6 @@
 #include "mongo/s/cursors.h"
 #include "mongo/s/grid.h"
 #include "mongo/s/request.h"
-#include "mongo/s/stats.h"
 #include "mongo/s/version_manager.h"
 #include "mongo/util/mongoutils/str.h"
 
@@ -94,9 +93,6 @@ namespace mongo {
                 long long start_millis = 0;
                 if ( qSpec.isExplain() ) start_millis = curTimeMillis64();
                 cursor->init();
-
-                LOG(5) << "   cursor type: " << cursor->type() << endl;
-                shardedCursorTypes.hit( cursor->type() );
 
                 if ( qSpec.isExplain() ) {
                     // fetch elapsed time for the query

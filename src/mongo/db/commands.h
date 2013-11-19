@@ -329,6 +329,6 @@ namespace mongo {
         bool shutdownHelper();
     };
 
-    bool _runCommands(const char *ns, BSONObj& jsobj, BufBuilder &b, BSONObjBuilder& anObjBuilder, bool fromRepl, int queryOptions);
+    bool _runCommands(const char *ns, const BSONObj &cmdObj, BufBuilder &b, BSONObjBuilder& anObjBuilder, bool fromRepl, int queryOptions);
 
 } // namespace mongo

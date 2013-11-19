@@ -189,12 +189,30 @@ namespace mongo {
             }
             idx.reset(new IndexDetails(info));
         }
-        idx->open(may_create);
+        bool ok = idx->open(may_create);
+        if (!ok) {
+            // This signals NamespaceDetails::make that we got ENOENT due to #673
+            return shared_ptr<IndexDetails>();
+        }
         return idx;
     }
 
+    static BSONObj stripDropDups(const BSONObj &obj) {
+        BSONObjBuilder b;
+        for (BSONObjIterator it(obj); it.more(); ) {
+            BSONElement e = it.next();
+            if (StringData(e.fieldName()) == "dropDups") {
+                warning() << "dropDups is not supported because it deletes arbitrary data." << endl;
+                warning() << "We'll proceed without it but if there are duplicates, the index build will fail." << endl;
+            } else {
+                b.append(e);
+            }
+        }
+        return b.obj();
+    }
+
     IndexDetails::IndexDetails(const BSONObj &info) :
-        _info(info.copy()),
+        _info(stripDropDups(info)),
         _keyPattern(info["key"].Obj().copy()),
         _unique(info["unique"].trueValue()),
         _sparse(info["sparse"].trueValue()),
@@ -205,7 +223,7 @@ namespace mongo {
     }
 
     // Open the dictionary. Creates it if necessary.
-    void IndexDetails::open(const bool may_create) {
+    bool IndexDetails::open(const bool may_create) {
         const string dname = indexNamespace();
         if (may_create) {
             addNewNamespaceToCatalog(dname);
@@ -215,7 +233,16 @@ namespace mongo {
         try {
             _db.reset(new storage::Dictionary(dname, _info, *_descriptor, may_create,
                                               _info["background"].trueValue()));
+            return true;
         } catch (storage::Dictionary::NeedsCreate) {
+            if (cc().upgradingSystemUsers() &&
+                isSystemUsersCollection(parentNS()) &&
+                keyPattern() == oldSystemUsersKeyPattern) {
+                // We're upgrading the system.users collection, and we are missing the old index.
+                // That's ok, we'll signal the caller about this by returning a NULL pointer from
+                // IndexDetails::make.  See #673
+                return false;
+            }
             // Unlike for NamespaceIndex, this dictionary must exist on disk if we think it should
             // exist.  This error only gets thrown if may_create is false, which happens when we're
             // trying to open a collection for which we have serialized info.  Therefore, this is a
@@ -320,30 +347,28 @@ namespace mongo {
         return -1;
     }
 
-    void IndexDetails::uniqueCheck(const BSONObj &key, const BSONObj *pk) const {
-        BSONObjIterator it(key);
-        while (it.more()) {
-            BSONElement id = it.next();
-            if (!id.ok()) {
-                // If one of the key fields is null, we just insert it.
-                return;
-            }
-        }
-
-        IndexDetails::Cursor c(*this, DB_SERIALIZABLE);
+    void IndexDetails::uniqueCheck(const BSONObj &key, const BSONObj &pk) const {
+        IndexDetails::Cursor c(*this, DB_SERIALIZABLE | DB_RMW);
         DBC *cursor = c.dbc();
 
-        const bool hasPK = pk != NULL;
-        storage::Key sKey(key, hasPK ? &minKey : NULL);
-        DBT kdbt = sKey.dbt();
+        // We need to check if a secondary key, 'key', exists. We'd like to only
+        // lock just the range of the index that may contain that secondary key,
+        // if it exists. That range is { key, minKey } -> { key, maxKey }, where
+        // the second part of the compound key is the appended primary key.
+        storage::Key leftSKey(key, &minKey);
+        storage::Key rightSKey(key, &maxKey);
+        DBT start = leftSKey.dbt();
+        DBT end = rightSKey.dbt();
+        int r = cursor->c_set_bounds(cursor, &start, &end, true, 0);
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
 
         bool isUnique = true;
-        UniqueCheckExtra extra(sKey, *_descriptor, isUnique);
-        // If the key has a PK, we need to set range in order to find the first
-        // key greater than { key, minKey }. If there is no pk then there's
-        // just one component to the key, so we can just getf_set to that point.
-        const int r = hasPK ? cursor->c_getf_set_range(cursor, 0, &kdbt, uniqueCheckCallback, &extra) :
-                              cursor->c_getf_set(cursor, 0, &kdbt, uniqueCheckCallback, &extra);
+        UniqueCheckExtra extra(leftSKey, *_descriptor, isUnique);
+        const int flags = DB_PRELOCKED | DB_PRELOCKED_WRITE; // prelocked above
+        r = cursor->c_getf_set_range(cursor, flags, &start, uniqueCheckCallback, &extra);
+                              
         if (r != 0 && r != DB_NOTFOUND) {
             extra.throwException();
             storage::handle_ydb_error(r);
@@ -427,7 +452,7 @@ namespace mongo {
     }
 
     void IndexDetails::optimize(const storage::Key &leftSKey, const storage::Key &rightSKey,
-                                const bool sendOptimizeMessage) {
+                                const bool sendOptimizeMessage, uint64_t* loops_run) {
         if (sendOptimizeMessage) {
             const int r = db()->optimize(db());
             if (r != 0) {
@@ -438,7 +463,7 @@ namespace mongo {
         uint64_t iter = 0;
         DBT left = leftSKey.dbt();
         DBT right = rightSKey.dbt();
-        const int r = db()->hot_optimize(db(), &left, &right, hot_opt_callback, &iter);
+        const int r = db()->hot_optimize(db(), &left, &right, hot_opt_callback, &iter, loops_run);
         if (r != 0) {
             uassert(16810, mongoutils::str::stream() << "reIndex query killed ", false);
         }

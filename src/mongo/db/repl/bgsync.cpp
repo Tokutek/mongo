@@ -19,14 +19,49 @@
 
 #include "mongo/db/client.h"
 #include "mongo/db/commands/fsync.h"
+#include "mongo/db/commands/server_status.h"
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/repl/rs_sync.h"
+#include "mongo/base/counter.h"
+#include "mongo/db/stats/timer_stats.h"
 
 namespace mongo {
     void incRBID();
     BackgroundSync* BackgroundSync::s_instance = 0;
     boost::mutex BackgroundSync::s_mutex;
 
+    //The number and time spent reading batches off the network
+    static TimerStats getmoreReplStats;
+    static ServerStatusMetricField<TimerStats> displayBatchesRecieved(
+                                                    "repl.network.getmores",
+                                                    &getmoreReplStats );
+    //The oplog entries read via the oplog reader
+    static Counter64 opsReadStats;
+    static ServerStatusMetricField<Counter64> displayOpsRead( "repl.network.ops",
+                                                                &opsReadStats );
+    //The bytes read via the oplog reader
+    static Counter64 networkByteStats;
+    static ServerStatusMetricField<Counter64> displayBytesRead( "repl.network.bytes",
+                                                                &networkByteStats );
+
+    //The count of items in the buffer
+    static Counter64 bufferCountGauge;
+    static ServerStatusMetricField<Counter64> displayBufferCount( "repl.buffer.count",
+                                                                &bufferCountGauge );
+    //The size (bytes) of items in the buffer
+    static Counter64 bufferSizeGauge;
+    static ServerStatusMetricField<Counter64> displayBufferSize( "repl.buffer.sizeBytes",
+                                                                &bufferSizeGauge );
+
+    // Number and time of each ApplyOps worker pool round
+    static TimerStats applyBatchStats;
+    static ServerStatusMetricField<TimerStats> displayOpBatchesApplied(
+                                                    "repl.apply.batches",
+                                                    &applyBatchStats );
+    //The oplog entries applied
+    static Counter64 opsAppliedStats;
+    static ServerStatusMetricField<Counter64> displayOpsApplied( "repl.apply.ops",
+                                                                &opsAppliedStats );
 
     BackgroundSync::BackgroundSync() : _opSyncShouldRun(false),
                                             _opSyncRunning(false),
@@ -38,26 +73,12 @@ namespace mongo {
     {
     }
 
-    BackgroundSync::QueueCounter::QueueCounter() : waitTime(0) {
-    }
-
     BackgroundSync* BackgroundSync::get() {
         boost::unique_lock<boost::mutex> lock(s_mutex);
         if (s_instance == NULL && !inShutdown()) {
             s_instance = new BackgroundSync();
         }
         return s_instance;
-    }
-
-    BSONObj BackgroundSync::getCounters() {
-        BSONObjBuilder counters;
-        {
-            boost::unique_lock<boost::mutex> lock(_mutex);
-            counters.appendIntOrLL("waitTimeMs", _queueCounter.waitTime);
-            uint32_t size = _deque.size();
-            counters.append("numElems", size);
-        }
-        return counters.obj();
     }
 
     void BackgroundSync::shutdown() {
@@ -123,7 +144,7 @@ namespace mongo {
                     // wait until we know an item has been produced
                     while (_deque.size() == 0 && !_applierShouldExit) {
                         _queueDone.notify_all();
-                        _queueCond.wait(_mutex);
+                        _queueCond.wait(lck);
                     }
                     if (_deque.size() == 0 && _applierShouldExit) {
                         return; 
@@ -138,7 +159,9 @@ namespace mongo {
                 for (uint32_t numTries = 0; numTries <= 100; numTries++) {
                     try {
                         numTries++;
+                        TimerHolder timer(&applyBatchStats);
                         applyTransactionFromOplog(curr);
+                        opsAppliedStats.increment();
                         break;
                     }
                     catch (std::exception &e) {
@@ -157,6 +180,8 @@ namespace mongo {
                     boost::unique_lock<boost::mutex> lck(_mutex);
                     dassert(_deque.size() > 0);
                     _deque.pop_front();
+                    bufferCountGauge.increment(-1);
+                    bufferSizeGauge.increment(-curr.objsize());
                     
                     // this is a flow control mechanism, with bad numbers
                     // hard coded for now just to get something going.
@@ -331,6 +356,7 @@ namespace mongo {
             // we attempted a rollback and failed, we must go fatal.
             log() << "Caught a RollbackOplogException during rollback, going fatal" << rsLog;
             theReplSet->fatal();
+            return 2; // 2 is arbitrary, if we are going fatal, we are done
         }
 
         while (!_opSyncShouldExit) {
@@ -356,8 +382,14 @@ namespace mongo {
                     if (shouldChangeSyncTarget()) {
                         return 0;
                     }
+                    //record time for each getmore
+                    {
+                        TimerHolder batchTimer(&getmoreReplStats);
+                        r.more();
+                    }
+                    //increment
+                    networkByteStats.increment(r.currentBatchMessageSize());
 
-                    r.more();
                 }
 
                 if (!r.more()) {
@@ -367,6 +399,7 @@ namespace mongo {
                 // This is the operation we have received from the target
                 // that we must put in our oplog with an applied field of false
                 BSONObj o = r.nextSafe().getOwned();
+                opsReadStats.increment();
                 LOG(3) << "replicating " << o.toString(false, true) << " from " << _currentSyncTarget->fullName() << endl;
                 uint64_t ts = o["ts"]._numberLong();
 
@@ -398,12 +431,13 @@ namespace mongo {
                         boost::unique_lock<boost::mutex> lock(_mutex);
                         // update counters
                         theReplSet->gtidManager->noteGTIDAdded(currEntry, ts, lastHash);
-                        _queueCounter.waitTime += timer.millis();
                         // notify applier thread that data exists
                         if (_deque.size() == 0) {
                             _queueCond.notify_all();
                         }
                         _deque.push_back(o);
+                        bufferCountGauge.increment();
+                        bufferSizeGauge.increment(o.objsize());
                         // this is a flow control mechanism, with bad numbers
                         // hard coded for now just to get something going.
                         // If the opSync thread notices that we have over 20000
@@ -468,7 +502,7 @@ namespace mongo {
     }
 
     void BackgroundSync::getOplogReader(OplogReader& r) {
-        Member *target = NULL, *stale = NULL;
+        const Member *target = NULL, *stale = NULL;
         BSONObj oldest;
 
         verify(r.conn() == NULL);
@@ -646,7 +680,7 @@ namespace mongo {
                     dassert(GTID::cmp(lastGTID, idToRollbackTo) == 0);
                     break;
                 }
-                rollbackTransactionFromOplog(o);
+                rollbackTransactionFromOplog(o, true);
             }
             theReplSet->leaveRollbackState();
         }
@@ -693,7 +727,7 @@ namespace mongo {
         return true;
     }
 
-    Member* BackgroundSync::getSyncTarget() {
+    const Member* BackgroundSync::getSyncTarget() {
         boost::unique_lock<boost::mutex> lock(_mutex);
         return _currentSyncTarget;
     }

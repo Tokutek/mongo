@@ -1,18 +1,137 @@
 tokumx news
 ===========
 
-tokumx 1.3.0
+tokumx 1.3.2
 ------------
 Release date: TBD
 
 General
 ~~~~~~~
 
-    -
+    - This release is focused on bug fixes since 1.3.1.
 
 
 New features and improvements
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Added `tokumxstat.py`, a script for polling `db.engineStatus()`.
+      (#534, #535)
+
+    - Improved the error messages reported in the server log when
+      filesystem errors occur.  (#703, #715)
+
+    - Improved the concurrency of sequential inserts into a unique index.
+      (#705)
+
+    - Improved the concurrency of `justOne` remove operations.  (#721)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Removed an overactive assert that could prevent a server from
+      starting if recovery was needed.  (#650)
+
+    - Fixed counting of oplog insert statistics on secondaries.
+      Previously, operations were double-counted on secondaries.  (#689)
+
+    - Fixed the upgrade of `system.users` collections to work when the
+      server is started with `--auth`.  (#690)
+
+    - Changed required authorization of transaction and loader commands so
+      that they are available to normal users when running with `--auth`.
+      (#698)
+
+    - Fixed the semantics of `getLastError` with `j:1` or `fsync:1`.
+      (#709)
+
+    - Fixed the rollback of very large transactions after a replication
+      failover.  (#716, #720)
+
+
+tokumx 1.3.1
+------------
+Release date: 2013-10-25
+
+General
+~~~~~~~
+
+    - This release is focused on bug fixes since 1.3.0.
+
+    - Please take careful note of the changed default of expireOplogDays.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - TokuMX now reports progress related to the purging of expired
+      entries from the oplog.  (#645)
+
+    - The default value of expireOplogDays has been changed to 14 (entries
+      expire after 2 weeks), from 0 (no expiration or purging occurs).
+
+      Therefore, if you haven't set expireOplogDays on the command line or
+      in a config file and you've been running a TokuMX replica set for
+      more than 14 days, when you upgrade, you may see a lot of oplog
+      purging activity initially as it adjusts to the new default.  If you
+      have set expireOplogDays, nothing will change when you upgrade.
+
+      See the user's guide for a description of expireOplogDays and
+      guidelines for how to choose a good value.
+
+    - Optimized deletes that specify just the `_id` field.  (#669)
+
+    - TokuMX now warns you if you have `cacheSize` set to <1GB, as
+      performance may suffer.  (#678)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Incorporated the fix for
+      http://jira.mongodb.org/browse/SERVER-9283[SERVER-9283]
+      (lastHeartbeatRecv flaps between invalid and valid dates).  (#660)
+
+    - Fixed an authentication error that prevented manual `copydb` and
+      `cloneCollection` commands from succeeding.  (#666)
+
+    - Fixed a problem where setting `lockTimeout` with `setParameter`
+      would succeed but claim that it had failed.  It now succeeds and
+      reports success.  (#667)
+
+    - Fixed an isolation bug with multi-statement transactions.  (#668)
+
+    - Fixed the upgrading of the `system.users` collection to the MongoDB
+      v2.4 format.  Also, version 1.3.1 repairs damage that was possible
+      to do to the `system.users` collection in rare cases with version
+      1.3.0.  (#673, #674)
+
+    - Fixed a bug that prevented serializable transactions from starting
+      on the primary of a replica set.  (#682)
+
+
+tokumx 1.3.0
+------------
+Release date: 2013-10-18
+
+General
+~~~~~~~
+
+    - This release brings TokuMX full compatibility with MongoDB v2.4,
+      except for full text search and geo indexes (2d and 2dsphere).
+
+      For a full set of changes, confer with https://jira.mongodb.org and
+      MongoDB's marketing materials.  Some major features are called out
+      below in addition to TokuMX-specific features and fixes.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Switched the default Javascript interpreter to V8.  (#161, #497,
+      #517)
+
+    - Added the `$setOnInsert` update operator.  (#279)
 
     - Many numeric `"byte quantity"` parameters can now be specified with
       units, for example `"1MB"` or `"32k"` or `"6T"`.  The allowed
@@ -29,6 +148,82 @@ New features and improvements
 
     - Added mongo shell wrapper functions `db.showLiveTransactions()` and
       `db.showPendingLockRequests()`.  (#437, #526)
+
+    - Merged improvements to the aggregation framework in v2.4, including
+      performance optimizations and some behavioral changes.  (#516, #517)
+
+    - Merged authorization system changes (fine-grained access control) in
+      v2.4.  (#527, #549)
+
+    - Re-enabled an optimization for updates using the `_id` index.
+      (#538)
+
+    - Added a parameter `--loaderMaxMemory` which controls the amount of
+      memory used by the bulk loader, which is used by mongorestore.  The
+      default value is 100MB.  (#571)
+
+    - The `lockTimeout` parameter can now be set by the `setParameter`
+      command.  (#574)
+
+    - Merged changes to the `db.serverStatus()` command, and added several
+      TokuMX-specific fields.  See the user's guide for more details.
+      (#591, #626, #627)
+
+    - Optimized generation of secondary keys, which impacts workloads with
+      a large number of secondary indexes and/or indexes on array-valued
+      fields.  (#600, #618)
+
+    - Skip generation of secondary keys for indexes that are not affected
+      by an update.  This has a significant positive impact on the
+      performance of workloads with indexes on array-valued fields that
+      don't get changed by update statements.  (#601, #617)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Fixed display of date/time information in `db.engineStatus()`
+      output.  (#533)
+
+    - Avoid building unique indexes in the background.  Doing this is not
+      actually an error, but if another client violates the unique
+      constraint for an index that isn't finished building, the index
+      build will waste a lot of time building the index only to roll it
+      back later.  Unique indexes will always be built in the foreground.
+      (#537)
+
+    - Fixed command line parsing of the `--lockTimeout` option.  (#541)
+
+    - Allow `db.dropDatabase()` when profiling is on.  (#546)
+
+    - Fixed an issue where deletes and updates in multi-statement
+      transactions can cause indexes to get out of sync.  (#562)
+
+    - Fixed a possible deadlock caused by trying to open a collection in
+      certain contexts, like `db.eval()`.  (#573)
+
+    - Fixed a possible crash after aborting a bulk load.  (#589)
+
+    - Prevented `mapReduce` operations from using too much server memory.
+      (#593)
+
+    - Fixed an issue where splitting a chunk may fail if many documents
+      have been deleted from the chunk since it was created.  (#602)
+
+    - Fixed a bug that causes an extra empty chunk to be generated when
+      the `force` option is used with the `splitVector` command.  (#604)
+
+    - The date fields in `db.engineStatus()` are now stored as true BSON
+      Date objects, rather than formatted strings.  (#630)
+
+    - Fixed a locking issue with the `replSetExpireOplog` command.  (#642)
+
+    - Fixed an issue where the initial splitting of an empty collection
+      for a `shardCollection` command with a hashed shard key would fail
+      on clusters of 32 or more shards.  (#649)
+
+    - Fixed the logging of "lock not granted" errors that happen on the
+      ydb directory.  (#652)
 
 
 tokumx 1.2.1

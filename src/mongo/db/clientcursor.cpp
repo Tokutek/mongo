@@ -39,6 +39,7 @@
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/database.h"
+#include "mongo/db/commands/server_status.h"
 #include "mongo/db/introspect.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/kill_current_op.h"
@@ -67,17 +68,6 @@ namespace mongo {
     CCById ClientCursor::clientCursorsById;
     boost::recursive_mutex& ClientCursor::ccmutex( *(new boost::recursive_mutex()) );
     long long ClientCursor::numberTimedOut = 0;
-
-    /*static*/ void ClientCursor::assertNoCursors() {
-        recursive_scoped_lock lock(ccmutex);
-        if( clientCursorsById.size() ) {
-            log() << "ERROR clientcursors exist but should not at this point" << endl;
-            ClientCursor *cc = clientCursorsById.begin()->second;
-            log() << "first one: " << cc->_cursorid << ' ' << cc->_ns << endl;
-            clientCursorsById.clear();
-            verify(false);
-        }
-    }
 
     void ClientCursor::invalidateAllCursors() {
         verify(Lock::isW());
@@ -435,6 +425,20 @@ namespace mongo {
             return true;
         }
     } cmdCursorInfo;
+
+    class CursorServerStats : public ServerStatusSection {
+    public:
+
+        CursorServerStats() : ServerStatusSection( "cursors" ){}
+        virtual bool includeByDefault() const { return true; }
+
+        BSONObj generateSection(const BSONElement& configElement) const {
+            BSONObjBuilder b;
+            ClientCursor::appendStats( b );
+            return b.obj();
+        }
+
+    } cursorServerStats;
 
     /** thread for timing out old cursors */
     void ClientCursorMonitor::run() {

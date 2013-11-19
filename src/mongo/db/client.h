@@ -52,6 +52,7 @@ namespace mongo {
     class LockCollectionForReading;
     class DBClientConnection;
     class ReplSet;
+    class TxnContext;
 
     extern ReplSet *theReplSet;
     extern RWLockRecursive operationLock;
@@ -306,6 +307,7 @@ namespace mongo {
         std::string _desc;
         bool _god;
         StringData _creatingSystemUsers;
+        bool _upgradingSystemUsers;
         GTID _lastGTID;
         BSONObj _handshake;
         BSONObj _remoteId;
@@ -328,6 +330,16 @@ namespace mongo {
         };
         bool creatingSystemUsers() const;
 
+        /* declare that we're upgrading system.users
+           therefore we should look for mismatched namespaceindex objects and handle them properly
+           this allows us to repair #672 properly */
+        class UpgradingSystemUsersScope : boost::noncopyable {
+          public:
+            UpgradingSystemUsersScope();
+            ~UpgradingSystemUsersScope();
+        };
+        bool upgradingSystemUsers() const { return _upgradingSystemUsers; }
+
         /* set _god=true temporarily, safely */
         class GodScope {
             bool _prev;
@@ -349,9 +361,6 @@ namespace mongo {
                 see also: reset().
             */
             Context(const StringData &ns , Database * db);
-
-            // used by ReadContext
-            Context(const StringData &path, const StringData &ns, Database *db);
 
             ~Context();
             Client* getClient() const { return _client; }

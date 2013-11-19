@@ -25,6 +25,7 @@
 
 #include "mongo/pch.h"
 #include "mongo/server.h"
+#include "mongo/base/counter.h"
 #include "mongo/base/init.h"
 #include "mongo/base/status.h"
 #include "mongo/bson/util/builder.h"
@@ -44,6 +45,7 @@
 #include "mongo/db/replutil.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/commands/rename_collection.h"
+#include "mongo/db/commands/server_status.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/lasterror.h"
 #include "mongo/db/namespace_details.h"
@@ -51,8 +53,8 @@
 #include "mongo/db/query_optimizer.h"
 #include "mongo/db/ops/count.h"
 #include "mongo/db/ops/insert.h"
-#include "mongo/db/repl/bgsync.h"
 #include "mongo/db/stats/counters.h"
+#include "mongo/db/stats/timer_stats.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/s/d_writeback.h"
@@ -61,8 +63,6 @@
 #include "mongo/util/version.h"
 #include "mongo/util/lruishmap.h"
 #include "mongo/util/md5.hpp"
-#include "mongo/util/processinfo.h"
-#include "mongo/util/ramlog.h"
 
 namespace mongo {
 
@@ -96,6 +96,12 @@ namespace mongo {
        note: once non-null, never goes to null again.
     */
     BSONObj *getLastErrorDefault = 0;
+
+    static TimerStats gleWtimeStats;
+    static ServerStatusMetricField<TimerStats> displayGleLatency( "getLastError.wtime", &gleWtimeStats );
+
+    static Counter64 gleWtimeouts;
+    static ServerStatusMetricField<Counter64> gleWtimeoutsDisplay( "getLastError.wtimeouts", &gleWtimeouts );
 
     class CmdGetLastError : public InformationCommand {
     public:
@@ -155,9 +161,9 @@ namespace mongo {
                 // we allow to set both
                 //
                 if ( cmdObj["j"].trueValue() || cmdObj["fsync"].trueValue()) {
-                    // only bother to flush recovery log 
-                    // if we are not already fsyncing on commit
-                    if (!cmdLine.logFlushPeriod != 0) {
+                    // if there's a non-zero log flush period, transactions
+                    // do not fsync on commit and so we must do it here.
+                    if (cmdLine.logFlushPeriod != 0) {
                         storage::log_flush();
                     }
                 }
@@ -174,7 +180,7 @@ namespace mongo {
                     }
 
                     int timeout = cmdObj["wtimeout"].numberInt();
-                    Timer t;
+                    TimerHolder timer( &gleWtimeStats );
 
                     long long passes = 0;
                     char buf[32];
@@ -237,10 +243,12 @@ namespace mongo {
                             return true;
                         }
 
-                        if ( timeout > 0 && t.millis() >= timeout ) {
+                        if ( timeout > 0 && timer.millis() >= timeout ) {
+                            gleWtimeouts.increment();
                             result.append( "wtimeout" , true );
                             errmsg = "timed out waiting for slaves";
-                            result.append( "waited" , t.millis() );
+                            result.append( "waited" , timer.millis() );
+							result.append("writtenTo", getHostsWrittenTo(gtid));
                             result.append( "err" , "timeout" );
                             return true;
                         }
@@ -251,7 +259,8 @@ namespace mongo {
                         killCurrentOp.checkForInterrupt();
                     }
 
-                    int myMillis = t.millis();
+					result.append("writtenTo", getHostsWrittenTo(gtid));
+					int myMillis = timer.recordMillis();
                     result.appendNumber( "wtime" , myMillis );
                 }
             }
@@ -265,6 +274,7 @@ namespace mongo {
             result.appendNull( "err" );
             return true;
         }
+
     } cmdGetLastError;
 
     class CmdGetPrevError : public InformationCommand {
@@ -461,167 +471,6 @@ namespace mongo {
             }
         }
     } cmdProfile;
-
-    void reportLockStats(BSONObjBuilder& result);
-    
-    class CmdServerStatus : public WebInformationCommand {
-        unsigned long long _started;
-    public:
-        CmdServerStatus() : WebInformationCommand("serverStatus") {
-            _started = curTimeMillis64();
-        }
-
-        virtual void help( stringstream& help ) const {
-            help << "returns lots of administrative server statistics";
-        }
-        virtual void addRequiredPrivileges(const std::string& dbname,
-                                           const BSONObj& cmdObj,
-                                           std::vector<Privilege>* out) {
-            ActionSet actions;
-            actions.addAction(ActionType::serverStatus);
-            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
-        }
-        bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
-            long long start = Listener::getElapsedTimeMillis();
-            BSONObjBuilder timeBuilder(128);
-
-            result.append("host", prettyHostName() );
-            result.append("version", mongodbVersionString);
-            result.append("tokumxVersion", tokumxVersionString);
-            result.append("process","mongod");
-            result.append("pid", (int)getpid());
-            result.append("uptime",(double) (time(0)-cmdLine.started));
-            result.append("uptimeMillis", (long long)(curTimeMillis64()-_started));
-            result.append("uptimeEstimate",(double) (start/1000));
-            result.appendDate( "localTime" , jsTime() );
-
-            reportLockStats(result);
-
-            {
-                BSONObjBuilder t;
-                
-                t.append( "totalTime" , (long long)(1000 * ( curTimeMillis64() - _started ) ) );
-                t.append( "lockTime" , Lock::globalLockStat()->getTimeLocked( 'W' ) );
-
-                {
-                    BSONObjBuilder ttt( t.subobjStart( "currentQueue" ) );
-                    int w=0, r=0;
-                    Client::getReaderWriterClientCount( &r , &w );
-                    ttt.append( "total" , w + r );
-                    ttt.append( "readers" , r );
-                    ttt.append( "writers" , w );
-                    ttt.done();
-                }
-
-                {
-                    BSONObjBuilder ttt( t.subobjStart( "activeClients" ) );
-                    int w=0, r=0;
-                    Client::getActiveClientCount( w , r );
-                    ttt.append( "total" , w + r );
-                    ttt.append( "readers" , r );
-                    ttt.append( "writers" , w );
-                    ttt.done();
-                }
-
-
-
-                result.append( "globalLock" , t.obj() );
-            }
-            timeBuilder.appendNumber( "after basic" , Listener::getElapsedTimeMillis() - start );
-
-            {
-                BSONObjBuilder bb( result.subobjStart( "connections" ) );
-                bb.append( "current" , Listener::globalTicketHolder.used() );
-                bb.append( "available" , Listener::globalTicketHolder.available() );
-                bb.append( "totalCreated" , Listener::globalConnectionNumber.load() );
-                bb.done();
-            }
-            timeBuilder.appendNumber( "after connections" , Listener::getElapsedTimeMillis() - start );
-
-            {
-                BSONObjBuilder bb( result.subobjStart( "extra_info" ) );
-                bb.append("note", "fields vary by platform");
-                ProcessInfo p;
-                p.getExtraInfo(bb);
-                bb.done();
-                timeBuilder.appendNumber( "after extra info" , Listener::getElapsedTimeMillis() - start );
-
-            }
-
-            {
-                BSONObjBuilder bb( result.subobjStart( "cursors" ) );
-                ClientCursor::appendStats( bb );
-                bb.done();
-            }
-
-            {
-                BSONObjBuilder bb( result.subobjStart( "network" ) );
-                networkCounter.append( bb );
-                bb.done();
-            }
-
-
-            timeBuilder.appendNumber( "after counters" , Listener::getElapsedTimeMillis() - start );
-
-            if ( anyReplEnabled() ) {
-                BSONObjBuilder bb( result.subobjStart( "repl" ) );
-                appendReplicationInfo(bb, cmdObj["repl"].numberInt());
-                bb.done();
-
-                if ( ! _isMaster() ) {
-                    result.append( "opcountersRepl" , replOpCounters.getObj() );
-                }
-
-                if (theReplSet) {
-                    result.append( "replNetworkQueue", BackgroundSync::get()->getCounters());
-                }
-            }
-
-            timeBuilder.appendNumber( "after repl" , Listener::getElapsedTimeMillis() - start );
-
-            result.append( "opcounters" , globalOpCounters.getObj() );
-
-            {
-                BSONObjBuilder asserts( result.subobjStart( "asserts" ) );
-                asserts.append( "regular" , assertionCount.regular );
-                asserts.append( "warning" , assertionCount.warning );
-                asserts.append( "msg" , assertionCount.msg );
-                asserts.append( "user" , assertionCount.user );
-                asserts.append( "rollovers" , assertionCount.rollovers );
-                asserts.done();
-            }
-
-            timeBuilder.appendNumber( "after asserts" , Listener::getElapsedTimeMillis() - start );
-
-            result.append( "writeBacksQueued" , ! writeBackManager.queuesEmpty() );
-
-            timeBuilder.appendNumber( "after dur" , Listener::getElapsedTimeMillis() - start );
-
-            {
-                RamLog* rl = RamLog::get( "warnings" );
-                massert(15880, "no ram log for warnings?" , rl);
-
-                if (rl->lastWrite() >= time(0)-(10*60)){ // only show warnings from last 10 minutes
-                    vector<const char*> lines;
-                    rl->get( lines );
-
-                    BSONArrayBuilder arr( result.subarrayStart( "warnings" ) );
-                    for ( unsigned i=std::max(0,(int)lines.size()-10); i<lines.size(); i++ )
-                        arr.append( lines[i] );
-                    arr.done();
-                }
-            }
-
-            timeBuilder.appendNumber( "at end" , Listener::getElapsedTimeMillis() - start );
-            if ( Listener::getElapsedTimeMillis() - start > 1000 ) {
-                BSONObj t = timeBuilder.obj();
-                log() << "serverStatus was very slow: " << t << endl;
-                result.append( "timing" , t );
-            }
-
-            return true;
-        }
-    } cmdServerStatus;
 
     class CmdEngineStatus : public WebInformationCommand {
     public:
@@ -1894,7 +1743,7 @@ namespace mongo {
             retval = _execCommand(c, dbname, cmdObj, queryOptions, errmsg, result, fromRepl);
 
             if ( retval && c->logTheOp() && ! fromRepl ) {
-                OpLogHelpers::logCommand(cmdns, cmdObj, &cc().txn());
+                OpLogHelpers::logCommand(cmdns, cmdObj);
             }
 
             if (retval && txn) {
@@ -1928,7 +1777,7 @@ namespace mongo {
             client.curop()->ensureStarted();
             retval = _execCommand(c, dbname, cmdObj, queryOptions, errmsg, result, fromRepl);
             if ( retval && c->logTheOp() && ! fromRepl ) {
-                OpLogHelpers::logCommand(cmdns, cmdObj, &cc().txn());
+                OpLogHelpers::logCommand(cmdns, cmdObj);
             }
 
             if (retval && transaction) {
@@ -1948,11 +1797,11 @@ namespace mongo {
 
        returns true if ran a cmd
     */
-    bool _runCommands(const char *ns, BSONObj& _cmdobj, BufBuilder &b, BSONObjBuilder& anObjBuilder, bool fromRepl, int queryOptions) {
+    bool _runCommands(const char *ns, const BSONObj &cmdobj, BufBuilder &b, BSONObjBuilder& anObjBuilder, bool fromRepl, int queryOptions) {
         string dbname = nsToDatabase( ns );
 
         if( logLevel >= 1 )
-            log() << "run command " << ns << ' ' << _cmdobj << endl;
+            log() << "run command " << ns << ' ' << cmdobj << endl;
 
         const char *p = strchr(ns, '.');
         if ( !p ) return false;
@@ -1960,7 +1809,7 @@ namespace mongo {
 
         BSONObj jsobj;
         {
-            BSONElement e = _cmdobj.firstElement();
+            BSONElement e = cmdobj.firstElement();
             if ( e.type() == Object && (e.fieldName()[0] == '$'
                                          ? str::equals("query", e.fieldName()+1)
                                          : str::equals("query", e.fieldName())))
@@ -1968,13 +1817,13 @@ namespace mongo {
                 jsobj = e.embeddedObject();
             }
             else {
-                jsobj = _cmdobj;
+                jsobj = cmdobj;
             }
         }
 
         // Treat the command the same as if it has slaveOk bit on if it has a read
         // preference setting. This is to allow these commands to run on a secondary.
-        if (Query::hasReadPreference(_cmdobj)) {
+        if (Query::hasReadPreference(cmdobj)) {
             queryOptions |= QueryOption_SlaveOk;
         }
 
@@ -1991,7 +1840,7 @@ namespace mongo {
             Command::appendCommandStatus(anObjBuilder,
                                          false,
                                          str::stream() << "no such cmd: " << e.fieldName());
-            anObjBuilder.append("bad cmd" , _cmdobj );
+            anObjBuilder.append("bad cmd" , cmdobj );
         }
 
         BSONObj x = anObjBuilder.done();

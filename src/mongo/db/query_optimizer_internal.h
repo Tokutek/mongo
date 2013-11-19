@@ -224,7 +224,6 @@ namespace mongo {
         CachedMatchCounter _matchCounter;
         bool _countingMatches;
         bool _mustAdvance;
-        bool _capped;
         shared_ptr<Cursor> _c;
         ClientCursor::Holder _cc;
         const QueryPlanSelectionPolicy& _selectionPolicy;
@@ -319,8 +318,6 @@ namespace mongo {
         void setHintedPlanForIndex( IndexDetails& id );
 
         void validateAndSetHintedPlan( const shared_ptr<QueryPlan>& plan );
-
-        void warnOnCappedIdTableScan() const;
 
         QueryPlanSet& _qps;
         auto_ptr<FieldRangeSetPair> _originalFrsp;
@@ -682,7 +679,6 @@ namespace mongo {
         virtual bool advance();
 
         virtual BSONObj currKey() const { return _c->currKey(); }
-        virtual bool supportGetMore() { return true; }
         virtual BSONObj indexKeyPattern() const { return _c->indexKeyPattern(); }
 
         /** Deduping documents from a prior cursor is handled by the matcher. */
@@ -694,8 +690,6 @@ namespace mongo {
 
         virtual CoveredIndexMatcher* matcher() const { return _matcher.get(); }
 
-        virtual bool capped() const { return _c->capped(); }
-        
         virtual long long nscanned() const { return _nscanned + _c->nscanned(); }
         
         void noteIterate( bool match, bool loadedRecord );

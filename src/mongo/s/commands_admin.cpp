@@ -34,7 +34,6 @@
 #include "mongo/s/config.h"
 #include "mongo/s/field_parser.h"
 #include "mongo/s/grid.h"
-#include "mongo/s/stats.h"
 #include "mongo/s/strategy.h"
 #include "mongo/s/type_chunk.h"
 #include "mongo/s/type_database.h"
@@ -111,108 +110,6 @@ namespace mongo {
                 return true;
             }
         } flushRouterConfigCmd;
-
-
-        class ServerStatusCmd : public WebInformationCommand {
-        public:
-            ServerStatusCmd() : WebInformationCommand( "serverStatus" ) {
-                _started = time(0);
-            }
-            virtual void addRequiredPrivileges(const std::string& dbname,
-                                               const BSONObj& cmdObj,
-                                               std::vector<Privilege>* out) {
-                ActionSet actions;
-                actions.addAction(ActionType::serverStatus);
-                out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
-            }
-
-            bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
-                result.append( "host" , prettyHostName() );
-                result.append("version", mongodbVersionString);
-                result.append("tokumxVersion", tokumxVersionString);
-                result.append("process","mongos");
-                result.append("uptime",(double) (time(0)-_started));
-                result.appendDate( "localTime" , jsTime() );
-
-                {
-                    BSONObjBuilder t( result.subobjStart( "mem" ) );
-
-                    ProcessInfo p;
-                    if ( p.supported() ) {
-                        t.appendNumber( "resident" , p.getResidentSize() );
-                        t.appendNumber( "virtual" , p.getVirtualMemorySize() );
-                        t.appendBool( "supported" , true );
-                    }
-                    else {
-                        result.append( "note" , "not all mem info support on this platform" );
-                        t.appendBool( "supported" , false );
-                    }
-
-                    t.done();
-                }
-
-                {
-                    BSONObjBuilder bb( result.subobjStart( "connections" ) );
-                    bb.append( "current" , Listener::globalTicketHolder.used() );
-                    bb.append( "available" , Listener::globalTicketHolder.available() );
-                    bb.append( "totalCreated" , Listener::globalConnectionNumber.load() );
-                    bb.done();
-                }
-
-                {
-                    BSONObjBuilder bb( result.subobjStart( "extra_info" ) );
-                    bb.append("note", "fields vary by platform");
-                    ProcessInfo p;
-                    p.getExtraInfo(bb);
-                    bb.done();
-                }
-
-                result.append( "opcounters" , globalOpCounters.getObj() );
-                {
-                    BSONObjBuilder bb( result.subobjStart( "ops" ) );
-                    bb.append( "sharded" , opsSharded.getObj() );
-                    bb.append( "notSharded" , opsNonSharded.getObj() );
-                    bb.done();
-                }
-
-                result.append( "shardCursorType" , shardedCursorTypes.getObj() );
-
-                {
-                    BSONObjBuilder asserts( result.subobjStart( "asserts" ) );
-                    asserts.append( "regular" , assertionCount.regular );
-                    asserts.append( "warning" , assertionCount.warning );
-                    asserts.append( "msg" , assertionCount.msg );
-                    asserts.append( "user" , assertionCount.user );
-                    asserts.append( "rollovers" , assertionCount.rollovers );
-                    asserts.done();
-                }
-
-                {
-                    BSONObjBuilder bb( result.subobjStart( "network" ) );
-                    networkCounter.append( bb );
-                    bb.done();
-                }
-
-                {
-                    RamLog* rl = RamLog::get( "warnings" );
-                    verify(rl);
-                    
-                    if (rl->lastWrite() >= time(0)-(10*60)){ // only show warnings from last 10 minutes
-                        vector<const char*> lines;
-                        rl->get( lines );
-                        
-                        BSONArrayBuilder arr( result.subarrayStart( "warnings" ) );
-                        for ( unsigned i=std::max(0,(int)lines.size()-10); i<lines.size(); i++ )
-                            arr.append( lines[i] );
-                        arr.done();
-                    }
-                }
-
-                return 1;
-            }
-
-            time_t _started;
-        } cmdServerStatus;
 
         class FsyncCommand : public GridAdminCmd {
         public:
@@ -544,7 +441,7 @@ namespace mongo {
                     }
                 }
 
-                if ( ns.find( ".system." ) != string::npos ) {
+                if ( NamespaceString::isSystem(ns) ) {
                     errmsg = "can't shard system namespaces";
                     return false;
                 }
@@ -712,19 +609,60 @@ namespace mongo {
                 //    Only need to call ensureIndex on primary shard, since indexes get copied to
                 //    receiving shard whenever a migrate occurs.
                 else {
-                    BSONElement ce = cmdObj["clustering"];
-                    bool clustering = (ce.ok() ? ce.trueValue() : true);
-                    // call ensureIndex with cache=false, see SERVER-1691
-                    bool ensureSuccess = conn->get()->ensureIndex(ns,
-                                                                  proposedKey,
-                                                                  careAboutUnique,
-                                                                  clustering,
-                                                                  "",
-                                                                  false);
-                    if ( ! ensureSuccess ) {
-                        errmsg = "ensureIndex failed to create index on primary shard";
-                        conn->done();
-                        return false;
+                    bool collectionExists;
+                    {
+                        BSONObj res;
+                        BSONObjBuilder cmd;
+                        BSONArrayBuilder b(cmd.subarrayStart("_collectionsExist"));
+                        b.append(ns);
+                        b.doneFast();
+                        collectionExists = conn->get()->runCommand(config->getName(), cmd.done(), res);
+                    }
+                    bool onlyId = proposedKey.nFields() == 1 && proposedKey["_id"].ok();
+                    bool onlyHashed = proposedKey.nFields() == 1 && StringData(proposedKey.firstElement().valuestrsafe()) == "hashed";
+                    if (!collectionExists && !onlyId && !onlyHashed && !careAboutUnique) {
+                        BSONObjBuilder cmd;
+                        cmd.append("create", NamespaceString(ns).coll);
+                        BSONObjBuilder pk(cmd.subobjStart("primaryKey"));
+                        pk.appendElements(proposedKey);
+                        bool containsId = false;
+                        for (BSONObjIterator it(proposedKey); it.more(); ) {
+                            BSONElement e = it.next();
+                            if (StringData(e.fieldName()) == "_id") {
+                                uassert(17212, "_id must be ascending if present in shard key", e.numberLong() == 1);
+                                uassert(17213, "_id:1 must be last field in shard key, if present", !it.more());
+                                containsId = true;
+                            }
+                        }
+                        if (!containsId) {
+                            pk.append("_id", 1);
+                        }
+                        BSONObj pkObj = pk.done();
+
+                        LOG(0) << "sharding non-existent collection, creating " << ns << " with a primary key on " << pkObj << endl;
+
+                        BSONObj res;
+                        bool createSuccess = conn->get()->runCommand(config->getName(), cmd.done(), res);
+                        if (!createSuccess) {
+                            errmsg = "create failed to create collection on primary shard: " + res["errmsg"].String();
+                            conn->done();
+                            return false;
+                        }
+                    } else {
+                        BSONElement ce = cmdObj["clustering"];
+                        bool clustering = (ce.ok() ? ce.trueValue() : true);
+                        // call ensureIndex with cache=false, see SERVER-1691
+                        bool ensureSuccess = conn->get()->ensureIndex(ns,
+                                                                      proposedKey,
+                                                                      careAboutUnique,
+                                                                      clustering,
+                                                                      "",
+                                                                      false);
+                        if ( ! ensureSuccess ) {
+                            errmsg = "ensureIndex failed to create index on primary shard";
+                            conn->done();
+                            return false;
+                        }
                     }
                 }
 
@@ -765,6 +703,10 @@ namespace mongo {
                         // gives you a good runway of around 8GB per shard before you should expect
                         // to start having to split much.
                         numChunks = 256 * numShards;  // default number of initial chunks
+                        // multiSplit has a max of (non-inclusive) 8192 split points.
+                        if (numChunks > 4096) {
+                            numChunks = 4096;
+                        }
                     }
 
                     // hashes are signed, 64-bit ints. So we divide the range (-MIN long, +MAX long)

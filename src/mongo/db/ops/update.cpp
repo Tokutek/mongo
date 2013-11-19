@@ -19,41 +19,23 @@
 
 #include "pch.h"
 
-#include "mongo/client/dbclientinterface.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/query_optimizer.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/ops/insert.h"
-#include "mongo/db/ops/delete.h"
+#include "mongo/db/ops/query.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/update_internal.h"
 #include "mongo/db/oplog_helpers.h"
 
 namespace mongo {
 
-    void updateOneObject(
-        NamespaceDetails *d, 
-        const BSONObj &pk, 
-        const BSONObj &oldObj, 
-        const BSONObj &newObj, 
-        const LogOpUpdateDetails &logDetails,
-        uint64_t flags
-        ) 
-    {
-        BSONObj newObjModified = newObj;
-        d->updateObject(pk, oldObj, newObjModified, flags);
-        if (logDetails.logop) {
-            const string &ns = d->ns();
-            OpLogHelpers::logUpdate(
-                ns.c_str(),
-                pk,
-                oldObj,
-                newObjModified,
-                logDetails.fromMigrate,
-                &cc().txn()
-                );
-        }
+    void updateOneObject(NamespaceDetails *d, const BSONObj &pk, 
+                         const BSONObj &oldObj, const BSONObj &newObj, 
+                         const bool logop, const bool fromMigrate,
+                         uint64_t flags) {
+        d->updateObject(pk, oldObj, newObj, logop, fromMigrate, flags);
         d->notifyOfWriteOp();
     }
 
@@ -88,24 +70,22 @@ namespace mongo {
 
     static void updateUsingMods(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj,
                                 ModSetState &mss, const bool modsAreIndexed,
-                                const LogOpUpdateDetails &logDetails) {
-
+                                const bool logop, const bool fromMigrate) {
         BSONObj newObj = mss.createNewFromMods();
         checkTooLarge( newObj );
         TOKULOG(3) << "updateUsingMods used mod set, transformed " << obj << " to " << newObj << endl;
 
-        updateOneObject( d, pk, obj, newObj, logDetails,
+        updateOneObject( d, pk, obj, newObj, logop, fromMigrate,
                          modsAreIndexed ? 0 : NamespaceDetails::KEYS_UNAFFECTED_HINT );
     }
 
-    static void updateNoMods(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj,
-                             const BSONObj &updateobj, const LogOpUpdateDetails &logDetails) {
-
+    static void updateNoMods(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj, const BSONObj &updateobj,
+                             const bool logop, const bool fromMigrate) {
         BSONElementManipulator::lookForTimestamps( updateobj );
         checkNoMods( updateobj );
         TOKULOG(3) << "updateNoMods replacing pk " << pk << ", obj " << obj << " with updateobj " << updateobj << endl;
 
-        updateOneObject( d, pk, obj, updateobj, logDetails );
+        updateOneObject( d, pk, obj, updateobj, logop, fromMigrate );
     }
 
     static void checkBulkLoad(const StringData &ns) {
@@ -126,7 +106,7 @@ namespace mongo {
         checkBulkLoad(ns);
         insertOneObject(d, newObj);
         if (logop) {
-            OpLogHelpers::logInsert(ns, newObj, &cc().txn());
+            OpLogHelpers::logInsert(ns, newObj);
         }
     }
 
@@ -148,14 +128,12 @@ namespace mongo {
              - not mods is indexed
              - not upsert
     */
-    static UpdateResult _updateById(const BSONObj &pk,
+    static UpdateResult _updateById(const BSONObj &idQuery,
                                     bool isOperatorUpdate,
                                     ModSet* mods,
                                     NamespaceDetails* d,
-                                    const char* ns,
                                     const BSONObj& updateobj,
                                     bool logop,
-                                    OpDebug& debug,
                                     bool fromMigrate = false) {
 
         if ( cmdLine.fastupdates && !mods->isIndexed() &&
@@ -171,28 +149,40 @@ namespace mongo {
         }
 
         BSONObj obj;
-        const bool found = d->findByPK( pk, obj );
+        ResultDetails queryResult;
+        if ( mods && mods->hasDynamicArray() ) {
+            queryResult.matchDetails.requestElemMatchKey();
+        }
+
+        const bool found = queryByIdHack(d, idQuery,
+                                         patternOrig, obj,
+                                         &queryResult);
         if ( !found ) {
             // no upsert support in _updateById yet, so we are done.
             return UpdateResult( 0 , 0 , 1 , BSONObj() );
         }
 
-        d->notifyOfWriteOp();
+        const BSONObj &pk = idQuery.firstElement().wrap("");
 
         /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
            regular ones at the moment. */
-        LogOpUpdateDetails logDetails(logop, fromMigrate);
         if ( isOperatorUpdate ) {
-            auto_ptr<ModSetState> mss = mods->prepare( obj, false /* not an insertion */ );
+            ModSet* useMods = mods;
+            auto_ptr<ModSet> mymodset;
+            if ( queryResult.matchDetails.hasElemMatchKey() && mods->hasDynamicArray() ) {
+                useMods = mods->fixDynamicArray( queryResult.matchDetails.elemMatchKey() );
+                mymodset.reset( useMods );
+            }
 
             // mod set update, ie: $inc: 10 increments by 10.
-            updateUsingMods( d, pk, obj, *mss, mods->isIndexed() > 0, logDetails );
+            auto_ptr<ModSetState> mss = useMods->prepare( obj, false /* not an insertion */ );
+            updateUsingMods( d, pk, obj, *mss, useMods->isIndexed() > 0, logop, fromMigrate );
             return UpdateResult( 1 , 1 , 1 , BSONObj() );
 
         } // end $operator update
 
         // replace-style update
-        updateNoMods( d, pk, obj, updateobj, logDetails );
+        updateNoMods( d, pk, obj, updateobj, logop, fromMigrate );
         return UpdateResult( 1 , 0 , 1 , BSONObj() );
     }
 
@@ -222,31 +212,20 @@ namespace mongo {
             mods.reset( new ModSet(updateobj, d->indexKeys()) );
         }
 
-        int idIdxNo = -1;
-        if ( planPolicy.permitOptimalIdPlan() && !multi && !d->isCapped() &&
-             (idIdxNo = d->findIdIndex()) >= 0 &&
-             d->mayFindById() && isSimpleIdQuery(patternOrig) ) {
-            debug.idhack = true;
-            IndexDetails &idx = d->idx(idIdxNo);
-            BSONObj pk = idx.getKeyFromQuery(patternOrig);
-            TOKULOG(3) << "_updateObjects using simple _id query, pattern " << patternOrig << ", pk " << pk << endl;
-            UpdateResult result = _updateById( pk,
-                                               isOperatorUpdate,
-                                               mods.get(),
-                                               d,
-                                               ns,
-                                               updateobj,
-                                               logop,
-                                               debug,
-                                               fromMigrate);
-            if ( result.existing || ! upsert ) {
-                return result;
-            }
-            else if ( upsert && ! isOperatorUpdate && ! logop) {
-                debug.upsert = true;
-                BSONObj objModified = updateobj;
-                insertAndLog( ns, d, objModified, logop, fromMigrate );
-                return UpdateResult( 0 , 0 , 1 , updateobj );
+        if (d->mayFindById()) {
+            const BSONObj idQuery = getSimpleIdQuery(patternOrig);
+            if (!idQuery.isEmpty()) {
+                UpdateResult result = _updateById( idQuery,
+                                                   isOperatorUpdate,
+                                                   mods.get(),
+                                                   d,
+                                                   updateobj,
+                                                   patternOrig,
+                                                   logop,
+                                                   fromMigrate);
+                if ( result.existing || ! upsert ) {
+                    return result;
+                }
             }
         }
 
@@ -257,7 +236,6 @@ namespace mongo {
         if( c->ok() ) {
             set<BSONObj> seenObjects;
             MatchDetails details;
-            auto_ptr<ClientCursor> cc;
             do {
 
                 debug.nscanned++;
@@ -278,40 +256,18 @@ namespace mongo {
                 }
 
                 BSONObj currentObj = c->current();
-                BSONObj pattern = patternOrig;
-
-                if ( logop ) {
-                    BSONObjBuilder idPattern;
-                    BSONElement id;
-                    // NOTE: If the matching object lacks an id, we'll log
-                    // with the original pattern.  This isn't replay-safe.
-                    // It might make sense to suppress the log instead
-                    // if there's no id.
-                    if ( currentObj.getObjectID( id ) ) {
-                        idPattern.append( id );
-                        pattern = idPattern.obj();
-                    }
-                    else {
-                        uassert( 10157 ,  "multi-update requires all modified objects to have an _id" , ! multi );
-                    }
-                }
 
                 /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
                    regular ones at the moment. */
-                LogOpUpdateDetails logDetails(logop, fromMigrate);
                 if ( isOperatorUpdate ) {
 
                     if ( multi ) {
                         // Make our own copies of the currPK and currentObj before we invalidate
                         // them by advancing the cursor.
-                        currPK = currPK.copy();
-                        currentObj = currentObj.copy();
+                        currPK = currPK.getOwned();
+                        currentObj = currentObj.getOwned();
 
-                        // Advance past the document to be modified. This used to be because of SERVER-5198,
-                        // but TokuMX does it because we want to avoid needing to do manual deduplication
-                        // of this PK on the next iteration if the current update modifies the next
-                        // entry in the index. For example, an index scan over a:1 with mod {$inc: {a:1}}
-                        // would cause every other key read to be a duplicate if we didn't advance here.
+                        // Advance past the document to be modified - SERVER-5198,
                         while ( c->ok() && currPK == c->currPK() ) {
                             c->advance();
                         }
@@ -335,7 +291,7 @@ namespace mongo {
 
                     auto_ptr<ModSetState> mss = useMods->prepare( currentObj,
                                                                   false /* not an insertion */ );
-                    updateUsingMods( d, currPK, currentObj, *mss, useMods->isIndexed() > 0, logDetails );
+                    updateUsingMods( d, currPK, currentObj, *mss, useMods->isIndexed() > 0, logop, fromMigrate );
 
                     numModded++;
                     if ( ! multi )
@@ -346,7 +302,7 @@ namespace mongo {
 
                 uassert( 10158 ,  "multi update only works with $ operators" , ! multi );
 
-                updateNoMods( d, currPK, currentObj, updateobj, logDetails );
+                updateNoMods( d, currPK, currentObj, updateobj, logop, fromMigrate );
 
                 return UpdateResult( 1 , 0 , 1 , BSONObj() );
             } while ( c->ok() );

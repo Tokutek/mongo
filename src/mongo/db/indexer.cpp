@@ -71,8 +71,7 @@ namespace mongo {
         const StringData &name = _info["name"].Stringdata();
         const BSONObj &keyPattern = _info["key"].Obj();
 
-        uassert(16922, str::stream() << "dropDups is not supported and is likely to remain "
-                       << "unsupported for some time because it deletes arbitrary data",
+        massert(16922, "dropDups is not supported, we should have stripped it out earlier",
                        !_info["dropDups"].trueValue());
 
         uassert(12588, "cannot add index with a hot index build in progress",

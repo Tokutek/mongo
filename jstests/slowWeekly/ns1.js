@@ -17,7 +17,8 @@ check = function( n , isNew ){
 
 max = 0;
 
-for ( ; max<1000; max++ ){
+// was 1000, but that hit too many open files on buildslaves
+for ( ; max<500; max++ ){
     check(max,true);
 }
 

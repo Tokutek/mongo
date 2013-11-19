@@ -42,16 +42,16 @@ namespace mongo {
         boost::mutex _mutex;
         // condition variable to signal changes in whether
         // opsync thread  is running.
-        boost::condition _opSyncRunningCondVar;
+        boost::condition_variable _opSyncRunningCondVar;
         // condition variable to signal changes in permission
         // of opsync thread running.
-        boost::condition _opSyncCanRunCondVar;
+        boost::condition_variable _opSyncCanRunCondVar;
 
         // signals events related to the elements in the queue
-        boost::condition _queueCond;
+        boost::condition_variable _queueCond;
 
         // signals when the applier has nothing to do
-        boost::condition _queueDone;
+        boost::condition_variable _queueDone;
 
         // boolean that states whether we should actively be 
         // trying to read data from another machine and apply it
@@ -62,7 +62,7 @@ namespace mongo {
         // thread.
         bool _opSyncRunning;
 
-        Member* _currentSyncTarget;
+        const Member* _currentSyncTarget;
 
         // double ended queue containing the ops
         // that have been written to the oplog but yet
@@ -88,15 +88,9 @@ namespace mongo {
         // variable that states if the applier thread is alive doing anything
         bool _applierInProgress;
 
-        struct QueueCounter {
-            QueueCounter();
-            unsigned long long waitTime;
-        } _queueCounter;
-
         BackgroundSync();
         BackgroundSync(const BackgroundSync& s);
         BackgroundSync operator=(const BackgroundSync& s);
-
 
         // Production thread
         uint32_t produce();
@@ -129,7 +123,7 @@ namespace mongo {
         // starts the producer thread
         void producerThread();
 
-        virtual Member* getSyncTarget();
+        virtual const Member* getSyncTarget();
 
         // For monitoring
         BSONObj getCounters();

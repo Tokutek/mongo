@@ -67,8 +67,6 @@ namespace mongo {
             return BSONObj();
         }
 
-        virtual bool supportGetMore() = 0;
-
         virtual string toString() const { return "abstract?"; }
 
         /* used for multikey index traversal to avoid sending back dups. see Matcher::matches().
@@ -90,11 +88,6 @@ namespace mongo {
         virtual bool modifiedKeys() const = 0;
 
         virtual BSONObj prettyIndexBounds() const { return BSONArray(); }
-
-        /**
-         * If true, this is an unindexed cursor over a capped collection.
-         */
-        virtual bool capped() const { return false; }
 
         virtual long long nscanned() const = 0;
 
@@ -209,7 +202,6 @@ namespace mongo {
 
         bool ok() { return _ok; }
         bool advance();
-        bool supportGetMore() { return true; }
 
         /**
          * used for multikey index traversal to avoid sending back dups. see Matcher::matches() and cursor.h
@@ -325,7 +317,9 @@ namespace mongo {
          * bounds.
          */
         bool skipOutOfRangeKeysAndCheckEnd();
-        void checkEnd();
+
+    protected:
+        virtual void checkEnd();
 
         NamespaceDetails *const _d;
         const IndexDetails &_idx;
@@ -383,13 +377,103 @@ namespace mongo {
      * Abstracts index scans by generating a the start and end key
      * based on the index's ordering and the desired direction.
      */
-    class IndexScanCursor : public IndexCursor {
+    class ScanCursor : boost::noncopyable {
+    protected:
+        static const BSONObj &startKey(const BSONObj &keyPattern, const int direction);
+        static const BSONObj &endKey(const BSONObj &keyPattern, const int direction);
+
+    private:
+        static bool reverseMinMaxBoundsOrder(const Ordering &ordering, const int direction);
+    };
+
+    /**
+     * Cursor for scanning an index.
+     */
+    class IndexScanCursor : public IndexCursor, ScanCursor {
     public:
         IndexScanCursor( NamespaceDetails *d, const IndexDetails &idx,
                          int direction, int numWanted = 0);
     private:
-        static const BSONObj &startKey(const BSONObj &keyPattern, const int direction);
-        static const BSONObj &endKey(const BSONObj &keyPattern, const int direction);
+        // Implemented as a no-op, since "scan" cursors are always in bounds.
+        void checkEnd();
+    };
+
+    /**
+     * Cursor optimized for count operations.
+     * Does not track the current key or pk.
+     * Cannot produce a meaningful result for current().
+     */
+    class IndexCountCursor : public IndexCursor {
+    public:
+        IndexCountCursor( NamespaceDetails *d, const IndexDetails &idx,
+                          const BSONObj &startKey, const BSONObj &endKey,
+                          const bool endKeyInclusive );
+
+        IndexCountCursor( NamespaceDetails *d, const IndexDetails &idx,
+                          const shared_ptr< FieldRangeVector > &bounds );
+
+        virtual string toString() const {
+            return "IndexCountCursor";
+        }
+
+        BSONObj current() {
+            msgasserted(17036, "bug: IndexCountCursor cannot return current()");
+        }
+
+        // A counting cursor can only be used when no matcher is necessary.
+        bool currentMatches(MatchDetails *details = NULL) {
+            dassert(matcher() == NULL);
+            return true;
+        }
+
+        // A counting cursor cannot be used on multikey indexes, because that
+        // would require tracking the current PK for manual deduplication.
+        bool getsetdup(const BSONObj &pk) {
+            dassert(!isMultiKey());
+            return false;
+        }
+
+        void setMatcher(shared_ptr<CoveredIndexMatcher> matcher) {
+            if (matcher) {
+                msgasserted(17039, "bug: IndexCountCursor cannot utilize a matcher");
+            }
+        }
+
+        struct count_cursor_getf_extra : public ExceptionSaver {
+            count_cursor_getf_extra(int &c, bool &e, const storage::Key &key,
+                                    const Ordering &o, const bool inc) :
+                bufferedRowCount(c), exhausted(e), endSKeyPrefix(key), ordering(o), endKeyInclusive(inc) {
+            }
+            int &bufferedRowCount;
+            bool &exhausted;
+            const storage::Key &endSKeyPrefix;
+            const Ordering &ordering;
+            const bool endKeyInclusive;
+        };
+        static int count_cursor_getf(const DBT *key, const DBT *val, void *extra);
+
+        bool advance();
+
+    private:
+        bool countMoreRows();
+        void checkAssumptionsAndInit();
+
+        // The number of rows counted during the last bulk-fetch
+        int _bufferedRowCount; 
+        // Whether the last bulk-fetch ended early because we reached an out-of-bounds key.
+        bool _exhausted;
+        // We only want to compare by the secondary key prefix.
+        // This will be constructed with a NULL primary-key argument.
+        const storage::Key _endSKeyPrefix;
+    };
+
+    /**
+     * Cursor for scanning an index, optimized for counts.
+     * See IndexScanCursor.
+     */
+    class IndexScanCountCursor : public IndexCountCursor, ScanCursor {
+    public:
+        IndexScanCountCursor( NamespaceDetails *d, const IndexDetails &idx );
     };
 
     /**
@@ -430,7 +514,6 @@ namespace mongo {
         virtual bool getsetdup(const BSONObj &pk) { return false; }
         virtual bool isMultiKey() const { return false; }
         virtual bool modifiedKeys() const { return false; }
-        virtual bool supportGetMore() { return true; }
         virtual void setMatcher( shared_ptr< CoveredIndexMatcher > matcher ) { }
         virtual void setKeyFieldsOnly( const shared_ptr<Projection::KeyOnly> &keyFieldsOnly ) { }
         virtual long long nscanned() const { return 0; }

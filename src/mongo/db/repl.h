@@ -28,12 +28,14 @@
 
 #pragma once
 
+#include "mongo/base/counter.h"
 #include "mongo/db/dbhelpers.h"
 #include "mongo/util/optime.h"
 #include "mongo/db/oplog.h"
 #include "mongo/util/concurrency/thread_pool.h"
 #include "mongo/db/oplogreader.h"
 #include "mongo/db/cloner.h"
+#include "mongo/db/stats/timer_stats.h"
 
 namespace mongo {
 
@@ -63,5 +65,8 @@ namespace mongo {
     extern ReplSettings replSettings;
 
     bool anyReplEnabled();
-    void appendReplicationInfo(BSONObjBuilder& result, int level = 0);
+
+    extern TimerStats oplogInsertStats;
+    extern Counter64 oplogInsertBytesStats;
+
 } // namespace mongo

@@ -29,6 +29,7 @@
 #include "mongo/client/sasl_client_authenticate.h"
 #include "mongo/db/json.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/txn_complete_hooks.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/platform/posix_fadvise.h"
 #include "mongo/util/password.h"
@@ -238,11 +239,7 @@ namespace mongo {
                 ::_exit(EXIT_FAILURE);
             }
 
-            // the last thing we do before initializing storage is to install the
-            // txn complete hooks, which live in namespace_details.cpp
-            extern TxnCompleteHooks _txnCompleteHooks;
-            setTxnCompleteHooks(&_txnCompleteHooks);
-            storage::startup();
+            storage::startup(&_txnCompleteHooks);
         }
 
         if ( _params.count( "db" ) )
@@ -308,7 +305,13 @@ namespace mongo {
 
         fflush(stdout);
         fflush(stderr);
+#ifdef _COVERAGE
+        // Need to make sure coverage data is properly flushed before exit.
+        // It appears that ::_exit() does not do this.
+        ::exit(ret);
+#else
         ::_exit(ret);
+#endif
     }
 
     DBClientBase& Tool::conn( bool slaveIfPaired ) {

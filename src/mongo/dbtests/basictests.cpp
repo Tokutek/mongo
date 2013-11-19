@@ -398,25 +398,6 @@ namespace BasicTests {
         }
     };
 
-    class DatabaseOwnsNS {
-    public:
-        void run() {
-            Lock::GlobalWrite lk;
-            // this leaks as ~Database is private
-            // if that changes, should put this on the stack
-            {
-                Client::Transaction txn(DB_SERIALIZABLE);
-                Database * db = new Database( "dbtests_basictests_ownsns" );
-
-                ASSERT( db->ownsNS( "dbtests_basictests_ownsns.x" ) );
-                ASSERT( db->ownsNS( "dbtests_basictests_ownsns.x.y" ) );
-                ASSERT( ! db->ownsNS( "dbtests_basictests_ownsn.x.y" ) );
-                ASSERT( ! db->ownsNS( "dbtests_basictests_ownsnsa.x.y" ) );
-                txn.commit();
-            }
-        }
-    };
-
     class NSValidNames {
     public:
         void run() {
@@ -664,8 +645,6 @@ namespace BasicTests {
             add< AssertTests >();
 
             add< ArrayTests::basic1 >();
-
-            add< DatabaseOwnsNS >();
 
             add< NSValidNames >();
 

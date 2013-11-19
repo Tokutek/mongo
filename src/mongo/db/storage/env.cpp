@@ -20,6 +20,9 @@
 
 #include <errno.h>
 #include <string>
+#include <string.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 #include <db.h>
 #include <toku_time.h>
@@ -35,7 +38,9 @@
 #include "mongo/db/curop.h"
 #include "mongo/db/client.h"
 #include "mongo/db/cmdline.h"
+#include "mongo/db/commands/server_status.h"
 #include "mongo/db/descriptor.h"
+#include "mongo/db/server_parameters.h"
 #include "mongo/db/storage/assert_ids.h"
 #include "mongo/db/storage/dbt.h"
 #include "mongo/db/storage/exception.h"
@@ -224,6 +229,11 @@ namespace mongo {
             return cmdLine.lockTimeout;
         }
 
+        static uint64_t get_loader_memory_size_callback(void) {
+            return cmdLine.loaderMaxMemory > 0 ?
+                (uint64_t) cmdLine.loaderMaxMemory : 100 * 1024 * 1024;
+        }
+
         static void lock_not_granted_callback(DB *db, uint64_t requesting_txnid,
                                               const DBT *left_key, const DBT *right_key,
                                               uint64_t blocking_txnid);
@@ -233,9 +243,12 @@ namespace mongo {
             ~InStartup() { _inStartup = false; }
         };
 
-        void startup(void) {
+        MONGO_EXPORT_STARTUP_SERVER_PARAMETER(numCachetableBucketMutexes, uint32_t, 0);
+
+        void startup(TxnCompleteHooks *hooks) {
             InStartup is;
 
+            setTxnCompleteHooks(hooks);
             tokulog() << "startup" << endl;
 
             db_env_set_direct_io(cmdLine.directio);
@@ -256,6 +269,12 @@ namespace mongo {
             const uint64_t cachesize = (cmdLine.cacheSize > 0
                                         ? (uint64_t) cmdLine.cacheSize
                                         : calculate_cachesize());
+            if (cachesize < 1ULL<<30) {
+                warning() << "*****************************" << endl;
+                warning() << "cacheSize set to less than 1 GB: " << cachesize << " bytes. " << endl;
+                warning() << "This value may be too low to achieve good performance." << endl;
+                warning() << "*****************************" << endl;
+            }
             const uint32_t bytes = cachesize % (1024L * 1024L * 1024L);
             const uint32_t gigabytes = cachesize >> 30;
             r = env->set_cachesize(env, gigabytes, bytes, 1);
@@ -282,10 +301,8 @@ namespace mongo {
             }
             TOKULOG(1) << "lock timeout set to " << lock_timeout << " milliseconds." << endl;
 
-            const uint64_t loader_memory = cmdLine.loaderMaxMemory > 0 ?
-                                           (uint64_t) cmdLine.loaderMaxMemory : 100 * 1024 * 1024;
-            env->set_loader_memory_size(env, loader_memory);
-            TOKULOG(1) << "loader memory size set to " << loader_memory << " bytes." << endl;
+            env->set_loader_memory_size(env, get_loader_memory_size_callback);
+            TOKULOG(1) << "loader memory size set to " << get_loader_memory_size_callback() << " bytes." << endl;
 
             r = env->set_default_bt_compare(env, dbt_key_compare);
             if (r != 0) {
@@ -335,10 +352,10 @@ namespace mongo {
                 TOKULOG(1) << "temporary bulk loader directory set to " << tmpDir << endl;
             }
 
-            if (cmdLine.debug) {
+            if (numCachetableBucketMutexes > 0) {
                 // The default number of bucket mutexes is 1 million, which is a nightmare for
                 // valgrind's drd tool to keep track of.
-                db_env_set_num_bucket_mutexes(32);
+                db_env_set_num_bucket_mutexes(numCachetableBucketMutexes);
             }
 
             const int env_flags = DB_INIT_LOCK|DB_INIT_MPOOL|DB_INIT_TXN|DB_CREATE|DB_PRIVATE|DB_INIT_LOG|DB_RECOVER;
@@ -398,88 +415,241 @@ namespace mongo {
                            r == 0);
         }
 
-        void get_status(BSONObjBuilder &status) {
-            uint64_t num_rows;
-            uint64_t max_rows;
-            uint64_t panic;
-            size_t panic_string_len = 128;
-            char panic_string[panic_string_len];
-            fs_redzone_state redzone_state;
+        class FractalTreeEngineStatus {
+            uint64_t _num_rows;
+            uint64_t _max_rows;
+            uint64_t _panic;
+            static const size_t _panic_string_len = 128;
+            char _panic_string[_panic_string_len];
+            fs_redzone_state _redzone_state;
+            scoped_array<TOKU_ENGINE_STATUS_ROW_S> _rows;
 
-            int r = storage::env->get_engine_status_num_rows(storage::env, &max_rows);
-            if (r != 0) {
-                handle_ydb_error(r);
-            }
-            TOKU_ENGINE_STATUS_ROW_S mystat[max_rows];
-            r = env->get_engine_status(env, mystat, max_rows, &num_rows, &redzone_state, &panic, panic_string, panic_string_len, TOKU_ENGINE_STATUS);
-            if (r != 0) {
-                handle_ydb_error(r);
-            }
-            status.append( "panic code", (long long) panic );
-            status.append( "panic string", panic_string );
-            switch (redzone_state) {
-                case FS_GREEN:
-                    status.append( "filesystem status", "OK" );
-                    break;
-                case FS_YELLOW:
-                    status.append( "filesystem status", "Getting full..." );
-                    break;
-                case FS_RED:
-                    status.append( "filesystem status", "Critically full. Engine is read-only until space is freed." );
-                    break;
-                case FS_BLOCKED:
-                    status.append( "filesystem status", "Completely full. Free up some space now." );
-                    break;
-                default:
-                    {
-                        StringBuilder s;
-                        s << "Unknown. Code: " << (int) redzone_state;
-                        status.append( "filesystem status", s.str() );
-                    }
-            }
-            for (uint64_t i = 0; i < num_rows; i++) {
-                TOKU_ENGINE_STATUS_ROW row = &mystat[i];
-                switch (row->type) {
-                case FS_STATE:
-                case UINT64:
-                    status.appendNumber( row->keyname, (long long) row->value.num );
-                    break;
-                case CHARSTR:
-                    status.append( row->keyname, row->value.str );
-                    break;
-                case UNIXTIME:
-                    {
-                        time_t t = row->value.num;
-                        char tbuf[26];
-                        char *tstr = ctime_r(&t, tbuf);
-                        verify(tstr != NULL);
-                        // Remove any trailing newline.
-                        size_t len = strlen(tstr);
-                        if (len > 0 && tstr[len - 1] == '\n') {
-                            tstr[len - 1] = '\0';
-                        }
-                        status.append( row->keyname, tstr );
-                    }
-                    break;
-                case TOKUTIME:
-                    status.appendNumber( row->keyname, tokutime_to_seconds(row->value.num) );
-                    break;
-                case PARCOUNT:
-                    {
-                        uint64_t v = read_partitioned_counter(row->value.parcount);
-                        status.appendNumber( row->keyname, (long long) v );
-                    }
-                    break;
-                default:
-                    {
-                        StringBuilder s;
-                        s << "Unknown type. Code: " << (int) row->type;
-                        status.append( row->keyname, s.str() );
-                    }
-                    break;                
+          public:
+            FractalTreeEngineStatus()
+                    : _num_rows(0),
+                      _max_rows(0),
+                      _panic(0),
+                      _redzone_state(FS_GREEN),
+                      _rows(NULL) {}
+
+            void fetch() {
+                int r = storage::env->get_engine_status_num_rows(storage::env, &_max_rows);
+                if (r != 0) {
+                    handle_ydb_error(r);
+                }
+                _rows.reset(new TOKU_ENGINE_STATUS_ROW_S[_max_rows]);
+                r = env->get_engine_status(env, _rows.get(), _max_rows, &_num_rows, &_redzone_state, &_panic, _panic_string, _panic_string_len, TOKU_ENGINE_STATUS);
+                if (r != 0) {
+                    handle_ydb_error(r);
                 }
             }
+
+            void appendPanic(BSONObjBuilder &result, bool evenIfEmpty) const {
+                if (_panic != 0 || evenIfEmpty) {
+                    result.append("panic code", (long long) _panic);
+                    result.append("panic string", _panic_string);
+                }
+            }
+
+            void appendFilesystem(BSONObjBuilder &result, bool evenIfGreen) const {
+                switch (_redzone_state) {
+                    case FS_GREEN:
+                        if (evenIfGreen) {
+                            result.append("filesystem status", "OK");
+                        }
+                        break;
+                    case FS_YELLOW:
+                        result.append("filesystem status", "Getting full...");
+                        break;
+                    case FS_RED:
+                        result.append("filesystem status", "Critically full. Engine is read-only until space is freed.");
+                        break;
+                    case FS_BLOCKED:
+                        result.append("filesystem status", "Completely full. Free up some space now.");
+                        break;
+                    default:
+                        {
+                            StringBuilder s;
+                            s << "Unknown. Code: " << (int) _redzone_state;
+                            result.append("filesystem status", s.str());
+                        }
+                }
+            }
+
+            static void appendRow(BSONObjBuilder &result, const StringData &field, TOKU_ENGINE_STATUS_ROW row, bool ifZero, int scale = 1) {
+                switch (row->type) {
+                    case FS_STATE:
+                    case UINT64:
+                        if (ifZero || row->value.num != 0) {
+                            result.appendNumber(field, (long long) row->value.num / scale);
+                        }
+                        break;
+                    case CHARSTR:
+                        {
+                            StringData s(row->value.str);
+                            if (ifZero || !s.empty()) {
+                                result.append(field, s);
+                            }
+                        }
+                        break;
+                    case UNIXTIME:
+                        {
+                            time_t t = row->value.num;
+                            result.appendTimeT(field, t);
+                        }
+                        break;
+                    case TOKUTIME:
+                        if (ifZero || row->value.num != 0) {
+                            result.appendNumber(field, tokutime_to_seconds(row->value.num));
+                        }
+                        break;
+                    case PARCOUNT:
+                        {
+                            uint64_t v = read_partitioned_counter(row->value.parcount);
+                            if (ifZero || v != 0) {
+                                result.appendNumber(field, (long long) v / scale);
+                            }
+                        }
+                        break;
+                    default:
+                        {
+                            StringBuilder s;
+                            s << "Unknown type. Code: " << (int) row->type;
+                            result.append(field, s.str());
+                        }
+                        break;                
+                }
+            }
+
+            void appendInfo(BSONObjBuilder &result) {
+                appendPanic(result, true);
+                appendFilesystem(result, true);
+                for (uint64_t i = 0; i < _num_rows; ++i) {
+                    appendRow(result, _rows[i].keyname, &_rows[i], true);
+                }
+            }
+
+            void appendInfo(BSONObjBuilder &result, const StringData &field, const StringData &key, bool ifZero, int scale = 1) const {
+                // well, this is annoying
+                for (uint64_t i = 0; i < _num_rows; ++i) {
+                    if (key == _rows[i].keyname) {
+                        appendRow(result, field, &_rows[i], ifZero, scale);
+                        break;
+                    }
+                }
+            }
+        };
+
+        void get_status(BSONObjBuilder &result) {
+            FractalTreeEngineStatus status;
+            status.fetch();
+            status.appendInfo(result);
         }
+
+        class FractalTreeSSS : public ServerStatusSection {
+          public:
+            FractalTreeSSS() : ServerStatusSection("ft") {}
+            virtual bool includeByDefault() const { return true; }
+
+            BSONObj generateSection(const BSONElement &configElement) const {
+                if (cmdLine.isMongos()) {
+                    return BSONObj();
+                }
+
+                int scale = 1;
+                if (configElement.isABSONObj()) {
+                    BSONObj o = configElement.Obj();
+                    BSONElement scaleElt = o["scale"];
+                    if (scaleElt.ok()) {
+                        scale = scaleElt.safeNumberLong();
+                    }
+                }
+
+                BSONObjBuilder result;
+
+                FractalTreeEngineStatus status;
+                status.fetch();
+
+                status.appendPanic(result, false);
+                status.appendFilesystem(result, false);
+                {
+                    BSONObjBuilder b(result.subobjStart("fsync"));
+                    status.appendInfo(b, "count", "FS_FSYNC_COUNT", true);
+                    status.appendInfo(b, "time", "FS_FSYNC_TIME", true);
+                    {
+                        BSONObjBuilder lwb;
+                        status.appendInfo(lwb, "count", "FS_LONG_FSYNC_COUNT", false);
+                        status.appendInfo(lwb, "time", "FS_LONG_FSYNC_TIME", false);
+                        BSONObj lw = lwb.done();
+                        if (!lw.isEmpty()) {
+                            b.append("longFsync", lw);
+                        }
+                    }
+                    b.doneFast();
+                }
+                {
+                    BSONObjBuilder b(result.subobjStart("log"));
+                    status.appendInfo(b, "bytesWritten", "LOGGER_BYTES_WRITTEN", true, scale);
+                    b.doneFast();
+                }
+                {
+                    BSONObjBuilder b(result.subobjStart("cachetable"));
+                    {
+                        BSONObjBuilder b2(b.subobjStart("size"));
+                        status.appendInfo(b2, "current", "CT_SIZE_CURRENT", true, scale);
+                        status.appendInfo(b2, "writing", "CT_SIZE_WRITING", true, scale);
+                        status.appendInfo(b2, "limit", "CT_SIZE_LIMIT", true, scale);
+                        b2.doneFast();
+                    }
+                    {
+                        BSONObjBuilder b2(b.subobjStart("miss"));
+                        status.appendInfo(b2, "count", "CT_MISS", true);
+                        status.appendInfo(b2, "time", "CT_MISSTIME", true);
+                        b2.doneFast();
+                    }
+                    {
+                        BSONObjBuilder lwb;
+                        status.appendInfo(lwb, "count", "CT_LONG_WAIT_PRESSURE_COUNT", false);
+                        status.appendInfo(lwb, "time", "CT_LONG_WAIT_PRESSURE_TIME", false);
+                        BSONObj lw = lwb.done();
+                        if (!lw.isEmpty()) {
+                            b.append("longWaitCachePressure", lw);
+                        }
+                    }
+                    b.doneFast();
+                }
+                {
+                    BSONObjBuilder b(result.subobjStart("locktree"));
+                    {
+                        BSONObjBuilder b2(b.subobjStart("size"));
+                        status.appendInfo(b2, "current", "LTM_SIZE_CURRENT", true, scale);
+                        status.appendInfo(b2, "limit", "LTM_SIZE_LIMIT", true, scale);
+                        b2.doneFast();
+                    }
+                    {
+                        BSONObjBuilder lwb;
+                        status.appendInfo(lwb, "count", "LTM_LONG_WAIT_COUNT", false);
+                        status.appendInfo(lwb, "time", "LTM_LONG_WAIT_TIME", false);
+                        BSONObj lw = lwb.done();
+                        if (!lw.isEmpty()) {
+                            b.append("longWait", lw);
+                        }
+                    }
+                    {
+                        BSONObjBuilder lwb;
+                        status.appendInfo(lwb, "count", "LTM_LONG_WAIT_ESCALATION_COUNT", false);
+                        status.appendInfo(lwb, "time", "LTM_LONG_WAIT_ESCALATION_TIME", false);
+                        BSONObj lw = lwb.done();
+                        if (!lw.isEmpty()) {
+                            b.append("longWaitEscalation", lw);
+                        }
+                    }
+                    b.doneFast();
+                }
+
+                return result.obj();
+            }
+        } essss;
 
         static BSONObj pretty_key(const DBT *key, DB *db) {
             BSONObjBuilder b;
@@ -506,7 +676,12 @@ namespace mongo {
                     b.appendAs(pk.firstElement(), "$primaryKey");
                 }
             } else {
-                b.append("$key", string(reinterpret_cast<const char *>(key->data), key->size));
+                const char *data = reinterpret_cast<const char *>(key->data);
+                size_t size = key->size;
+                while (data[size - 1] == '\0' && size > 0) {
+                    --size;
+                }
+                b.append("$key", string(data, size));
             }
             return b.obj();
         }
@@ -662,49 +837,94 @@ namespace mongo {
             }
         }
 
-        void set_log_flush_interval(uint32_t period_ms) {
-            cmdLine.logFlushPeriod = period_ms;
-            env->change_fsync_log_period(env, cmdLine.logFlushPeriod);
-            TOKULOG(1) << "fsync log period set to " << period_ms << " milliseconds." << endl;
-        }
+        class LogFlushPeriodParameter : public ExportedServerParameter<uint32_t> {
+          public:
+            LogFlushPeriodParameter() : ExportedServerParameter<uint32_t>(ServerParameterSet::getGlobal(), "logFlushPeriod", &cmdLine.logFlushPeriod, true, true) {}
 
-        void set_checkpoint_period(uint32_t period_seconds) {
-            cmdLine.checkpointPeriod = period_seconds;
-            int r = env->checkpointing_set_period(env, period_seconds);
-            if (r != 0) {
-                handle_ydb_error(r);
+          protected:
+            virtual Status validate(const uint32_t& period) {
+                if (period < 0 || period > 500) {
+                    return Status(ErrorCodes::BadValue, "logFlushPeriod must be between 0 and 500 ms");
+                }
+                env->change_fsync_log_period(env, period);
+                return Status::OK();
             }
-            TOKULOG(1) << "checkpoint period set to " << period_seconds << " seconds." << endl;
-        }
+        } logFlushPeriod;
 
-        void set_cleaner_period(uint32_t period_seconds) {
-            cmdLine.cleanerPeriod = period_seconds;
-            int r = env->cleaner_set_period(env, period_seconds);
-            if (r != 0) {
-                handle_ydb_error(r);
+        class CheckpointPeriodParameter : public ExportedServerParameter<uint32_t> {
+          public:
+            CheckpointPeriodParameter() : ExportedServerParameter<uint32_t>(ServerParameterSet::getGlobal(), "checkpointPeriod", &cmdLine.checkpointPeriod, true, true) {}
+
+            virtual Status validate(const uint32_t &period) {
+                if (period < 0) {
+                    return Status(ErrorCodes::BadValue, "checkpointPeriod must be greater than 0s");
+                }
+                int r = env->checkpointing_set_period(env, period);
+                if (r != 0) {
+                    handle_ydb_error(r);
+                    return Status(ErrorCodes::InternalError, "error setting checkpointPeriod");
+                }
+                return Status::OK();
             }
-            TOKULOG(1) << "cleaner period set to " << period_seconds << " seconds." << endl;
-        }
+        } checkpointPeriodParameter;
 
-        void set_cleaner_iterations(uint32_t num_iterations) {
-            cmdLine.cleanerPeriod = num_iterations;
-            int r = env->cleaner_set_iterations(env, num_iterations);
-            if (r != 0) {
-                handle_ydb_error(r);
+        class CleanerPeriodParameter : public ExportedServerParameter<uint32_t> {
+          public:
+            CleanerPeriodParameter() : ExportedServerParameter<uint32_t>(ServerParameterSet::getGlobal(), "cleanerPeriod", &cmdLine.cleanerPeriod, true, true) {}
+
+            virtual Status validate(const uint32_t &period) {
+                if (period < 0) {
+                    return Status(ErrorCodes::BadValue, "cleanerPeriod must be greater than 0s");
+                }
+                int r = env->cleaner_set_period(env, period);
+                if (r != 0) {
+                    handle_ydb_error(r);
+                    return Status(ErrorCodes::InternalError, "error setting cleanerPeriod");
+                }
+                return Status::OK();
             }
-            TOKULOG(1) << "cleaner iterations set to " << num_iterations << "." << endl;
-        }
+        } cleanerPeriodParameter;
 
-        void set_lock_timeout(uint64_t timeout_ms) {
-            // This is sufficient. See get_lock_timeout_callback()
-            cmdLine.lockTimeout = timeout_ms;
-            TOKULOG(1) << "lock timeout set to " << timeout_ms << " milliseconds." << endl;
-        }
+        class CleanerIterationsParameter : public ExportedServerParameter<uint32_t> {
+          public:
+            CleanerIterationsParameter() : ExportedServerParameter<uint32_t>(ServerParameterSet::getGlobal(), "cleanerIterations", &cmdLine.cleanerIterations, true, true) {}
 
-        void set_loader_max_memory(uint64_t bytes) {
-            cmdLine.loaderMaxMemory = bytes;
-            env->set_loader_memory_size(env, bytes);
-            TOKULOG(1) << "loader max memory set to " << bytes << "." << endl;
+            virtual Status validate(const uint32_t &iterations) {
+                if (iterations < 0) {
+                    return Status(ErrorCodes::BadValue, "cleanerIterations must be greater than 0");
+                }
+                int r = env->cleaner_set_iterations(env, iterations);
+                if (r != 0) {
+                    handle_ydb_error(r);
+                    return Status(ErrorCodes::InternalError, "error setting cleanerIterations");
+                }
+                return Status::OK();
+            }
+        } cleanerIterationsParameter;
+
+        ExportedServerParameter<uint64_t> lockTimeoutParameter(ServerParameterSet::getGlobal(), "lockTimeout", &cmdLine.lockTimeout, true, true);
+        ExportedServerParameter<BytesQuantity<uint64_t> > loaderMaxMemoryParameter(ServerParameterSet::getGlobal(), "loaderMaxMemory", &cmdLine.loaderMaxMemory, true, true);
+
+        __attribute__((noreturn))
+        static void handle_filesystem_error_nicely(int error) {
+            stringstream ss;
+            ss << "Error " << error << ": " << strerror(error);
+            warning() << "Got the following error from the filesystem:" << endl;
+            warning() << ss.str() << endl;
+#if defined(RLIMIT_NOFILE)
+            if (error == EMFILE) {
+                struct rlimit rlnofile;
+                int r = getrlimit(RLIMIT_NOFILE, &rlnofile);
+                if (r == 0) {
+                    warning() << "The current resource limit for this process allows only " << rlnofile.rlim_cur
+                              << " open files.  Consider raising this value." << endl;
+                } else {
+                    r = errno;
+                    warning() << "getrlimit error " << r << ": " << strerror(r) << endl;
+                }
+            }
+#endif
+            uasserted(17035, ss.str());
         }
 
         void handle_ydb_error(int error) {
@@ -719,6 +939,15 @@ namespace mongo {
                 case ASSERT_IDS::CannotHashArrays:
                     uasserted( storage::ASSERT_IDS::CannotHashArrays,
                                "Error: hashed indexes do not currently support array values" );
+                case EACCES:
+                case EMFILE:
+                case ENFILE:
+                case ENOSPC:
+                case EPERM:
+                case EROFS: {
+                    handle_filesystem_error_nicely(error);
+                    verify(false);  // should not reach this point
+                }
                 default:
                     // fall through
                     ;

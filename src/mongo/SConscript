@@ -252,6 +252,7 @@ env.StaticLibrary("coredb", [
         "db/commands/mr_common.cpp",
         "db/commands/rename_collection_common.cpp",
         "db/commands/parameters.cpp",
+        "db/commands/server_status.cpp",
         "db/pipeline/pipeline.cpp",
         "db/dbcommands_generic.cpp",
         "db/dbpath.cpp",
@@ -276,7 +277,6 @@ env.StaticLibrary("coredb", [
         "db/pipeline/document_source.cpp",
         "db/pipeline/document_source_bson_array.cpp",
         "db/pipeline/document_source_command_shards.cpp",
-        "db/pipeline/document_source_filter.cpp",
         "db/pipeline/document_source_filter_base.cpp",
         "db/pipeline/document_source_geo_near.cpp",
         "db/pipeline/document_source_group.cpp",
@@ -294,6 +294,7 @@ env.StaticLibrary("coredb", [
         "db/projection.cpp",
         "db/querypattern.cpp",
         "db/queryutil.cpp",
+        "db/stats/timer_stats.cpp",
         "db/stats/top.cpp",
         "db/descriptor.cpp",
         "db/storage/cursor.cpp",
@@ -477,7 +478,6 @@ mongosLibraryFiles = [
     "s/config_server_checker_service.cpp",
     "s/cursors.cpp",
     "s/s_only.cpp",
-    "s/stats.cpp",
     "s/balance.cpp",
     "s/balancer_policy.cpp",
     "s/writeback_listener.cpp",
@@ -788,6 +788,8 @@ env.Append(MODULE_BANNERS = [distsrc.File('README'),
                              distsrc.File('THIRD-PARTY-NOTICES'),
                              distsrc.File('NEWS'),
                              toku_readme])
+scriptsdir = env.Dir('#scripts')
+env.Append(INSTALLED_SCRIPTS = [scriptsdir.File('tokumxstat.py')])
 env.Append(TOKULIBS = [tokulib.File('lib%s.so' % libname) for libname in [ltokufractaltree, ltokuportability]])
 env.Append(TOKULIBS=[tokubackup_lib.File('libHotBackup.so')])
 
@@ -812,6 +814,9 @@ module_banner_transforms = ["--transform %s=$SERVER_DIST_BASENAME" % d for d in 
 toku_lib_dirs = set([Dir('#').rel_path(f.get_dir()) for f in env['TOKULIBS']])
 toku_lib_transforms = ["--transform %s=$SERVER_DIST_BASENAME/lib64" % d for d in toku_lib_dirs]
 
+scripts_dirs = set([Dir('#').rel_path(f.get_dir()) for f in env['INSTALLED_SCRIPTS']])
+scripts_transforms = ["--transform %s=$SERVER_DIST_BASENAME/scripts" % d for d in scripts_dirs]
+
 if not has_option("skip-tarballs"):
     for d in ['/', '/usr/local/gcc-4.7', '/usr/local/gcc-4.7.3']:
         for lib64, lib32 in [('lib64', 'lib'), ('lib/x86_64-linux-gnu', 'lib/i386-linux-gnu')]:
@@ -834,12 +839,12 @@ if not has_option("skip-tarballs"):
 
     env.Command(
         '#/${SERVER_ARCHIVE}',
-        ['#buildscripts/make_archive.py'] + env["MODULE_BANNERS"] + env['TOKULIBS'] + distBinaries + allPlugins +
+        ['#buildscripts/make_archive.py'] + env["MODULE_BANNERS"] + env['INSTALLED_SCRIPTS'] + env['TOKULIBS'] + distBinaries + allPlugins +
         [libgcc_s,
          libstdcxx,
          os.path.realpath(libgcc_s),
          os.path.realpath(libstdcxx)],
-        ' '.join(['$PYTHON ${SOURCES[0]} -o $TARGET'] + toku_lib_transforms + module_banner_transforms + [
+        ' '.join(['$PYTHON ${SOURCES[0]} -o $TARGET'] + toku_lib_transforms + module_banner_transforms + scripts_transforms + [
                 '--transform ${str(Dir(BUILD_DIR))}/mongo/stripped=$SERVER_DIST_BASENAME/bin',
                 '--transform ${str(Dir(BUILD_DIR))}/mongo/install_rpath=$SERVER_DIST_BASENAME/bin',
                 '--transform ${str(Dir(BUILD_DIR))}/mongo/plugins=$SERVER_DIST_BASENAME/lib64/plugins',

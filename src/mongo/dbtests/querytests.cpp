@@ -1291,29 +1291,6 @@ namespace QueryTests {
         Client::Context _ctx;
     };
     
-    class Exhaust : public CollectionInternalBase {
-    public:
-        Exhaust() : CollectionInternalBase( "exhaust" ) {}
-        void run() {
-            BSONObj info;
-            ASSERT( client().runCommand( "unittests",
-                                        BSON( "create" << "querytests.exhaust" <<
-                                             "capped" << true << "size" << 8192 ), info ) );
-            client().insert( ns(), BSON( "ts" << 0 ) );
-            Message message;
-            assembleRequest( ns(), BSON( "ts" << GTE << 0 ), 0, 0, 0,
-                            QueryOption_OplogReplay | QueryOption_CursorTailable |
-                            QueryOption_Exhaust,
-                            message );
-            DbMessage dbMessage( message );
-            QueryMessage queryMessage( dbMessage );
-            Message result;
-            string exhaust = runQuery( message, queryMessage, *cc().curop(), result );
-            ASSERT( exhaust.size() );
-            ASSERT_EQUALS( string( ns() ), exhaust );
-        }
-    };
-
     class QueryCursorTimeout : public CollectionInternalBase {
     public:
         QueryCursorTimeout() : CollectionInternalBase( "querycursortimeout" ) {}
@@ -1660,7 +1637,6 @@ namespace QueryTests {
             add< FindingStartPartiallyFull >();
             add< FindingStartStale >();
             add< WhatsMyUri >();
-            add< Exhaust >();
             add< QueryCursorTimeout >();
             add< QueryReadsAll >();
             add< KillPinnedCursor >();

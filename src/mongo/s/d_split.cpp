@@ -234,10 +234,18 @@ namespace mongo {
             c = splitKey.woCompare(_lastSplitKey, _ordering);
             if (c < 0) {
                 stringstream ss;
-                ss << "next split key cannot be less than the last split key. "
+                ss << "WARNING: next split key cannot be less than the last split key. "
                    << "last key: " << _lastSplitKey
                    << "next key: " << splitKey;
-                msgasserted(16797, ss.str());
+                // This error may come about if there are a huge number of deletes, and
+                // _lastSplitKey gets initialized to something much larger than min (because it
+                // skips over all the deleted entries, but get_key_after_bytes doesn't).  So in that
+                // case, just finish early but don't crash.  Still worth logging though, and we
+                // should reserve the assert id in case we fix this better later.
+                //msgasserted(16797, ss.str());
+                LOG(0) << ss.str();
+                _useCursor = true;
+                return;
             }
             if (c == 0) {
                 // If we got the same as the current chunk min, that means there are many documents
@@ -942,6 +950,10 @@ namespace mongo {
                 for (int i=1; i >= 0 ; i--){ // high chunk more likely to have only one obj
 
                     NamespaceDetails *d = nsdetails(ns);
+                    if ( ! d ) {
+                        errmsg = "ns not found";
+                        return false;
+                    }
 
                     const IndexDetails *idx = d->findIndexByPrefix( keyPattern ,
                                                                     true ); /* exclude multikeys */

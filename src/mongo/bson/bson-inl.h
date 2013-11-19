@@ -1043,6 +1043,39 @@ dodouble:
         return true;
     }
 
+    template<> inline bool BSONElement::coerce<unsigned int>( unsigned int* out ) const {
+        if ( !isNumber() )
+            return false;
+        if ( numberInt() < 0) {
+            return false;
+        }
+        *out = numberInt();
+        return true;
+    }
+
+    template<> inline bool BSONElement::coerce<unsigned long>( unsigned long* out ) const {
+        if ( !isNumber() )
+            return false;
+        if ( numberInt() < 0) {
+            return false;
+        }
+        *out = numberInt();
+        return true;
+    }
+
+    template<typename T> inline bool BSONElement::coerce( BytesQuantity<T>* out ) const {
+        T val;
+        if (type() == mongo::String) {
+            if (!BytesQuantity<T>::fromString(Stringdata(), val).isOK()) {
+                return false;
+            }
+        } else if (!coerce<T>(&val)) {
+            return false;
+        }
+        *out = val;
+        return true;
+    }
+
     template<> inline bool BSONElement::coerce<double>( double* out ) const {
         if ( !isNumber() )
             return false;

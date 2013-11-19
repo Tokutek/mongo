@@ -53,7 +53,9 @@ namespace mongo {
 
         DBT dbt() const;
 
-        int compareKeys(const storage::Key &key1, const storage::Key &key2) const;
+        int compareKeys(const storage::Key &key1, const storage::Key &key2) const {
+            return key1.woCompare(key2, ordering());
+        }
 
         void generateKeys(const BSONObj &obj, BSONObjSet &keys) const;
 

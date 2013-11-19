@@ -160,6 +160,17 @@ namespace mongo {
                 minUnapplied,
                 result
                 );
+            addGTIDToBSON(
+                "lastPurgedGTID",
+                theReplSet->getLastPurgedGTID(),
+                result
+                );
+            result.appendDate("lastPurgedTS", theReplSet->getLastPurgedTS());
+            const Member *syncTarget = BackgroundSync::get()->getSyncTarget();
+            if (syncTarget) {
+                result.append("syncingTo", syncTarget->fullName());
+            }
+
             int v = theReplSet->config().version;
             result.append("v", v);
             if( v > cmdObj["v"].Int() )
@@ -177,7 +188,7 @@ namespace mongo {
             }
 
             // note that we got a heartbeat from this node
-            from->get_hbinfo().recvHeartbeat();
+            from->recvHeartbeat();
 
             return true;
         }
@@ -279,11 +290,13 @@ namespace mongo {
                     down(mem, info.getStringField("errmsg"));
                 }
             }
-            catch(DBException& e) {
+            catch (const DBException& e) {
+                log() << "replSet health poll task caught a DBException: " << e.what();
                 down(mem, e.what());
             }
-            catch(...) {
-                down(mem, "replSet unexpected exception in ReplSetHealthPollTask");
+            catch (const std::exception& e) {
+                log() << "replSet health poll task caught an exception: " << e.what();
+                down(mem, e.what());
             }
             m = mem;
 
@@ -389,6 +402,9 @@ namespace mongo {
         }
 
         void authIssue(HeartbeatInfo& mem) {
+            if (!mem.authIssue) {
+                log() << "replSet member " << h.toString() << " has an auth issue" << rsLog;
+            }
             mem.authIssue = true;
             mem.hbstate = MemberState::RS_UNKNOWN;
 
@@ -401,14 +417,22 @@ namespace mongo {
             // if we've received a heartbeat from this member within the last two seconds, don't
             // change its state to down (if it's already down, leave it down since we don't have
             // any info about it other than it's heartbeating us)
+
+            // This code is essentially a no-op in vanilla MongoDB thanks to
+            // SERVER-11280. I (Zardosht) am reluctant to fix it because
+            // I don't know what impact it may have on elections and failover.
+            // For now, commenting out because we are moving lastHeartbeatRecv
+            // out of HeartbeatInfo and into Member
+            /*
             if (m.lastHeartbeatRecv+2 >= time(0)) {
-                LOG(1) << "replset info " << h.toString()
-                       << " just heartbeated us, but our heartbeat failed: " << msg
-                       << ", not changing state" << rsLog;
+                log() << "replset info " << h.toString()
+                      << " just heartbeated us, but our heartbeat failed: " << msg
+                      << ", not changing state" << rsLog;
                 // we don't update any of the heartbeat info, though, since we didn't get any info
                 // other than "not down" from having it heartbeat us
                 return;
             }
+            */
 
             mem.authIssue = false;
             mem.health = 0.0;
@@ -433,6 +457,9 @@ namespace mongo {
             }
             mem.health = 1.0;
             mem.lastHeartbeatMsg = info["hbmsg"].String();
+            if (info.hasElement("syncingTo")) {
+                mem.syncingTo = info["syncingTo"].String();
+            }
             if( info.hasElement("opTime") ) {
                 mem.opTime = info["opTime"].Date();
             }
@@ -447,6 +474,15 @@ namespace mongo {
             }
             if ( info.hasElement("minUnappliedGTID")) {
                 mem.minUnappliedGTID= getGTIDFromBSON("minUnappliedGTID", info);
+            }
+            if ( info.hasElement("lastPurgedGTID")) {
+                mem.purgedInfoAvailable = true;
+                mem.lastPurgedGTID = getGTIDFromBSON("lastPurgedGTID", info);
+                // if lastPurgedGTID is available, lastPurgedTS must be as well
+                mem.lastPurgedTS = info["lastPurgedTS"].Date();
+            }
+            else {
+                mem.purgedInfoAvailable = false;
             }
             // see if this member is in the electable set
             if( info["e"].eoo() ) {
@@ -486,9 +522,6 @@ namespace mongo {
         time_t _timeout;
     };
 
-    void HeartbeatInfo::recvHeartbeat() {
-        lastHeartbeatRecv = time(0);
-    }
 
     int ReplSetHealthPollTask::s_try_offset = 0;
 

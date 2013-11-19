@@ -22,25 +22,34 @@
 
 namespace mongo {
 
-    class BeginTransactionCmd : public InformationCommand {
-    public:
+    class TransactionCommand : public InformationCommand {
+      public:
         virtual bool adminOnly() const { return false; }
         virtual bool requiresAuth() { return true; }
-        virtual void addRequiredPrivileges(const std::string& dbname,
-                                           const BSONObj& cmdObj,
-                                           std::vector<Privilege>* out) {
+        virtual void addRequiredPrivileges(const std::string &dbname,
+                                           const BSONObj &cmdObj,
+                                           std::vector<Privilege> *out) {
             ActionSet actions;
             actions.addAction(ActionType::transactionCommands);
-            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+            // This doesn't really need to be specific to this dbname, but it ensures that you are
+            // authed as someone and aren't just anonymous.  This means that if you're running with
+            // auth, you need to issue transaction commands against a db that you have privileges
+            // on, which doesn't seem like that big of a requirement.
+            out->push_back(Privilege(dbname, actions));
         }
         virtual LockType locktype() const { return OPLOCK; }
+        TransactionCommand(const char *name, bool webUI=false, const char *oldName=NULL) : InformationCommand(name, webUI, oldName) {}
+    };
+
+    class BeginTransactionCmd : public TransactionCommand {
+    public:
         virtual void help( stringstream& help ) const {
             help << "begin transaction\n"
                 "Create a transaction for multiple statements.\n"
                 "{ beginTransaction, [isolation : ]  }\n"
                 " Possible values for isolation: serializable, mvcc (default), readUncommitted \n";
         }
-        BeginTransactionCmd() : InformationCommand("beginTransaction") {}
+        BeginTransactionCmd() : TransactionCommand("beginTransaction") {}
 
         virtual bool run(const string& db, 
                          BSONObj& cmdObj, 
@@ -61,7 +70,7 @@ namespace mongo {
                 string iso = isoBSON.String();
                 if (iso == "serializable") {
                     iso_flags = 0;
-                    uassert(16807, "Cannot set multi statement transaction to serializable on machine that is not primary", !(theReplSet && theReplSet->isPrimary()));
+                    uassert(16807, "Cannot set multi statement transaction to serializable on machine that is not primary", (!theReplSet || theReplSet->isPrimary()));
                 }
                 else if (iso == "mvcc") {
                     iso_flags = DB_TXN_SNAPSHOT;
@@ -86,24 +95,14 @@ namespace mongo {
         }
     } beginTransactionCmd;
 
-    class CommitTransactionCmd : public InformationCommand {
+    class CommitTransactionCmd : public TransactionCommand {
     public:
-        virtual bool adminOnly() const { return false; }
-        virtual bool requiresAuth() { return true; }
-        virtual void addRequiredPrivileges(const std::string& dbname,
-                                           const BSONObj& cmdObj,
-                                           std::vector<Privilege>* out) {
-            ActionSet actions;
-            actions.addAction(ActionType::transactionCommands);
-            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
-        }
-        virtual LockType locktype() const { return OPLOCK; }
         virtual void help( stringstream& help ) const {
             help << "commit transaction\n"
                 "If running a multi statement transaction, commit transaction, no-op otherwise .\n"
                 "{ commitTransaction }";
         }
-        CommitTransactionCmd() : InformationCommand("commitTransaction") {}
+        CommitTransactionCmd() : TransactionCommand("commitTransaction") {}
 
         virtual bool run(const string& db, 
                          BSONObj& cmdObj, 
@@ -123,24 +122,14 @@ namespace mongo {
         }
     } commitTransactionCmd;
 
-    class RollbackTransactionCmd : public InformationCommand {
+    class RollbackTransactionCmd : public TransactionCommand {
     public:
-        virtual bool adminOnly() const { return false; }
-        virtual bool requiresAuth() { return true; }
-        virtual void addRequiredPrivileges(const std::string& dbname,
-                                           const BSONObj& cmdObj,
-                                           std::vector<Privilege>* out) {
-            ActionSet actions;
-            actions.addAction(ActionType::transactionCommands);
-            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
-        }
-        virtual LockType locktype() const { return OPLOCK; }
         virtual void help( stringstream& help ) const {
             help << "rollback transaction\n"
                 "If running a multi statement transaction, rollback transaction, no-op otherwise .\n"
                 "{ rollbackTransaction }";
         }
-        RollbackTransactionCmd() : InformationCommand("rollbackTransaction") {}
+        RollbackTransactionCmd() : TransactionCommand("rollbackTransaction", false, "abortTransaction") {}
 
         virtual bool run(const string& db, 
                          BSONObj& cmdObj, 

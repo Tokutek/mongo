@@ -439,10 +439,56 @@ namespace mongo {
 
         /** @return the number of index ranges represented by 'this' */
         unsigned size();
+
+        /**
+         * Methods for identifying compound start and end btree bounds describing this field range
+         * vector.
+         *
+         * A FieldRangeVector contains the FieldRange bounds for every field of an index.  A
+         * FieldRangeVectorIterator may be used to efficiently search for btree keys within these
+         * bounds.  Alternatively, a single compound field interval of the btree may be scanned,
+         * between a compound field start point and end point.  If isSingleInterval() is true then
+         * the interval between the start and end points will be an exact description of this
+         * FieldRangeVector, otherwise the start/end interval will be a superset of this
+         * FieldRangeVector.  For example:
+         *
+         * index { a:1 }, query { a:{ $gt:2, $lte:4 } }
+         *     -> frv ( 2, 4 ]
+         *         -> start/end bounds ( { '':2 }, { '':4 } ]
+         *
+         * index { a:1, b:1 }, query { a:2, b:{ $gte:7, $lt:9 } }
+         *     -> frv [ 2, 2 ], [ 7, 9 )
+         *         -> start/end bounds [ { '':2, '':7 }, { '':2, '':9 } )
+         *
+         * index { a:1, b:-1 }, query { a:2, b:{ $gte:7, $lt:9 } }
+         *     -> frv [ 2, 2 ], ( 9, 7 ]
+         *         -> start/end bounds ( { '':2, '':9 }, { '':2, '':7 } ]
+         *
+         * index { a:1, b:1 }, query { a:{ $gte:7, $lt:9 } }
+         *     -> frv [ 7, 9 )
+         *         -> start/end bounds [ { '':7, '':MinKey }, { '':9, '':MinKey } )
+         *
+         * index { a:1, b:1 }, query { a:{ $gte:2, $lte:5 }, b:{ $gte:7, $lte:9 } }
+         *     -> frv [ 2, 5 ], [ 7, 9 ]
+         *         -> start/end bounds [ { '':2, '':7 }, { '':5, '':9 } ]
+         *            (isSingleInterval() == false)
+         */
+
+        /**
+         * @return true if this FieldRangeVector represents a single interval within a btree,
+         * comprised of all keys between a single start point and a single end point.
+         */
+        bool isSingleInterval() const;
+
         /** @return starting point for an index traversal. */
         BSONObj startKey() const;
+
         /** @return end point for an index traversal. */
         BSONObj endKey() const;
+
+        /** @return true if the endKey() bound is inclusive. */
+        bool endKeyInclusive() const;
+
         /** @return a client readable representation of 'this' */
         BSONObj obj() const;
         
@@ -484,8 +530,8 @@ namespace mongo {
 
         const vector<FieldRange> &ranges() const { return _ranges; }
 
-        // True if each FieldRange in _ranges is a point interval set.
-        bool containsOnlyPointIntervals() const;
+        // True if the first FieldRange in _ranges is a point interval.
+        bool prefixedByPointInterval() const;
         
     private:
         int matchingLowElement( const BSONElement &e, int i, bool direction, bool &lowEquality ) const;
@@ -535,7 +581,6 @@ namespace mongo {
         const vector<bool> &inc() const { return _inc; }
         bool after() const { return _after; }
         void prepDive();
-        void getCurrentIntervals(vector<const FieldInterval *> intervals) const;
 
         /**
          * Helper class representing a position within a vector of ranges.  Public for testing.
@@ -733,6 +778,21 @@ namespace mongo {
         return false;
     }
 
+    inline BSONObj getSimpleIdQuery( const BSONObj &query ) {
+        for (BSONObjIterator i(query); i.more(); ) {
+            const BSONElement &e = i.next();
+            if (e.isSimpleType() && strcmp(e.fieldName(), "_id") == 0) {
+                if (e.type() == Object && e.Obj().firstElementFieldName()[0] == '$') {
+                    return BSONObj();
+                }
+                if (query.nFields() == 1) {
+                    return query;
+                }
+                return e.wrap();
+            }
+        }
+        return BSONObj();
+    }
     
     inline bool FieldInterval::equality() const {
         if ( _cachedEquality == -1 ) {

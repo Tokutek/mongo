@@ -44,6 +44,7 @@
 #include "mongo/db/stats/snapshots.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/ttl.h"
+#include "mongo/db/txn_complete_hooks.h"
 #include "mongo/plugins/loader.h"
 #include "mongo/s/d_writeback.h"
 #include "mongo/scripting/engine.h"
@@ -334,14 +335,8 @@ namespace mongo {
 
         acquirePathLock();
 
-        // the last thing we do before initializing storage is to install the
-        // txn complete hooks and update callback, which live in txn_complete_hooks.cpp
-        // and storage/env.cpp respectively.
-        extern TxnCompleteHooks _txnCompleteHooks;
-        extern storage::UpdateCallback _storageUpdateCallback;
-        setTxnCompleteHooks(&_txnCompleteHooks);
         set_update_callback(&_storageUpdateCallback);
-        storage::startup();
+        storage::startup(&_txnCompleteHooks);
 
         unsigned long long missingRepl = checkIfReplMissingFromCommandLine();
         if (missingRepl) {
@@ -389,6 +384,24 @@ namespace mongo {
             // open admin db in case we need to use it later. TODO this is not the right way to
             // resolve this.
             Client::WriteContext c("admin", dbpath);
+        }
+
+        {
+            // Upgrade any system.users collections if they need it.
+            Lock::GlobalWrite lk;
+            Client::UpgradingSystemUsersScope usus;
+            Client::Transaction txn(DB_SERIALIZABLE);
+
+            vector<string> databases;
+            getDatabaseNames(databases);
+            for (vector<string>::const_iterator it = databases.begin(); it != databases.end(); ++it) {
+                string ns = getSisterNS(*it, "system.users");
+                Client::Context ctx(ns);
+                // Just by calling nsdetails, if a collection that needed upgrade is opened, it'll
+                // get upgraded.  This fixes #674.
+                nsdetails(ns);
+            }
+            txn.commit();
         }
 
         listen(listenPort);
@@ -463,6 +476,7 @@ static void buildOptionsDescriptions(po::options_description *pVisible,
     po::options_description ms_options("Master/slave options");
     po::options_description rs_options("Replica set options");
     po::options_description sharding_options("Sharding options");
+    po::options_description hidden_sharding_options("Sharding options");
     po::options_description ssl_options("SSL options");
 
     CmdLine::addGlobalOptions( general_options , hidden_options , ssl_options );
@@ -484,7 +498,7 @@ static void buildOptionsDescriptions(po::options_description *pVisible,
     ("fsRedzone", po::value<int>(), "percentage of free-space left on device before the system goes read-only.")
     ("logDir", po::value<string>(), "directory to store transaction log files (default is --dbpath)")
     ("tmpDir", po::value<string>(), "directory to store temporary bulk loader files (default is --dbpath)")
-    ("debug", "go into a debug-friendly mode (development use only).")
+    ("gdb", "go into a gdb-friendly mode (development use only).")
     ("gdbPath", po::value<string>(), "if specified, debugging information will be gathered on fatal error by launching gdb at the given path")
     ("ipv6", "enable IPv6 support (disabled by default)")
     ("journal", "DEPRECATED")
@@ -545,8 +559,13 @@ static void buildOptionsDescriptions(po::options_description *pVisible,
     sharding_options.add_options()
     ("configsvr", "declare this is a config db of a cluster; default port 27019; default dir /data/configdb")
     ("shardsvr", "declare this is a shard db of a cluster; default port 27018")
-    ("noMoveParanoia" , "turn off paranoid saving of data for moveChunk.  this is on by default for now, but default will switch" )
     ;
+
+    hidden_sharding_options.add_options()
+    ("noMoveParanoia" , "turn off paranoid saving of data for the moveChunk command; default" )
+    ("moveParanoia" , "turn on paranoid saving of data during the moveChunk command (used for internal system diagnostics)" )
+    ;
+    hidden_options.add(hidden_sharding_options);
 
     hidden_options.add_options()
     ("fastsync", "indicate that this instance is starting from a dbpath snapshot of the repl peer")
@@ -673,11 +692,26 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
                 dbexit( EXIT_BADOPTIONS );
             }
         }
-        if( params.count("expireOplogDays") ) {
-            cmdLine.expireOplogDays = params["expireOplogDays"].as<uint32_t>();
+        if ( !(params.count("expireOplogHours") || params.count("expireOplogDays")) && params.count("replSet") ) {
+            warning() << "*****************************" << endl;
+            warning() << "No value set for expireOplogDays, using default of " << cmdLine.expireOplogDays << " days." << endl;
+            warning() << "*****************************" << endl;
         }
         if( params.count("expireOplogHours") ) {
             cmdLine.expireOplogHours = params["expireOplogHours"].as<uint32_t>();
+            // if expireOplogHours is set, we don't want to use the default
+            // value of expireOplogDays. We want to use 0. If the user
+            // sets the value of expireOplogDays as well, next if-clause
+            // below will catch it
+            if( !params.count("expireOplogDays") ) {
+                cmdLine.expireOplogDays = 0;
+                warning() << "*****************************" << endl;
+                warning() << "No value set for expireOplogDays, only for expireOplogHours. Having at least 1 day set for expireOplogDays is recommended." << endl;
+                warning() << "*****************************" << endl;
+            }
+        }
+        if( params.count("expireOplogDays") ) {
+            cmdLine.expireOplogDays = params["expireOplogDays"].as<uint32_t>();
         }
         if (params.count("journalOptions")) {
             out() << "journalOptions deprecated" <<endl;
@@ -873,9 +907,18 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
         if (params.count("ipv6")) {
             enableIPv6();
         }
-        if (params.count("noMoveParanoia")) {
-            cmdLine.moveParanoia = false;
+
+        if (params.count("noMoveParanoia") > 0 && params.count("moveParanoia") > 0) {
+            out() << "The moveParanoia and noMoveParanoia flags cannot both be set; please use only one of them." << endl;
+            ::_exit( EXIT_BADOPTIONS );
         }
+
+        if (params.count("noMoveParanoia"))
+            cmdLine.moveParanoia = false;
+
+        if (params.count("moveParanoia"))
+            cmdLine.moveParanoia = true;
+
         if (params.count("pairwith") || params.count("arbiter") || params.count("opIdMem")) {
             out() << "****" << endl;
             out() << "Replica Pairs have been deprecated. Invalid options: --pairwith, --arbiter, and/or --opIdMem" << endl;
@@ -970,8 +1013,6 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
 
     getcurns = ourgetns;
 
-    setupSignalHandlers();
-
     dbExecCommand = argv[0];
 
     srand(curTimeMicros());
@@ -988,8 +1029,9 @@ static int mongoDbMain(int argc, char* argv[], char **envp) {
     if( argc == 1 )
         cout << dbExecCommand << " --help for help and startup options" << endl;
 
-
     processCommandLineOptions(std::vector<std::string>(argv, argv + argc));
+    setupSignalHandlers();
+
     mongo::runGlobalInitializersOrDie(argc, argv, envp);
     CmdLine::censor(argc, argv);
 
@@ -1125,10 +1167,10 @@ namespace mongo {
         // asyncSignals is a global variable listing the signals that should be handled by the
         // interrupt thread, once it is started via startSignalProcessingThread().
         sigemptyset( &asyncSignals );
-        if (!cmdLine.debug) {
-            sigaddset( &asyncSignals, SIGHUP );
+        sigaddset( &asyncSignals, SIGTERM );
+        sigaddset( &asyncSignals, SIGHUP );
+        if (!cmdLine.gdb) {
             sigaddset( &asyncSignals, SIGINT );
-            sigaddset( &asyncSignals, SIGTERM );
         }
         sigaddset( &asyncSignals, SIGUSR1 );
 

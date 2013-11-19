@@ -16,7 +16,6 @@
 # adding a comment for zardosht
 
 import buildscripts
-import buildscripts.bb
 import datetime
 import imp
 import os
@@ -50,8 +49,6 @@ def _rpartition(string, sep):
     return string[:idx], sep, string[idx + 1:]
 
 
-
-buildscripts.bb.checkOk()
 
 def findSettingsSetup():
     sys.path.append( "." )
@@ -302,6 +299,7 @@ env = Environment( BUILD_DIR=variantDir,
                    MODULE_LIBDEPS_MONGOD=[],
                    MODULE_LIBDEPS_MONGOS=[],
                    MODULE_LIBDEPS_MONGOSHELL=[],
+                   MODULETEST_ALIAS='moduletests',
                    MODULETEST_LIST='#build/moduletests.txt',
                    MSVS_ARCH=msarch ,
                    PYTHON=utils.find_python(),
@@ -717,7 +715,7 @@ if nix:
 
     env.Append( CPPDEFINES=["_FILE_OFFSET_BITS=64"] )
     env.Append( CXXFLAGS=["-Wnon-virtual-dtor", "-Woverloaded-virtual"] )
-    if env['CCVERSION'] in ['4.7.3', '4.8.0', '4.8.1']:
+    if env['CCVERSION'] in ['4.7.3', '4.8.0', '4.8.1', '4.8.2']:
         # boost makes this warning super annoying
         env.Append( CXXFLAGS=['-Wno-unused-local-typedefs'] )
     env.Append( LINKFLAGS=["-fPIC", "-pthread", "-rdynamic"] )
@@ -730,12 +728,10 @@ if nix:
         except KeyError:
             pass
 
-    if linux and has_option( "sharedclient" ):
-        env.Append( SHLINKFLAGS=" -Wl,--as-needed -Wl,-zdefs " )
-
     if linux and has_option( "gcov" ):
         env.Append( CXXFLAGS=" -fprofile-arcs -ftest-coverage " )
         env.Append( LINKFLAGS=" -fprofile-arcs -ftest-coverage " )
+        env.Append( CPPDEFINES=["_COVERAGE"] );
 
     if debugBuild:
         env.Append( CCFLAGS=["-O0", "-fstack-protector"] )
@@ -1168,4 +1164,4 @@ def clean_old_dist_builds(env, target, source):
 env.Alias("dist_clean", [], [clean_old_dist_builds])
 env.AlwaysBuild("dist_clean")
 
-env.Alias('all', ['core', 'tools', 'clientTests', 'test', 'unittests'])
+env.Alias('all', ['core', 'tools', 'clientTests', 'test', 'unittests', 'moduletests'])

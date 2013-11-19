@@ -61,6 +61,20 @@ try:
 except ImportError:
     import pickle
 
+try:
+    from hashlib import md5 # new in 2.5
+except ImportError:
+    from md5 import md5 # deprecated in 2.5
+
+try:
+    import json
+except:
+    try:
+        import simplejson as json
+    except:
+        json = None
+
+
 # TODO clean this up so we don't need globals...
 mongo_repo = os.getcwd() #'./'
 failfile = os.path.join(mongo_repo, 'failfile.smoke')
@@ -95,6 +109,8 @@ server_log_file = ''
 quiet = False
 
 _debug = False
+
+all_test_results = []
 
 # This class just implements the with statement API, for a sneaky
 # purpose below.
@@ -173,19 +189,25 @@ class mongod(object):
         return False
 
     def setup_admin_user(self, port=mongod_port):
+        db = Connection( "localhost" , int(port) ).admin
         try:
-            Connection( "localhost" , int(port) ).admin.add_user("admin","password")
+            db.authenticate("admin","password")
         except OperationFailure, e:
-            if e.message == 'need to login':
-                pass # SERVER-4225
-            else:
-                raise e
+            try:
+                db.add_user("admin","password")
+            except OperationFailure, e:
+                if e.message == 'need to login':
+                    pass # SERVER-4225
+                else:
+                    raise e
 
     def start(self):
         global mongod_port
         global mongod
         global shell_executable
         global _debug
+        global valgrind
+        global drd
         if self.proc:
             print >> sys.stderr, "probable bug: self.proc already set in start()"
             return
@@ -218,8 +240,8 @@ class mongod(object):
         argv = [mongod_executable, "--port", str(self.port), "--dbpath", dir_name]
         # This should always be set for tests
         argv += ['--setParameter', 'enableTestCommands=1']
-        # --debug puts mongod in a debugging-friendly mode
-        argv += ['--debug']
+        if valgrind or drd:
+            argv += ['--setParameter', 'numCachetableBucketMutexes=32']
         if self.kwargs.get('small_oplog'):
             argv += ["--master", "--oplogSize", "511"]
         if self.kwargs.get('small_oplog_rs'):
@@ -253,8 +275,12 @@ class mongod(object):
         if not self.did_mongod_start(self.port):
             raise Exception("Failed to start mongod")
 
-        if "true" == check_output([shell_executable, '--port', str(self.port), '--quiet', '--eval',
-                                   'print(db.runCommand("buildInfo").debug)']).strip():
+        run_mongo_cmd = [shell_executable, '--port', str(self.port), '--quiet']
+        if self.kwargs.get('use_ssl'):
+            run_mongo_cmd += ['--ssl',
+                              '--sslPEMKeyFile', 'jstests/libs/server.pem',
+                              '--sslCAFile', 'jstests/libs/ca.pem']
+        if "true" == check_output(run_mongo_cmd + ['--eval', 'print(db.runCommand("buildInfo").debug)']).strip():
             _debug = True
 
         if self.auth:
@@ -392,7 +418,7 @@ def skipTest(path):
     parentPath = os.path.dirname(path)
     parentDir = os.path.basename(parentPath)
     if small_oplog: # For tests running in parallel
-        if basename in ["cursor8.js", "indexh.js", "dropdb.js"]:
+        if basename in ["cursor8.js", "indexh.js", "dropdb.js", "connections_opened.js", "opcounters.js"]:
             return True
     if auth or keyFile: # For tests running with auth
         # Skip any tests that run with auth explicitly
@@ -427,6 +453,9 @@ def skipTest(path):
                            ("jstests", "bench_test1.js"),
                            ("jstests", "bench_test2.js"),
                            ("jstests", "bench_test3.js"),
+                           ("jstests", "max_message_size.js"), # SERVER-8414
+                           ("jstests", "drop2.js"), # SERVER-8589
+                           ("jstests", "killop.js") # SERVER-10128
                            ]
 
         if os.path.join(parentDir,basename) in [ os.path.join(*test) for test in authTestsToSkip ]:
@@ -450,7 +479,11 @@ def runTest(test, testnum):
     # so, we won't mess with the output
     is_test_binary = False
     if skipTest(path):
-        print "skipping " + path
+        if quiet:
+            sys.stdout.write("skip %d %s\n" % (testnum, os.path.basename(path)))
+            sys.stdout.flush()
+        else:
+            print "skipping " + path
         return
     if file_of_commands_mode:
         # smoke.py was invoked like "--mode files --from-file foo",
@@ -470,7 +503,9 @@ def runTest(test, testnum):
         if small_oplog or small_oplog_rs:
             argv += ["--eval", 'testingReplication = true;']
         if use_ssl:
-            argv += ["--ssl"]
+            argv += ["--ssl",
+                     "--sslPEMKeyFile", "jstests/libs/client.pem",
+                     "--sslCAFile", "jstests/libs/ca.pem"]
         argv += [path]
     elif ext in ["", ".exe"]:
         # Blech.
@@ -485,7 +520,7 @@ def runTest(test, testnum):
             argv = [test_path and os.path.abspath(os.path.join(test_path, path)) or path,
                     "--port", mongod_port]
     else:
-        raise Bug("fell off in extenstion case: %s" % path)
+        raise Bug("fell off in extension case: %s" % path)
 
     if keyFile:
         f = open(keyFile, 'r')
@@ -495,6 +530,9 @@ def runTest(test, testnum):
     else:
         keyFileData = None
 
+    mongo_test_filename = os.path.basename(path)
+    if 'sharedclient' in path:
+        mongo_test_filename += "-sharedclient"
 
     # sys.stdout.write() is more atomic than print, so using it prevents
     # lines being interrupted by, e.g., child processes
@@ -508,7 +546,7 @@ def runTest(test, testnum):
         tlog = None
 
     vlog.write(" *******************************************\n")
-    vlog.write("         Test : %s ...\n" % os.path.basename(path))
+    vlog.write("         Test : %s ...\n" % mongo_test_filename)
     vlog.flush()
 
     # FIXME: we don't handle the case where the subprocess
@@ -545,7 +583,7 @@ def runTest(test, testnum):
     tempfile = SpooledTemporaryFile(max_size=16*1024*1024)
 
     try:
-        os.environ['MONGO_TEST_FILENAME'] = os.path.basename(path)
+        os.environ['MONGO_TEST_FILENAME'] = mongo_test_filename
         t1 = time.time()
         r = call(buildlogger(argv), cwd=test_path,
                  # the dbtests know how to format their own output nicely
@@ -562,17 +600,17 @@ def runTest(test, testnum):
                 vlog.write(line)
             vlog.flush()
 
-        if quiet:
-            if r == 0:
-                qlog.write('ok %d %s\n' % (testnum, os.path.basename(path)))
-            else:
-                qlog.write('not ok %d %s # exit %d\n' % (testnum, os.path.basename(path), r))
-            qlog.flush()
-            if r != 0:
-                tempfile.seek(0)
-                for line in tempfile:
-                    tlog.write(line)
-                tlog.flush()
+            if quiet:
+                if r == 0:
+                    qlog.write('ok %d %s\n' % (testnum, os.path.basename(path)))
+                else:
+                    qlog.write('not ok %d %s # exit %d\n' % (testnum, os.path.basename(path), r))
+                qlog.flush()
+                if r != 0:
+                    tempfile.seek(0)
+                    for line in tempfile:
+                        tlog.write(line)
+                    tlog.flush()
         if r != 0:
             raise TestExitFailure(path, r)
     finally:
@@ -585,6 +623,7 @@ def runTest(test, testnum):
         try:
             c = Connection(host="127.0.0.1", port=int(mongod_port), ssl=use_ssl)
         except Exception,e:
+            print "Exception from pymongo: ", e
             raise TestServerFailure(path)
 
 def run_tests(tests):
@@ -640,16 +679,25 @@ def run_tests(tests):
             if quiet:
                 sys.stdout.write('1..%d\n' % len(tests))
             for tests_run, test in enumerate(tests):
+                test_result = { "test": test[0], "start": time.time() }
                 try:
                     fails.append(test)
                     runTest(test, tests_run + 1)
                     fails.pop()
                     winners.append(test)
 
+                    test_result["passed"] = True
+                    test_result["end"] = time.time()
+                    all_test_results.append( test_result )
+
                     if small_oplog or small_oplog_rs:
                         master.wait_for_repl()
 
                 except TestFailure, f:
+                    test_result["passed"] = False
+                    test_result["end"] = time.time()
+                    test_result["error"] = str(f)
+                    all_test_results.append( test_result )
                     try:
                         if not quiet:
                             print f
@@ -701,6 +749,8 @@ at the end of testing:"""
     if losers or lost_in_slave or lost_in_master or screwy_in_slave:
         raise Exception("Test failures")
 
+# Keys are the suite names (passed on the command line to smoke.py)
+# Values are pairs: (filenames, <start mongod before running tests>)
 suiteGlobalConfig = {"js": ("[!_]*.js", True),
                      "quota": ("quota/*.js", True),
                      "jsPerf": ("perf/*.js", True),
@@ -716,7 +766,9 @@ suiteGlobalConfig = {"js": ("[!_]*.js", True),
                      "sharding": ("sharding/*.js", False),
                      "tool": ("tool/*.js", False),
                      "aggregation": ("aggregation/*.js", True),
-                     "multiVersion": ("multiVersion/*.js", True )
+                     "multiVersion": ("multiVersion/*.js", True),
+                     "failPoint": ("fail_point/*.js", False),
+                     "ssl": ("ssl/*.js", True)
                      }
 
 def expand_suites(suites,expandUseDB=True):
@@ -742,10 +794,12 @@ def expand_suites(suites,expandUseDB=True):
             if os.sys.platform == "win32":
                 paths = [path + '.exe' for path in paths]
 
-            # Add any files of the same name from the sharedclient directory.
-            scpaths = ["sharedclient/" + path for path in paths]
-            scfiles = glob.glob("sharedclient/*")
-            paths += [scfile for scfile in scfiles if scfile in scpaths]
+            if not test_path:
+                # If we are testing 'in-tree', then add any files of the same name from the
+                # sharedclient directory. The out of tree client build doesn't have shared clients.
+                scpaths = ["sharedclient/" + path for path in paths]
+                scfiles = glob.glob("sharedclient/*")
+                paths += [scfile for scfile in scfiles if scfile in scpaths]
 
             # hack
             tests += [(test_path and path or os.path.join(mongo_repo, path), False) for path in paths]
@@ -796,7 +850,8 @@ def set_globals(options, tests):
     global file_of_commands_mode
     global valgrind, drd
     start_mongod = options.start_mongod
-    use_ssl = options.use_ssl
+    if hasattr(options, 'use_ssl'):
+        use_ssl = options.use_ssl
     #Careful, this can be called multiple times
     test_path = options.test_path
 
@@ -857,6 +912,9 @@ def set_globals(options, tests):
         print "Both --valgrind and --drd specified: assuming drd..."
         valgrind = False
 
+def file_version():
+    return md5(open(__file__, 'r').read()).hexdigest()
+
 def clear_failfile():
     if os.path.exists(failfile):
         os.remove(failfile)
@@ -866,7 +924,7 @@ def run_old_fails():
 
     try:
         f = open(failfile, 'r')
-        testsAndOptions = pickle.load(f)
+        state = pickle.load(f)
         f.close()
     except Exception:
         try:
@@ -876,6 +934,12 @@ def run_old_fails():
         clear_failfile()
         return # This counts as passing so we will run all tests
 
+    if ('version' not in state or state['version'] != file_version()):
+        print "warning: old version of failfile.smoke detected. skipping recent fails"
+        clear_failfile()
+        return
+
+    testsAndOptions = state['testsAndOptions']
     tests = [x[0] for x in testsAndOptions]
     passed = []
     try:
@@ -903,7 +967,8 @@ def run_old_fails():
 
         if testsAndOptions:
             f = open(failfile, 'w')
-            pickle.dump(testsAndOptions, f)
+            state = {'version':file_version(), 'testsAndOptions':testsAndOptions}
+            pickle.dump(state, f)
         else:
             clear_failfile()
 
@@ -912,7 +977,7 @@ def run_old_fails():
 def add_to_failfile(tests, options):
     try:
         f = open(failfile, 'r')
-        testsAndOptions = pickle.load(f)
+        testsAndOptions = pickle.load(f)["testsAndOptions"]
     except Exception:
         testsAndOptions = []
 
@@ -920,8 +985,9 @@ def add_to_failfile(tests, options):
         if (test, options) not in testsAndOptions:
             testsAndOptions.append( (test, options) )
 
+    state = {'version':file_version(), 'testsAndOptions':testsAndOptions}
     f = open(failfile, 'w')
-    pickle.dump(testsAndOptions, f)
+    pickle.dump(state, f)
 
 
 
@@ -1057,7 +1123,16 @@ def main():
 
     if options.ignore_files != None :
         ignore_patt = re.compile( options.ignore_files )
-        tests = filter( lambda x : ignore_patt.search( x[0] ) == None, tests )
+        print "Ignoring files with pattern: ", ignore_patt
+	
+        def ignore_test( test ):
+            if ignore_patt.search( test[0] ) != None:
+                print "Ignoring test ", test[0]
+                return False
+            else:
+                return True
+
+        tests = filter( ignore_test, tests )
 
     if not tests:
         print "warning: no tests specified"
@@ -1090,8 +1165,12 @@ def main():
         run_tests(tests)
     finally:
         add_to_failfile(fails, options)
-        report()
 
+        f = open( "smoke-last.json", "wb" )
+        f.write( json.dumps( { "results" : all_test_results } ) )
+        f.close()
+
+        report()
 
 if __name__ == "__main__":
     main()

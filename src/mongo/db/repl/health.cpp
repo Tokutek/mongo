@@ -18,17 +18,17 @@
 #include "pch.h"
 #include "rs.h"
 #include "health.h"
-#include "../../util/background.h"
-#include "../../client/connpool.h"
-#include "../commands.h"
-#include "../../util/concurrency/value.h"
-#include "../../util/concurrency/task.h"
-#include "../../util/mongoutils/html.h"
-#include "../../util/goodies.h"
-#include "../../util/ramlog.h"
+#include "mongo/util/background.h"
+#include "mongo/client/connpool.h"
+#include "mongo/db/commands.h"
+#include "mongo/util/concurrency/value.h"
+#include "mongo/util/concurrency/task.h"
+#include "mongo/util/mongoutils/html.h"
+#include "mongo/util/goodies.h"
+#include "mongo/util/ramlog.h"
 #include "connections.h"
-#include "../../util/startup_test.h"
-#include "../dbhelpers.h"
+#include "mongo/util/startup_test.h"
+#include "mongo/db/dbhelpers.h"
 #include "mongo/db/repl/bgsync.h"
 
 namespace mongo {
@@ -416,6 +416,8 @@ namespace mongo {
                 bb.append("lastUnappliedGTID", lastUnapplied.toString());
                 bb.append("minLiveGTID", minLive.toString());
                 bb.append("minUnappliedGTID", minUnapplied.toString());                
+                bb.append("nextPurgedGTID", _lastPurgedGTID.toString());
+                bb.appendDate("nextPurgedTS", _lastPurgedTS);
             }
 
             int maintenance = _maintenanceMode;
@@ -454,16 +456,25 @@ namespace mongo {
                 bb.append("lastUnappliedGTID", m->hbinfo().lastUnappliedGTID.toString());
                 bb.append("minLiveGTID", m->hbinfo().minLiveGTID.toString());
                 bb.append("minUnappliedGTID", m->hbinfo().minUnappliedGTID.toString());
+                if (m->hbinfo().purgedInfoAvailable) {
+                    bb.append("nextPurgedGTID", m->hbinfo().lastPurgedGTID.toString());
+                    bb.appendDate("nextPurgedTS", m->hbinfo().lastPurgedTS);
+                }
             }
             bb.appendTimeT("lastHeartbeat", m->hbinfo().lastHeartbeat);
-            bb.appendTimeT("lastHeartbeatRecv", m->hbinfo().lastHeartbeatRecv);
+            bb.appendTimeT("lastHeartbeatRecv", m->getLastRecvHeartbeat());
             bb.append("pingMs", m->hbinfo().ping);
             string s = m->lhb();
             if( !s.empty() )
-                bb.append("errmsg", s);
+                bb.append("lastHeartbeatMessage", s);
 
             if (m->hbinfo().authIssue) {
                 bb.append("authenticated", false);
+            }
+
+            string syncingTo = m->hbinfo().syncingTo;
+            if (!syncingTo.empty()) {
+                bb.append("syncingTo", syncingTo);
             }
 
             v.push_back(bb.obj());

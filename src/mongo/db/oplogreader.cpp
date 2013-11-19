@@ -4,12 +4,14 @@
 #include "pcrecpp.h"
 #include <boost/thread/thread.hpp>
 
+#include "mongo/base/counter.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/repl.h"
 #include "mongo/util/net/message.h"
 #include "mongo/util/background.h"
 #include "mongo/client/connpool.h"
 #include "mongo/db/commands.h"
+#include "mongo/db/commands/server_status.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/repl/connections.h"
 #include "mongo/db/instance.h"
@@ -127,6 +129,13 @@ namespace mongo {
         return true;
     }
 
+    //number of readers created;
+    //  this happens when the source source changes, a reconfig/network-error or the cursor dies
+    static Counter64 readersCreatedStats;
+    static ServerStatusMetricField<Counter64> displayReadersCreated(
+                                                    "repl.network.readersCreated",
+                                                    &readersCreatedStats );
+
     OplogReader::OplogReader( bool doHandshake ) : 
         _doHandshake( doHandshake ) { 
         
@@ -135,6 +144,8 @@ namespace mongo {
         
         /* TODO: slaveOk maybe shouldn't use? */
         _tailingQueryOptions |= QueryOption_AwaitData;
+
+        readersCreatedStats.increment();
     }
 
     bool OplogReader::commonConnect(const string& hostName) {
@@ -181,13 +192,19 @@ namespace mongo {
         return false;
     }
 
-    bool OplogReader::passthroughHandshake(const BSONObj& rid, const int f) {
+    bool OplogReader::passthroughHandshake(const BSONObj& rid, const int nextOnChainId) {
         BSONObjBuilder cmd;
-        cmd.appendAs( rid["_id"], "handshake" );
-        cmd.append( "member" , f );
+        cmd.appendAs(rid["_id"], "handshake");
+        if (theReplSet) {
+            const Member* chainedMember = theReplSet->findById(nextOnChainId);
+            if (chainedMember != NULL) {
+                cmd.append("config", chainedMember->config().asBson());
+            }
+        }
+        cmd.append("member", nextOnChainId);
 
         BSONObj res;
-        return conn()->runCommand( "admin" , cmd.obj() , res );
+        return conn()->runCommand("admin", cmd.obj(), res);
     }
 
     void OplogReader::tailingQuery(const char *ns, Query& query, const BSONObj* fields ) {
