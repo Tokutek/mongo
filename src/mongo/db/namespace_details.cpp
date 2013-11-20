@@ -1521,9 +1521,15 @@ namespace mongo {
         }
     }
 
-    void NamespaceDetails::updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, uint64_t flags) {
+    void NamespaceDetails::updateObjectMods(const BSONObj &pk, const BSONObj &updateObj,
+                                            const bool logop, const bool fromMigrate,
+                                            uint64_t flags) {
         IndexDetails &pkIdx = getPKIndex();
         pkIdx.updatePair(pk, NULL, updateObj, flags);
+
+        if (logop) {
+            //TODO Log something special
+        }
     }
 
     void NamespaceDetails::setIndexIsMultikey(const int idxNum) {

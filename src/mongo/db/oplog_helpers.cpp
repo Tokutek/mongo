@@ -321,11 +321,11 @@ namespace mongo {
             if (isRollback) {
                 // if this is a rollback, then the newRow is what is in the
                 // collections, that we want to replace with oldRow
-                updateOneObject(nsd, pk, newRow, oldRow, false, false, flags);
+                updateOneObject(nsd, pk, BSONObj(), newRow, oldRow, false, false, flags);
             }
             else {
                 // normal replication case
-                updateOneObject(nsd, pk, oldRow, newRow, false, false, flags);
+                updateOneObject(nsd, pk, BSONObj(), oldRow, newRow, false, false, flags);
             }
         }
 

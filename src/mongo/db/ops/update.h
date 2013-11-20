@@ -43,6 +43,7 @@ namespace mongo {
     };
 
     void updateOneObject(NamespaceDetails *d, const BSONObj &pk, 
+                         const BSONObj &updateobj,
                          const BSONObj &oldObj, const BSONObj &newObj, 
                          const bool logop, const bool fromMigrate,
                          uint64_t flags = 0);

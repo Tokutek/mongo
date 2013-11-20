@@ -381,7 +381,11 @@ namespace mongo {
                                   uint64_t flags = 0);
 
         // update an object in the namespace by pk, described by the updateObj's $ operators
-        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, uint64_t flags = 0);
+        //
+        // handles logging
+        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
+                                      const bool logop, const bool fromMigrate,
+                                      uint64_t flags = 0);
 
         // remove everything from a collection
         virtual void empty();

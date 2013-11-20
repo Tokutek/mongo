@@ -32,10 +32,16 @@
 namespace mongo {
 
     void updateOneObject(NamespaceDetails *d, const BSONObj &pk, 
+                         const BSONObj &updateobj,
                          const BSONObj &oldObj, const BSONObj &newObj, 
                          const bool logop, const bool fromMigrate,
                          uint64_t flags) {
-        d->updateObject(pk, oldObj, newObj, logop, fromMigrate, flags);
+        if (!updateobj.isEmpty()) {
+            cc().curop()->debug().fastmod = true;
+            d->updateObjectMods(pk, updateobj, logop, fromMigrate, flags);
+        } else {
+            d->updateObject(pk, oldObj, newObj, logop, fromMigrate, flags);
+        }
         d->notifyOfWriteOp();
     }
 
@@ -75,7 +81,7 @@ namespace mongo {
                                 const bool logop, const bool fromMigrate) {
         const BSONObj newObj = mss.createNewFromMods();
         checkTooLarge(newObj);
-        updateOneObject(d, pk, obj, newObj, logop, fromMigrate,
+        updateOneObject(d, pk, BSONObj(), obj, newObj, logop, fromMigrate,
                         modsAreIndexed ? 0 : NamespaceDetails::KEYS_UNAFFECTED_HINT);
     }
 
@@ -85,7 +91,7 @@ namespace mongo {
         // and modifies it in-place if a timestamp needs to be set.
         BSONElementManipulator::lookForTimestamps(updateobj);
         checkNoMods(updateobj);
-        updateOneObject(d, pk, obj, updateobj, logop, fromMigrate);
+        updateOneObject(d, pk, BSONObj(), obj, updateobj, logop, fromMigrate);
     }
 
     static UpdateResult upsertAndLog(NamespaceDetails *d, const BSONObj &patternOrig,
@@ -131,11 +137,11 @@ namespace mongo {
             !hasClusteringSecondaryKey(d)) {
             // Fast update path that skips the _id query.
             // We know no indexes need to be updated so we don't read the full object.
+            //
+            // Further, we specifically do _not_ check if upsert is true because it's
+            // implied when using fastupdates.
             const BSONObj &pk = idQuery.firstElement().wrap("");
-            d->updateObjectMods(pk, updateobj);
-            d->notifyOfWriteOp();
-            cc().curop()->debug().fastmod = true;
-            // TODO: Log this update for replication.
+            updateOneObject(d, pk, updateobj, BSONObj(), BSONObj(), logop, fromMigrate);
             return UpdateResult(0, 0, 1, BSONObj());
         }
 
