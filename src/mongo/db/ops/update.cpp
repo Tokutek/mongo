@@ -87,8 +87,8 @@ namespace mongo {
         return UpdateResult(0, isOperatorUpdate, 1, newObj);
     }
 
-    static UpdateResult _updateById(NamespaceDetails *d,
-                                    const BSONObj &patternOrig, const BSONObj &idQuery,
+    static UpdateResult _updateByPK(NamespaceDetails *d,
+                                    const BSONObj &pk, const BSONObj &patternOrig,
                                     const BSONObj &updateobj, const bool isOperatorUpdate,
                                     ModSet *mods, const bool logop, const bool fromMigrate) {
 
@@ -98,13 +98,12 @@ namespace mongo {
             queryResult.matchDetails.requestElemMatchKey();
         }
 
-        const bool found = queryByIdHack(d, idQuery, patternOrig, obj, &queryResult);
+        const bool found = queryByPKHack(d, pk, patternOrig, obj, &queryResult);
         if (!found) {
-            // no upsert support in _updateById yet, so we are done.
+            // no upsert support in _updateByPK yet, so we are done.
             return UpdateResult(0, 0, 0, BSONObj());
         }
 
-        const BSONObj &pk = idQuery.firstElement().wrap("");
         if (isOperatorUpdate) {
             // operator-style update
             ModSet *useMods = mods;
@@ -140,16 +139,14 @@ namespace mongo {
             mods.reset(new ModSet(updateobj, d->indexKeys()));
         }
 
-        // Attempt to take the fast path for updates by _id
-        if (d->mayFindById()) {
-            const BSONObj idQuery = getSimpleIdQuery(patternOrig);
-            if (!idQuery.isEmpty()) {
-                UpdateResult result = _updateById(d, patternOrig, idQuery,
-                                                  updateobj, isOperatorUpdate, mods.get(),
-                                                  logop, fromMigrate);
-                if (result.existing || !upsert) {
-                    return result;
-                }
+        // Fast-path for simple primary key updates.
+        const BSONObj pk = d->getSimplePKFromQuery(patternOrig);
+        if (!pk.isEmpty()) {
+            UpdateResult result = _updateByPK(d, pk, patternOrig,
+                                              updateobj, isOperatorUpdate, mods.get(),
+                                              logop, fromMigrate);
+            if (result.existing || !upsert) {
+                return result;
             }
         }
 

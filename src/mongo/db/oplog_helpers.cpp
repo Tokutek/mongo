@@ -282,7 +282,8 @@ namespace mongo {
             NamespaceDetails* nsd = nsdetails(ns);
 
             const BSONObj row = op[KEY_STR_ROW].Obj();
-            const BSONObj pk = nsd->extractPrimaryKey(row);
+            // Use "validated" version for paranoia, which checks for bad types like regex
+            const BSONObj pk = nsd->getValidatedPKFromObject(row);
             const uint64_t flags = NamespaceDetails::NO_LOCKTREE;
             deleteOneObject(nsd, pk, row, flags);
         }

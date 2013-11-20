@@ -42,28 +42,26 @@ namespace mongo {
             return 0;
         }
 
-        uassert( 10101 ,  "can't remove from a capped collection" , ! d->isCapped() );
+        uassert(10101, "can't remove from a capped collection", !d->isCapped());
 
-        // Fast-path for simple _id deletes.
-        if (d->mayFindById()) {
-            const BSONObj idQuery = getSimpleIdQuery(pattern);
-            if (!idQuery.isEmpty()) {
-                BSONObj obj;
-                if (queryByIdHack(d, idQuery, pattern, obj)) {
-                    if (logop) {
-                        OpLogHelpers::logDelete(ns, obj, false);
-                    }
-                    const BSONObj &pk = idQuery.firstElement().wrap("");
-                    deleteOneObject(d, pk, obj);
-                    return 1;
+        BSONObj obj;
+        BSONObj pk = d->getSimplePKFromQuery(pattern);
+
+        // Fast-path for simple primary key deletes.
+        if (!pk.isEmpty()) {
+            if (queryByPKHack(d, pk, pattern, obj)) {
+                if (logop) {
+                    OpLogHelpers::logDelete(ns, obj, false);
                 }
-                return 0;
+                deleteOneObject(d, pk, obj);
+                return 1;
             }
+            return 0;
         }
 
         long long nDeleted = 0;
         for (shared_ptr<Cursor> c = getOptimizedCursor(ns, pattern); c->ok(); ) {
-            BSONObj pk = c->currPK();
+            pk = c->currPK();
             if (c->getsetdup(pk)) {
                 c->advance();
                 continue;
@@ -73,7 +71,7 @@ namespace mongo {
                 continue;
             }
 
-            BSONObj obj = c->current();
+            obj = c->current();
 
             // justOne deletes do not intend to advance, so there's
             // no reason to do so here and potentially overlock rows.

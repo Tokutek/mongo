@@ -264,10 +264,6 @@ namespace mongo {
             return _pk;
         }
 
-        // Extracts and returns an owned BSONObj representing
-        // the primary key portion of the given object.
-        BSONObj extractPrimaryKey(const BSONObj &obj) const;
-
         bool indexBuildInProgress() const {
             return _indexBuildInProgress;
         }
@@ -324,6 +320,17 @@ namespace mongo {
             return findIdIndex() >= 0;
         }
 
+        // Extracts and returns validates an owned BSONObj represetning
+        // the primary key portion of the given object. Validates each
+        // field, ensuring there are no undefined, regex, or array types.
+        virtual BSONObj getValidatedPKFromObject(const BSONObj &obj) const;
+
+        // Extracts and returns an owned BSONObj representing
+        // the primary key portion of the given query, if each
+        // portion of the primary key exists in the query and
+        // is 'simple' (ie: equality, no $ operators)
+        virtual BSONObj getSimplePKFromQuery(const BSONObj &query) const;
+
         // send an optimize message into each index and run
         // hot optimize over all of the keys.
         virtual void optimizeAll();
@@ -353,18 +360,6 @@ namespace mongo {
         // strictly less than the minUnsafeKey is either committed or aborted.
         virtual BSONObj minUnsafeKey() {
             massert(16864, "bug: should not call minUnsafeKey for collection that is not Oplog or capped", false);
-        }
-
-        // Hack for ops/query.cpp queryIdHack.
-        // Lets us know if findById is okay to do. We should find a nicer way to do this eventually.
-        // Even though a capped collection may have an _id index, it may not use the findById code path.
-        virtual bool mayFindById() const {
-            return false;
-        }
-
-        // finds an object by _id field
-        virtual bool findById(const BSONObj &query, BSONObj &result) const {
-            msgasserted( 16461, "findById shouldn't be called unless it is implemented." );
         }
 
         // inserts an object into this namespace, taking care of secondary indexes if they exist
