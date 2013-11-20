@@ -29,14 +29,14 @@ s = new ShardingTest( "tag_auto_split2", 2, 0, 1, { nopreallocj : true } );
 db = s.getDB( "test" );
 
 s.adminCommand( { enablesharding : "test" } )
-s.adminCommand( { shardcollection : "test.foo" , key : { _id : 1, a : 1 } } );
+s.adminCommand( { shardcollection : "test.foo" , key : { a : 1, _id : 1 } } );
 
 assert.eq( 1, s.config.chunks.count() );
 
 sh.addShardTag( "shard0000" , "a" )
 
-sh.addTagRange( "test.foo" , { _id : 5 } , { _id : 10 } , "a" )
-sh.addTagRange( "test.foo" , { _id : 10 } , { _id : 15 } , "b" )
+sh.addTagRange( "test.foo" , { a : 5 } , { a : 10 } , "a" )
+sh.addTagRange( "test.foo" , { a : 10 } , { a : 15 } , "b" )
 
 assert.soon( function() {
     //printjson( sh.status() );
@@ -55,9 +55,9 @@ s.config.chunks.find().forEach(
 );
 
 // check chunk mins correspond exactly to tag range boundaries, extended to match shard key
-assert.eq( 1, s.config.chunks.find( {min : {_id : 5 , a : MinKey} } ).count(),
+assert.eq( 1, s.config.chunks.find( {min : {a : 5 , _id : MinKey} } ).count(),
            "bad chunk range boundary" );
-assert.eq( 1, s.config.chunks.find( {min : {_id : 10 , a : MinKey} } ).count(),
+assert.eq( 1, s.config.chunks.find( {min : {a : 10 , _id : MinKey} } ).count(),
            "bad chunk range boundary" );
 
 s.stop();

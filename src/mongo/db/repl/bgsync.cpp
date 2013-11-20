@@ -166,6 +166,7 @@ namespace mongo {
                     }
                     catch (std::exception &e) {
                         log() << "exception during applying transaction from oplog: " << e.what() << endl;
+                        log() << "oplog entry: " << curr.str() << endl;
                         if (numTries == 100) {
                             // something is really wrong if we fail 100 times, let's abort
                             ::abort();

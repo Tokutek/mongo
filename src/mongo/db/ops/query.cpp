@@ -83,16 +83,15 @@ namespace mongo {
         return qr;
     }
 
-    bool queryByIdHack(NamespaceDetails *d, const BSONObj &idQuery,
+
+    bool queryByPKHack(NamespaceDetails *d, const BSONObj &pk,
                        const BSONObj &query, BSONObj &result,
                        ResultDetails *resDetails) {
-        verify(d->mayFindById()); // caller should have asserted d->mayFindById()
-
         cc().curop()->debug().idhack = true;
 
         BSONObj obj;
         bool objMatches = true;
-        const bool found = d->findById(idQuery, obj);
+        const bool found = d->findByPK(pk, obj);
         if (found) {
             // Only use a matcher for queries with more than just an _id
             // component. The _id was already 'matched' by the find.
@@ -103,6 +102,7 @@ namespace mongo {
             }
         }
 
+        d->getPKIndex().noteQuery(1, 0);
         const bool ok = found && objMatches;
         result = ok ? obj : BSONObj();
         return ok;
@@ -852,21 +852,20 @@ namespace mongo {
         return saveClientCursor;
     }
 
-    bool _tryQueryByIdHack(const char *ns, const BSONObj &idQuery, const BSONObj &query,
+    bool _tryQueryByPKHack(const char *ns, const BSONObj &query,
                            const ParsedQuery &pq, CurOp &curop, Message &result) {
-        int n = 0;
-        auto_ptr< QueryResult > qr;
         BSONObj resObject;
 
         bool found = false;
         NamespaceDetails *d = nsdetails(ns);
-        if (d != NULL) {
-            if (!d->mayFindById()) {
-                // we have to resort to using the optimizer
-                return false;
-            }
-            found = queryByIdHack(d, idQuery, query, resObject);
+        if (d == NULL) {
+            return false; // ns doesn't exist, fall through to optimizer for legacy reasons
         }
+        const BSONObj &pk = d->getSimplePKFromQuery(query);
+        if (pk.isEmpty()) {
+            return false; // unable to query by PK - resort to using the optimizer
+        }
+        found = queryByPKHack(d, pk, query, resObject);
 
         if ( shardingState.needShardChunkManager( ns ) ) {
             ShardChunkManagerPtr m = shardingState.getShardChunkManager( ns );
@@ -883,11 +882,10 @@ namespace mongo {
         bb.skip(sizeof(QueryResult));
 
         if ( found ) {
-            n = 1;
             fillQueryResultFromObj( bb , pq.getFields() , resObject );
         }
 
-        qr.reset( (QueryResult *) bb.buf() );
+        auto_ptr< QueryResult > qr( (QueryResult *) bb.buf() );
         bb.decouple();
         qr->setResultFlagsToOk();
         qr->len = bb.len();
@@ -896,7 +894,7 @@ namespace mongo {
         qr->setOperation(opReply);
         qr->cursorId = 0;
         qr->startingFrom = 0;
-        qr->nReturned = n;
+        qr->nReturned = found ? 1 : 0;
 
         result.setData( qr.release(), true );
         return true;
@@ -956,7 +954,8 @@ namespace mongo {
             return "";
         }
 
-        bool explain = pq.isExplain();
+        const bool explain = pq.isExplain();
+        const bool tailable = pq.hasOption(QueryOption_CursorTailable);
         BSONObj order = pq.getOrder();
         BSONObj query = pq.getFilter();
 
@@ -980,55 +979,43 @@ namespace mongo {
         settings.setCappedAppendPK(pq.hasOption(QueryOption_AddHiddenPK));
         cc().setOpSettings(settings);
 
-        // Run a simple id query.
-
-        // - Don't do it for explains.
-        // - Don't do it for tailable cursors.
-        if ( !explain && !pq.hasOption( QueryOption_CursorTailable ) ) {
-            const BSONObj idQuery = getSimpleIdQuery(query);
-            if (!idQuery.isEmpty()) {
-                Client::ReadContext ctx(ns);
-                Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-                replVerifyReadsOk(&pq);
-                if ( _tryQueryByIdHack( ns, idQuery, query, pq, curop, result ) ) {
-                    transaction.commit();
-                    return "";
-                }
-            }
+        // If our caller has a transaction, it's multi-statement.
+        const bool inMultiStatementTxn = cc().hasTxn();
+        if (tailable) {
+            // Because it's easier to disable this. It shouldn't be happening in a normal system.
+            uassert(16812, "May not perform a tailable query in a multi-statement transaction.",
+                           !inMultiStatementTxn);
         }
-
-        // sanity check the query and projection
-        if ( pq.getFields() != NULL )
-            pq.getFields()->validateQuery( query );
-
-        // these now may stored in a ClientCursor or somewhere else,
-        // so make sure we use a real copy
-        jsobj = jsobj.getOwned();
-        query = query.getOwned();
-        order = order.getOwned();
 
         bool hasRetried = false;
         while ( 1 ) {
             try {
-                const bool tailable = pq.hasOption( QueryOption_CursorTailable ) && pq.getNumToReturn() != 1;
-
-                // If our caller has a transaction, it's multi-statement.
-                const bool inMultiStatementTxn = cc().hasTxn();
-                if (tailable) {
-                    // Because it's easier to disable this. It shouldn't be happening in a normal system.
-                    uassert(16812, "May not perform a tailable query in a multi-statement transaction.",
-                                   !inMultiStatementTxn);
-                }
-
+                // Begin a read-only, snapshot transaction under normal circumstances.
+                // If the cursor is tailable, we need to be able to read uncommitted data.
                 const int txnFlags = (tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT) | DB_TXN_READ_ONLY;
                 Client::ReadContext ctx(ns);
                 scoped_ptr<Client::Transaction> transaction(!inMultiStatementTxn ?
                                                             new Client::Transaction(txnFlags) : NULL);
-
-                const ConfigVersion shardingVersionAtStart = shardingState.getVersion( ns );
                 replVerifyReadsOk(&pq);
+
+                // Fast-path for primary key queries.
+                if (!explain && !tailable) {
+                    replVerifyReadsOk(&pq);
+                    if (_tryQueryByPKHack(ns, query, pq, curop, result)) {
+                        if (transaction) {
+                            transaction->commit();
+                        }
+                        return "";
+                    }
+                }
+
+                // sanity check the query and projection
+                if (pq.getFields() != NULL) {
+                    pq.getFields()->validateQuery( query );
+                }
+
                         
-                if ( pq.hasOption( QueryOption_CursorTailable ) ) {
+                if (tailable) {
                     NamespaceDetails *d = nsdetails( ns );
                     if (d != NULL && !(d->isCapped() || str::equals(ns, rsoplog))) {
                         uasserted( 13051, "tailable cursor requested on non-capped, non-oplog collection" );
@@ -1043,13 +1030,19 @@ namespace mongo {
                     
                 // Run a regular query.
 
+                // these now may stored in a ClientCursor or somewhere else,
+                // so make sure we use a real copy
+                jsobj = jsobj.getOwned();
+                query = query.getOwned();
+                order = order.getOwned();
+                const ConfigVersion shardingVersionAtStart = shardingState.getVersion( ns );
                 const bool getCachedExplainPlan = ! hasRetried && explain && ! pq.hasIndexSpecifier();
                 const bool savedCursor = queryWithQueryOptimizer( queryOptions, ns, jsobj, curop, query,
                                                                   order, pq_shared, shardingVersionAtStart,
                                                                   getCachedExplainPlan, inMultiStatementTxn,
                                                                   result );
                 // Did not save the cursor, so we can commit the transaction now if it exists.
-                if (transaction.get() != NULL && !savedCursor) {
+                if (transaction && !savedCursor) {
                     transaction->commit();
                 }
                 return curop.debug().exhaust ? ns : "";

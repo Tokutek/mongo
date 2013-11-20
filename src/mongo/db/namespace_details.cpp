@@ -184,26 +184,10 @@ namespace mongo {
             _idPrimaryKey(idx(findIndexByKeyPattern(BSON("_id" << 1))).clustering()) {
         }
 
-        // regular collections are eligble for queryByIdHack() as long
-        // as they have a clusteirng _id index. see ops/query.cpp
-        bool mayFindById() const {
-            dassert(hasIdIndex());
-            return _idPrimaryKey;
-        }
-
-        // finds an objectl by _id field, which in the case of indexed collections
-        // is the primary key.
-        bool findById(const BSONObj &query, BSONObj &result) const {
-            dassert(mayFindById() && query["_id"].ok());
-            const bool found = findByPK(query["_id"].wrap(""), result);
-            getPKIndex().noteQuery(found ? 1 : 0, 0);
-            return found;
-        }
-
         // inserts an object into this namespace, taking care of secondary indexes if they exist
         void insertObject(BSONObj &obj, uint64_t flags) {
             obj = addIdField(obj);
-            const BSONObj pk = extractPrimaryKey(obj);
+            const BSONObj pk = getValidatedPKFromObject(obj);
 
             // We skip unique checks if the primary key is something other than the _id index.
             // Any other PK is guaranteed to contain the _id somewhere in its pattern, so
@@ -219,7 +203,7 @@ namespace mongo {
             if (_idPrimaryKey) {
                 NamespaceDetails::updateObject(pk, oldObj, newObjWithId, logop, fromMigrate, flags | NO_PK_UNIQUE_CHECKS);
             } else {
-                const BSONObj newPK = extractPrimaryKey(newObjWithId);
+                const BSONObj newPK = getValidatedPKFromObject(newObjWithId);
                 dassert(newPK.nFields() == pk.nFields());
                 if (newPK != pk) {
                     // Primary key has changed - that means all indexes will be affected.
@@ -237,14 +221,30 @@ namespace mongo {
         }
 
         // Overridden to optimize the case where we have an _id primary key.
-        BSONObj extractPrimaryKey(const BSONObj &obj) {
+        BSONObj getValidatedPKFromObject(const BSONObj &obj) const {
             if (_idPrimaryKey) {
                 const BSONElement &e = obj["_id"];
                 dassert(e.ok() && e.type() != Array &&
                         e.type() != RegEx && e.type() != Undefined); // already checked in ops/insert.cpp
                 return e.wrap("");
             } else {
-                return NamespaceDetails::extractPrimaryKey(obj);
+                return NamespaceDetails::getValidatedPKFromObject(obj);
+            }
+        }
+
+        // Overriden to optimize pk generation for an _id primary key.
+        // We just need to look for the _id field and, if it exists
+        // and is simple, return a wrapped object.
+        BSONObj getSimplePKFromQuery(const BSONObj &query) const {
+            if (_idPrimaryKey) {
+                const BSONElement &e = query["_id"];
+                if (e.ok() && e.isSimpleType() &&
+                    !(e.type() == Object && e.Obj().firstElementFieldName()[0] == '$')) {
+                    return e.wrap("");
+                }
+                return BSONObj();
+            } else {
+                return NamespaceDetails::getSimplePKFromQuery(query);
             }
         }
     };
@@ -884,7 +884,7 @@ namespace mongo {
 
         void insertObject(BSONObj &obj, uint64_t flags = 0) {
             obj = addIdField(obj);
-            const BSONObj pk = extractPrimaryKey(obj);
+            const BSONObj pk = getValidatedPKFromObject(obj);
 
             storage::Key sPK(pk, NULL);
             DBT key = storage::dbt_make(sPK.buf(), sPK.size());
@@ -1135,7 +1135,39 @@ namespace mongo {
         return serialize(_ns, _options, _pk, _multiKeyIndexBits, indexes_array.arr());
     }
 
-    BSONObj NamespaceDetails::extractPrimaryKey(const BSONObj &obj) const {
+    BSONObj NamespaceDetails::getSimplePKFromQuery(const BSONObj &query) const {
+        const int numPKFields = _pk.nFields();
+        BSONElement pkElements[numPKFields];
+        int numPKElementsFound = 0;
+        for (BSONObjIterator queryIterator(query); queryIterator.more(); ) {
+            const BSONElement &q = queryIterator.next();
+            if (!q.isSimpleType() ||
+                (q.type() == Object && q.Obj().firstElementFieldName()[0] == '$')) {
+                continue; // not a 'simple' query element
+            }
+            BSONObjIterator pkIterator(_pk);
+            for (int i = 0; i < numPKFields; i++) {
+                const BSONElement &p = pkIterator.next();
+                if (pkElements[i].ok()) {
+                    continue; // already set
+                } else if (str::equals(q.fieldName(), p.fieldName())) {
+                    pkElements[i] = q;
+                    numPKElementsFound++;
+                }
+            }
+        }
+        if (numPKElementsFound == numPKFields) {
+            // We found a simple element in the query for each part of the pk.
+            BSONObjBuilder b;
+            for (int i = 0; i < numPKFields; i++) {
+                b.appendAs(pkElements[i], "");
+            }
+            return b.obj();
+        }
+        return BSONObj();
+    }
+
+    BSONObj NamespaceDetails::getValidatedPKFromObject(const BSONObj &obj) const {
         BSONObjSet keys;
         getPKIndex().getKeysFromObject(obj, keys);
         uassert(17205, str::stream() << "primary key " << _pk << " cannot be multi-key",
