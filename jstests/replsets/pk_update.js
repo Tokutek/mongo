@@ -24,6 +24,8 @@ primary.x.ensureIndex({ c: 1 });
 
 primary.x.insert({ c: 1, z: 1 });
 replTest.awaitReplication();
+print("    after insert, primary oplog contains:");
+primaryOplog.find().forEach(function(o) { printjson(o) } );
 assert.eq(4, primaryOplog.find().count());
 assert.eq(4, secondaryOplog.find().count());
 
@@ -39,6 +41,7 @@ assert.eq(1, secondary.x.find({ c: 1 }).hint({ c: 1 }).itcount());
 primary.x.update({ z: 1 }, { c: 1, z: 0 });
 replTest.awaitReplication();
 
+print("    after update, primary oplog contains:");
 primaryOplog.find().forEach(function(o) { printjson(o) } );
 assert.eq(5, primaryOplog.find().count());
 assert.eq(5, secondaryOplog.find().count());
