@@ -494,7 +494,8 @@ static void buildOptionsDescriptions(po::options_description *pVisible,
     ("dbpath", po::value<string>() , dbpathBuilder.str().c_str())
     ("diaglog", po::value<int>(), "0=off 1=W 2=R 3=both 7=W+some reads")
     ("directio", "use direct I/O in tokumx")
-    ("fastupdates", "use fast updates in tokumx. improves unindexed _id update performance but prevents replication rollback.")
+    ("fastupdates", "enable fast updates. dramatically improves the performance of certain unindexed updates. see the users guide for very important implications when using fastupdates.")
+    ("fastupdatesIgnoreErrors", "silently ignore all fastupdate errors. NOT RECOMMENDED FOR PRODUCTION, unless failed updates are expected and/or acceptable.")
     ("fsRedzone", po::value<int>(), "percentage of free-space left on device before the system goes read-only.")
     ("logDir", po::value<string>(), "directory to store transaction log files (default is --dbpath)")
     ("tmpDir", po::value<string>(), "directory to store temporary bulk loader files (default is --dbpath)")
@@ -721,6 +722,9 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
         }
         if (params.count("fastupdates")) {
             cmdLine.fastupdates = true;
+        }
+        if (params.count("fastupdatesIgnoreErrors")) {
+            cmdLine.fastupdatesIgnoreErrors = true;
         }
         if (params.count("checkpointPeriod")) {
             cmdLine.checkpointPeriod = params["checkpointPeriod"].as<uint32_t>();

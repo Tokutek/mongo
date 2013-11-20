@@ -68,12 +68,28 @@ namespace mongo {
                 BSONObj newObj = mss->createNewFromMods();
                 checkTooLarge( newObj );
                 return newObj;
-            } catch (...) {
+            } catch (const std::exception &ex) {
                 // Applying an update message in this fashion _always_ ignores errors.
                 // That is the risk you take when using --fastupdates.
+                //
+                // We will print such errors to the server's error log no more than once per 5 seconds.
+                if (!cmdLine.fastupdatesIgnoreErrors && _loggingTimer.millisReset() > 5000) {
+                    problem() << "* Failed to apply \"--fastupdate\" updateobj message! "
+                                 "This means an update operation that appeared successful actually failed." << endl;
+                    problem() << "* It probably should not be happening in production. To ignore these errors, "
+                                 "start the server with --fastupdatesIgnoreErrors" << endl;
+                    problem() << "*    doc: " << oldObj << endl;
+                    problem() << "*    updateobj: " << msg << endl;
+                    problem() << "*    exception: " << ex.what() << endl;
+                }
+                // IMPORTANT
+                // TODO: Put this in some counter so serverStatus can report the number
+                //       of silently failing updates for monitoring purposes.
                 return oldObj;
             }
         }
+    private:
+        Timer _loggingTimer;
     } _storageUpdateCallback; // installed as the ydb update callback in db.cpp via set_update_callback
 
     static void updateUsingMods(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj,
@@ -133,7 +149,8 @@ namespace mongo {
                                     const BSONObj &pk, const BSONObj &patternOrig,
                                     const BSONObj &updateobj, const bool isOperatorUpdate,
                                     ModSet *mods, const bool logop, const bool fromMigrate) {
-        if (cmdLine.fastupdates && !mods->isIndexed() &&
+        if (/*cmdLine.fastupdates && */
+            (isOperatorUpdate && mods && !mods->isIndexed()) &&
             !hasClusteringSecondaryKey(d)) {
             // Fast update path that skips the pk query.
             // We know no indexes need to be updated so we don't read the full object.
