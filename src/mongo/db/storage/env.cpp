@@ -87,12 +87,12 @@ namespace mongo {
         static int update_callback(DB *db, const DBT *key, const DBT *old_val, const DBT *extra,
                                    void (*set_val)(const DBT *new_val, void *set_extra),
                                    void *set_extra) {
-            verify( _updateCallback != NULL );
             try {
-                verify( key != NULL && extra != NULL && extra->data != NULL );
+                verify(_updateCallback != NULL);
+                verify(key != NULL && extra != NULL && extra->data != NULL);
                 BSONObj oldObj;
                 // old_val is NULL when the old row did not exist (and so this is an upsert)
-                if (old_val->data != NULL) {
+                if (old_val && old_val->data != NULL) {
                     oldObj = BSONObj(static_cast<char *>(old_val->data));
                 }
                 // Apply the message, set the new value.
@@ -101,9 +101,10 @@ namespace mongo {
                 DBT new_val = dbt_make(newObj.objdata(), newObj.objsize());
                 set_val(&new_val, set_extra);
                 return 0;
-            } catch (...) { 
-                LOG(0) << "Caught exception while processing update message. That's bad." << endl;
-                verify(false);
+            } catch (const std::exception &ex) { 
+                problem() << "Caught exception in ydb update callback, cannot proceed: " 
+                          << ex.what() << endl;
+                fassertFailed(17215);
             }
             return -1;
         }
