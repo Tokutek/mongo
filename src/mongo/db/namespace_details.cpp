@@ -322,19 +322,6 @@ namespace mongo {
         // strip out the _id field before inserting into a system collection
         void insertObject(BSONObj &obj, uint64_t flags) {
             obj = beautify(obj);
-            BSONObj result;
-            const BSONElement &e = obj["ns"];
-            DEV {
-                // This findOne call will end up creating a BasicCursor over
-                // system.indexes which will prelock the collection. That
-                // prevents concurrent threads from doing file-ops, which is
-                // bad in production.
-                const bool exists = findOne(e.ok() ? BSON("name" << obj["name"] << "ns" << e) :
-                                                     BSON("name" << obj["name"]), result);
-                massert( 16891, str::stream() << "bug: system catalog tried to insert " <<
-                                obj << ", but something similar already exists: " << result,
-                                !exists);
-            }
             NaturalOrderCollection::insertObject(obj, flags);
         }
 
