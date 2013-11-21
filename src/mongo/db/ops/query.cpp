@@ -102,8 +102,8 @@ namespace mongo {
             }
         }
 
-        d->getPKIndex().noteQuery(1, 0);
         const bool ok = found && objMatches;
+        d->getPKIndex().noteQuery(ok ? 1 : 0, 0);
         result = ok ? obj : BSONObj();
         return ok;
     }
