@@ -1547,7 +1547,7 @@ namespace mongo {
         pkIdx.updatePair(pk, NULL, updateObj, flags);
 
         if (logop) {
-            //TODO Log something special
+            OpLogHelpers::logUpdateMods(_ns.c_str(), pk, updateObj, fromMigrate);
         }
     }
 

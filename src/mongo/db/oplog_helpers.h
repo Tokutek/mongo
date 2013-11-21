@@ -27,6 +27,7 @@ namespace mongo {
         static const char OP_STR_INSERT[] = "i";
         static const char OP_STR_CAPPED_INSERT[] = "ci";
         static const char OP_STR_UPDATE[] = "u";
+        static const char OP_STR_UPDATE_MODS[] = "um";
         static const char OP_STR_DELETE[] = "d";
         static const char OP_STR_CAPPED_DELETE[] = "cd";
         static const char OP_STR_COMMENT[] = "n";
@@ -41,6 +42,8 @@ namespace mongo {
         void logInsertForCapped(const char *ns, const BSONObj &pk, const BSONObj &row);
 
         void logUpdate(const char *ns, const BSONObj& pk, const BSONObj& oldRow, const BSONObj& newRow, bool fromMigrate);
+
+        void logUpdateMods(const char *ns, const BSONObj &pk, const BSONObj &updateobj, bool fromMigrate);
 
         void logDelete(const char *ns, const BSONObj &row, bool fromMigrate);
 
