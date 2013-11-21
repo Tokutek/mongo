@@ -349,11 +349,11 @@ namespace mongo {
             if (isRollback) {
                 // if this is a rollback, then the newRow is what is in the
                 // collections, that we want to replace with oldRow
-                updateOneObject(nsd, pk, BSONObj(), newRow, oldRow, false, false, flags);
+                updateOneObject(nsd, pk, newRow, oldRow, false, false, flags);
             }
             else {
                 // normal replication case
-                updateOneObject(nsd, pk, BSONObj(), oldRow, newRow, false, false, flags);
+                updateOneObject(nsd, pk, oldRow, newRow, false, false, flags);
             }
         }
 
@@ -368,10 +368,12 @@ namespace mongo {
             const BSONObj updateobj = fields[1].Obj();
             uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);        
             if (isRollback) {
-                uasserted(0, "cannot rollback update mods yet");
+                uasserted(17216, "cannot rollback update mods yet");
             }
             else {
-                uasserted(0, "cannot apply update mods on a secondary yet");
+                updateByPK(nsd, pk, pk /* patternOrig, the "full" query */,
+                           updateobj, false, true /* fastupdates always okay on secondary */,
+                           false, false, flags);
             }
         }
 

@@ -32,16 +32,10 @@
 namespace mongo {
 
     void updateOneObject(NamespaceDetails *d, const BSONObj &pk, 
-                         const BSONObj &updateobj,
                          const BSONObj &oldObj, const BSONObj &newObj, 
                          const bool logop, const bool fromMigrate,
                          uint64_t flags) {
-        if (!updateobj.isEmpty()) {
-            cc().curop()->debug().fastmod = true;
-            d->updateObjectMods(pk, updateobj, logop, fromMigrate, flags);
-        } else {
-            d->updateObject(pk, oldObj, newObj, logop, fromMigrate, flags);
-        }
+        d->updateObject(pk, oldObj, newObj, logop, fromMigrate, flags);
         d->notifyOfWriteOp();
     }
 
@@ -66,7 +60,7 @@ namespace mongo {
                 ModSet mods( updateObj );
                 auto_ptr<ModSetState> mss = mods.prepare( oldObj );
                 BSONObj newObj = mss->createNewFromMods();
-                checkTooLarge( newObj );
+                checkTooLarge(newObj);
                 return newObj;
             } catch (const std::exception &ex) {
                 // Applying an update message in this fashion _always_ ignores errors.
@@ -97,7 +91,7 @@ namespace mongo {
                                 const bool logop, const bool fromMigrate) {
         const BSONObj newObj = mss.createNewFromMods();
         checkTooLarge(newObj);
-        updateOneObject(d, pk, BSONObj(), obj, newObj, logop, fromMigrate,
+        updateOneObject(d, pk, obj, newObj, logop, fromMigrate,
                         modsAreIndexed ? 0 : NamespaceDetails::KEYS_UNAFFECTED_HINT);
     }
 
@@ -107,7 +101,7 @@ namespace mongo {
         // and modifies it in-place if a timestamp needs to be set.
         BSONElementManipulator::lookForTimestamps(updateobj);
         checkNoMods(updateobj);
-        updateOneObject(d, pk, BSONObj(), obj, updateobj, logop, fromMigrate);
+        updateOneObject(d, pk, obj, updateobj, logop, fromMigrate);
     }
 
     static UpdateResult upsertAndLog(NamespaceDetails *d, const BSONObj &patternOrig,
@@ -145,20 +139,30 @@ namespace mongo {
         return false;
     }
 
-    static UpdateResult _updateByPK(NamespaceDetails *d,
-                                    const BSONObj &pk, const BSONObj &patternOrig,
-                                    const BSONObj &updateobj, const bool isOperatorUpdate,
-                                    ModSet *mods, const bool logop, const bool fromMigrate) {
-        if (/*cmdLine.fastupdates && */
-            (isOperatorUpdate && mods && !mods->isIndexed()) &&
+    UpdateResult updateByPK(NamespaceDetails *d,
+                            const BSONObj &pk, const BSONObj &patternOrig,
+                            const BSONObj &updateobj,
+                            const bool upsert, const bool fastupdateOk,
+                            const bool logop, const bool fromMigrate,
+                            uint64_t flags) {
+        // Create a mod set for $ style updates.
+        scoped_ptr<ModSet> mods;
+        const bool isOperatorUpdate = updateobj.firstElementFieldName()[0] == '$';
+        if (isOperatorUpdate) {
+            mods.reset(new ModSet(updateobj, d->indexKeys()));
+        }
+
+        if (fastupdateOk && mods && !mods->isIndexed() &&
             !hasClusteringSecondaryKey(d)) {
             // Fast update path that skips the pk query.
             // We know no indexes need to be updated so we don't read the full object.
             //
             // Further, we specifically do _not_ check if upsert is true because it's
             // implied when using fastupdates.
-            updateOneObject(d, pk, updateobj, BSONObj(), BSONObj(), logop, fromMigrate);
-            return UpdateResult(0, 0, 1, BSONObj());
+            cc().curop()->debug().fastmod = true;
+            d->updateObjectMods(pk, updateobj, logop, fromMigrate, flags);
+            d->notifyOfWriteOp();
+            return UpdateResult(0, 1, 1, BSONObj());
         }
 
         BSONObj obj;
@@ -169,20 +173,19 @@ namespace mongo {
 
         const bool found = queryByPKHack(d, pk, patternOrig, obj, &queryResult);
         if (!found) {
-            // no upsert support in _updateByPK yet, so we are done.
-            return UpdateResult(0, 0, 0, BSONObj());
+            if (!upsert) {
+                return UpdateResult(0, 0, 0, BSONObj());
+            }
+            return upsertAndLog(d, patternOrig, updateobj, isOperatorUpdate, mods.get(), logop);
         }
 
         if (isOperatorUpdate) {
             // operator-style update
-            ModSet *useMods = mods;
-            auto_ptr<ModSet> mymodset;
             if (queryResult.matchDetails.hasElemMatchKey() && mods->hasDynamicArray()) {
-                useMods = mods->fixDynamicArray( queryResult.matchDetails.elemMatchKey());
-                mymodset.reset(useMods);
+                mods.reset(mods->fixDynamicArray(queryResult.matchDetails.elemMatchKey()));
             }
-            auto_ptr<ModSetState> mss = useMods->prepare(obj, false /* not an insertion */);
-            updateUsingMods(d, pk, obj, *mss, useMods->isIndexed() > 0, logop, fromMigrate);
+            auto_ptr<ModSetState> mss = mods->prepare(obj, false /* not an insertion */);
+            updateUsingMods(d, pk, obj, *mss, mods->isIndexed() > 0, logop, fromMigrate);
         } else {
             // replace-style update
             updateNoMods(d, pk, obj, updateobj, logop, fromMigrate);
@@ -202,32 +205,29 @@ namespace mongo {
 
         NamespaceDetails *d = getAndMaybeCreateNS(ns, logop);
 
-        auto_ptr<ModSet> mods;
-        const bool isOperatorUpdate = updateobj.firstElementFieldName()[0] == '$';
-        if (isOperatorUpdate) {
-            mods.reset(new ModSet(updateobj, d->indexKeys()));
-        }
-
         // Fast-path for simple primary key updates.
         const BSONObj pk = d->getSimplePKFromQuery(patternOrig);
         if (!pk.isEmpty()) {
-            UpdateResult result = _updateByPK(d, pk, patternOrig,
-                                              updateobj, isOperatorUpdate, mods.get(),
-                                              logop, fromMigrate);
-            if (result.existing || !upsert) {
-                return result;
-            }
+            return updateByPK(d, pk, patternOrig, updateobj,
+                              upsert, cmdLine.fastupdates, logop, fromMigrate);
         }
 
         // Run a regular update using the query optimizer.
 
-        int numModded = 0;
-        cc().curop()->debug().nscanned = 0;
         set<BSONObj> seenObjects;
         MatchDetails details;
-        if (mods.get() && mods->hasDynamicArray()) {
-            details.requestElemMatchKey();
+        auto_ptr<ModSet> mods;
+
+        const bool isOperatorUpdate = updateobj.firstElementFieldName()[0] == '$';
+        if (isOperatorUpdate) {
+            mods.reset(new ModSet(updateobj, d->indexKeys()));
+            if (mods->hasDynamicArray()) {
+                details.requestElemMatchKey();
+            }
         }
+
+        int numModded = 0;
+        cc().curop()->debug().nscanned = 0;
         for (shared_ptr<Cursor> c = getOptimizedCursor(ns, patternOrig); c->ok(); ) {
             cc().curop()->debug().nscanned++;
             BSONObj currPK = c->currPK();
