@@ -367,14 +367,11 @@ namespace mongo {
             const BSONObj pk = fields[0].Obj();
             const BSONObj updateobj = fields[1].Obj();
             uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);        
-            if (isRollback) {
-                uasserted(17216, "cannot rollback update mods yet");
-            }
-            else {
-                updateByPK(nsd, pk, pk /* patternOrig, the "full" query */,
-                           updateobj, false, true /* fastupdates always okay on secondary */,
-                           false, false, flags);
-            }
+            updateByPK(nsd, pk, pk /* patternOrig, the "full" query */,
+                       // for rollback, we need to invert the update object to 'roll back' the update.
+                       !isRollback ? updateobj : invertUpdateMods(updateobj),
+                       false, true /* fastupdates always okay on secondary */,
+                       false, false, flags);
         }
 
         static void runCommandFromOplog(const char *ns, const BSONObj &op) {

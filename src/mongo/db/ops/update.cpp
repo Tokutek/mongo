@@ -23,6 +23,7 @@
 #include "mongo/db/queryutil.h"
 #include "mongo/db/query_optimizer.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/server_parameters.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/query.h"
 #include "mongo/db/ops/update.h"
@@ -50,6 +51,11 @@ namespace mongo {
         uassert(12522, "$ operator made object too large", obj.objsize() <= BSONObjMaxUserSize);
     }
 
+    ExportedServerParameter<bool> _fastupdatesParameter(
+            ServerParameterSet::getGlobal(), "fastupdates", &cmdLine.fastupdates, true, true);
+    ExportedServerParameter<bool> _fastupdatesIgnoreErrorsParameter(
+            ServerParameterSet::getGlobal(), "fastupdatesIgnoreErrors", &cmdLine.fastupdatesIgnoreErrors, true, true);
+
     // Apply an update message supplied by a NamespaceDetails to
     // some row in an in IndexDetails (for fast ydb updates).
     class ApplyUpdateMessage : public storage::UpdateCallback {
@@ -71,7 +77,7 @@ namespace mongo {
                     problem() << "* Failed to apply \"--fastupdate\" updateobj message! "
                                  "This means an update operation that appeared successful actually failed." << endl;
                     problem() << "* It probably should not be happening in production. To ignore these errors, "
-                                 "start the server with --fastupdatesIgnoreErrors" << endl;
+                                 "set the server parameter fastupdatesIgnoreErrors=true" << endl;
                     problem() << "*    doc: " << oldObj << endl;
                     problem() << "*    updateobj: " << msg << endl;
                     problem() << "*    exception: " << ex.what() << endl;
@@ -212,6 +218,23 @@ namespace mongo {
             }
         }
         return true;
+    }
+
+    BSONObj invertUpdateMods(const BSONObj &updateobj) {
+        BSONObjBuilder b(updateobj.objsize());
+        for (BSONObjIterator i(updateobj); i.more(); ) {
+            const BSONElement &e = i.next();
+            verify(str::equals(e.fieldName(), "$inc"));
+            BSONObjBuilder inc(b.subobjStart("$inc"));
+            for (BSONObjIterator o(e.Obj()); o.more(); ) {
+                const BSONElement &fieldToInc = o.next();
+                verify(fieldToInc.isNumber());
+                const long long invertedValue = -fieldToInc.numberLong();
+                inc.append(fieldToInc.fieldName(), invertedValue);
+            }
+            inc.done();
+        }
+        return b.obj();
     }
 
     static UpdateResult _updateObjects(const char *ns,

@@ -42,6 +42,8 @@ namespace mongo {
         }
     };
 
+    BSONObj invertUpdateMods(const BSONObj &updateobj);
+
     void updateOneObject(NamespaceDetails *d, const BSONObj &pk, 
                          const BSONObj &oldObj, const BSONObj &newObj, 
                          const bool logop, const bool fromMigrate,
