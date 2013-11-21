@@ -193,6 +193,27 @@ namespace mongo {
         return UpdateResult(1, isOperatorUpdate, 1, BSONObj());
     }
 
+    // return true if the given updateobj can be 'unapplied'
+    // on a replica set member performing rollback.
+    //
+    // this will be true case for things like $inc X, because
+    // its inverse is $inc -X.
+    // 
+    // it will be false for things like $addToSet(set, X), because
+    // there's no way to know for sure if the right thing to do is
+    // remove X from the set, or keep the set the same (because X
+    // may have already existed prior to the addToSet operation).
+    static bool modsAreInvertible(const BSONObj &updateobj) {
+        for (BSONObjIterator i(updateobj); i.more(); ) {
+            const BSONElement &e = i.next();
+            // For now, only pure $inc updates are considered invertible.
+            if (!str::equals(e.fieldName(), "$inc")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     static UpdateResult _updateObjects(const char *ns,
                                        const BSONObj &updateobj,
                                        const BSONObj &patternOrig,
@@ -209,7 +230,10 @@ namespace mongo {
         const BSONObj pk = d->getSimplePKFromQuery(patternOrig);
         if (!pk.isEmpty()) {
             return updateByPK(d, pk, patternOrig, updateobj,
-                              upsert, cmdLine.fastupdates, logop, fromMigrate);
+                              // We check here that the update operators are invertible
+                              // before requesting a fastupdate.
+                              upsert, cmdLine.fastupdates && modsAreInvertible(updateobj),
+                              logop, fromMigrate);
         }
 
         // Run a regular update using the query optimizer.
