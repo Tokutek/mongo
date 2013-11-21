@@ -85,6 +85,8 @@ namespace mongo {
         ASSERT( eq.matchesBSON( BSONObj(), NULL ) );
         ASSERT( eq.matchesBSON( BSON( "a" << BSONNULL ), NULL ) );
         ASSERT( !eq.matchesBSON( BSON( "a" << 4 ), NULL ) );
+        // A non-existent field is treated same way as an empty bson object
+        ASSERT( eq.matchesBSON( BSON( "b" << 4 ), NULL ) );
     }
 
     TEST( EqOp, MatchesMinKey ) {
@@ -265,6 +267,8 @@ namespace mongo {
         ASSERT( !lt.matchesBSON( BSONObj(), NULL ) );
         ASSERT( !lt.matchesBSON( BSON( "a" << BSONNULL ), NULL ) );
         ASSERT( !lt.matchesBSON( BSON( "a" << 4 ), NULL ) );
+        // A non-existent field is treated same way as an empty bson object
+        ASSERT( !lt.matchesBSON( BSON( "b" << 4 ), NULL ) );
     }
 
     TEST( LtOp, MatchesMinKey ) {
@@ -401,6 +405,8 @@ namespace mongo {
         ASSERT( lte.matchesBSON( BSONObj(), NULL ) );
         ASSERT( lte.matchesBSON( BSON( "a" << BSONNULL ), NULL ) );
         ASSERT( !lte.matchesBSON( BSON( "a" << 4 ), NULL ) );
+        // A non-existent field is treated same way as an empty bson object
+        ASSERT( lte.matchesBSON( BSON( "b" << 4 ), NULL ) );
     }
 
     TEST( LteOp, MatchesMinKey ) {
@@ -539,6 +545,8 @@ namespace mongo {
         ASSERT( !gt.matchesBSON( BSONObj(), NULL ) );
         ASSERT( !gt.matchesBSON( BSON( "a" << BSONNULL ), NULL ) );
         ASSERT( !gt.matchesBSON( BSON( "a" << 4 ), NULL ) );
+        // A non-existent field is treated same way as an empty bson object
+        ASSERT( !gt.matchesBSON( BSON( "b" << 4 ), NULL ) );
     }
 
     TEST( GtOp, MatchesMinKey ) {
@@ -676,6 +684,8 @@ namespace mongo {
         ASSERT( gte.matchesBSON( BSONObj(), NULL ) );
         ASSERT( gte.matchesBSON( BSON( "a" << BSONNULL ), NULL ) );
         ASSERT( !gte.matchesBSON( BSON( "a" << 4 ), NULL ) );
+        // A non-existent field is treated same way as an empty bson object
+        ASSERT( gte.matchesBSON( BSON( "b" << 4 ), NULL ) );
     }
 
     TEST( ComparisonMatchExpression, MatchesMinKey ) {
@@ -1369,6 +1379,8 @@ namespace mongo {
         ASSERT( in.matchesBSON( BSONObj(), NULL ) );
         ASSERT( in.matchesBSON( BSON( "a" << BSONNULL ), NULL ) );
         ASSERT( !in.matchesBSON( BSON( "a" << 4 ), NULL ) );
+        // A non-existent field is treated same way as an empty bson object
+        ASSERT( in.matchesBSON( BSON( "b" << 4 ), NULL ) );
     }
 
     TEST( InMatchExpression, MatchesMinKey ) {
