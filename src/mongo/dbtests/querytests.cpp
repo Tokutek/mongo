@@ -41,11 +41,6 @@ namespace mongo {
 
 namespace QueryTests {
 
-    bool findById(const char *ns, const BSONObj &query, BSONObj &result) {
-        NamespaceDetails *d = nsdetails(ns);
-        return d != NULL ? d->findById(query, result) : false;
-    }
-
     class Base {
         Client::Transaction _transaction;
         Lock::GlobalWrite lk;
@@ -1114,82 +1109,6 @@ namespace QueryTests {
         int _n;
     };
 
-    class HelperTest : public CollectionBase {
-    public:
-
-        HelperTest() : CollectionBase( "helpertest" ) {
-        }
-
-        void run() {
-            Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx( "unittests" );
-
-            for ( int i=0; i<50; i++ ) {
-                insert( ns() , BSON( "_id" << i << "x" << i * 2 ) );
-            }
-
-            ASSERT_EQUALS( 50 , count() );
-
-            BSONObj res;
-            NamespaceDetails *d = nsdetails( ns() );
-            ASSERT( d->findOne( BSON( "_id" << 20 ) , res , true ) );
-            ASSERT_EQUALS( 40 , res["x"].numberInt() );
-
-            ASSERT( findById( ns() , BSON( "_id" << 20 ) , res ) );
-            ASSERT_EQUALS( 40 , res["x"].numberInt() );
-
-            ASSERT( ! findById( ns() , BSON( "_id" << 200 ) , res ) );
-
-            unsigned long long slow , fast;
-
-            int n = 10000;
-            DEV n = 1000;
-            {
-                Timer t;
-                for ( int i=0; i<n; i++ ) {
-                    ASSERT( d->findOne( BSON( "_id" << 20 ) , res , true ) );
-                }
-                slow = t.micros();
-            }
-            {
-                Timer t;
-                for ( int i=0; i<n; i++ ) {
-                    ASSERT( findById( ns() , BSON( "_id" << 20 ) , res ) );
-                }
-                fast = t.micros();
-            }
-
-            cerr << "HelperTest  slow:" << slow << " fast:" << fast << endl;
-            transaction.commit();
-        }
-    };
-
-    class HelperByIdTest : public CollectionBase {
-    public:
-
-        HelperByIdTest() : CollectionBase( "helpertestbyid" ) {
-        }
-
-        void run() {
-            Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx( "unittests" );
-
-            for ( int i=0; i<1000; i++ ) {
-                insert( ns() , BSON( "_id" << i << "x" << i * 2 ) );
-            }
-            for ( int i=0; i<1000; i+=2 ) {
-                client_.remove( ns() , BSON( "_id" << i ) );
-            }
-
-            BSONObj res;
-            for ( int i=0; i<1000; i++ ) {
-                bool found = findById( ns() , BSON( "_id" << i ) , res );
-                ASSERT_EQUALS( i % 2 , int(found) );
-            }
-            transaction.commit();
-        }
-    };
-
     class ClientCursorTest : public CollectionBase {
         ClientCursorTest() : CollectionBase( "clientcursortest" ) {
         }
@@ -1632,8 +1551,6 @@ namespace QueryTests {
             add< SymbolStringSame >();
             // TokuMX does not have this race condition
             //add< TailableCappedRaceCondition >();
-            add< HelperTest >();
-            add< HelperByIdTest >();
             add< FindingStartPartiallyFull >();
             add< FindingStartStale >();
             add< WhatsMyUri >();
