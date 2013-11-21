@@ -3,7 +3,7 @@ tokumx news
 
 tokumx 1.3.2
 ------------
-Release date: TBD
+Release date: 2013-11-21
 
 General
 ~~~~~~~
@@ -47,6 +47,10 @@ Bug fixes
 
     - Fixed the rollback of very large transactions after a replication
       failover.  (#716, #720)
+
+    - Fixed a problem when dropping an index concurrently with a
+      background index build.  The server now correctly serializes those
+      operations.  (#745)
 
 
 tokumx 1.3.1
