@@ -44,7 +44,7 @@ namespace mongo {
     NamespaceDetails::Indexer::~Indexer() {
         Lock::assertWriteLocked(_d->_ns);
 
-        if (_d->_indexBuildInProgress) {
+        if (_idx && _d->_indexBuildInProgress) {
             verify(_idx.get() == _d->_indexes.back().get());
             // Pop back the index from the index vector. We still
             // have a shared pointer (_idx), so it won't close here.
@@ -62,6 +62,10 @@ namespace mongo {
             } catch (...) {
                 TOKULOG(0) << "Caught generic exception while destroying Indexer." << endl;
             }
+        } else {
+            // the indexer is destructing before it got a chance to actually
+            // build anything, which is the case if prepare() throws before
+            // creating the indexer and setting _d->_indexBuildInProgress, etc.
         }
     }
 
