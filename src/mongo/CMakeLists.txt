@@ -610,6 +610,15 @@ if (BUILD_TESTING)
     ${TOKUMX_SSL_LIBRARIES}
     )
 
+  add_executable(version_test util/version_test)
+  add_dependencies(version_test generate_error_codes generate_action_types)
+  link_recursive_deps(version_test
+    unittest_main
+    mongocommon
+    unittest_crutch
+    ${TOKUMX_SSL_LIBRARIES}
+    )
+
   foreach (test
       censor_cmdline_test
       )
@@ -1021,6 +1030,7 @@ if (BUILD_TESTING)
       stringutils_test
       text_test
       time_support_test
+      version_test
       )
     add_mongo_test(util ${test} ${test})
   endforeach ()
