@@ -90,14 +90,25 @@ namespace mongo {
             try {
                 verify(_updateCallback != NULL);
                 verify(key != NULL && extra != NULL && extra->data != NULL);
-                BSONObj oldObj;
-                // old_val is NULL when the old row did not exist (and so this is an upsert)
-                if (old_val && old_val->data != NULL) {
-                    oldObj = BSONObj(static_cast<char *>(old_val->data));
-                }
-                // Apply the message, set the new value.
+
+                BSONObj newObj;
                 const BSONObj msg(static_cast<char *>(extra->data));
-                const BSONObj newObj = _updateCallback->apply( oldObj, msg );
+                if (old_val == NULL || old_val->data == NULL) {
+                    const DBT *desc = &db->cmp_descriptor->dbt;
+                    verify(desc->data != NULL);
+                    Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
+
+                    // Old object did not exist - create a new one via upsert.
+                    // The stored pk does not have field names, add them here.
+                    const Key sPK(key);
+                    const BSONObj pkWithFieldNames = descriptor.fillKeyFieldNames(sPK.key());
+                    newObj = _updateCallback->upsert(pkWithFieldNames, msg);
+                } else {
+                    // Apply the update mods
+                    const BSONObj oldObj(reinterpret_cast<char *>(old_val->data));
+                    newObj = _updateCallback->applyMods(oldObj, msg);
+                }
+                // Set the new value
                 DBT new_val = dbt_make(newObj.objdata(), newObj.objsize());
                 set_val(&new_val, set_extra);
                 return 0;
@@ -662,16 +673,11 @@ namespace mongo {
                 const BSONObj key = sKey.key();
 
                 // Use the descriptor to match key parts with field names
-                vector<const char *> fields;
-                descriptor.fieldNames(fields);
-                BSONObjIterator o(key);
-                for (vector<const char *>::const_iterator i = fields.begin();
-                     i != fields.end(); i++) {
-                    b.appendAs(o.next(), *i);
-                }
+                b.appendElements(descriptor.fillKeyFieldNames(key));
                 // The primary key itself will have its value in sKey.key(),
-                // but fields will be empty so nothing is in the bsonobj yet.
-                const BSONObj pk = fields.empty() ? key : sKey.pk();
+                // Secondary keys will have a non-empty sKey.pk(), and
+                // we'll append that pk as "$primaryKey"
+                const BSONObj pk = sKey.pk();
                 if (!pk.isEmpty()) {
                     b.appendAs(pk.firstElement(), "$primaryKey");
                 }

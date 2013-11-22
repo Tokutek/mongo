@@ -58,14 +58,23 @@ namespace mongo {
 
     // Apply an update message supplied by a NamespaceDetails to
     // some row in an in IndexDetails (for fast ydb updates).
+    //
     class ApplyUpdateMessage : public storage::UpdateCallback {
-        BSONObj apply(const BSONObj &oldObj, const BSONObj &msg) {
+        // @param pkQuery - the pk with field names, for proper default obj construction
+        //                  in mods.createNewFromQuery().
+        BSONObj upsert(const BSONObj &pkQuery, const BSONObj &msg) {
+            // Create a new object from the pk and updateobj.
+            ModSet mods(msg);
+            const BSONObj newObj = mods.createNewFromQuery(pkQuery);
+            checkTooLarge(newObj);
+            return newObj;
+        }
+        BSONObj applyMods(const BSONObj &oldObj, const BSONObj &msg) {
             try {
                 // The update message is simply an update object, supplied by the user.
-                const BSONObj &updateObj = msg;
-                ModSet mods( updateObj );
-                auto_ptr<ModSetState> mss = mods.prepare( oldObj );
-                BSONObj newObj = mss->createNewFromMods();
+                ModSet mods(msg);
+                auto_ptr<ModSetState> mss = mods.prepare(oldObj);
+                const BSONObj newObj = mss->createNewFromMods();
                 checkTooLarge(newObj);
                 return newObj;
             } catch (const std::exception &ex) {
