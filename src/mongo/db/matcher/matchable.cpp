@@ -22,9 +22,6 @@
 
 namespace mongo {
 
-    MatchableDocument::~MatchableDocument(){
-    }
-
     BSONMatchableDocument::BSONMatchableDocument( const BSONObj& obj )
         : _obj( obj ) {
     }
