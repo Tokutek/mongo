@@ -621,7 +621,7 @@ namespace mongo {
                     LOG( logLvl ) << "inserting initial doc in " << LocksType::ConfigNS << " for lock " << _name << endl;
                     conn->insert( LocksType::ConfigNS , BSON( LocksType::name(_name) << LocksType::state(0) << LocksType::who("") ) );
                 }
-                catch (storage::RetryableException) {
+                catch (storage::RetryableException &e) {
                     conn.done();
                     LOG( logLvl ) << "retryable error inserting initial doc in " << LocksType::ConfigNS
                                   << " for lock " << _name << ": " << e.what() << endl;
