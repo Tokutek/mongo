@@ -623,6 +623,8 @@ namespace mongo {
                 }
                 catch (storage::RetryableException) {
                     conn.done();
+                    LOG( logLvl ) << "retryable error inserting initial doc in " << LocksType::ConfigNS
+                                  << " for lock " << _name << ": " << e.what() << endl;
                     return false;
                 }
                 catch ( UserException& e ) {
@@ -655,7 +657,7 @@ namespace mongo {
                     // reset since we've been bounced by a previous lock not being where we thought it was,
                     // and should go through full forcing process if required.
                     // (in theory we should never see a ping here if used correctly)
-                    *other = o; other->getOwned(); conn.done(); resetLastPing();
+                    *other = o.getOwned(); conn.done(); resetLastPing();
                     return false;
                 }
 
@@ -713,12 +715,12 @@ namespace mongo {
 
                 if ( elapsed <= takeover && ! canReenter ) {
                     LOG( logLvl ) << "could not force lock '" << lockName << "' because elapsed time " << elapsed << " <= takeover time " << takeover << endl;
-                    *other = o; other->getOwned(); conn.done();
+                    *other = o.getOwned(); conn.done();
                     return false;
                 }
                 else if( elapsed > takeover && canReenter ) {
                     LOG( logLvl - 1 ) << "not re-entering distributed lock " << lockName << "' because elapsed time " << elapsed << " > takeover time " << takeover << endl;
-                    *other = o; other->getOwned(); conn.done();
+                    *other = o.getOwned(); conn.done();
                     return false;
                 }
 
@@ -756,7 +758,7 @@ namespace mongo {
                         if ( !errMsg.empty() || !err["n"].type() || err["n"].numberInt() < 1 ) {
                             ( errMsg.empty() ? LOG( logLvl - 1 ) : warning() ) << "Could not force lock '" << lockName << "' "
                                     << ( !errMsg.empty() ? causedBy(errMsg) : string("(another force won)") ) << endl;
-                            *other = o; other->getOwned(); conn.done();
+                            *other = o.getOwned(); conn.done();
                             return false;
                         }
 
@@ -767,7 +769,7 @@ namespace mongo {
                         warning() << "lock forcing " << lockName << " inconsistent" << endl;
                     }
                     catch (storage::RetryableException) {
-                        conn.done();
+                        *other = o.getOwned(); conn.done();
                         return false;
                     }
                     catch( std::exception& e ) {
@@ -807,7 +809,7 @@ namespace mongo {
                                                                                << ( !errMsg.empty() ? causedBy(errMsg) : string("(not sure lock is held)") ) 
                                                                                << " gle: " << err
                                                                                << endl;
-                            *other = o; other->getOwned(); conn.done();
+                            *other = o.getOwned(); conn.done();
                             return false;
                         }
 
@@ -815,11 +817,12 @@ namespace mongo {
                     catch( UpdateNotTheSame& ) {
                         // NOT ok to continue since our lock isn't held by all servers, so isn't valid.
                         warning() << "inconsistent state re-entering lock, lock " << lockName << " not held" << endl;
-                        *other = o; other->getOwned(); conn.done();
+                        *other = o.getOwned(); conn.done();
                         return false;
                     }
                     catch (storage::RetryableException) {
-                        conn.done();
+                        *other = o.getOwned(); conn.done();
+                        LOG( logLvl ) << "retryable error while re-entering lock, lock " << lockName << " not held" << endl;
                         return false;
                     }
                     catch( std::exception& e ) {
@@ -846,11 +849,13 @@ namespace mongo {
         }
         catch (storage::RetryableException) {
             conn.done();
+            LOG( logLvl ) << "retryable error looking up lock" << endl;
             return false;
         }
         catch (UserException &e) {
             if (nextSafeExceptionIsRetryable(e)) {
                 conn.done();
+                LOG( logLvl ) << "retryable error looking up lock" << endl;
                 return false;
             }
             throw;
@@ -893,8 +898,7 @@ namespace mongo {
             if ( !errMsg.empty() || !err["n"].type() || err["n"].numberInt() < 1 ) {
                 ( errMsg.empty() ? LOG( logLvl - 1 ) : warning() ) << "could not acquire lock '" << lockName << "' "
                         << ( !errMsg.empty() ? causedBy( errMsg ) : string("(another update won)") ) << endl;
-                *other = currLock;
-                other->getOwned();
+                *other = currLock.getOwned();
                 gotLock = false;
             }
             else {
@@ -952,11 +956,22 @@ namespace mongo {
 
                 }
                 catch (storage::RetryableException) {
-                    conn.done();
+                    conn.done(); indDB.done();
+                    LOG( logLvl ) << "retryable error forcing lock " << lockName << endl;
                     return false;
                 }
+                catch (UserException &e) {
+                    conn.done(); indDB.done();
+                    if (nextSafeExceptionIsRetryable(e)) {
+                        LOG( logLvl ) << "retryable error forcing lock " << lockName << endl;
+                        return false;
+                    }
+                    throw LockException( str::stream() << "distributed lock " << lockName
+                                         << " had errors communicating with individual server "
+                                         << up[1].first << causedBy( e ), 13661 );
+                }
                 catch( std::exception& e ) {
-                    conn.done();
+                    conn.done(); indDB.done();
                     throw LockException( str::stream() << "distributed lock " << lockName
                                          << " had errors communicating with individual server "
                                          << up[1].first << causedBy( e ), 13661 );
@@ -991,14 +1006,17 @@ namespace mongo {
         }
         catch (storage::RetryableException) {
             conn.done();
+            LOG( logLvl ) << "retryable error while acquiring lock " << lockName << endl;
             return false;
         }
         catch (UserException &e) {
+            conn.done();
             if (nextSafeExceptionIsRetryable(e)) {
-                conn.done();
+                LOG( logLvl ) << "retryable error while acquiring lock " << lockName << endl;
                 return false;
             }
-            throw;
+            throw LockException( str::stream() << "exception creating distributed lock "
+                                 << lockName << causedBy( e ), 13663 );
         }
         catch( std::exception& e ) {
             conn.done();
@@ -1045,14 +1063,19 @@ namespace mongo {
             }
             catch (storage::RetryableException) {
                 conn.done();
+                LOG( logLvl ) << "retryable exception finalizing winning lock" << endl;
                 return false;
             }
             catch (UserException &e) {
+                conn.done();
                 if (nextSafeExceptionIsRetryable(e)) {
-                    conn.done();
+                    LOG( logLvl ) << "retryable exception finalizing winning lock" << endl;
                     return false;
                 }
-                throw;
+                // Register the bad final lock for deletion, in case it exists
+                distLockPinger.addUnlockOID( lockDetails[LocksType::lockID()].OID() );
+                throw LockException( str::stream() << "exception finalizing winning lock"
+                                     << causedBy( e ), 13662 );
             }
             catch( std::exception& e ) {
                 conn.done();
@@ -1066,8 +1089,7 @@ namespace mongo {
 
         }
 
-        *other = currLock;
-        other->getOwned();
+        *other = currLock.getOwned();
 
         // Log our lock results
         if(gotLock)

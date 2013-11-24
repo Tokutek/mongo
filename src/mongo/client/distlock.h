@@ -201,9 +201,7 @@ namespace mongo {
 
     	dist_lock_try() : _lock(NULL), _got(false) {}
 
-    	dist_lock_try( const dist_lock_try& that ) : _lock(that._lock), _got(that._got), _other(that._other) {
-    		_other.getOwned();
-
+    	dist_lock_try( const dist_lock_try& that ) : _lock(that._lock), _got(that._got), _other(that._other.getOwned()) {
     		// Make sure the lock ownership passes to this object,
     		// so we only unlock once.
     		((dist_lock_try&) that)._got = false;
@@ -218,8 +216,7 @@ namespace mongo {
 
     	    _lock = that._lock;
     	    _got = that._got;
-    	    _other = that._other;
-    	    _other.getOwned();
+    	    _other = that._other.getOwned();
     	    _why = that._why;
 
     	    // Make sure the lock ownership passes to this object,
