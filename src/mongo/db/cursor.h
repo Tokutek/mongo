@@ -101,6 +101,14 @@ namespace mongo {
         // Used when we want fast matcher lookup
         virtual CoveredIndexMatcher *matcher() const { return 0; }
 
+        // With some cursors, thanks to github issue 751, cursor->advance() will advance
+        // to the next matched document for the cursor, skipping over documents that
+        // do not match. In such cases, the caller does not need to run currentMatches again
+        // and waste CPU cycles. This function tells the caller if the matcher has already run
+        // during advance
+        virtual bool currentMatchedOnAdvance() {
+            return false;
+        }
         virtual bool currentMatches( MatchDetails *details = 0 ) {
             return !matcher() || matcher()->matchesCurrent( this, details );
         }
