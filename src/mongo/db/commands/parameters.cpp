@@ -120,6 +120,13 @@ namespace mongo {
                     cmdObj["releaseConnectionsAfterResponse"].trueValue();
                 s++;
             }
+            if( cmdObj.hasElement( "fastupdates" ) ) {
+                if ( s == 0 ) {
+                    result.appendBool( "was", cmdLine.fastupdates );
+                }
+                cmdLine.fastupdates = cmdObj["fastupdates"].trueValue();
+                s++;
+            }
 
             const ServerParameter::Map& m = ServerParameterSet::getGlobal()->getMap();
             BSONObjIterator i( cmdObj );

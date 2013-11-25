@@ -91,6 +91,7 @@ doTest = function (signal, txnLimit, startPort) {
     a.foo.dropIndex("a");
     verifyLastItemCannotBeRolledBack(replTest, conns);
 
+    print('Testing insert rollback');
     a.foo.insert({_id:0});
     replTest.awaitReplication();
     restartSlaveOutOfReplset(replTest);
@@ -99,17 +100,21 @@ doTest = function (signal, txnLimit, startPort) {
     assert.eq(0, conns[1].getDB("foo").foo.find({_id:0}).count());
     restartSlaveInReplset(replTest, conns);
 
-    a.foo.insert({_id:1, a:1});
-    a.foo.update({_id:1}, {a:2});
-    replTest.awaitReplication();
-    restartSlaveOutOfReplset(replTest);
-    var currDoc = conns[1].getDB("foo").foo.find({_id:1}).next();
-    assert.eq(2, currDoc.a);
-    rollbackLastItem(conns, txnLimit);
-    currDoc = conns[1].getDB("foo").foo.find({_id:1}).next();
-    assert.eq(1, currDoc.a);
-    restartSlaveInReplset(replTest, conns);
+    for (i = 0; i < 2; i++) {
+        a.foo.remove({_id:1});
+        a.foo.insert({_id:1, a:1});
+        a.foo.update({_id:1}, i == 0 ? {a:2} : {$inc:{a:1}});
+        replTest.awaitReplication();
+        restartSlaveOutOfReplset(replTest);
+        var currDoc = conns[1].getDB("foo").foo.find({_id:1}).next();
+        assert.eq(2, currDoc.a);
+        rollbackLastItem(conns, txnLimit);
+        currDoc = conns[1].getDB("foo").foo.find({_id:1}).next();
+        assert.eq(1, currDoc.a);
+        restartSlaveInReplset(replTest, conns);
+    }
 
+    print('Testing remove rollback');
     a.foo.insert({_id:2});
     a.foo.remove({_id:2});
     replTest.awaitReplication();
@@ -119,6 +124,7 @@ doTest = function (signal, txnLimit, startPort) {
     assert.eq(1, conns[1].getDB("foo").foo.find({_id:2}).count());
     restartSlaveInReplset(replTest, conns);    
     
+    print('Testing multi-insert rollback');
     a.foo.insert([{_id:6},{_id:5},{_id:4},{_id:3}]);
     replTest.awaitReplication();
     restartSlaveOutOfReplset(replTest);
@@ -127,7 +133,44 @@ doTest = function (signal, txnLimit, startPort) {
     assert.eq(0, conns[1].getDB("foo").foo.find({_id:{$gt:2}}).count());
     restartSlaveInReplset(replTest, conns);    
     
-    
+    for (fast in [ true, false ]) {
+        print('Testing update rollback 2, fast: ' + fast);
+        if (fast) assert.commandWorked(a.getSisterDB('admin').runCommand({ setParameter: 1, fastupdates: true }));
+        a.foo.remove({_id: 7});
+        a.foo.insert({_id: 7});
+        a.foo.update({_id: 7}, { $inc: { c: 1 } });
+        replTest.awaitReplication();
+        restartSlaveOutOfReplset(replTest);
+        assert.eq(1, conns[1].getDB("foo").foo.find({ _id: 7, c: 1 }).count());
+        rollbackLastItem(conns, txnLimit);
+        if (fast) {
+            // fastupdate rolls back to { c: 0 }, even though c did not exist before.
+            assert.eq({ _id: 7, c: 0 }, conns[1].getDB("foo").foo.find({ _id: 7, c: 0 }).toArray()[0]);
+        } else {
+            // regular update rolls back to no value for c
+            assert.eq({ _id: 7 }, conns[1].getDB("foo").foo.find({ _id: 7 }).toArray()[0]);
+        }
+        restartSlaveInReplset(replTest, conns);    
+        if (fast) assert.commandWorked(a.getSisterDB('admin').runCommand({ setParameter: 1, fastupdates: false }));
+    }
+
+    for (fast in [ true, false ]) {
+        print('Testing update rollback 3, fast: ' + fast);
+        if (fast) assert.commandWorked(a.getSisterDB('admin').runCommand({ setParameter: 1, fastupdates: true }));
+        a.foo.remove({_id: 8});
+        a.foo.insert({_id: 8, c: 0});
+        a.foo.update({_id: 8}, { $inc: { c: 1 } }); assert.eq(null, a.getLastError());
+        replTest.awaitReplication();
+        restartSlaveOutOfReplset(replTest);
+        assert.eq(1, conns[1].getDB("foo").foo.find({ _id: 8, c: 1 }).count());
+        rollbackLastItem(conns, txnLimit);
+        // rollback sets { c: 0 }, since it was incremented by 1 starting at zero.
+        // this is expected for both fastupdates and regular updates.
+        assert.eq(1, conns[1].getDB("foo").foo.find({ _id: 8, c: 0 }).count());
+        restartSlaveInReplset(replTest, conns);
+        if (fast) assert.commandWorked(a.getSisterDB('admin').runCommand({ setParameter: 1, fastupdates: false }));
+    }
+
     replTest.stopSet(signal);
 }
 

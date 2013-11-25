@@ -320,6 +320,11 @@ namespace mongo {
             return findIdIndex() >= 0;
         }
 
+        // @return true, if fastupdates are ok for this collection.
+        //         fastupdates are not ok for this collection if it's sharded
+        //         and the primary key does not contain the full shard key.
+        bool fastupdatesOk();
+
         // Extracts and returns validates an owned BSONObj represetning
         // the primary key portion of the given object. Validates each
         // field, ensuring there are no undefined, regex, or array types.
@@ -374,6 +379,13 @@ namespace mongo {
         virtual void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
                                   const bool logop, const bool fromMigrate,
                                   uint64_t flags = 0);
+
+        // update an object in the namespace by pk, described by the updateObj's $ operators
+        //
+        // handles logging
+        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
+                                      const bool logop, const bool fromMigrate,
+                                      uint64_t flags = 0);
 
         // remove everything from a collection
         virtual void empty();
@@ -486,6 +498,12 @@ namespace mongo {
         const BSONObj _options;
         // The primary index pattern.
         const BSONObj _pk;
+
+        // State of fastupdates for sharding:
+        // -1 not sure if fastupdates are okay - need to check if pk is in shardkey.
+        // 0 fastupdates are deinitely not okay - sharding is enabled and pk is not in shardkey
+        // 1 fastupdates are definitely okay - either no sharding, or the pk is in shardkey
+        AtomicWord<int> _fastupdatesOkState;
 
         // Every index has an IndexDetails that describes it.
         bool _indexBuildInProgress;

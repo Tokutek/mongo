@@ -28,9 +28,20 @@ namespace mongo {
 
     namespace storage {
 
+        class UpdateCallback : boost::noncopyable {
+        public:
+            virtual ~UpdateCallback() { }
+            virtual BSONObj upsert(const BSONObj &pk, const BSONObj &msg) {
+                msgasserted(17216, "bug: update upsert callback not properly installed");
+            }
+            virtual BSONObj applyMods(const BSONObj &oldObj, const BSONObj &msg) {
+                msgasserted(17214, "bug: update apply callback not properly installed");
+            }
+        };
+
         extern DB_ENV *env;
 
-        void startup(TxnCompleteHooks *hooks);
+        void startup(TxnCompleteHooks *hooks, UpdateCallback *updateCallback);
         void shutdown(void);
 
         void db_remove(const string &name);

@@ -49,8 +49,6 @@ namespace mongo {
 
         const Ordering &ordering() const;
 
-        void fieldNames(vector<const char *> &fields) const;
-
         DBT dbt() const;
 
         int compareKeys(const storage::Key &key1, const storage::Key &key2) const {
@@ -58,6 +56,8 @@ namespace mongo {
         }
 
         void generateKeys(const BSONObj &obj, BSONObjSet &keys) const;
+
+        BSONObj fillKeyFieldNames(const BSONObj &key) const;
 
         bool clustering() const {
             const Header &h(*reinterpret_cast<const Header *>(_data));
@@ -67,6 +67,8 @@ namespace mongo {
         static size_t serializedSize(const BSONObj &keyPattern);
 
     private:
+        void fieldNames(vector<const char *> &fields) const;
+
 #pragma pack(1)
         // Descriptor format:
         //   [

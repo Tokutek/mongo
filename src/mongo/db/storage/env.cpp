@@ -58,6 +58,8 @@ namespace mongo {
         DB_ENV *env;
         bool _inStartup;
 
+        UpdateCallback *_updateCallback;
+
         static int dbt_key_compare(DB *db, const DBT *dbt1, const DBT *dbt2) {
             try {
                 const DBT *desc = &db->cmp_descriptor->dbt;
@@ -80,6 +82,42 @@ namespace mongo {
                 }
                 fassertFailed(16455);
             }
+        }
+
+        static int update_callback(DB *db, const DBT *key, const DBT *old_val, const DBT *extra,
+                                   void (*set_val)(const DBT *new_val, void *set_extra),
+                                   void *set_extra) {
+            try {
+                verify(_updateCallback != NULL);
+                verify(key != NULL && extra != NULL && extra->data != NULL);
+
+                BSONObj newObj;
+                const BSONObj msg(static_cast<char *>(extra->data));
+                if (old_val == NULL || old_val->data == NULL) {
+                    const DBT *desc = &db->cmp_descriptor->dbt;
+                    verify(desc->data != NULL);
+                    Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
+
+                    // Old object did not exist - create a new one via upsert.
+                    // The stored pk does not have field names, add them here.
+                    const Key sPK(key);
+                    const BSONObj pkWithFieldNames = descriptor.fillKeyFieldNames(sPK.key());
+                    newObj = _updateCallback->upsert(pkWithFieldNames, msg);
+                } else {
+                    // Apply the update mods
+                    const BSONObj oldObj(reinterpret_cast<char *>(old_val->data));
+                    newObj = _updateCallback->applyMods(oldObj, msg);
+                }
+                // Set the new value
+                DBT new_val = dbt_make(newObj.objdata(), newObj.objsize());
+                set_val(&new_val, set_extra);
+                return 0;
+            } catch (const std::exception &ex) { 
+                problem() << "Caught exception in ydb update callback, cannot proceed: " 
+                          << ex.what() << endl;
+                fassertFailed(17215);
+            }
+            return -1;
         }
 
         static int generate_keys(DB *dest_db, DB *src_db,
@@ -216,10 +254,12 @@ namespace mongo {
 
         MONGO_EXPORT_STARTUP_SERVER_PARAMETER(numCachetableBucketMutexes, uint32_t, 0);
 
-        void startup(TxnCompleteHooks *hooks) {
+        void startup(TxnCompleteHooks *hooks, UpdateCallback *updateCallback) {
             InStartup is;
 
             setTxnCompleteHooks(hooks);
+            _updateCallback = updateCallback;
+
             tokulog() << "startup" << endl;
 
             db_env_set_direct_io(cmdLine.directio);
@@ -296,6 +336,7 @@ namespace mongo {
             }
 
             env->change_fsync_log_period(env, cmdLine.logFlushPeriod);
+            env->set_update(env, update_callback);
 
             const int redzone_threshold = cmdLine.fsRedzone;
             r = env->set_redzone(env, redzone_threshold);
@@ -632,16 +673,11 @@ namespace mongo {
                 const BSONObj key = sKey.key();
 
                 // Use the descriptor to match key parts with field names
-                vector<const char *> fields;
-                descriptor.fieldNames(fields);
-                BSONObjIterator o(key);
-                for (vector<const char *>::const_iterator i = fields.begin();
-                     i != fields.end(); i++) {
-                    b.appendAs(o.next(), *i);
-                }
+                b.appendElements(descriptor.fillKeyFieldNames(key));
                 // The primary key itself will have its value in sKey.key(),
-                // but fields will be empty so nothing is in the bsonobj yet.
-                const BSONObj pk = fields.empty() ? key : sKey.pk();
+                // Secondary keys will have a non-empty sKey.pk(), and
+                // we'll append that pk as "$primaryKey"
+                const BSONObj pk = sKey.pk();
                 if (!pk.isEmpty()) {
                     b.appendAs(pk.firstElement(), "$primaryKey");
                 }

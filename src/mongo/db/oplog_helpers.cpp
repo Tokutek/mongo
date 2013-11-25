@@ -32,6 +32,7 @@ static const char *KEY_STR_NS = "ns";
 static const char *KEY_STR_ROW = "o";
 static const char *KEY_STR_OLD_ROW = "o";
 static const char *KEY_STR_NEW_ROW = "o2";
+static const char *KEY_STR_MODS = "m";
 static const char *KEY_STR_PK = "pk";
 static const char *KEY_STR_COMMENT = "o";
 static const char *KEY_STR_MIGRATE = "fromMigrate";
@@ -118,6 +119,32 @@ namespace mongo {
                 b.append(KEY_STR_PK, pk);
                 b.append(KEY_STR_OLD_ROW, oldRow);
                 b.append(KEY_STR_NEW_ROW, newRow);
+                BSONObj logObj = b.obj();
+                if (logTxnOpsForReplication()) {
+                    cc().txn().logOpForReplication(logObj);
+                }
+                if (logForSharding) {
+                    cc().txn().logOpForSharding(logObj);
+                }
+            }
+        }
+
+        void logUpdateMods(const char *ns, const BSONObj &pk,
+                           const BSONObj &updateobj,
+                           bool fromMigrate) {
+            bool logForSharding = !fromMigrate &&
+                shouldLogTxnUpdateOpForSharding(OP_STR_UPDATE, ns, pk, pk); // HACK: Faking newObj and oldObj with just PK
+            if (logTxnOpsForReplication() || logForSharding) {
+                BSONObjBuilder b;
+                if (isLocalNs(ns)) {
+                    return;
+                }
+
+                appendOpType(OP_STR_UPDATE_MODS, &b);
+                appendNsStr(ns, &b);
+                appendMigrate(fromMigrate, &b);
+                b.append(KEY_STR_PK, pk);
+                b.append(KEY_STR_MODS, updateobj);
                 BSONObj logObj = b.obj();
                 if (logTxnOpsForReplication()) {
                     cc().txn().logOpForReplication(logObj);
@@ -330,6 +357,23 @@ namespace mongo {
             }
         }
 
+        static void runUpdateModsFromOplog(const char *ns, const BSONObj &op, bool isRollback) {
+            Client::ReadContext ctx(ns);
+            NamespaceDetails* nsd = nsdetails(ns);
+
+            const char *names[] = { KEY_STR_PK, KEY_STR_MODS };
+            BSONElement fields[2];
+            op.getFields(2, names, fields);
+            const BSONObj pk = fields[0].Obj();
+            const BSONObj updateobj = fields[1].Obj();
+            uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);        
+            updateByPK(nsd, pk, pk /* patternOrig, the "full" query */,
+                       // for rollback, we need to invert the update object to 'roll back' the update.
+                       !isRollback ? updateobj : invertUpdateMods(updateobj),
+                       false, true /* fastupdates always okay on secondary */,
+                       false, false, flags);
+        }
+
         static void runCommandFromOplog(const char *ns, const BSONObj &op) {
             BufBuilder bb;
             BSONObjBuilder ob;
@@ -363,6 +407,10 @@ namespace mongo {
             else if (strcmp(opType, OP_STR_UPDATE) == 0) {
                 opCounters->gotUpdate();
                 runUpdateFromOplog(ns, op, false);
+            }
+            else if (strcmp(opType, OP_STR_UPDATE_MODS) == 0) {
+                opCounters->gotUpdate();
+                runUpdateModsFromOplog(ns, op, false);
             }
             else if (strcmp(opType, OP_STR_DELETE) == 0) {
                 opCounters->gotDelete();
@@ -414,6 +462,9 @@ namespace mongo {
             }
             else if (strcmp(opType, OP_STR_UPDATE) == 0) {
                 runUpdateFromOplog(ns, op, true);
+            }
+            else if (strcmp(opType, OP_STR_UPDATE_MODS) == 0) {
+                runUpdateModsFromOplog(ns, op, true);
             }
             else if (strcmp(opType, OP_STR_DELETE) == 0) {
                 // the rollback of a delete is to do the insert
