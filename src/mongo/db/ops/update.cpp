@@ -123,7 +123,7 @@ namespace mongo {
                                      const BSONObj &updateobj, const bool isOperatorUpdate,
                                      ModSet *mods, const bool logop) {
         const string &ns = d->ns();
-        uassert(16893, str::stream() << "Cannot update a collection under-going bulk load: " << ns,
+        uassert(16893, str::stream() << "Cannot upsert a collection under-going bulk load: " << ns,
                        ns != cc().bulkLoadNS());
 
         BSONObj newObj = updateobj;
@@ -260,12 +260,14 @@ namespace mongo {
 
         // Fast-path for simple primary key updates.
         const BSONObj pk = d->getSimplePKFromQuery(patternOrig);
-        if (!pk.isEmpty()) {
+        if (!pk.isEmpty() && !d->isCapped()) { // don't fastupdate capped collections
+            // We check here that the fastupdates are okay to do.
+            // - cmdline switch must be enabled
+            // - NamespaceDetails must ok with it (may not be for some sharded collections)
+            // - modifications to the destination object must be invertible (for repl rollback)
+            const bool fastupdatesOk = cmdLine.fastupdates && d->fastupdatesOk() && modsAreInvertible(updateobj);
             return updateByPK(d, pk, patternOrig, updateobj,
-                              // We check here that the update operators are invertible
-                              // before requesting a fastupdate.
-                              upsert, cmdLine.fastupdates && modsAreInvertible(updateobj),
-                              logop, fromMigrate);
+                              upsert, fastupdatesOk, logop, fromMigrate);
         }
 
         // Run a regular update using the query optimizer.

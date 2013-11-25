@@ -362,8 +362,8 @@ namespace mongo {
             NamespaceDetails* nsd = nsdetails(ns);
 
             const char *names[] = { KEY_STR_PK, KEY_STR_MODS };
-            BSONElement fields[3];
-            op.getFields(3, names, fields);
+            BSONElement fields[2];
+            op.getFields(2, names, fields);
             const BSONObj pk = fields[0].Obj();
             const BSONObj updateobj = fields[1].Obj();
             uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);        
