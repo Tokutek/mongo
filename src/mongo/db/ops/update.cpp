@@ -259,15 +259,22 @@ namespace mongo {
         NamespaceDetails *d = getAndMaybeCreateNS(ns, logop);
 
         // Fast-path for simple primary key updates.
-        const BSONObj pk = d->getSimplePKFromQuery(patternOrig);
-        if (!pk.isEmpty() && !d->isCapped()) { // don't fastupdate capped collections
-            // We check here that the fastupdates are okay to do.
-            // - cmdline switch must be enabled
-            // - NamespaceDetails must ok with it (may not be for some sharded collections)
-            // - modifications to the destination object must be invertible (for repl rollback)
-            const bool fastupdatesOk = cmdLine.fastupdates && d->fastupdatesOk() && modsAreInvertible(updateobj);
-            return updateByPK(d, pk, patternOrig, updateobj,
-                              upsert, fastupdatesOk, logop, fromMigrate);
+        //
+        // - We don't do it for capped collections since  their documents may not grow,
+        // and the fast path doesn't know if docs grow until the update message is applied.
+        // - We don't do it if multi=true because semantically we're not supposed to, if
+        // the update ends up being a replace-style upsert. See jstests/update_multi6.js
+        if (!multi && !d->isCapped()) {
+            const BSONObj pk = d->getSimplePKFromQuery(patternOrig);
+            if (!pk.isEmpty()) {
+                // We check here that the fastupdates are okay to do.
+                // - cmdline switch must be enabled
+                // - NamespaceDetails must ok with it (may not be for some sharded collections)
+                // - modifications to the destination object must be invertible (for repl rollback)
+                const bool fastupdatesOk = cmdLine.fastupdates && d->fastupdatesOk() && modsAreInvertible(updateobj);
+                return updateByPK(d, pk, patternOrig, updateobj,
+                                  upsert, fastupdatesOk, logop, fromMigrate);
+            }
         }
 
         // Run a regular update using the query optimizer.
