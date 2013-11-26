@@ -180,14 +180,15 @@ namespace mongo {
         _multiKey(_d->isMultikey(_d->idxNo(_idx))),
         _direction(direction),
         _bounds(),
-        _boundsMustMatch(true),
+        _boundsIterator(),
         _nscanned(0),
         _nscannedObjects(0),
         _prelock(!cc().opSettings().getJustOne() && numWanted == 0),
         _cursor(_idx, cursor_flags()),
         _tailable(false),
         _ok(false),
-        _getf_iteration(0)
+        _getf_iteration(0),
+        _bulkFetchWentOutBounds(false)
     {
         verify( _d != NULL );
         TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
@@ -206,14 +207,14 @@ namespace mongo {
         _multiKey(_d->isMultikey(_d->idxNo(_idx))),
         _direction(direction),
         _bounds(bounds),
-        _boundsMustMatch(true),
         _nscanned(0),
         _nscannedObjects(0),
         _prelock(!cc().opSettings().getJustOne() && numWanted == 0),
         _cursor(_idx, cursor_flags()),
         _tailable(false),
         _ok(false),
-        _getf_iteration(0)
+        _getf_iteration(0),
+        _bulkFetchWentOutBounds(false)
     {
         verify( _d != NULL );
         _boundsIterator.reset( new FieldRangeVectorIterator( *_bounds , singleIntervalLimit ) );
@@ -255,15 +256,39 @@ namespace mongo {
     int IndexCursor::cursor_getf(const DBT *key, const DBT *val, void *extra) {
         struct cursor_getf_extra *info = static_cast<struct cursor_getf_extra *>(extra);
         try {
+            // by default, state that we did not exceed our bounds
+            info->cursor_went_out_bounds = false;
             if (key != NULL) {
                 RowBuffer *buffer = info->buffer;
                 storage::Key sKey(key);
-                buffer->append(sKey, val->size > 0 ?
-                        BSONObj(static_cast<const char *>(val->data)) : BSONObj());
+                // only copy key if it matches the bounds
+                info->buf_builder->reset();
+                bool fetchRow = true;
+                BSONObj currKey = sKey.key(*info->buf_builder);
+                // if the key is no longer in bounds, don't fetch it
+                if (info->end_checker && !info->end_checker->endInBounds(currKey)) {
+                    fetchRow = false;
+                    info->cursor_went_out_bounds = true;
+                }
+                info->num_scanned++;
+                
+                // if we have bounds and the key does not match the
+                // bounds, don't fetch the row into the buffer
+                if ( info->bounds && !info->bounds->matchesKey(currKey)) {
+                    fetchRow = false;
+                }
+                
+                if (fetchRow) {
+                    buffer->append(sKey, val->size > 0 ?
+                            BSONObj(static_cast<const char *>(val->data)) : BSONObj());
+                    info->rows_fetched++;
+                }
 
                 // request more bulk fetching if we are allowed to fetch more rows
                 // and the row buffer is not too full.
-                if (++info->rows_fetched < info->rows_to_fetch && !buffer->isGorged()) {
+                if (!info->cursor_went_out_bounds &&
+                    (info->rows_fetched < info->rows_to_fetch) &&
+                    !buffer->isGorged()) {
                     return TOKUDB_CURSOR_CONTINUE;
                 }
             }
@@ -287,7 +312,8 @@ namespace mongo {
         // Tailable cursors _must_ use endKey/endKeyInclusive so the bounds we
         // may or may not have gotten via the constructor is no longer valid.
         _bounds.reset();
-        checkCurrentAgainstBounds();
+        struct cursor_end_checker checker (&_endKey, _endKeyInclusive, _ordering, _direction);
+        _ok = checker.endInBounds(_currKey);
     }
 
     bool IndexCursor::forward() const {
@@ -430,7 +456,19 @@ namespace mongo {
         } else {
             findKey( _startKey );
         }
-        checkCurrentAgainstBounds();
+
+        // at this point, we have positioned the cursor somewhere
+        bool inRange = false;
+        if (_bounds) {
+            inRange = _bounds->matchesKey(_currKey);
+        }
+        else {
+            struct cursor_end_checker checker (&_endKey, _endKeyInclusive, _ordering, _direction);
+            inRange = checker.endInBounds(_currKey);
+        }
+        if (!inRange) {
+            advance();
+        }
     }
 
     int IndexCursor::cursor_flags() {
@@ -506,7 +544,8 @@ namespace mongo {
 
         int r;
         const int rows_to_fetch = getf_fetch_count();
-        struct cursor_getf_extra extra(&_buffer, rows_to_fetch);
+        shared_ptr<FieldRangeVector> emptyBounds;
+        struct cursor_getf_extra extra(&_buffer, rows_to_fetch, emptyBounds, NULL, &_getfCallbackBufBuilder);
         DBC *cursor = _cursor.dbc();
         if ( forward() ) {
             r = cursor->c_getf_set_range(cursor, getf_flags(), &key_dbt, cursor_getf, &extra);
@@ -520,6 +559,7 @@ namespace mongo {
             extra.throwException();
             storage::handle_ydb_error(r);
         }
+        _nscanned += extra.num_scanned;
 
         _getf_iteration++;
         _ok = extra.rows_fetched > 0 ? true : false;
@@ -528,36 +568,6 @@ namespace mongo {
         }
 
         TOKULOG(3) << "setPosition hit K, PK, Obj " << _currKey << _currPK << _currObj << endl;
-    }
-
-    // Check the current key with respect to our key bounds, whether
-    // it be provided by independent field ranges or by start/end keys.
-    bool IndexCursor::checkCurrentAgainstBounds() {
-        if ( _bounds == NULL ) {
-            checkEnd();
-            if ( ok() ) {
-                ++_nscanned;
-            }
-        } else {
-            // If nscanned is increased by more than 20 before a matching key is found, abort
-            // skipping through the index to find a matching key.  This iteration cutoff
-            // prevents unbounded internal iteration within IndexCursor::initializeDBC and
-            // IndexCursor::advance(). See SERVER-3448.
-            const long long startNscanned = _nscanned;
-            if ( skipOutOfRangeKeysAndCheckEnd() ) {
-                do {
-                    if ( _nscanned > startNscanned + 20 ) {
-                        // If iteration is aborted before a key matching _bounds is identified, the
-                        // cursor may be left pointing at a key that is not within bounds
-                        // (_bounds->matchesKey( currKey() ) may be false).  Set _boundsMustMatch to
-                        // false accordingly.
-                        _boundsMustMatch = false;
-                        break;
-                    }
-                } while ( skipOutOfRangeKeysAndCheckEnd() );
-            }
-        }
-        return ok();
     }
 
     // Skip the key comprised of the first k fields of currentKey and the
@@ -608,7 +618,7 @@ namespace mongo {
         // eg: skipPrefixIndex = 1, currKey {a:1, b:2, c:1}, direction > 0,  so we skip
         // to the first key greater than {a:1, b:maxkey, c:maxkey}
         //
-        // If after() is false, we use the same key prefix but set the reamining
+        // If after() is false, we use the same key prefix but set the remaining
         // elements to the elements described by cmp(), in order.
         // eg: skipPrefixIndex = 1, currKey {a:1, b:2, c:1}) and cmp() [b:5, c:11]
         // so we use skip to {a:1, b:5, c:11}, also noting direction.
@@ -668,44 +678,23 @@ again:      while ( !allInclusive && ok() ) {
         return 0;
     }
 
-    bool IndexCursor::skipOutOfRangeKeysAndCheckEnd() {
-        if ( ok() ) { 
-            // If r is -2, the cursor is exhausted. We're not supposed to count that.
-            const int r = skipToNextKey( _currKey );
-            if ( r != -2 ) {
-                _nscanned++;
-            }
-            return r == 0;
-        }
-        return false;
-    }
-
-    // Check if the current key is beyond endKey.
-    void IndexCursor::checkEnd() {
-        if ( !ok() ) {
-            return;
-        }
-        dassert(!_endKey.isEmpty());
-        const int cmp = _endKey.woCompare( _currKey, _ordering );
-        const int sign = cmp == 0 ? 0 : (cmp > 0 ? 1 : -1);
-        if ( (sign != 0 && sign != _direction) || (sign == 0 && !_endKeyInclusive) ) {
-            _ok = false;
-            TOKULOG(3) << toString() << ": checkEnd() stopping @ curr, end: " << _currKey << _endKey << endl;
-        }
-    }
-
     bool IndexCursor::fetchMoreRows() {
         // We're going to get more rows, so get rid of what's there.
         _buffer.empty();
 
         int r;
         const int rows_to_fetch = getf_fetch_count();
-        struct cursor_getf_extra extra(&_buffer, rows_to_fetch);
+        struct cursor_end_checker end_checker(&_endKey, _endKeyInclusive, _ordering, _direction);
+        struct cursor_getf_extra extra(&_buffer, rows_to_fetch, _bounds, &end_checker, &_getfCallbackBufBuilder);
         DBC *cursor = _cursor.dbc();
         if ( forward() ) {
             r = cursor->c_getf_next(cursor, getf_flags(), cursor_getf, &extra);
         } else {
             r = cursor->c_getf_prev(cursor, getf_flags(), cursor_getf, &extra);
+        }
+        _nscanned += extra.num_scanned;
+        if (extra.cursor_went_out_bounds) {
+            _bulkFetchWentOutBounds = true;
         }
         if ( extra.ex != NULL ) {
             throw *extra.ex;
@@ -714,45 +703,134 @@ again:      while ( !allInclusive && ok() ) {
             extra.throwException();
             storage::handle_ydb_error(r);
         }
+        else if (r == DB_NOTFOUND) {
+            _bulkFetchWentOutBounds = true;
+        }
 
         _getf_iteration++;
         return extra.rows_fetched > 0 ? true : false;
     }
 
-    void IndexCursor::_advance() {
-        // Reset this flag at the start of a new iteration.
-        // See IndexCursor::checkCurrentAgainstBounds()
-        _boundsMustMatch = true;
-
-        // first try to get data from the bulk fetch buffer
-        _ok = _buffer.next();
-        // if there is not data remaining in the bulk fetch buffer,
-        // do a fractal tree call to get more rows
-        if ( !ok() ) {
-            _ok = fetchMoreRows();
-        }
-        // at this point, if there are rows to be gotten,
-        // it is residing in the bulk fetch buffer.
-        // Get a row from the bulk fetch buffer
-        if ( ok() ) {
+    bool IndexCursor::advanceFromBuffer() {
+        bool bufferAdvanced = _buffer.next();
+        if (bufferAdvanced) {
+            // we got a row, we are good
             getCurrentFromBuffer();
-            TOKULOG(3) << "_advance moved to K, PK, Obj" << _currKey << _currPK << _currObj << endl;
-        } else {
-            TOKULOG(3) << "_advance exhausted" << endl;
+            TOKULOG(3) << "advance moved to K, PK, Obj" << _currKey << _currPK << _currObj << endl;
+            _ok = true;
+            return true;
         }
+        return false;
+    }
+
+    bool IndexCursor::_advance() {
+        if (!ok()) {
+            return false;
+        }
+        
+        // first check the RowBuffer. If something is there, we are good,
+        // because we don't place it in the RowBuffer unless we KNOW it is
+        // good to return
+        // first try to get data from the bulk fetch buffer
+        bool bufferAdvanced = advanceFromBuffer();
+        if (bufferAdvanced) {
+            return true;
+        }
+
+        // Now we are in the case where the RowBuffer has nothing,
+        // but we should still be in bounds for the cursor. So, we need
+        // to do fractal tree operations to refill the RowBuffer and get
+        // rows to return
+        while (ok()) {
+            // if we went out of bounds, with our previous calls,
+            // get out, there is nothing for this cursor to do.
+            if (_bulkFetchWentOutBounds) {
+                TOKULOG(3) << "advance exhausted, went past endKey" << endl;
+                _ok = false;
+                return false;
+            }
+
+            // get the last key read and see what the bounds iterator
+            // says we should do
+            if (_bounds) {
+                // get the last key read from the cursor
+                // ask the bounds iterator what the planned course
+                // of action should be
+                DBT lastKeyRead;
+                memset(&lastKeyRead, 0, sizeof(lastKeyRead));
+                lastKeyRead.flags = DB_DBT_REALLOC;                
+                DBC *cursor = _cursor.dbc();
+                int r = cursor->c_get_recent_key_read(cursor, &lastKeyRead);
+                dassert(r == 0);                
+                storage::Key sKey(&lastKeyRead);
+                _getfCallbackBufBuilder.reset();                
+                // now currKey is a BSONObj that represents the last
+                // key this cursor has read
+                BSONObj currKey = sKey.key(_getfCallbackBufBuilder);
+                int skipIndex = skipToNextKey(currKey);
+                if (skipIndex == -2) {
+                    TOKULOG(3) << "skipIndex exhausted, went past endKey" << endl;
+                    _bulkFetchWentOutBounds = true;
+                    return false;
+                }
+                else if (skipIndex == -1) {
+                    // continue with bulk fetching
+                    bool gotMore = fetchMoreRows();
+                    if (gotMore) {
+                        // we got a row, we are good
+                        getCurrentFromBuffer();
+                        TOKULOG(3) << "advance moved to K, PK, Obj" << _currKey << _currPK << _currObj << endl;
+                        _ok = true;
+                        return true;
+                    }
+                    // otherwise, we go to the top of the loop and continue
+                }
+                else {
+                    // the ugly case!
+                    // we've skipped the key to another location
+                    // check this new value to see if it is good
+                    if (ok() && _bounds->matchesKey(_currKey)) {
+                        // we are good! we have a row, get out
+                        return true;
+                    }
+                    else {
+                        // The row we retrieved does not match,
+                        // keep going
+                        continue;
+                    }
+                }
+            }
+            else {
+                // we simply fetch some more
+                // continue with bulk fetching
+                bool gotMore = fetchMoreRows();
+                if (gotMore) {
+                    // we got a row, we are good
+                    getCurrentFromBuffer();
+                    TOKULOG(3) << "advance moved to K, PK, Obj" << _currKey << _currPK << _currObj << endl;
+                    _ok = true;
+                    return true;
+                }
+                // otherwise, we go to the top of the loop and continue
+                // eventually, _bulkFetchWentOutBounds should become true
+                // and we break out
+            }
+        }
+        // if we get out here, we failed to advance, because ok() is false
+        return false;
     }
 
     bool IndexCursor::advance() {
         killCurrentOp.checkForInterrupt();
         if ( ok() ) {
             // Advance one row further, and then check if we've went out of bounds.
-            _advance();
+            return _advance();
         } else {
             if ( tailable() ) {
                 if ( _currKey < _endKey ) {
                     // Read the most up-to-date minUnsafeKey from the namespace
                     _endKey = _d->minUnsafeKey();
-                    _advance();
+                    return _advance();
                 } else {
                     // reset _currKey, we may have accidentally
                     // gone past _endKey when we did our last advance
@@ -761,15 +839,15 @@ again:      while ( !allInclusive && ok() ) {
                     // Read the most up-to-date minUnsafeKey from the namespace
                     _endKey = _d->minUnsafeKey();
                     findKey( _currKey.isEmpty() ? minKey : _currKey );
+                    // tailable cursors don't have bounds anymore,
+                    // so we can just return ok() here
+                    return ok();
                 }
             } else {
                 // Exhausted cursors that are not tailable never advance
                 return false;
             }
         }
-        // the key we are now positioned over may or may not be ok to read.
-        // checkCurrentAgainstBounds() will decide.
-        return checkCurrentAgainstBounds();
     }
 
     BSONObj IndexCursor::current() {
@@ -805,11 +883,6 @@ again:      while ( !allInclusive && ok() ) {
     }
 
     bool IndexCursor::currentMatches( MatchDetails *details ) {
-         // If currKey() might not match the specified _bounds, check whether or not it does.
-         if ( !_boundsMustMatch && _bounds && !_bounds->matchesKey( currKey() ) ) {
-             // If the key does not match _bounds, it does not match the query.
-             return false;
-         }
          // Forward to the base class implementation, which may utilize a Matcher.
          return Cursor::currentMatches( details );
     }

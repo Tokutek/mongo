@@ -280,22 +280,50 @@ namespace mongo {
                                     BufBuilder &startKeyBuilder, BufBuilder &endKeyBuilder);
         void _prelockBounds();
         void _prelockRange(const BSONObj &startKey, const BSONObj &endKey);
+        bool _advance();
+        bool advanceFromBuffer();
 
         /** Get the current key/pk/obj from the row buffer and set _currKey/PK/Obj */
         void getCurrentFromBuffer();
-        /** Advance the internal DBC, not updating nscanned or checking the key against our bounds. */
-        void _advance();
 
+        struct cursor_end_checker {
+            BSONObj* _endKey;
+            const bool _endKeyInclusive;
+            const Ordering _ordering;
+            const int _direction;            
+            // Check if the current key is beyond endKey.
+            cursor_end_checker(BSONObj* endKey, bool endKeyInclusive, Ordering ordering, int direction) : 
+                _endKey(endKey), _endKeyInclusive(endKeyInclusive), _ordering(ordering), _direction(direction) {
+            }
+            bool endInBounds(BSONObj currKey) {
+                dassert(!_endKey->isEmpty());
+                const int cmp = _endKey->woCompare( currKey, _ordering );
+                const int sign = cmp == 0 ? 0 : (cmp > 0 ? 1 : -1);
+                if ( (sign != 0 && sign != _direction) || (sign == 0 && !_endKeyInclusive) ) {
+                    return false;
+                }
+                return true;
+            }
+        };
+        
         /** ydb cursor callback + flags */
         struct cursor_getf_extra : public ExceptionSaver {
             RowBuffer *buffer;
             int rows_fetched;
             int rows_to_fetch;
             std::exception *ex;
-            cursor_getf_extra(RowBuffer *buf, int n_to_fetch) :
-                buffer(buf), rows_fetched(0), rows_to_fetch(n_to_fetch), ex(NULL) {
+            shared_ptr<FieldRangeVector> bounds;
+            struct cursor_end_checker* end_checker;
+            bool cursor_went_out_bounds;
+            BufBuilder* buf_builder;
+            uint32_t num_scanned;
+            cursor_getf_extra(RowBuffer *buf, int n_to_fetch, shared_ptr<FieldRangeVector> cursor_bounds, struct cursor_end_checker* checker, BufBuilder* builder) :
+                buffer(buf), rows_fetched(0), rows_to_fetch(n_to_fetch), ex(NULL), 
+                bounds(cursor_bounds), end_checker(checker), cursor_went_out_bounds(false), 
+                buf_builder(builder), num_scanned(0) {
             }
         };
+
         static int cursor_getf(const DBT *key, const DBT *val, void *extra);
         /** determine how many rows the next getf should bulk fetch */
         int getf_fetch_count();
@@ -305,21 +333,10 @@ namespace mongo {
         void findKey(const BSONObj &key);
         /** find by key and a given PK */
         void setPosition(const BSONObj &key, const BSONObj &pk);
-        /** check if the current key is out of bounds, invalidate the current key if so */
-        bool checkCurrentAgainstBounds();
         void skipPrefix(const BSONObj &key, const int k);
         int skipToNextKey(const BSONObj &currentKey);
-        /**
-         * Attempt to locate the next index key matching _bounds.  This may mean advancing to the
-         * next successive key in the index, or skipping to a new position in the index.  If an
-         * internal iteration cutoff is reached before a matching key is found, then the search for
-         * a matching key will be aborted, leaving the cursor pointing at a key that is not within
-         * bounds.
-         */
-        bool skipOutOfRangeKeysAndCheckEnd();
 
     protected:
-        virtual void checkEnd();
 
         NamespaceDetails *const _d;
         const IndexDetails &_idx;
@@ -334,10 +351,6 @@ namespace mongo {
         const int _direction;
         shared_ptr< FieldRangeVector > _bounds; // field ranges to iterate over, if non-null
         auto_ptr< FieldRangeVectorIterator > _boundsIterator;
-        bool _boundsMustMatch; // If iteration is aborted before a key matching _bounds is
-                               // identified, the cursor may be left pointing at a key that is not
-                               // within bounds (_bounds->matchesKey( currKey() ) may be false).
-                               // _boundsMustMatch will be set to false accordingly.
         shared_ptr< CoveredIndexMatcher > _matcher;
         shared_ptr<Projection::KeyOnly> _keyFieldsOnly;
         long long _nscanned;
@@ -367,10 +380,22 @@ namespace mongo {
         BSONObj _currObj;
         BufBuilder _currKeyBufBuilder;
 
+        // a BufBuilder used in the cursor's callback
+        // function to generate the keys. Cached here
+        // for efficiency, so we don't create a new one
+        // every time we do a cursor call
+        BufBuilder _getfCallbackBufBuilder;
+
         // Row buffer to store rows in using bulk fetch. Also track the iteration
         // of bulk fetch so we know an appropriate amount of rows to fetch.
         RowBuffer _buffer;
         int _getf_iteration;
+
+        // states if the last bulk fetch call went out of bounds, that is,
+        // it went past endKey. If so, that means that after the current
+        // rows in the buffer are exhausted, there is no need to do any
+        // more operations. The cursor is done
+        bool _bulkFetchWentOutBounds;
     };
 
     /**
@@ -394,8 +419,6 @@ namespace mongo {
         IndexScanCursor( NamespaceDetails *d, const IndexDetails &idx,
                          int direction, int numWanted = 0);
     private:
-        // Implemented as a no-op, since "scan" cursors are always in bounds.
-        void checkEnd();
     };
 
     /**
