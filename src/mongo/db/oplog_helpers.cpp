@@ -381,11 +381,7 @@ namespace mongo {
             // Locking and context are handled in _runCommands
             const BSONObj command = op[KEY_STR_ROW].embeddedObject();
             bool ret = _runCommands(ns, command, bb, ob, true, 0);
-            massert(
-                0, 
-                str::stream() << "Command " << op.str() << " failed under runCommandFromOplog: " << ob.done(),
-                ret
-                );
+            massert(17220, str::stream() << "Command " << op.str() << " failed under runCommandFromOplog: " << ob.done(), ret);
         }
 
         static void rollbackCommandFromOplog(const char *ns, const BSONObj &op) {
