@@ -242,6 +242,13 @@ namespace mongo {
             _opSettings = settings;
         }
 
+        void setGloballyUninterruptible(bool val) {
+            _globallyUninterruptible = val;
+        }
+        bool globallyUninterruptible() {
+            return _globallyUninterruptible;
+        }
+
         /**
          * Swap out the transaction stack to another location.
          * This breaks the relationship with any Client::Transaction objects, which is useful for getMore() and one day multi-statement transactions.
@@ -312,6 +319,10 @@ namespace mongo {
         BSONObj _handshake;
         BSONObj _remoteId;
         OpSettings _opSettings;
+        // if true, this client cannot be uninterrupted by global events,
+        // and _checkForInterrupt will return false even if we are globally
+        // killed
+        bool _globallyUninterruptible;
 
         // for CmdCopyDb and CmdCopyDbGetNonce
         shared_ptr< DBClientConnection > _authConn;

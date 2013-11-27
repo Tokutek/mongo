@@ -107,7 +107,8 @@ namespace mongo {
         _desc(desc),
         _god(0),
         _creatingSystemUsers(""),
-        _upgradingSystemUsers(false)
+        _upgradingSystemUsers(false),
+        _globallyUninterruptible(false)
     {
         _connectionId = p ? p->connectionId() : 0;
         

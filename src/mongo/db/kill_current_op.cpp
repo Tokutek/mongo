@@ -71,11 +71,14 @@ namespace mongo {
     }
 
     void KillCurrentOp::_checkForInterrupt( Client &c ) {
-        if (_killForTransition > 0) {
-            uasserted(16809, "interrupted due to state transition");
+        if (!c.globallyUninterruptible()) {
+            if (_killForTransition > 0) {
+                uasserted(16809, "interrupted due to state transition");
+            }
+            if( _globalKill ) {
+                uasserted(11600,"interrupted at shutdown");
+            }
         }
-        if( _globalKill )
-            uasserted(11600,"interrupted at shutdown");
         if( c.curop()->killed() ) {
             uasserted(11601,"operation was interrupted");
         }
