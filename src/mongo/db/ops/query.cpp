@@ -22,6 +22,7 @@
 #include "mongo/db/ops/query.h"
 
 #include "mongo/bson/util/builder.h"
+#include "mongo/db/client.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/parsed_query.h"
@@ -992,15 +993,20 @@ namespace mongo {
                            !inMultiStatementTxn);
         }
 
+        // Begin a read-only, snapshot transaction under normal circumstances.
+        // If the cursor is tailable, we need to be able to read uncommitted data.
+        const int txnFlags = (tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT) | DB_TXN_READ_ONLY;
+        Client::ReadContext ctx(ns);
+        scoped_ptr<Client::Transaction> transaction(!inMultiStatementTxn ?
+                                                    new Client::Transaction(txnFlags) : NULL);
+
+        // At this point, we have a snapshot transaction, so it's safe to leave the
+        // ShardedOperationScope, since MVCC will allow us to read anything that migrates away.
+        cc().leaveShardedOperationScope();
+
         bool hasRetried = false;
         while ( 1 ) {
             try {
-                // Begin a read-only, snapshot transaction under normal circumstances.
-                // If the cursor is tailable, we need to be able to read uncommitted data.
-                const int txnFlags = (tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT) | DB_TXN_READ_ONLY;
-                Client::ReadContext ctx(ns);
-                scoped_ptr<Client::Transaction> transaction(!inMultiStatementTxn ?
-                                                            new Client::Transaction(txnFlags) : NULL);
                 replVerifyReadsOk(&pq);
 
                 // Fast-path for primary key queries.
