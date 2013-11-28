@@ -58,6 +58,7 @@
 #include "mongo/db/stats/timer_stats.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/oplog_helpers.h"
+#include "mongo/s/d_logic.h"
 #include "mongo/s/d_writeback.h"
 #include "mongo/s/stale_exception.h"  // for SendStaleConfigException
 #include "mongo/scripting/engine.h"
@@ -423,6 +424,7 @@ namespace mongo {
         }
         // Need access to the database to enable profiling on it
         virtual bool slaveOk() const { return true; }
+        virtual bool requiresShardedOperationScope() const { return false; }
         virtual LockType locktype() const { return NONE; }
         virtual bool requiresSync() const { return false; }
         virtual bool needsTxn() const { return false; }
@@ -538,6 +540,7 @@ namespace mongo {
     public:
         CmdCheckpoint() : Command("checkpoint") {}
         virtual bool slaveOk() const { return true; }
+        virtual bool requiresShardedOperationScope() const { return false; }
         virtual LockType locktype() const { return NONE; }
         virtual bool requiresSync() const { return true; }
         virtual bool needsTxn() const { return false; }
@@ -933,6 +936,7 @@ namespace mongo {
     public:
         virtual bool slaveOk() const { return true; }
         virtual bool slaveOverrideOk() const { return true; }
+        virtual bool requiresShardedOperationScope() const { return false; }
         virtual bool adminOnly() const { return true; }
         virtual LockType locktype() const { return READ; }
         virtual bool lockGlobally() const { return true; }
@@ -1722,6 +1726,12 @@ namespace mongo {
         // before proceeding
         if (!fromRepl && !c->canRunInMultiStmtTxn()) {
             uassert(16786, "cannot run command inside of multi statement transaction", !cc().hasTxn());
+        }
+
+        scoped_ptr<Client::ShardedOperationScope> scp;
+        if (c->requiresShardedOperationScope()) {
+            scp.reset(new Client::ShardedOperationScope);
+            scp->checkPossiblyShardedMessage(dbQuery, cmdns);
         }
 
         std::string errmsg;

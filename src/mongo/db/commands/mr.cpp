@@ -1097,6 +1097,9 @@ namespace mongo {
 
             virtual bool slaveOverrideOk() const { return false; }
 
+            // mapreduce is like a query, we don't need to hold this lock
+            virtual bool requiresShardedOperationScope() const { return false; }
+
             virtual void help( stringstream &help ) const {
                 help << "Run a map/reduce operation on the server.\n";
                 help << "Note this is used for aggregation, not querying, in MongoDB.\n";
@@ -1305,6 +1308,7 @@ namespace mongo {
             MapReduceFinishCommand() : Command( "mapreduce.shardedfinish" ) {}
             virtual bool slaveOk() const { return !replSet; }
             virtual bool slaveOverrideOk() const { return true; }
+            virtual bool requiresShardedOperationScope() const { return false; }
             virtual LockType locktype() const { return NONE; }
             virtual bool requiresSync() const { return false; }
             virtual bool needsTxn() const { return false; }
