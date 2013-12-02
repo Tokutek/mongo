@@ -41,9 +41,9 @@ namespace mongo {
      */
     class LockException : public DBException {
     public:
-    	LockException( const char * msg , int code ) : DBException( msg, code ) {}
-    	LockException( const string& msg, int code ) : DBException( msg, code ) {}
-    	virtual ~LockException() throw() { }
+        LockException( const char * msg , int code ) : DBException( msg, code ) {}
+        LockException( const string& msg, int code ) : DBException( msg, code ) {}
+        virtual ~LockException() throw() { }
     };
 
     /**
@@ -67,7 +67,7 @@ namespace mongo {
     class DistributedLock {
     public:
 
-    	static LabeledLevel logLvl;
+        static LabeledLevel logLvl;
 
         struct PingData {
             
@@ -85,19 +85,19 @@ namespace mongo {
             OID ts;
         };
         
-    	class LastPings {
-    	public:
-    	    LastPings() : _mutex( "DistributedLock::LastPings" ) {}
-    	    ~LastPings(){}
+        class LastPings {
+        public:
+            LastPings() : _mutex( "DistributedLock::LastPings" ) {}
+            ~LastPings(){}
 
-    	    PingData getLastPing( const ConnectionString& conn, const string& lockName );
-    	    void setLastPing( const ConnectionString& conn, const string& lockName, const PingData& pd );
+            PingData getLastPing( const ConnectionString& conn, const string& lockName );
+            void setLastPing( const ConnectionString& conn, const string& lockName, const PingData& pd );
 
-    	    mongo::mutex _mutex;
-    	    map< std::pair<string, string>, PingData > _lastPings;
-    	};
+            mongo::mutex _mutex;
+            map< std::pair<string, string>, PingData > _lastPings;
+        };
 
-    	static LastPings lastPings;
+        static LastPings lastPings;
 
         /**
          * The constructor does not connect to the configdb yet and constructing does not mean the lock was acquired.
@@ -199,37 +199,34 @@ namespace mongo {
     class dist_lock_try {
     public:
 
-    	dist_lock_try() : _lock(NULL), _got(false) {}
+        dist_lock_try() : _lock(NULL), _got(false) {}
 
-    	dist_lock_try( const dist_lock_try& that ) : _lock(that._lock), _got(that._got), _other(that._other) {
-    		_other.getOwned();
+        dist_lock_try( const dist_lock_try& that ) : _lock(that._lock), _got(that._got), _other(that._other.getOwned()) {
+            // Make sure the lock ownership passes to this object,
+            // so we only unlock once.
+            ((dist_lock_try&) that)._got = false;
+            ((dist_lock_try&) that)._lock = NULL;
+            ((dist_lock_try&) that)._other = BSONObj();
+        }
 
-    		// Make sure the lock ownership passes to this object,
-    		// so we only unlock once.
-    		((dist_lock_try&) that)._got = false;
-    		((dist_lock_try&) that)._lock = NULL;
-    		((dist_lock_try&) that)._other = BSONObj();
-    	}
+        // Needed so we can handle lock exceptions in context of lock try.
+        dist_lock_try& operator=( const dist_lock_try& that ){
 
-    	// Needed so we can handle lock exceptions in context of lock try.
-    	dist_lock_try& operator=( const dist_lock_try& that ){
+            if( this == &that ) return *this;
 
-    	    if( this == &that ) return *this;
+            _lock = that._lock;
+            _got = that._got;
+            _other = that._other.getOwned();
+            _why = that._why;
 
-    	    _lock = that._lock;
-    	    _got = that._got;
-    	    _other = that._other;
-    	    _other.getOwned();
-    	    _why = that._why;
+            // Make sure the lock ownership passes to this object,
+            // so we only unlock once.
+            ((dist_lock_try&) that)._got = false;
+            ((dist_lock_try&) that)._lock = NULL;
+            ((dist_lock_try&) that)._other = BSONObj();
 
-    	    // Make sure the lock ownership passes to this object,
-    	    // so we only unlock once.
-    	    ((dist_lock_try&) that)._got = false;
-    	    ((dist_lock_try&) that)._lock = NULL;
-    	    ((dist_lock_try&) that)._other = BSONObj();
-
-    	    return *this;
-    	}
+            return *this;
+        }
 
         dist_lock_try( DistributedLock * lock , const std::string& why, double timeout = 0.0 )
             : _lock(lock), _why(why) {
