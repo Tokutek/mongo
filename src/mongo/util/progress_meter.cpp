@@ -113,7 +113,7 @@ namespace mongo {
     }
 
     void ProgressMeter::appendInfo(BSONObjBuilder &b) const {
-        b.append("name", _name);
+        b.append("name", getName());
         b.append("units", _units);
         b.append("done", _done);
         b.append("total", _total);
