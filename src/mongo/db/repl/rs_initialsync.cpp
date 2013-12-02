@@ -370,6 +370,19 @@ namespace mongo {
         }
     }
     
+    static bool getLastPurgedGTIDFromPeer(const shared_ptr<DBClientConnection> &conn, GTID &gtid) {
+        BSONObj result;
+        const int r = conn->runCommand("admin", BSON("replSetGetStatus" << 1), result);
+        if (r == 0) {
+            gtid = getGTIDFromBSON("nextPurgedGTID", result);
+            return true;
+        } else {
+            warning() << "could not get repl status from sync target, "
+                      << " assuming full oplog ok to copy: error " << result << endl;
+            return false;
+        }
+    }
+
     /**
      * Do the initial sync for this member.
      * This code can use a little refactoring. bit ugly
@@ -468,18 +481,26 @@ namespace mongo {
 
                     // first copy the replInfo, as we will use its information
                     // to determine  how much of the opLog to copy
-                    BSONObj q;
                     cloneCollectionData(conn,
                                         rsReplInfo,
-                                        q,
+                                        BSONObj(),
                                         true, //copyIndexes
                                         false //logForRepl
                                         );
 
-                    // copy entire oplog (probably overkill)
+                    // We explicitly copy from the last purged GTID forward to avoid scanning
+                    // through the MVCC garbage that has almost certainly piled up due to oplog
+                    // trimming.
+                    BSONObj oplogQuery;
+                    GTID lastPurgedGTID; 
+                    if (getLastPurgedGTIDFromPeer(conn, lastPurgedGTID)) {
+                        BSONObjBuilder b;
+                        addGTIDToBSON("$gte", lastPurgedGTID, b);
+                        oplogQuery = BSON("_id" << b.done());
+                    }
                     cloneCollectionData(conn,
                                         rsoplog,
-                                        q,
+                                        oplogQuery,
                                         true, //copyIndexes
                                         false //logForRepl
                                         );
@@ -487,7 +508,7 @@ namespace mongo {
                     // copy entire oplog.refs (probably overkill)
                     cloneCollectionData(conn,
                                         rsOplogRefs,
-                                        q,
+                                        BSONObj(),
                                         true, //copyIndexes
                                         false //logForRepl
                                         );
