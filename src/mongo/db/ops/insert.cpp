@@ -30,9 +30,27 @@
 
 namespace mongo {
 
-    void insertOneObject(NamespaceDetails *details, BSONObj &obj, uint64_t flags) {
-        details->insertObject(obj, flags);
-        details->notifyOfWriteOp();
+    static void validateInsert(const BSONObj &obj) {
+        uassert(10059, "object to insert too large", obj.objsize() <= BSONObjMaxUserSize);
+        for (BSONObjIterator i(obj); i.more(); ) {
+            const BSONElement e = i.next();
+            // check no $ modifiers.  note we only check top level.
+            // (scanning deep would be quite expensive)
+            uassert(13511, "document to insert can't have $ fields", e.fieldName()[0] != '$');
+            if (str::equals(e.fieldName(), "_id")) {
+                // Note: Collections whose primary key is something other than _id will need to manually
+                //       check for multikeys and regexes. See IndexedCollection::extractPrimaryKey()
+                uassert(16440, "can't use an array for _id", e.type() != Array);
+                uassert(17033, "can't use a regex for _id", e.type() != RegEx);
+                uassert(17211, "can't use undefined for _id", e.type() != Undefined);
+            }
+        }
+    }
+
+    void insertOneObject(NamespaceDetails *d, BSONObj &obj, uint64_t flags) {
+        validateInsert(obj);
+        d->insertObject(obj, flags);
+        d->notifyOfWriteOp();
     }
 
     // Does not check magic system collection inserts.
@@ -41,23 +59,6 @@ namespace mongo {
         for (size_t i = 0; i < objs.size(); i++) {
             const BSONObj &obj = objs[i];
             try {
-                uassert( 10059 , "object to insert too large", obj.objsize() <= BSONObjMaxUserSize);
-                BSONObjIterator i( obj );
-                while ( i.more() ) {
-                    BSONElement e = i.next();
-                    // check no $ modifiers.  note we only check top level.
-                    // (scanning deep would be quite expensive)
-                    uassert( 13511 , "document to insert can't have $ fields" , e.fieldName()[0] != '$' );
-
-                    if (str::equals(e.fieldName(), "_id")) {
-                        // Note: Collections whose primary key is something other than _id will need to manually
-                        //       check for multikeys and regexes. See IndexedCollection::extractPrimaryKey()
-                        uassert(16440, "can't use an array for _id", e.type() != Array);
-                        uassert(17033, "can't use a regex for _id", e.type() != RegEx);
-                        uassert(17211, "can't use undefined for _id", e.type() != Undefined);
-                    }
-                }
-
                 BSONObj objModified = obj;
                 BSONElementManipulator::lookForTimestamps(objModified);
                 if (details->isCapped() && logop) {
@@ -66,6 +67,7 @@ namespace mongo {
                     // and what subsequent rows to delete are buried in the
                     // namespace details object. There is probably a nicer way
                     // to do this, but this works.
+                    validateInsert(obj);
                     details->insertObjectIntoCappedAndLogOps(objModified, flags);
                     details->notifyOfWriteOp();
                 }
