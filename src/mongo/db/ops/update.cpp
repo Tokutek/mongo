@@ -374,8 +374,6 @@ namespace mongo {
                            legalClientSystemNS(ns , true));
         }
 
-        cc().curop()->debug().updateobj = updateobj;
-
         UpdateResult ur = _updateObjects(ns, updateobj, patternOrig,
                                          upsert, multi, logop, fromMigrate);
 
