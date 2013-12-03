@@ -315,11 +315,6 @@ namespace mongo {
         // Find by primary key (single element bson object, no field name).
         bool findByPK(const BSONObj &pk, BSONObj &result) const;
 
-        // return true if this namespace has an index on the _id field.
-        bool hasIdIndex() const {
-            return findIdIndex() >= 0;
-        }
-
         // @return true, if fastupdates are ok for this collection.
         //         fastupdates are not ok for this collection if it's sharded
         //         and the primary key does not contain the full shard key.
