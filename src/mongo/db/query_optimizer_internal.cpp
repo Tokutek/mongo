@@ -413,7 +413,10 @@ namespace mongo {
             _qps.addCandidatePlan( *i );
         }        
         
-        _qps.addCandidatePlan( newPlan( d, -1 ) );
+        // Only add a table-scan plan if no helpful indexes were found.
+        if (_qps.nPlans() == 0) {
+            _qps.addCandidatePlan( newPlan( d, -1 ) );
+        }
     }
     
     bool QueryPlanGenerator::addShortCircuitPlan( NamespaceDetails* d ) {

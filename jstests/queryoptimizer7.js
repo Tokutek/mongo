@@ -15,6 +15,7 @@ function assertNoPlanWasRecorded( query ) {
 // constraint that would be impossible for a single key index, but is unindexed.
 t.drop();
 t.ensureIndex( {a:1} );
+t.ensureIndex({ b: 1 }); // there should be two candidate plans
 t.find( {a:1,b:1,c:{$gt:5,$lt:5}} ).itcount();
 assertPlanWasRecorded( {a:1,b:1,c:{$gt:5,$lt:5}} );
 
