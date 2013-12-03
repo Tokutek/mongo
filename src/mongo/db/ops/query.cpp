@@ -206,7 +206,7 @@ namespace mongo {
                 }
 
                 // in some cases (clone collection) there won't be a matcher
-                if ( !( c->currentMatchedOnAdvance() || c->currentMatches( &details )) ) {
+                if ( !c->currentMatches( &details ) ) {
                 }
                 else if ( manager && ! manager->belongsToMe( client_cursor ) ){
                     LOG(2) << "cursor skipping document in un-owned chunk: " << c->current() << endl;
@@ -665,8 +665,7 @@ namespace mongo {
     }
 
     bool QueryResponseBuilder::currentMatches( ResultDetails* resultDetails ) {
-        bool matches = _cursor->currentMatchedOnAdvance() ||
-            _cursor->currentMatches( &resultDetails->matchDetails );
+        bool matches = _cursor->currentMatches( &resultDetails->matchDetails );
         if ( resultDetails->matchDetails.hasLoadedRecord() ) {
             resultDetails->loadedRecord = true;
         }
