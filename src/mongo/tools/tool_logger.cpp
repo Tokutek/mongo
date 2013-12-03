@@ -71,7 +71,7 @@ MONGO_INITIALIZER_GENERAL(ToolLogRedirection,
                     new ConsoleAppender<MessageEventEphemeral, ErrorConsole>(
                         new MessageEventDetailsEncoder)));
 
-        setRawOutDestination(stderr);
+        setRawOutToStderr();
     }
 
     return Status::OK();
