@@ -19,11 +19,13 @@
 
 #include "pch.h"
 
+#include "mongo/base/counter.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/query_optimizer.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/server_parameters.h"
+#include "mongo/db/commands/server_status.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/query.h"
 #include "mongo/db/ops/update.h"
@@ -55,6 +57,9 @@ namespace mongo {
             ServerParameterSet::getGlobal(), "fastupdates", &cmdLine.fastupdates, true, true);
     ExportedServerParameter<bool> _fastupdatesIgnoreErrorsParameter(
             ServerParameterSet::getGlobal(), "fastupdatesIgnoreErrors", &cmdLine.fastupdatesIgnoreErrors, true, true);
+
+    static Counter64 fastupdatesErrors;
+    static ServerStatusMetricField<Counter64> fastupdatesIgnoredErrorsDisplay("fastupdates.errors", &fastupdatesErrors);
 
     // Apply an update message supplied by a NamespaceDetails to
     // some row in an in IndexDetails (for fast ydb updates).
@@ -91,9 +96,7 @@ namespace mongo {
                     problem() << "*    updateobj: " << msg << endl;
                     problem() << "*    exception: " << ex.what() << endl;
                 }
-                // IMPORTANT
-                // TODO: Put this in some counter so serverStatus can report the number
-                //       of silently failing updates for monitoring purposes.
+                fastupdatesErrors.increment(1);
                 return oldObj;
             }
         }
