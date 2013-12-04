@@ -22,7 +22,6 @@
 #include <algorithm> // for max
 
 #include "mongo/db/field_ref.h"
-#include "mongo/db/oplog.h"
 #include "mongo/db/jsobjmanipulator.h"
 #include "mongo/db/oplog.h"
 #include "mongo/util/mongoutils/str.h"
@@ -104,9 +103,6 @@ namespace mongo {
 
         case INC: {
             appendIncremented( builder , in , ms );
-            // We don't need to "fix" this operation into a $set, for oplog purposes,
-            // here. ModState::appendForOpLog will do that for us. It relies on the new value
-            // being in inc{int,long,double} inside the ModState that wraps around this Mod.
             break;
         }
 
@@ -115,7 +111,6 @@ namespace mongo {
             // field with $setOnInsert). If we're in an upsert, and the query portion of the
             // update creates a field, we can modify it with $setOnInsert. This degenerates
             // into a $set, so we fall through to the next case.
-            ms.fixedOpName = "$set";
             // Fall through.
 
         case SET: {
@@ -150,21 +145,7 @@ namespace mongo {
                     bb.append( i.next() );
                 }
                 bb.append( elt );
-
-                // We don't want to log a positional $set for which the '_checkForAppending' test
-                // won't pass. If we're in that case, fall back to non-optimized logging.
-                if ( (elt.type() == Object && elt.embeddedObject().okForStorage()) ||
-                     (elt.type() != Object) ) {
-                    ms.fixedOpName = "$set";
-                    ms.forcePositional = true;
-                    ms.position = bb.arrSize() - 1;
-                    bb.done();
-                }
-                else {
-                    ms.fixedOpName = "$set";
-                    ms.forceEmptyArray = true;
-                    ms.fixedArray = BSONArray( bb.done().getOwned() );
-                }
+                bb.done();
             }
 
             // If we're in the "push all" case, we'll copy all element of both the existing and
@@ -178,10 +159,7 @@ namespace mongo {
                 while ( j.more() ) {
                     bb.append( j.next() );
                 }
-
-                ms.fixedOpName = "$set";
-                ms.forceEmptyArray = true;
-                ms.fixedArray = BSONArray( bb.done().getOwned() );
+                bb.done();
             }
 
             // If we're in the "push with a $each" case with slice, we have to decide how much
@@ -229,10 +207,7 @@ namespace mongo {
                         bb.append( j.next() );
                     }
                 }
-
-                ms.fixedOpName = "$set";
-                ms.forceEmptyArray = true;
-                ms.fixedArray = BSONArray( bb.done().getOwned() );
+                bb.done();
             }
 
             // If we're in the "push all" case ($push with a $each) with sort, we have to
@@ -267,10 +242,7 @@ namespace mongo {
                         bb.append( *it );
                     }
                 }
-
-                ms.fixedOpName = "$set";
-                ms.forceEmptyArray = true;
-                ms.fixedArray = BSONArray( bb.done().getOwned() );
+                bb.done();
             }
 
             break;
@@ -302,10 +274,7 @@ namespace mongo {
                         }
                     }
                 }
-
-                ms.fixedOpName = "$set";
-                ms.forceEmptyArray = true;
-                ms.fixedArray = BSONArray(bb.done().getOwned());
+                bb.done();
             }
             else {
 
@@ -325,21 +294,7 @@ namespace mongo {
                 if ( !found ) {
                     bb.append( elt );
                 }
-
-                // We don't want to log a positional $set for which the '_checkForAppending'
-                // test won't pass. If we're in that case, fall back to non-optimized logging.
-                if ( (elt.type() == Object && elt.embeddedObject().okForStorage()) ||
-                     (elt.type() != Object) ) {
-                    ms.fixedOpName = "$set";
-                    ms.forcePositional = true;
-                    ms.position = found ? pos : bb.arrSize() - 1;
-                    bb.done();
-                }
-                else {
-                    ms.fixedOpName = "$set";
-                    ms.forceEmptyArray = true;
-                    ms.fixedArray = BSONArray(bb.done().getOwned());
-                }
+                bb.done();
             }
 
             break;
@@ -360,10 +315,7 @@ namespace mongo {
             while ( i.more() ) {
                 bb.append( i.next() );
             }
-
-            ms.fixedOpName = "$set";
-            ms.forceEmptyArray = true;
-            ms.fixedArray = BSONArray(bb.done().getOwned());
+            bb.done();
             break;
         }
 
@@ -396,12 +348,7 @@ namespace mongo {
                 if ( allowed )
                     bb.append( e );
             }
-
-            // If this is the last element of the array, then we want to write the empty array to the
-            // oplog.
-            ms.fixedOpName = "$set";
-            ms.forceEmptyArray = true;
-            ms.fixedArray = BSONArray(bb.done().getOwned());
+            bb.done();
             break;
         }
 
@@ -430,10 +377,7 @@ namespace mongo {
                     }
                 }
             }
-
-            ms.fixedOpName = "$set";
-            ms.forceEmptyArray = true;
-            ms.fixedArray = BSONArray(bb.done().getOwned());
+            bb.done();
             break;
         }
 
@@ -472,17 +416,11 @@ namespace mongo {
 
             case NumberInt:
                 builder.append( shortFieldName , x );
-                // By recording the result of the bit manipulation into the ModSet, we'll be
-                // set up so that this $bit operation be "fixed" as a $set of the final result
-                // in the oplog. This will happen in appendForOpLog and what triggers it is
-                // setting the incType in the ModSet that is around this Mod.
                 ms.incType = NumberInt;
                 ms.incint = x;
                 break;
 
             case NumberLong:
-                // Please see comment on fixing this $bit into a $set for logging purposes in
-                // the NumberInt case.
                 builder.append( shortFieldName , y );
                 ms.incType = NumberLong;
                 ms.inclong = y;
@@ -495,14 +433,10 @@ namespace mongo {
         }
 
         case RENAME_FROM: {
-            // We don't need to "fix" this operation into a $set here. ModState::appendForOpLog
-            // will do that for us. It relies on the field name being stored on this Mod.
             break;
         }
 
         case RENAME_TO: {
-            // We don't need to "fix" this operation into a $set here, for the same reason we
-            // didn't either with RENAME_FROM.
             ms.handleRename( builder, shortFieldName );
             break;
         }
@@ -649,109 +583,10 @@ namespace mongo {
         return mss;
     }
 
-    const char* ModState::getOpLogName() const {
-        if ( dontApply ) {
-            return NULL;
-        }
-
-        if ( incType ) {
-            return "$set";
-        }
-
-        if ( m->op == Mod::RENAME_FROM ) {
-            return "$unset";
-        }
-
-        if ( m->op == Mod::RENAME_TO ) {
-            return "$set";
-        }
-
-        return fixedOpName ? fixedOpName : Mod::modNames[op()];
-    }
-
-
-    void ModState::appendForOpLog( BSONObjBuilder& bb ) const {
-        // dontApply logic is deprecated for all but $rename.
-        if ( dontApply ) {
-            return;
-        }
-
-        if ( incType ) {
-            DEBUGUPDATE( "\t\t\t\t\t appendForOpLog inc fieldname: " << m->fieldName
-                         << " short:" << m->shortFieldName );
-            appendIncValue( bb , true );
-            return;
-        }
-
-        if ( m->op == Mod::RENAME_FROM ) {
-            DEBUGUPDATE( "\t\t\t\t\t appendForOpLog RENAME_FROM fieldName:" << m->fieldName );
-            bb.append( m->fieldName, 1 );
-            return;
-        }
-
-        if ( m->op == Mod::RENAME_TO ) {
-            DEBUGUPDATE( "\t\t\t\t\t appendForOpLog RENAME_TO fieldName:" << m->fieldName );
-            bb.appendAs( newVal, m->fieldName );
-            return;
-        }
-
-        const char* name = fixedOpName ? fixedOpName : Mod::modNames[op()];
-
-        DEBUGUPDATE( "\t\t\t\t\t appendForOpLog name:" << name << " fixed: " << fixed
-                     << " fn: " << m->fieldName );
-
-        if (strcmp(name, "$unset") == 0) {
-            bb.append(m->fieldName, 1);
-            return;
-        }
-
-        if ( fixed ) {
-            bb.appendAs( *fixed , m->fieldName );
-        }
-        else if ( ! fixedArray.isEmpty() || forceEmptyArray ) {
-            bb.append( m->fieldName, fixedArray );
-        }
-        else if ( forcePositional ) {
-            string positionalField = str::stream() << m->fieldName << "." << position;
-            bb.appendAs( m->elt, positionalField.c_str() );
-        }
-        else {
-            bb.appendAs( m->elt , m->fieldName );
-        }
-
-    }
-
     typedef map<string, vector<ModState*> > NamedModMap;
-
-    BSONObj ModSetState::getOpLogRewrite() const {
-        NamedModMap names;
-        for ( ModStateHolder::const_iterator i = _mods.begin(); i != _mods.end(); ++i ) {
-            const char* name = i->second->getOpLogName();
-            if ( ! name )
-                continue;
-            names[name].push_back( i->second.get() );
-        }
-
-        BSONObjBuilder b;
-        for ( NamedModMap::const_iterator i = names.begin();
-              i != names.end();
-              ++i ) {
-            BSONObjBuilder bb( b.subobjStart( i->first ) );
-            const vector<ModState*>& mods = i->second;
-            for ( unsigned j = 0; j < mods.size(); j++ ) {
-                mods[j]->appendForOpLog( bb );
-            }
-            bb.doneFast();
-        }
-        return b.obj();
-    }
 
     string ModState::toString() const {
         stringstream ss;
-        if ( fixedOpName )
-            ss << " fixedOpName: " << fixedOpName;
-        if ( fixed )
-            ss << " fixed: " << fixed;
         return ss.str();
     }
 
@@ -776,7 +611,6 @@ namespace mongo {
         case Mod::PULL:
         case Mod::PULL_ALL:
         case Mod::UNSET:
-            modState.fixedOpName = "$unset";
             return;
 
         // $rename/$setOnInsert may involve dotted path creation, so we want to make sure we're

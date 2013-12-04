@@ -78,41 +78,10 @@ namespace mongo {
                 shortFieldName = fieldName;
         }
 
-        /**
-         * @param in increments the actual value inside in
-         */
-        void incrementMe( BSONElement& in ) const {
-            BSONElementManipulator manip( in );
-            switch ( in.type() ) {
-            case NumberDouble:
-                manip.setNumber( elt.numberDouble() + in.numberDouble() );
-                break;
-            case NumberLong:
-                manip.setLong( elt.numberLong() + in.numberLong() );
-                break;
-            case NumberInt:
-                manip.setInt( elt.numberInt() + in.numberInt() );
-                break;
-            default:
-                verify(0);
-            }
-        }
-
         void appendIncremented( BSONBuilderBase& bb , const BSONElement& in, ModState& ms ) const;
 
         bool operator<( const Mod& other ) const {
             return strcmp( fieldName, other.fieldName ) < 0;
-        }
-
-        bool arrayDep() const {
-            switch (op) {
-            case PUSH:
-            case PUSH_ALL:
-            case POP:
-                return true;
-            default:
-                return false;
-            }
         }
 
         void apply( BSONBuilderBase& b , BSONElement in , ModState& ms ) const;
@@ -418,14 +387,6 @@ namespace mongo {
         BSONElement newVal;
         BSONObj _objData;
 
-        const char* fixedOpName;
-        BSONElement* fixed;
-        BSONArray fixedArray;
-        bool forceEmptyArray;
-        bool forcePositional;
-        int position;
-        int DEPRECATED_pushStartSize;
-
         BSONType incType;
         int incint;
         double incdouble;
@@ -434,12 +395,6 @@ namespace mongo {
         bool dontApply;
 
         ModState() {
-            fixedOpName = 0;
-            fixed = 0;
-            forceEmptyArray = false;
-            forcePositional = false;
-            position = 0;
-            DEPRECATED_pushStartSize = -1;
             incType = EOO;
             dontApply = false;
         }
@@ -451,29 +406,6 @@ namespace mongo {
         const char* fieldName() const {
             return m->fieldName;
         }
-
-        bool DEPRECATED_needOpLogRewrite() const {
-            if ( dontApply )
-                return false;
-
-            if ( fixed || fixedOpName || incType )
-                return true;
-
-            switch( op() ) {
-            case Mod::RENAME_FROM:
-            case Mod::RENAME_TO:
-                return true;
-            case Mod::BIT:
-            case Mod::BITAND:
-            case Mod::BITOR:
-                return true;
-            default:
-                return false;
-            }
-        }
-
-        const char* getOpLogName() const;
-        void appendForOpLog( BSONObjBuilder& b ) const;
 
         void apply( BSONBuilderBase& b , BSONElement in ) {
             m->apply( b , in , *this );
@@ -508,7 +440,7 @@ namespace mongo {
         typedef pair<const ModStateHolder::iterator,const ModStateHolder::iterator> ModStateRange;
         const BSONObj& _obj;
         ModStateHolder _mods;
-        BSONObj _newFromMods; // keep this data alive, as oplog generation may depend on it
+        BSONObj _newFromMods;
 
         ModSetState( const BSONObj& obj )
             : _obj( obj ) , _mods( LexNumCmp( true ) ) {
@@ -536,20 +468,13 @@ namespace mongo {
             switch ( m.op ) {
 
             case Mod::PUSH: {
-                ms.fixedOpName = "$set";
                 if ( m.isEach() ) {
                     BSONObj arr = m.getEach();
                     if ( !m.isSliceOnly() && !m.isSliceAndSort() ) {
                         b.appendArray( m.shortFieldName, arr );
-
-                        ms.forceEmptyArray = true;
-                        ms.fixedArray = BSONArray( arr.getOwned() );
                     }
                     else if ( m.isSliceOnly() && ( m.getSlice() >= arr.nFields() ) ) {
                         b.appendArray( m.shortFieldName, arr );
-
-                        ms.forceEmptyArray = true;
-                        ms.fixedArray = BSONArray( arr.getOwned() );
                     }
                     else if ( m.isSliceOnly() ) {
                         BSONArrayBuilder arrBuilder( b.subarrayStart( m.shortFieldName ) );
@@ -562,9 +487,7 @@ namespace mongo {
                             }
                             arrBuilder.append( j.next() );
                         }
-
-                        ms.forceEmptyArray = true;
-                        ms.fixedArray = BSONArray( arrBuilder.done().getOwned() );
+                        arrBuilder.done();
                     }
                     else if ( m.isSliceAndSort() ) {
                         long long slice = m.getSlice();
@@ -593,24 +516,18 @@ namespace mongo {
                                 arrBuilder.append( *it );
                             }
                         }
-
-                        // Log the full resulting array.
-                        ms.forceEmptyArray = true;
-                        ms.fixedArray = BSONArray( arrBuilder.done().getOwned() );
+                        arrBuilder.done();
                     }
                 }
                 else {
                     BSONObjBuilder arr( b.subarrayStart( m.shortFieldName ) );
                     arr.appendAs( m.elt, "0" );
-
-                    ms.forceEmptyArray = true;
-                    ms.fixedArray = BSONArray(arr.done().getOwned());
+                    arr.done();
                 }
                 break;
             }
 
             case Mod::ADDTOSET: {
-                ms.fixedOpName = "$set";
                 if ( m.isEach() ) {
                     // Remove any duplicates in given array
                     BSONArrayBuilder arr( b.subarrayStart( m.shortFieldName ) );
@@ -625,23 +542,18 @@ namespace mongo {
                             toadd.erase( e );
                         }
                     }
-                    ms.forceEmptyArray = true;
-                    ms.fixedArray = BSONArray(arr.done().getOwned());
+                    arr.done();
                 }
                 else {
                     BSONArrayBuilder arr( b.subarrayStart( m.shortFieldName ) );
                     arr.append( m.elt );
-                    ms.forceEmptyArray = true;
-                    ms.fixedArray = BSONArray(arr.done().getOwned());
+                    arr.done();
                 }
                 break;
             }
 
             case Mod::PUSH_ALL: {
                 b.appendAs( m.elt, m.shortFieldName );
-                ms.fixedOpName = "$set";
-                ms.forceEmptyArray = true;
-                ms.fixedArray = BSONArray(m.elt.Obj());
                 break;
             }
 
@@ -649,14 +561,10 @@ namespace mongo {
             case Mod::PULL:
             case Mod::PULL_ALL:
             case Mod::UNSET:
-                // No-op b/c unset/pull of nothing does nothing. Still, explicilty log that
-                // the target array was reset.
-                ms.fixedOpName = "$unset";
                 break;
 
             case Mod::INC:
             case Mod::SET_ON_INSERT:
-                ms.fixedOpName = "$set";
             case Mod::SET: {
                 m._checkForAppending( m.elt );
                 b.appendAs( m.elt, m.shortFieldName );
@@ -682,36 +590,6 @@ namespace mongo {
     public:
 
         BSONObj createNewFromMods();
-
-        // re-writing for oplog
-
-        bool DEPRECATED_needOpLogRewrite() const {
-            for ( ModStateHolder::const_iterator i = _mods.begin(); i != _mods.end(); i++ )
-                if ( i->second->DEPRECATED_needOpLogRewrite() )
-                    return true;
-            return false;
-        }
-
-        BSONObj getOpLogRewrite() const;
-
-        bool DEPRECATED_haveArrayDepMod() const {
-            for ( ModStateHolder::const_iterator i = _mods.begin(); i != _mods.end(); i++ )
-                if ( i->second->m->arrayDep() )
-                    return true;
-            return false;
-        }
-
-        void DEPRECATED_appendSizeSpecForArrayDepMods( BSONObjBuilder& b ) const {
-            for ( ModStateHolder::const_iterator i = _mods.begin(); i != _mods.end(); i++ ) {
-                const ModState& m = *i->second;
-                if ( m.m->arrayDep() ) {
-                    if ( m.DEPRECATED_pushStartSize == -1 )
-                        b.appendNull( m.fieldName() );
-                    else
-                        b << m.fieldName() << BSON( "$size" << m.DEPRECATED_pushStartSize );
-                }
-            }
-        }
 
         string toString() const;
 
