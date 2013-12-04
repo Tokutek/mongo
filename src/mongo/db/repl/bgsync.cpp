@@ -125,6 +125,10 @@ namespace mongo {
         }
         Client::initThread("applier");
         replLocalAuth();
+        // we don't want the applier to be interrupted,
+        // as it must finish work that it starts
+        // done for github issues #770 and #771
+        cc().setGloballyUninterruptible(true);
         applyOpsFromOplog();
         cc().shutdown();
         {

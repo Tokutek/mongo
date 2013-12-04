@@ -239,7 +239,8 @@ namespace mongo {
                 ::_exit(EXIT_FAILURE);
             }
 
-            storage::startup(&_txnCompleteHooks);
+            extern storage::UpdateCallback _storageUpdateCallback;
+            storage::startup(&_txnCompleteHooks, &_storageUpdateCallback);
         }
 
         if ( _params.count( "db" ) )

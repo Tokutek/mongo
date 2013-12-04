@@ -19,10 +19,13 @@
 
 #include "pch.h"
 
+#include "mongo/base/counter.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/query_optimizer.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/server_parameters.h"
+#include "mongo/db/commands/server_status.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/query.h"
 #include "mongo/db/ops/update.h"
@@ -46,11 +49,66 @@ namespace mongo {
         }
     }
 
+    static void checkTooLarge(const BSONObj &obj) {
+        uassert(12522, "$ operator made object too large", obj.objsize() <= BSONObjMaxUserSize);
+    }
+
+    ExportedServerParameter<bool> _fastupdatesParameter(
+            ServerParameterSet::getGlobal(), "fastupdates", &cmdLine.fastupdates, true, true);
+    ExportedServerParameter<bool> _fastupdatesIgnoreErrorsParameter(
+            ServerParameterSet::getGlobal(), "fastupdatesIgnoreErrors", &cmdLine.fastupdatesIgnoreErrors, true, true);
+
+    static Counter64 fastupdatesErrors;
+    static ServerStatusMetricField<Counter64> fastupdatesIgnoredErrorsDisplay("fastupdates.errors", &fastupdatesErrors);
+
+    // Apply an update message supplied by a NamespaceDetails to
+    // some row in an in IndexDetails (for fast ydb updates).
+    //
+    class ApplyUpdateMessage : public storage::UpdateCallback {
+        // @param pkQuery - the pk with field names, for proper default obj construction
+        //                  in mods.createNewFromQuery().
+        BSONObj upsert(const BSONObj &pkQuery, const BSONObj &msg) {
+            // Create a new object from the pk and updateobj.
+            ModSet mods(msg);
+            const BSONObj newObj = mods.createNewFromQuery(pkQuery);
+            checkTooLarge(newObj);
+            return newObj;
+        }
+        BSONObj applyMods(const BSONObj &oldObj, const BSONObj &msg) {
+            try {
+                // The update message is simply an update object, supplied by the user.
+                ModSet mods(msg);
+                auto_ptr<ModSetState> mss = mods.prepare(oldObj);
+                const BSONObj newObj = mss->createNewFromMods();
+                checkTooLarge(newObj);
+                return newObj;
+            } catch (const std::exception &ex) {
+                // Applying an update message in this fashion _always_ ignores errors.
+                // That is the risk you take when using --fastupdates.
+                //
+                // We will print such errors to the server's error log no more than once per 5 seconds.
+                if (!cmdLine.fastupdatesIgnoreErrors && _loggingTimer.millisReset() > 5000) {
+                    problem() << "* Failed to apply \"--fastupdate\" updateobj message! "
+                                 "This means an update operation that appeared successful actually failed." << endl;
+                    problem() << "* It probably should not be happening in production. To ignore these errors, "
+                                 "set the server parameter fastupdatesIgnoreErrors=true" << endl;
+                    problem() << "*    doc: " << oldObj << endl;
+                    problem() << "*    updateobj: " << msg << endl;
+                    problem() << "*    exception: " << ex.what() << endl;
+                }
+                fastupdatesErrors.increment(1);
+                return oldObj;
+            }
+        }
+    private:
+        Timer _loggingTimer;
+    } _storageUpdateCallback; // installed as the ydb update callback in db.cpp via set_update_callback
+
     static void updateUsingMods(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj,
                                 ModSetState &mss, const bool modsAreIndexed,
                                 const bool logop, const bool fromMigrate) {
         const BSONObj newObj = mss.createNewFromMods();
-        uassert(12522, "$ operator made object too large", obj.objsize() <= BSONObjMaxUserSize);
+        checkTooLarge(newObj);
         updateOneObject(d, pk, obj, newObj, logop, fromMigrate,
                         modsAreIndexed ? 0 : NamespaceDetails::KEYS_UNAFFECTED_HINT);
     }
@@ -68,7 +126,7 @@ namespace mongo {
                                      const BSONObj &updateobj, const bool isOperatorUpdate,
                                      ModSet *mods, const bool logop) {
         const string &ns = d->ns();
-        uassert(16893, str::stream() << "Cannot update a collection under-going bulk load: " << ns,
+        uassert(16893, str::stream() << "Cannot upsert a collection under-going bulk load: " << ns,
                        ns != cc().bulkLoadNS());
 
         BSONObj newObj = updateobj;
@@ -87,10 +145,43 @@ namespace mongo {
         return UpdateResult(0, isOperatorUpdate, 1, newObj);
     }
 
-    static UpdateResult _updateByPK(NamespaceDetails *d,
-                                    const BSONObj &pk, const BSONObj &patternOrig,
-                                    const BSONObj &updateobj, const bool isOperatorUpdate,
-                                    ModSet *mods, const bool logop, const bool fromMigrate) {
+    static bool hasClusteringSecondaryKey(NamespaceDetails *d) {
+        for (int i = 0; i < d->nIndexesBeingBuilt(); i++) {
+            IndexDetails &idx = d->idx(i);
+            if (!d->isPKIndex(idx) && idx.clustering()) {
+                // has a clustering secondary key
+                return true;
+            }
+        }
+        // no clustering secondary keys
+        return false;
+    }
+
+    UpdateResult updateByPK(NamespaceDetails *d,
+                            const BSONObj &pk, const BSONObj &patternOrig,
+                            const BSONObj &updateobj,
+                            const bool upsert, const bool fastupdateOk,
+                            const bool logop, const bool fromMigrate,
+                            uint64_t flags) {
+        // Create a mod set for $ style updates.
+        scoped_ptr<ModSet> mods;
+        const bool isOperatorUpdate = updateobj.firstElementFieldName()[0] == '$';
+        if (isOperatorUpdate) {
+            mods.reset(new ModSet(updateobj, d->indexKeys()));
+        }
+
+        if (fastupdateOk && mods && !mods->isIndexed() &&
+            !hasClusteringSecondaryKey(d)) {
+            // Fast update path that skips the pk query.
+            // We know no indexes need to be updated so we don't read the full object.
+            //
+            // Further, we specifically do _not_ check if upsert is true because it's
+            // implied when using fastupdates.
+            cc().curop()->debug().fastmod = true;
+            d->updateObjectMods(pk, updateobj, logop, fromMigrate, flags);
+            d->notifyOfWriteOp();
+            return UpdateResult(0, 1, 1, BSONObj());
+        }
 
         BSONObj obj;
         ResultDetails queryResult;
@@ -100,25 +191,62 @@ namespace mongo {
 
         const bool found = queryByPKHack(d, pk, patternOrig, obj, &queryResult);
         if (!found) {
-            // no upsert support in _updateByPK yet, so we are done.
-            return UpdateResult(0, 0, 0, BSONObj());
+            if (!upsert) {
+                return UpdateResult(0, 0, 0, BSONObj());
+            }
+            return upsertAndLog(d, patternOrig, updateobj, isOperatorUpdate, mods.get(), logop);
         }
 
         if (isOperatorUpdate) {
             // operator-style update
-            ModSet *useMods = mods;
-            auto_ptr<ModSet> mymodset;
             if (queryResult.matchDetails.hasElemMatchKey() && mods->hasDynamicArray()) {
-                useMods = mods->fixDynamicArray( queryResult.matchDetails.elemMatchKey());
-                mymodset.reset(useMods);
+                mods.reset(mods->fixDynamicArray(queryResult.matchDetails.elemMatchKey()));
             }
-            auto_ptr<ModSetState> mss = useMods->prepare(obj, false /* not an insertion */);
-            updateUsingMods(d, pk, obj, *mss, useMods->isIndexed() > 0, logop, fromMigrate);
+            auto_ptr<ModSetState> mss = mods->prepare(obj, false /* not an insertion */);
+            updateUsingMods(d, pk, obj, *mss, mods->isIndexed() > 0, logop, fromMigrate);
         } else {
             // replace-style update
             updateNoMods(d, pk, obj, updateobj, logop, fromMigrate);
         }
         return UpdateResult(1, isOperatorUpdate, 1, BSONObj());
+    }
+
+    // return true if the given updateobj can be 'unapplied'
+    // on a replica set member performing rollback.
+    //
+    // this will be true case for things like $inc X, because
+    // its inverse is $inc -X.
+    // 
+    // it will be false for things like $addToSet(set, X), because
+    // there's no way to know for sure if the right thing to do is
+    // remove X from the set, or keep the set the same (because X
+    // may have already existed prior to the addToSet operation).
+    static bool modsAreInvertible(const BSONObj &updateobj) {
+        for (BSONObjIterator i(updateobj); i.more(); ) {
+            const BSONElement &e = i.next();
+            // For now, only pure $inc updates are considered invertible.
+            if (!str::equals(e.fieldName(), "$inc")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    BSONObj invertUpdateMods(const BSONObj &updateobj) {
+        BSONObjBuilder b(updateobj.objsize());
+        for (BSONObjIterator i(updateobj); i.more(); ) {
+            const BSONElement &e = i.next();
+            verify(str::equals(e.fieldName(), "$inc"));
+            BSONObjBuilder inc(b.subobjStart("$inc"));
+            for (BSONObjIterator o(e.Obj()); o.more(); ) {
+                const BSONElement &fieldToInc = o.next();
+                verify(fieldToInc.isNumber());
+                const long long invertedValue = -fieldToInc.numberLong();
+                inc.append(fieldToInc.fieldName(), invertedValue);
+            }
+            inc.done();
+        }
+        return b.obj();
     }
 
     static UpdateResult _updateObjects(const char *ns,
@@ -133,32 +261,41 @@ namespace mongo {
 
         NamespaceDetails *d = getAndMaybeCreateNS(ns, logop);
 
-        auto_ptr<ModSet> mods;
-        const bool isOperatorUpdate = updateobj.firstElementFieldName()[0] == '$';
-        if (isOperatorUpdate) {
-            mods.reset(new ModSet(updateobj, d->indexKeys()));
-        }
-
         // Fast-path for simple primary key updates.
-        const BSONObj pk = d->getSimplePKFromQuery(patternOrig);
-        if (!pk.isEmpty()) {
-            UpdateResult result = _updateByPK(d, pk, patternOrig,
-                                              updateobj, isOperatorUpdate, mods.get(),
-                                              logop, fromMigrate);
-            if (result.existing || !upsert) {
-                return result;
+        //
+        // - We don't do it for capped collections since  their documents may not grow,
+        // and the fast path doesn't know if docs grow until the update message is applied.
+        // - We don't do it if multi=true because semantically we're not supposed to, if
+        // the update ends up being a replace-style upsert. See jstests/update_multi6.js
+        if (!multi && !d->isCapped()) {
+            const BSONObj pk = d->getSimplePKFromQuery(patternOrig);
+            if (!pk.isEmpty()) {
+                // We check here that the fastupdates are okay to do.
+                // - cmdline switch must be enabled
+                // - NamespaceDetails must ok with it (may not be for some sharded collections)
+                // - modifications to the destination object must be invertible (for repl rollback)
+                const bool fastupdatesOk = cmdLine.fastupdates && d->fastupdatesOk() && modsAreInvertible(updateobj);
+                return updateByPK(d, pk, patternOrig, updateobj,
+                                  upsert, fastupdatesOk, logop, fromMigrate);
             }
         }
 
         // Run a regular update using the query optimizer.
 
-        int numModded = 0;
-        cc().curop()->debug().nscanned = 0;
         set<BSONObj> seenObjects;
         MatchDetails details;
-        if (mods.get() && mods->hasDynamicArray()) {
-            details.requestElemMatchKey();
+        auto_ptr<ModSet> mods;
+
+        const bool isOperatorUpdate = updateobj.firstElementFieldName()[0] == '$';
+        if (isOperatorUpdate) {
+            mods.reset(new ModSet(updateobj, d->indexKeys()));
+            if (mods->hasDynamicArray()) {
+                details.requestElemMatchKey();
+            }
         }
+
+        int numModded = 0;
+        cc().curop()->debug().nscanned = 0;
         for (shared_ptr<Cursor> c = getOptimizedCursor(ns, patternOrig); c->ok(); ) {
             cc().curop()->debug().nscanned++;
             BSONObj currPK = c->currPK();
@@ -239,8 +376,6 @@ namespace mongo {
                                             " q: " << patternOrig << " u: " << updateobj,
                            legalClientSystemNS(ns , true));
         }
-
-        cc().curop()->debug().updateobj = updateobj;
 
         UpdateResult ur = _updateObjects(ns, updateobj, patternOrig,
                                          upsert, multi, logop, fromMigrate);

@@ -483,6 +483,9 @@ namespace mongo {
         /** @return starting point for an index traversal. */
         BSONObj startKey() const;
 
+        /** @return true if the startKey() bound is inclusive. */
+        bool startKeyInclusive() const;
+
         /** @return end point for an index traversal. */
         BSONObj endKey() const;
 

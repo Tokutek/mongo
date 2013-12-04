@@ -224,6 +224,28 @@ namespace mongo {
         _endKeyInclusive = _bounds->endKeyInclusive();
         TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         initializeDBC();
+
+        // Fairly bad hack:
+        //
+        // Primary keys are not skipped properly when a non-inclusive start bound is specified.
+        // See IndexCursor::skipToNextKey()
+        //
+        // Do a single advance here - the PK is unique so the next key is guaranteed to be
+        // strictly greater than the start key.
+        if (ok() && _d->isPKIndex(_idx) && !_bounds->startKeyInclusive() && _currKey == _startKey) {
+            _advance();
+        }
+        DEV {
+            // At this point, the current key should be consistent with
+            // _startKey and _bounds->startKeyInclusive()
+            if (ok() && !_bounds->startKeyInclusive()) {
+                if (forward()) {
+                    verify(_currKey.woCompare(_startKey, _ordering) > 0);
+                } else {
+                    verify(_currKey.woCompare(_startKey, _ordering) < 0);
+                }
+            }
+        }
     }
 
     IndexCursor::~IndexCursor() {

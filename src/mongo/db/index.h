@@ -195,6 +195,9 @@ namespace mongo {
                       const bool sendOptimizeMessage, uint64_t* loops_run);
         void acquireTableLock();
 
+        // Send an update message.
+        void updatePair(const BSONObj &key, const BSONObj *pk, const BSONObj &msg, uint64_t flags);
+
         struct UniqueCheckExtra : public ExceptionSaver {
             const storage::Key &newKey;
             const Descriptor &descriptor;

@@ -37,6 +37,7 @@
 #include "mongo/db/databaseholder.h"
 #include "mongo/db/introspect.h"
 #include "mongo/db/repl.h"
+#include "mongo/db/client.h"
 #include "mongo/db/dbmessage.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/lasterror.h"
@@ -391,9 +392,11 @@ namespace mongo {
         bool shouldLog = logLevel >= 1;
 
         if ( op == dbQuery ) {
-            if ( handlePossibleShardedMessage( m , &dbresponse ) )
+            Client::ShardedOperationScope sc;
+            if (sc.handlePossibleShardedMessage(m, &dbresponse)) {
                 return;
-            receivedQuery(c , dbresponse, m );
+            }
+            receivedQuery(c, dbresponse, m);
         }
         else if ( op == dbGetMore ) {
             if ( ! receivedGetMore(dbresponse, m, currentOp) )
@@ -527,21 +530,16 @@ namespace mongo {
         return nsToCollectionSubstring(ns) == "system.users";
     }
 
-    static void lockedReceivedUpdate(const char *ns, Message &m, CurOp &op, const BSONObj &toupdate, const BSONObj &query,
-                                     const bool upsert, const bool multi, const bool broadcast) {
+    static void lockedReceivedUpdate(const char *ns, Message &m, CurOp &op, const BSONObj &updateobj, const BSONObj &query,
+                                     const bool upsert, const bool multi) {
         // void ReplSetImpl::relinquish() uses big write lock so 
         // this is thus synchronized given our lock above.
         uassert(10054,  "not master", isMasterNs(ns));
 
-        // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
-        if (!broadcast && handlePossibleShardedMessage(m, 0)) {
-            return;
-        }
-
         Client::Context ctx(ns);
         scoped_ptr<Client::AlternateTransactionStack> altStack(opNeedsAltTxn(ns) ? new Client::AlternateTransactionStack : NULL);
         Client::Transaction transaction(DB_SERIALIZABLE);
-        UpdateResult res = updateObjects(ns, toupdate, query, upsert, multi, true);
+        UpdateResult res = updateObjects(ns, updateobj, query, upsert, multi, true);
         transaction.commit();
         lastError.getSafe()->recordUpdate( res.existing , res.num , res.upserted ); // for getlasterror
     }
@@ -555,12 +553,13 @@ namespace mongo {
 
         verify(d.moreJSObjs());
         verify(query.objsize() < m.header()->dataLen());
-        BSONObj toupdate = d.nextJsObj();
-        uassert(10055, "update object too large", toupdate.objsize() <= BSONObjMaxUserSize);
-        verify(toupdate.objsize() < m.header()->dataLen());
-        verify(query.objsize() + toupdate.objsize() < m.header()->dataLen());
+        const BSONObj updateobj = d.nextJsObj();
+        uassert(10055, "update object too large", updateobj.objsize() <= BSONObjMaxUserSize);
+        verify(updateobj.objsize() < m.header()->dataLen());
+        verify(query.objsize() + updateobj.objsize() < m.header()->dataLen());
 
         op.debug().query = query;
+        op.debug().updateobj = updateobj;
         op.setQuery(query);
 
         const bool upsert = flags & UpdateOption_Upsert;
@@ -575,13 +574,18 @@ namespace mongo {
         settings.setJustOne(!multi);
         cc().setOpSettings(settings);
 
+        Client::ShardedOperationScope sc;
+        if (!broadcast && sc.handlePossibleShardedMessage(m, 0)) {
+            return;
+        }
+
         try {
             Lock::DBRead lk(ns);
-            lockedReceivedUpdate(ns, m, op, toupdate, query, upsert, multi, broadcast);
+            lockedReceivedUpdate(ns, m, op, updateobj, query, upsert, multi);
         }
         catch (RetryWithWriteLock &e) {
             Lock::DBWrite lk(ns);
-            lockedReceivedUpdate(ns, m, op, toupdate, query, upsert, multi, broadcast);
+            lockedReceivedUpdate(ns, m, op, updateobj, query, upsert, multi);
         }
     }
 
@@ -608,15 +612,15 @@ namespace mongo {
         settings.setJustOne(justOne);
         cc().setOpSettings(settings);
 
+        Client::ShardedOperationScope sc;
+        if (!broadcast && sc.handlePossibleShardedMessage(m, 0)) {
+            return;
+        }
+
         Lock::DBRead lk(ns);
 
         // writelock is used to synchronize stepdowns w/ writes
         uassert(10056, "not master", isMasterNs(ns));
-
-        // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
-        if (!broadcast && handlePossibleShardedMessage(m, 0)) {
-            return;
-        }
 
         Client::Context ctx(ns);
         long long n;
@@ -814,12 +818,15 @@ namespace mongo {
     static void _buildHotIndex(const char *ns, Message &m, const vector<BSONObj> objs) {
         uassert(16905, "Can only build one index at a time.", objs.size() == 1);
 
+        DEV {
+            // System.indexes cannot be sharded.
+            Client::ShardedOperationScope sc;
+            verify(!sc.handlePossibleShardedMessage(m, 0));
+        }
+
         scoped_ptr<Lock::DBWrite> lk(new Lock::DBWrite(ns));
 
         uassert(16902, "not master", isMasterNs(ns));
-
-        // System.indexes cannot be sharded.
-        verify(!handlePossibleShardedMessage(m, 0));
 
         const BSONObj &info = objs[0];
         const StringData &coll = info["ns"].Stringdata();
@@ -868,10 +875,6 @@ namespace mongo {
         // writelock is used to synchronize stepdowns w/ writes
         uassert(10058, "not master", isMasterNs(ns));
 
-        if (handlePossibleShardedMessage(m, 0)) {
-            return;
-        }
-
         Client::Context ctx(ns);
         scoped_ptr<Client::AlternateTransactionStack> altStack(opNeedsAltTxn(ns) ? new Client::AlternateTransactionStack : NULL);
         Client::Transaction transaction(DB_SERIALIZABLE);
@@ -916,6 +919,14 @@ namespace mongo {
                 objs[0]["background"].trueValue() && !objs[0]["unique"].trueValue()) {
             _buildHotIndex(ns, m, objs);
             return;
+        }
+
+        scoped_ptr<Client::ShardedOperationScope> scp;
+        if (coll != "system.indexes") {
+            scp.reset(new Client::ShardedOperationScope);
+            if (scp->handlePossibleShardedMessage(m, 0)) {
+                return;
+            }
         }
 
         try {

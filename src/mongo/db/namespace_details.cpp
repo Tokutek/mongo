@@ -47,11 +47,12 @@
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/txn.h"
 #include "mongo/db/storage/key.h"
-#include "mongo/platform/atomic_word.h"
-#include "mongo/scripting/engine.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/repl/rs_optime.h"
 #include "mongo/db/repl/rs.h"
+#include "mongo/platform/atomic_word.h"
+#include "mongo/s/d_logic.h"
+#include "mongo/scripting/engine.h"
 
 namespace mongo {
 
@@ -574,6 +575,14 @@ namespace mongo {
             }
         }
 
+        void updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
+                              const bool logop, const bool fromMigrate,
+                              uint64_t flags) {
+            msgasserted(17217, "bug: cannot (fast) update a capped collection, "
+                               " should have been enforced higher in the stack" );
+        }
+
+
     protected:
         void _insertObject(const BSONObj &obj, uint64_t flags) {
             uassert( 16328 , str::stream() << "document is larger than capped size "
@@ -798,6 +807,12 @@ namespace mongo {
             msgasserted( 16850, "bug: The profile collection should not be updated." );
         }
 
+        void updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
+                          const bool logop, const bool fromMigrate,
+                          uint64_t flags = 0) {
+            msgasserted( 17219, "bug: The profile collection should not be updated." );
+        }
+
     private:
         void createIndex(const BSONObj &idx_info) {
             uassert(16851, "Cannot have an _id index on the system profile collection", !idx_info["key"]["_id"].ok());
@@ -886,6 +901,11 @@ namespace mongo {
                           const bool logop, const bool fromMigrate,
                           uint64_t flags = 0) {
             uasserted( 16866, "Cannot update a collection under-going bulk load." );
+        }
+        void updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
+                              const bool logop, const bool fromMigrate,
+                              uint64_t flags = 0) {
+            uasserted( 17218, "Cannot update a collection under-going bulk load." );
         }
         void empty() {
             uasserted( 16868, "Cannot empty a collection under-going bulk load." );
@@ -981,6 +1001,7 @@ namespace mongo {
         _ns(ns.toString()),
         _options(options.copy()),
         _pk(pkIndexPattern.copy()),
+        _fastupdatesOkState(AtomicWord<int>(-1)),
         _indexBuildInProgress(false),
         _nIndexes(0),
         _multiKeyIndexBits(0),
@@ -1033,6 +1054,7 @@ namespace mongo {
         _ns(serialized["ns"].String()),
         _options(serialized["options"].Obj().copy()),
         _pk(serialized["pk"].Obj().copy()),
+        _fastupdatesOkState(AtomicWord<int>(-1)),
         _indexBuildInProgress(false),
         _nIndexes(serialized["indexes"].Array().size()),
         _multiKeyIndexBits(static_cast<uint64_t>(serialized["multiKeyIndexBits"].Long())),
@@ -1120,6 +1142,25 @@ namespace mongo {
             indexes_array.append(idx.info());
         }
         return serialize(_ns, _options, _pk, _multiKeyIndexBits, indexes_array.arr());
+    }
+
+    bool NamespaceDetails::fastupdatesOk() {
+        const int state = _fastupdatesOkState.loadRelaxed();
+        if (state == -1) {
+            // need to determine if fastupdates are ok. any number of threads
+            // can race to do this - thats fine, they'll all get the same result.
+            bool ok = true;
+            if (shardingState.needShardChunkManager(_ns)) {
+                ShardChunkManagerPtr chunkManager = shardingState.getShardChunkManager(_ns);
+                ok = chunkManager == NULL || chunkManager->hasShardKey(_pk);
+            }
+            _fastupdatesOkState.swap(ok ? 1 : 0);
+            return ok;
+        } else {
+            // result already computed, fastupdates are ok if state is > 0
+            dassert(state >= 0);
+            return state > 0;
+        }
     }
 
     BSONObj NamespaceDetails::getSimplePKFromQuery(const BSONObj &query) const {
@@ -1537,6 +1578,17 @@ namespace mongo {
 
         if (logop) {
             OpLogHelpers::logUpdate(_ns.c_str(), pk, oldObj, newObj, fromMigrate);
+        }
+    }
+
+    void NamespaceDetails::updateObjectMods(const BSONObj &pk, const BSONObj &updateObj,
+                                            const bool logop, const bool fromMigrate,
+                                            uint64_t flags) {
+        IndexDetails &pkIdx = getPKIndex();
+        pkIdx.updatePair(pk, NULL, updateObj, flags);
+
+        if (logop) {
+            OpLogHelpers::logUpdateMods(_ns.c_str(), pk, updateObj, fromMigrate);
         }
     }
 

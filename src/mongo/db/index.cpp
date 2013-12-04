@@ -391,6 +391,20 @@ namespace mongo {
         }
     }
 
+    void IndexDetails::updatePair(const BSONObj &key, const BSONObj *pk, const BSONObj &msg, uint64_t flags) {
+        storage::Key skey(key, pk);
+        DBT kdbt = skey.dbt();
+        DBT vdbt = storage::dbt_make(msg.objdata(), msg.objsize());
+
+        const int update_flags = (flags & NamespaceDetails::NO_LOCKTREE) ? DB_PRELOCKED_WRITE : 0;
+        const int r = db()->update(db(), cc().txn().db_txn(), &kdbt, &vdbt, update_flags);
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
+        TOKULOG(3) << "index " << info()["key"].Obj() << ": sent update to "
+                   << key << ", pk " << (pk ? *pk : BSONObj()) << ", msg " << msg << endl;
+    }
+
     enum toku_compression_method IndexDetails::getCompressionMethod() const {
         enum toku_compression_method ret;
         int r = db()->get_compression_method(db(), &ret);

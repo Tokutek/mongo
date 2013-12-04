@@ -1307,6 +1307,15 @@ namespace mongo {
         return b.obj();
     }
 
+    bool FieldRangeVector::startKeyInclusive() const {
+        for( vector<FieldRange>::const_iterator i = _ranges.begin(); i != _ranges.end(); ++i ) {
+            if( !i->intervals().front()._lower._inclusive ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     BSONObj FieldRangeVector::endKey() const {
         BSONObjBuilder b;
         BSONObjIterator keys( _keyPattern );

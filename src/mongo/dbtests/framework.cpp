@@ -44,6 +44,7 @@ namespace po = boost::program_options;
 namespace mongo {
 
     CmdLine cmdLine;
+    extern storage::UpdateCallback _storageUpdateCallback;
 
     namespace dbtests {
 
@@ -222,7 +223,7 @@ namespace mongo {
                 filter = params["filter"].as<string>();
             }
 
-            storage::startup(&_txnCompleteHooks);
+            storage::startup(&_txnCompleteHooks, &_storageUpdateCallback);
 
             TestWatchDog twd;
             twd.go();

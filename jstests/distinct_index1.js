@@ -53,8 +53,6 @@ assert.eq( 398 , x.stats.nscannedObjects , "BC3" )
 t.dropIndexes();
 t.ensureIndex( { a : 1, b : 1 } );
 x = d( "b" , { a : { $gt : 5 }, b : { $gt : 5 } } );
-assert.eq( "QueryOptimizerCursor", x.stats.cursor );
+assert.eq( "IndexCursor a_1_b_1", x.stats.cursor );
 assert.eq( 171 , x.stats.n )
-assert.eq( 275 , x.stats.nscanned )
-// Disable temporarily - exact value doesn't matter.
-// assert.eq( 266 , x.stats.nscannedObjects )
+assert.eq( 171 , x.stats.nscanned )
