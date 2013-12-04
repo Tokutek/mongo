@@ -48,7 +48,7 @@ namespace mongo {
      * If you really need to do something else you'll need to fix _versionArray()
      */
     const char mongodbVersionString[] = "2.4.7";
-    const char tokumxVersionString[] = "1.3.0";
+    const char tokumxVersionString[] = "1.3.0+fix_806";
 
     std::string fullVersionString() {
         stringstream ss;
