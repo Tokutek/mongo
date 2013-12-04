@@ -349,10 +349,10 @@ namespace mongo {
         }
 
         void done() {
-            log() << "MigrateFromStatus::done About to acquire sharding write lock to exit critical "
+            log() << "MigrateFromStatus::done About to acquire global write lock to exit critical "
                     "section" << endl;
-            ShardingState::SetVersionScope sc;
-            log() << "MigrateFromStatus::done write lock acquired" << endl;
+            Lock::GlobalWrite lk;
+            log() << "MigrateFromStatus::done Global lock acquired" << endl;
 
             {
                 scoped_spinlock lk( _trackerLocks );
@@ -874,7 +874,6 @@ namespace mongo {
         virtual bool slaveOk() const { return false; }
         virtual bool adminOnly() const { return true; }
         virtual LockType locktype() const { return OPLOCK; }
-        virtual bool requiresShardedOperationScope() const { return false; }
         // this makes so little sense...
         virtual bool requiresSync() const { return false; }
         virtual bool needsTxn() const { return false; }
@@ -1225,7 +1224,8 @@ namespace mongo {
                 myVersion.incMajor();
 
                 {
-                    ShardingState::SetVersionScope sc;
+                    // TODO(leif): Why is this lock needed? Try to remove this lock or downgrade to a read lock later.
+                    Lock::DBWrite lk( ns );
                     verify( myVersion > shardingState.getVersion( ns ) );
 
                     // bump the chunks manager's version up and "forget" about the chunk being moved
@@ -1265,7 +1265,8 @@ namespace mongo {
                     log() << "moveChunk migrate commit not accepted by TO-shard: " << res
                           << " resetting shard version to: " << startingVersion << migrateLog;
                     {
-                        ShardingState::SetVersionScope sc;
+                        // TODO(leif): Why is this a global lock while the lock above at donateChunk is a db-level lock?
+                        Lock::GlobalWrite lk;
                         log() << "moveChunk global lock acquired to reset shard version from "
                               "failed migration"
                               << endl;
@@ -1389,7 +1390,7 @@ namespace mongo {
                               << "failed migration" << endl;
 
                         {
-                            ShardingState::SetVersionScope sc;
+                            Lock::GlobalWrite lk;
 
                             // Revert the chunk manager back to the state before "forgetting"
                             // about the chunk.

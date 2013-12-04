@@ -77,12 +77,6 @@ namespace mongo {
          */
         virtual LockType locktype() const = 0;
 
-        /** whether the command should be run in a ShardedOperationScope
-
-            usually true, except if the operation knows otherwise, like for setShardVersion (which
-            will take the exclusive lock later) */
-        virtual bool requiresShardedOperationScope() const { return true; }
-
         /** if true, this command must go to all members in a SyncClusterConnection.
             We add this because we can now have modifications without a locktype of WRITE, which is what we used to use to determine this for SyncClusterConnection.
          */

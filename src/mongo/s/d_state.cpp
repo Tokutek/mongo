@@ -52,8 +52,7 @@ namespace mongo {
 
     ShardingState::ShardingState()
         : _enabled(false) , _mutex( "ShardingState" ),
-          _configServerTickets( 3 /* max number of concurrent config server refresh threads */ ),
-          _rwlock("ShardingState") {
+          _configServerTickets( 3 /* max number of concurrent config server refresh threads */ ) {
     }
 
     void ShardingState::enable( const string& server ) {
@@ -278,7 +277,7 @@ namespace mongo {
 
         {
             // NOTE: This lock prevents the ns version from changing while a write operation occurs.
-            SetVersionScope sc;
+            Lock::DBRead readLk(ns);
             
             // This lock prevents simultaneous metadata changes using the same map
             scoped_lock lk( _mutex );
@@ -460,9 +459,6 @@ namespace mongo {
 
         virtual bool slaveOk() const { return true; }
         virtual LockType locktype() const { return NONE; }
-
-        /** we will be taking the exclusive lock, so we should not hold the shared lock */
-        virtual bool requiresShardedOperationScope() const { return false; }
         
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
@@ -502,7 +498,7 @@ namespace mongo {
                 return true;
             }
 
-            ShardingState::SetVersionScope sc;
+            Lock::GlobalWrite lk;
             return checkConfigOrInit( configdb , authoritative , errmsg , result , true );
         }
         
@@ -629,7 +625,21 @@ namespace mongo {
             // this is because of a weird segfault I saw and I can't see why this should ever be set
             massert( 13647 , str::stream() << "context should be empty here, is: " << cc().getContext()->ns() , cc().getContext() == 0 ); 
         
-            ShardingState::SetVersionScope sc;
+            struct SetShardVersionLock {
+                SetShardVersionLock() : _lk(new Lock::GlobalWrite()) { }
+                // Just yields the lock. Doesn't need to do anything with
+                // context because we asserted above that there is none.
+                struct temprelease {
+                    temprelease(SetShardVersionLock &lk) : _lk(lk._lk) {
+                        _lk.reset();
+                    };
+                    ~temprelease() {
+                        _lk.reset(new Lock::GlobalWrite());
+                    }
+                    scoped_ptr<Lock::GlobalWrite> &_lk;
+                };
+                scoped_ptr<Lock::GlobalWrite> _lk;
+            } setShardVersionLock; // TODO: can we get rid of this??
             
             if ( oldVersion.isSet() && ! globalVersion.isSet() ) {
                 // this had been reset
@@ -672,7 +682,7 @@ namespace mongo {
             if ( version < globalVersion && version.hasCompatibleEpoch( globalVersion ) ) {
                 while ( shardingState.inCriticalMigrateSection() ) {
                     log() << "waiting till out of critical section" << endl;
-                    ShardingState::SetVersionScope::temprelease tr(sc);
+                    SetShardVersionLock::temprelease temp(setShardVersionLock);
                     shardingState.waitTillNotInCriticalSection( 10 );
                 }
                 errmsg = "shard global version for collection is higher than trying to set to '" + ns + "'";
@@ -688,7 +698,7 @@ namespace mongo {
                 // should require a reload.
                 while ( shardingState.inCriticalMigrateSection() ) {
                     log() << "waiting till out of critical section" << endl;
-                    ShardingState::SetVersionScope::temprelease tr(sc);
+                    SetShardVersionLock::temprelease temp(setShardVersionLock);
                     shardingState.waitTillNotInCriticalSection( 10 );
                 }
 
@@ -701,7 +711,8 @@ namespace mongo {
 
             Timer relockTime;
             {
-                ShardingState::SetVersionScope::temprelease tr(sc);
+                SetShardVersionLock::temprelease temp(setShardVersionLock);
+
                 ChunkVersion currVersion = version;
                 if ( ! shardingState.trySetVersion( ns , currVersion ) ) {
                     errmsg = str::stream() << "client version differs from config's for collection '" << ns << "'";
@@ -775,8 +786,7 @@ namespace mongo {
     public:
         ShardingStateCmd() : MongodShardCommand( "shardingState" ) {}
 
-        // The ShardedOperationScope will protect us from concurrent modification during appendInfo
-        virtual LockType locktype() const { return NONE; }
+        virtual LockType locktype() const { return WRITE; } // TODO: figure out how to make this not need to lock
 
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,

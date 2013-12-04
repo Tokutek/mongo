@@ -58,7 +58,6 @@
 #include "mongo/db/stats/timer_stats.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/oplog_helpers.h"
-#include "mongo/s/d_logic.h"
 #include "mongo/s/d_writeback.h"
 #include "mongo/s/stale_exception.h"  // for SendStaleConfigException
 #include "mongo/scripting/engine.h"
@@ -1723,10 +1722,6 @@ namespace mongo {
         // before proceeding
         if (!fromRepl && !c->canRunInMultiStmtTxn()) {
             uassert(16786, "cannot run command inside of multi statement transaction", !cc().hasTxn());
-        }
-
-        if (!c->requiresShardedOperationScope()) {
-            cc().leaveShardedOperationScope();
         }
 
         std::string errmsg;

@@ -24,14 +24,12 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/s/d_chunk_manager.h"
 #include "mongo/s/chunk_version.h"
-#include "mongo/util/concurrency/rwlock.h"
 #include "mongo/util/concurrency/ticketholder.h"
 
 namespace mongo {
 
     class Database;
     //class DiskLoc;
-    struct DbResponse;
 
     typedef ChunkVersion ConfigVersion;
 
@@ -152,34 +150,6 @@ namespace mongo {
          */
         bool waitTillNotInCriticalSection( int maxSecondsToWait );
 
-        /** A scope in which client threads can read or write data without racing with a chunk
-            version change.  The handlePossibleShardedMessage functionality is a method here to make
-            sure we only check it inside this scope.  Currently is just a shared lock of _rwlock.
-            This class's lifetime and access should be managed through
-            Client::ShardedOperationScope. */
-        class ShardedOperationScope : public boost::noncopyable {
-            scoped_ptr<RWLockRecursive::Shared> _lk;
-          public:
-            ShardedOperationScope();
-            bool handlePossibleShardedMessage(Message &m, DbResponse *dbresponse);
-        };
-
-        /** A scope in which it is safe to modify the version information.  Current implementation
-            is just an exclusive lock of _rwlock.  Has temprelease because there are situations
-            where we need to wait for a migration to exit its critical section, and we'd deadlock
-            there without it.  */
-        class SetVersionScope : public boost::noncopyable {
-            scoped_ptr<RWLockRecursive::Exclusive> _lk;
-          public:
-            SetVersionScope();
-            class temprelease : public boost::noncopyable {
-                SetVersionScope& _sc;
-              public:
-                temprelease(SetVersionScope& sc);
-                ~temprelease();
-            };
-        };
-
     private:
         bool _enabled;
 
@@ -198,8 +168,6 @@ namespace mongo {
         // a ShardChunkManager carries all state we need for a collection at this shard, including its version information
         typedef map<string,ShardChunkManagerPtr> ChunkManagersMap;
         ChunkManagersMap _chunks;
-
-        mutable RWLockRecursive _rwlock;
     };
 
     extern ShardingState shardingState;
@@ -276,29 +244,15 @@ namespace mongo {
     /**
      * @return true if we took care of the message and nothing else should be done
      */
+    struct DbResponse;
+
     bool _handlePossibleShardedMessage( Message &m, DbResponse * dbresponse );
 
-    inline ShardingState::ShardedOperationScope::ShardedOperationScope()
-            : _lk(shardingState.enabled() ? new RWLockRecursive::Shared(shardingState._rwlock) : NULL) {}
-
     /** What does this do? document please? */
-    inline bool ShardingState::ShardedOperationScope::handlePossibleShardedMessage(Message &m, DbResponse *dbresponse) {
-        if (!shardingState.enabled()) {
+    inline bool handlePossibleShardedMessage( Message &m, DbResponse * dbresponse ) {
+        if( !shardingState.enabled() ) 
             return false;
-        }
         return _handlePossibleShardedMessage(m, dbresponse);
-    }
-
-    inline ShardingState::SetVersionScope::SetVersionScope()
-            : _lk(new RWLockRecursive::Exclusive(shardingState._rwlock)) {}
-
-    inline ShardingState::SetVersionScope::temprelease::temprelease(ShardingState::SetVersionScope& sc)
-            : _sc(sc) {
-        _sc._lk.reset();
-    }
-
-    inline ShardingState::SetVersionScope::temprelease::~temprelease() {
-        _sc._lk.reset(new RWLockRecursive::Exclusive(shardingState._rwlock));
     }
 
     bool shouldLogOpForSharding(const char *opstr, const char *ns, const BSONObj &obj);
