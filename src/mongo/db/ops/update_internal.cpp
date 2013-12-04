@@ -277,18 +277,13 @@ namespace mongo {
                 bb.done();
             }
             else {
-
                 bool found = false;
-                int pos = 0;
-                int count = 0;
                 while ( i.more() ) {
                     BSONElement cur = i.next();
                     bb.append( cur );
                     if ( elt.woCompare( cur , false ) == 0 ) {
                         found = true;
-                        pos = count;
                     }
-                    count++;
                 }
 
                 if ( !found ) {
