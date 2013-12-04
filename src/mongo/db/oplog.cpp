@@ -24,6 +24,7 @@
 #include "mongo/base/counter.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/cmdline.h"
+#include "mongo/db/keypattern.h"
 #include "mongo/db/repl_block.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/commands.h"
@@ -373,8 +374,8 @@ namespace mongo {
                     IndexCursor::make(
                         rsOplogRefsDetails,
                         rsOplogRefsDetails->getPKIndex(),
-                        Helpers::toKeyFormat(BSON( "_id" << BSON("oid" << oid << "seq" << seq))), // right endpoint
-                        Helpers::toKeyFormat(BSON( "_id" << BSON("oid" << oid << "seq" << 0))), // left endpoint
+                        KeyPattern::toKeyFormat(BSON( "_id" << BSON("oid" << oid << "seq" << seq))), // right endpoint
+                        KeyPattern::toKeyFormat(BSON( "_id" << BSON("oid" << oid << "seq" << 0))), // left endpoint
                         false,
                         -1 // direction
                         )
@@ -430,7 +431,9 @@ namespace mongo {
         verify(rsOplogDetails);
         if (entry.hasElement("ref")) {
             OID oid = entry["ref"].OID();
-            Helpers::removeRange(
+            Client::ReadContext ctx(rsOplogRefs);
+            Client::Transaction txn(DB_SERIALIZABLE);
+            deleteIndexRange(
                 rsOplogRefs,
                 BSON("_id" << BSON("oid" << oid << "seq" << 0)),
                 BSON("_id" << BSON("oid" << oid << "seq" << LLONG_MAX)),
@@ -438,6 +441,7 @@ namespace mongo {
                 true,
                 false
                 );
+            txn.commit();
         }
 
         BSONObj pk = entry["_id"].wrap("");

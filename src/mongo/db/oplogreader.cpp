@@ -18,6 +18,8 @@
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/relock.h"
+#include "mongo/db/ops/delete.h"
+#include "mongo/db/ops/update.h"
 
 namespace mongo {
     const BSONObj reverseNaturalObj = BSON( "$natural" << -1 );
@@ -91,16 +93,14 @@ namespace mongo {
             }
 
             // clean out local.me
-            if (d != NULL) {
-                d->empty();
-            }
+            deleteObjects("local.me", BSONObj(), false, false);
         
             // repopulate
             BSONObjBuilder b;
             b.appendOID( "_id" , 0 , true );
             b.append( "host", myname );
             me = b.obj();
-            Helpers::putSingleton( "local.me" , me );
+            updateObjects("local.me", me, BSONObj(), true, false, true);
         }
         transaction.commit(0);
     }

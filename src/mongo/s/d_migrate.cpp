@@ -37,7 +37,6 @@
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/database.h"
-#include "mongo/db/dbhelpers.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/hasher.h"
@@ -49,12 +48,14 @@
 #include "mongo/db/instance.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/repl.h"
+#include "mongo/db/keypattern.h"
 #include "mongo/db/kill_current_op.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/txn_context.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/update.h"
+#include "mongo/db/ops/delete.h"
 
 #include "mongo/client/connpool.h"
 #include "mongo/client/distlock.h"
@@ -221,11 +222,6 @@ namespace mongo {
         void doRemove() {
             ShardForceVersionOkModeBlock sf;
             {
-                // TODO: TokuMX: No need for a removesaver, we have transactions.
-#if 0
-                RemoveSaver rs("moveChunk",ns,"post-cleanup");
-#endif
-
                 log() << "moveChunk starting delete for: " << this->toString() << migrateLog;
 
                 BSONObj indexKeyPattern;
@@ -234,14 +230,16 @@ namespace mongo {
                     return;
                 }
 
+                Client::ReadContext ctx(ns);
+                Client::Transaction txn(DB_SERIALIZABLE);
                 long long numDeleted =
-                        Helpers::removeRange( ns,
-                                              min,
-                                              max,
-                                              indexKeyPattern,
-                                              false, /*maxInclusive*/
-                                              /* cmdLine.moveParanoia ? &rs : 0, */ /*callback*/
-                                              true ); /*fromMigrate*/
+                        deleteIndexRange( ns,
+                                          min,
+                                          max,
+                                          indexKeyPattern,
+                                          false, /*maxInclusive*/
+                                          true ); /*fromMigrate*/
+                txn.commit();
 
                 log() << "moveChunk deleted " << numDeleted << " documents for "
                       << this->toString() << migrateLog;
@@ -586,8 +584,8 @@ namespace mongo {
                 }
                 // Assume both min and max non-empty, append MinKey's to make them fit chosen index
                 KeyPattern kp( idx->keyPattern() );
-                BSONObj min = Helpers::toKeyFormat( kp.extendRangeBound( _min, false ) );
-                BSONObj max = Helpers::toKeyFormat( kp.extendRangeBound( _max, false ) );
+                BSONObj min = KeyPattern::toKeyFormat( kp.extendRangeBound( _min, false ) );
+                BSONObj max = KeyPattern::toKeyFormat( kp.extendRangeBound( _max, false ) );
 
                 shared_ptr<Cursor> idxCursor(IndexCursor::make( d , *idx , min , max , false , 1 ));
                 _cc.reset(new ClientCursor(QueryOption_NoCursorTimeout, idxCursor, _ns));
@@ -1620,13 +1618,13 @@ namespace mongo {
                 }
 
                 // 2. delete any data already in range
-                // removeRange makes a ReadContext and a Transaction
-                long long num = Helpers::removeRange( ns,
-                                                      min,
-                                                      max,
-                                                      indexKeyPattern,
-                                                      false, /*maxInclusive*/
-                                                      true ); /* flag fromMigrate in oplog */
+                Client::ReadContext ctx(ns);
+                Client::Transaction txn(DB_SERIALIZABLE);
+                long long num = deleteIndexRange( ns, min, max, indexKeyPattern,
+                                                  false, /*maxInclusive*/
+                                                  true ); /* flag fromMigrate in oplog */
+                txn.commit();
+
                 if ( num )
                     warning() << "moveChunkCmd deleted data already in chunk # objects: " << num << migrateLog;
 
@@ -2004,8 +2002,8 @@ namespace mongo {
                 // shardKeyPattern may not be provided if another shard is from pre 2.2
                 // In that case, assume the shard key pattern is the same as the range
                 // specifiers provided.
-                BSONObj keya = Helpers::inferKeyPattern( migrateStatus.min );
-                BSONObj keyb = Helpers::inferKeyPattern( migrateStatus.max );
+                BSONObj keya = KeyPattern::inferKeyPattern( migrateStatus.min );
+                BSONObj keyb = KeyPattern::inferKeyPattern( migrateStatus.max );
                 verify( keya == keyb );
 
                 warning() << "No shard key pattern provided by source shard for migration."

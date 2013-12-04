@@ -20,7 +20,6 @@
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/client.h"
-#include "mongo/db/dbhelpers.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/jsobj.h"

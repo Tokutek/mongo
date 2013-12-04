@@ -39,6 +39,7 @@
 #include "mongo/db/introspect.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/json.h"
+#include "mongo/db/keypattern.h"
 #include "mongo/db/kill_current_op.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/repl_block.h"
@@ -1208,7 +1209,7 @@ namespace mongo {
 
                 if ( keyPattern.isEmpty() ){
                     // if keyPattern not provided, try to infer it from the fields in 'min'
-                    keyPattern = Helpers::inferKeyPattern( min );
+                    keyPattern = KeyPattern::inferKeyPattern( min );
                 }
 
                 const IndexDetails *idx = d->findIndexByPrefix( keyPattern ,
@@ -1219,8 +1220,8 @@ namespace mongo {
                 }
                 // If both min and max non-empty, append MinKey's to make them fit chosen index
                 KeyPattern kp( idx->keyPattern() );
-                min = Helpers::toKeyFormat( kp.extendRangeBound( min, false ) );
-                max = Helpers::toKeyFormat( kp.extendRangeBound( max, false ) );
+                min = KeyPattern::toKeyFormat( kp.extendRangeBound( min, false ) );
+                max = KeyPattern::toKeyFormat( kp.extendRangeBound( max, false ) );
 
                 c = IndexCursor::make( d, *idx, min, max, false, 1 );
             }

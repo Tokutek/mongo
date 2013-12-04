@@ -49,6 +49,23 @@ namespace mongo {
      */
     class KeyPattern {
     public:
+
+        // The following two static methods are helpers for manipulating keys
+        // and key patterns. It feels natural to put them here.
+
+        /* Takes object o, and infers an ascending keyPattern with the same fields as o
+         * Example:
+         *    o = {a : 5 , b : 6} --> {a : 1 , b : 1 }
+         */
+        static BSONObj inferKeyPattern( const BSONObj& o );
+
+        /* Takes object o, and returns a new object with the
+         * same field elements but the names stripped out.
+         * Example:
+         *    o = {a : 5 , b : 6} --> {"" : 5, "" : 6}
+         */
+        static BSONObj toKeyFormat( const BSONObj& o );
+
         /*
          * We are allowing implicit conversion from BSON
          */

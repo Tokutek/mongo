@@ -24,7 +24,6 @@
 #include "mongo/db/auth/principal.h"
 #include "mongo/db/client.h"
 #include "mongo/db/cmdline.h"
-#include "mongo/db/dbhelpers.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/repl/bgsync.h"

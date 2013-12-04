@@ -27,6 +27,22 @@ using namespace mongoutils;
 
 namespace mongo {
 
+    BSONObj KeyPattern::inferKeyPattern( const BSONObj& o ) {
+        BSONObjBuilder kpBuilder;
+        BSONForEach( e , o ) {
+            kpBuilder.append( e.fieldName() , 1 );
+        }
+        return kpBuilder.obj();
+    }
+
+    BSONObj KeyPattern::toKeyFormat( const BSONObj& o ) {
+        BSONObjBuilder keyObj( o.objsize() );
+        BSONForEach( e , o ) {
+            keyObj.appendAs( e , "" );
+        }
+        return keyObj.obj();
+    }
+
     KeyPattern::KeyPattern( const BSONObj& pattern ): _pattern( pattern ) {
 
         // Extract all prefixes of each field in pattern.

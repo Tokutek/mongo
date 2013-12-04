@@ -18,20 +18,20 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "../db/dbhelpers.h"
 #include "mongo/client/dbclientcursor.h"
 
 #include "dbtests.h"
+#include "mongo/db/ops/delete.h"
 
 namespace RemoveTests {
 
     static const char * const ns = "unittests.removetests";
     static DBDirectClient client;
     
-    /** Simple test for Helpers::RemoveRange. */
-    class RemoveRange {
+    /** Simple test for deleteIndexRange */
+    class DeleteIndexRange {
     public:
-        RemoveRange() :
+        DeleteIndexRange() :
         _min( 4 ),
         _max( 8 ) {
         }
@@ -42,12 +42,12 @@ namespace RemoveTests {
             
             {
                 // Remove _id range [_min, _max).
-                Client::Transaction transaction(DB_SERIALIZABLE);
                 Client::WriteContext ctx(ns);
-                Helpers::removeRange( ns,
-                                      BSON( "_id" << _min ),
-                                      BSON( "_id" << _max ),
-                                      BSON( "_id" << 1 ) );
+                Client::Transaction transaction(DB_SERIALIZABLE);
+                deleteIndexRange( ns,
+                                  BSON( "_id" << _min ),
+                                  BSON( "_id" << _max ),
+                                  BSON( "_id" << 1 ) );
                 transaction.commit();
             }
 
@@ -83,7 +83,7 @@ namespace RemoveTests {
         All() : Suite( "remove" ) {
         }
         void setupTests() {
-            add<RemoveRange>();
+            add<DeleteIndexRange>();
         }
     } myall;
     

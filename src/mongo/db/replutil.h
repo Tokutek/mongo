@@ -18,7 +18,6 @@
 #pragma once
 
 #include "mongo/db/database.h"
-#include "mongo/db/dbhelpers.h"
 #include "mongo/db/json.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/cmdline.h"

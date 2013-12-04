@@ -28,7 +28,6 @@
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/commands.h"
-#include "mongo/db/dbhelpers.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/query_optimizer_internal.h"
@@ -117,13 +116,13 @@ namespace mongo {
             }
             // extend min to get (min, MinKey, MinKey, ....)
             KeyPattern kp( idx->keyPattern() );
-            min = Helpers::toKeyFormat( kp.extendRangeBound( min, false ) );
+            min = KeyPattern::toKeyFormat( kp.extendRangeBound( min, false ) );
             if  ( max.isEmpty() ) {
                 // if max not specified, make it (MaxKey, Maxkey, MaxKey...)
-                max = Helpers::toKeyFormat( kp.extendRangeBound( max, true ) );
+                max = KeyPattern::toKeyFormat( kp.extendRangeBound( max, true ) );
             } else {
                 // otherwise make it (max,MinKey,MinKey...) so that bound is non-inclusive
-                max = Helpers::toKeyFormat( kp.extendRangeBound( max, false ) );
+                max = KeyPattern::toKeyFormat( kp.extendRangeBound( max, false ) );
             }
 
             shared_ptr<IndexCursor> c( IndexCursor::make( d , *idx , min , max , false , 1 ) );
@@ -264,7 +263,7 @@ namespace mongo {
             _lastSplitKey = splitKey.getOwned();
             _splitPoints.push_back(_lastSplitKey);
             KeyPattern kp(_idx.keyPattern());
-            BSONObj modSplitKey = Helpers::toKeyFormat(kp.extendRangeBound(_lastSplitKey, false));
+            BSONObj modSplitKey = KeyPattern::toKeyFormat(kp.extendRangeBound(_lastSplitKey, false));
             _chunkMin.reset(modSplitKey, _idx.isIdIndex() ? NULL : &minKey);
         }
 
@@ -288,7 +287,7 @@ namespace mongo {
                         _lastSplitKey = splitKey.getOwned();
                         _splitPoints.push_back(_lastSplitKey);
                         KeyPattern kp(_idx.keyPattern());
-                        BSONObj modSplitKey = Helpers::toKeyFormat(kp.extendRangeBound(_lastSplitKey, false));
+                        BSONObj modSplitKey = KeyPattern::toKeyFormat(kp.extendRangeBound(_lastSplitKey, false));
                         _chunkMin.reset(modSplitKey, _idx.isIdIndex() ? NULL : &minKey);
                         return;
                     }
@@ -448,13 +447,13 @@ namespace mongo {
             }
             // extend min to get (min, MinKey, MinKey, ....)
             KeyPattern kp( idx->keyPattern() );
-            min = Helpers::toKeyFormat( kp.extendRangeBound( min, false ) );
+            min = KeyPattern::toKeyFormat( kp.extendRangeBound( min, false ) );
             if  ( max.isEmpty() ) {
                 // if max not specified, make it (MaxKey, Maxkey, MaxKey...)
-                max = Helpers::toKeyFormat( kp.extendRangeBound( max, true ) );
+                max = KeyPattern::toKeyFormat( kp.extendRangeBound( max, true ) );
             } else {
                 // otherwise make it (max,MinKey,MinKey...) so that bound is non-inclusive
-                max = Helpers::toKeyFormat( kp.extendRangeBound( max, false ) );
+                max = KeyPattern::toKeyFormat( kp.extendRangeBound( max, false ) );
             }
 
             // 'force'-ing a split is equivalent to having maxChunkSize be the size of the current chunk, i.e., the
@@ -963,8 +962,8 @@ namespace mongo {
 
                     ChunkInfo chunk = newChunks[i];
                     KeyPattern kp( idx->keyPattern() );
-                    BSONObj newmin = Helpers::toKeyFormat( kp.extendRangeBound( chunk.min, false) );
-                    BSONObj newmax = Helpers::toKeyFormat( kp.extendRangeBound( chunk.max, false) );
+                    BSONObj newmin = KeyPattern::toKeyFormat( kp.extendRangeBound( chunk.min, false) );
+                    BSONObj newmax = KeyPattern::toKeyFormat( kp.extendRangeBound( chunk.max, false) );
 
                     shared_ptr<Cursor> c( IndexCursor::make( d , *idx ,
                                                              newmin , /* lower */

@@ -26,10 +26,10 @@
 #include <boost/static_assert.hpp>
 
 #include "mongo/client/syncclusterconnection.h"
-#include "mongo/db/dbhelpers.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/oplog_helpers.h"
+#include "mongo/db/ops/update.h"
 #include "mongo/db/repl/connections.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/util/net/hostandport.h"
@@ -73,8 +73,7 @@ namespace mongo {
             if (onInitiate) {
                 cc().txn().txnIntiatingRs();
             }
-            BSONObj o = asBson();
-            Helpers::putSingleton(rsConfigNs.c_str(), o);
+            updateObjects(rsConfigNs.c_str(), asBson(), BSONObj(), true, false, true);
             if( !comment.isEmpty() && (!theReplSet || theReplSet->isPrimary()) ) {
                 OpLogHelpers::logComment(comment);
             }

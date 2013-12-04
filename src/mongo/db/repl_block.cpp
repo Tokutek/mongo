@@ -24,7 +24,6 @@
 #include "repl.h"
 #include "repl_block.h"
 #include "instance.h"
-#include "dbhelpers.h"
 #include "../util/background.h"
 #include "../util/mongoutils/str.h"
 #include "replutil.h"

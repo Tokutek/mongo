@@ -23,7 +23,6 @@
 #include "mongo/db/instance.h"
 #include "mongo/db/query_optimizer.h"
 #include "mongo/db/namespace_details.h"
-#include "mongo/db/dbhelpers.h"
 #include "mongo/db/ops/count.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/query.h"

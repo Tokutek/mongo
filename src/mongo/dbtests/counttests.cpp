@@ -20,7 +20,6 @@
 #include <boost/thread/thread.hpp>
 
 #include "mongo/db/cursor.h"
-#include "mongo/db/dbhelpers.h"
 #include "mongo/db/json.h"
 #include "mongo/db/ops/count.h"
 #include "mongo/db/ops/delete.h"

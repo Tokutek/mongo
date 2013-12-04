@@ -36,6 +36,38 @@ namespace mongo {
         d->notifyOfWriteOp();
     }
     
+    // Special-cased helper for deleting ranges out of an index.
+    long long deleteIndexRange(const string &ns,
+                               const BSONObj &min,
+                               const BSONObj &max,
+                               const BSONObj &keyPattern,
+                               const bool maxInclusive,
+                               const bool fromMigrate) {
+        NamespaceDetails *d = nsdetails(ns);
+        if (d == NULL) {
+            return 0;
+        }
+
+        IndexDetails &i = d->idx(d->findIndexByKeyPattern(keyPattern));
+        // Extend min to get (min, MinKey, MinKey, ....)
+        KeyPattern kp(keyPattern);
+        BSONObj newMin = KeyPattern::toKeyFormat(kp.extendRangeBound(min, false));
+        // If upper bound is included, extend max to get (max, MaxKey, MaxKey, ...)
+        // If not included, extend max to get (max, MinKey, MinKey, ....)
+        BSONObj newMax = KeyPattern::toKeyFormat(kp.extendRangeBound(max, maxInclusive));
+
+        long long nDeleted = 0;
+        for (shared_ptr<Cursor> c(IndexCursor::make(d, i, newMin, newMax, maxInclusive, 1));
+             c->ok(); c->advance()) {
+            const BSONObj pk = c->currPK();
+            const BSONObj obj = c->current();
+            OpLogHelpers::logDelete(ns.c_str(), obj, fromMigrate);
+            deleteOneObject(d, pk, obj);
+            nDeleted++;
+        }
+        return nDeleted;
+    }
+
     long long _deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop) {
         NamespaceDetails *d = nsdetails(ns);
         if (d == NULL) {

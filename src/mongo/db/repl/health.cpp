@@ -28,7 +28,6 @@
 #include "mongo/util/ramlog.h"
 #include "connections.h"
 #include "mongo/util/startup_test.h"
-#include "mongo/db/dbhelpers.h"
 #include "mongo/db/repl/bgsync.h"
 
 namespace mongo {
