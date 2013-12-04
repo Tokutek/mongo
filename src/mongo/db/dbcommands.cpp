@@ -1515,6 +1515,26 @@ namespace mongo {
         return Status::OK();
     }
 
+    class ObjectIdTest : public InformationCommand {
+    public:
+        ObjectIdTest() : InformationCommand( "driverOIDTest" ) {}
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {} // No auth required
+        virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            if ( cmdObj.firstElement().type() != jstOID ) {
+                errmsg = "not oid";
+                return false;
+            }
+
+            const OID& oid = cmdObj.firstElement().__oid();
+            result.append( "oid" , oid );
+            result.append( "str" , oid.str() );
+
+            return true;
+        }
+    } driverObjectIdTest;
+
     // Testing-only, enabled via command line.
     class EmptyCapped : public ModifyCommand {
     public:
