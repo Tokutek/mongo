@@ -493,19 +493,6 @@ namespace mongo {
         return theReplSet->shouldChangeSyncTarget(_currentSyncTarget->hbinfo().opTime);
     }
 
-    bool BackgroundSync::isStale(OplogReader& r, BSONObj& remoteOldestOp) {
-        remoteOldestOp = r.findOne(rsoplog, Query());
-        GTID remoteOldestGTID = getGTIDFromBSON("_id", remoteOldestOp);
-        {
-            boost::unique_lock<boost::mutex> lock(_mutex);
-            GTID currLiveState = theReplSet->gtidManager->getLiveState();
-            if (GTID::cmp(currLiveState, remoteOldestGTID) < 0) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     void BackgroundSync::getOplogReader(OplogReader& r) {
         const Member *target = NULL, *stale = NULL;
         BSONObj oldest;
@@ -518,13 +505,6 @@ namespace mongo {
                 LOG(2) << "replSet can't connect to " << current << " to read operations" << rsLog;
                 r.resetConnection();
                 theReplSet->veto(current);
-                continue;
-            }
-
-            if (isStale(r, oldest)) {
-                r.resetConnection();
-                theReplSet->veto(current, 600);
-                stale = target;
                 continue;
             }
 
