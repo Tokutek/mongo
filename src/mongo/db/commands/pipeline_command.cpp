@@ -166,7 +166,7 @@ namespace mongo {
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return true; }
-        virtual OpSettings getOpSettings() const { return OpSettings(); }
+        virtual OpSettings getOpSettings() const { return OpSettings().setBulkFetch(true); }
         virtual bool slaveOk() const;
         virtual void help(stringstream &help) const;
         virtual void addRequiredPrivileges(const std::string& dbname,
