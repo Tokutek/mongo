@@ -336,7 +336,8 @@ namespace mongo {
         virtual void optimizeAll();
         // @param left/rightPK [ left, right ] primary key range to run
         // hot optimize on. no optimize message is sent.
-        virtual void optimizePK(const BSONObj &leftPK, const BSONObj &rightPK, uint64_t* loops_run);
+        virtual void optimizePK(const BSONObj &leftPK, const BSONObj &rightPK,
+                                const int timeout, uint64_t *loops_run);
 
         virtual bool dropIndexes(const StringData& ns, const StringData& name, string &errmsg,
                                  BSONObjBuilder &result, bool mayDeleteIdIndex);

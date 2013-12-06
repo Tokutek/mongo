@@ -439,20 +439,26 @@ namespace mongo {
         }
     }
 
-    int IndexDetails::hot_opt_callback(void *extra, float progress) {
-        int retval = 0;
-        uint64_t iter = *(uint64_t *)extra;
+    int IndexDetails::hot_optimize_callback(void *extra, float progress) {
         try {
+            struct hot_optimize_callback_extra *info =
+                reinterpret_cast<hot_optimize_callback_extra *>(extra);
+
             killCurrentOp.checkForInterrupt(); // uasserts if we should stop
+            if (info->timeout > 0 && info->timer.seconds() > info->timeout) {
+                // optimize timed out
+                return 1;
+            } else {
+                return 0;
+            }
         } catch (DBException &e) {
-            retval = 1;
+            return -1;
         }
-        iter++;
-        return retval;
     }
 
     void IndexDetails::optimize(const storage::Key &leftSKey, const storage::Key &rightSKey,
-                                const bool sendOptimizeMessage, uint64_t* loops_run) {
+                                const bool sendOptimizeMessage, const int timeout,
+                                uint64_t *loops_run) {
         if (sendOptimizeMessage) {
             const int r = db()->optimize(db());
             if (r != 0) {
@@ -460,12 +466,12 @@ namespace mongo {
             }
         }
 
-        uint64_t iter = 0;
         DBT left = leftSKey.dbt();
         DBT right = rightSKey.dbt();
-        const int r = db()->hot_optimize(db(), &left, &right, hot_opt_callback, &iter, loops_run);
-        if (r != 0) {
-            uassert(16810, mongoutils::str::stream() << "reIndex query killed ", false);
+        struct hot_optimize_callback_extra extra(timeout);
+        const int r = db()->hot_optimize(db(), &left, &right, hot_optimize_callback, &extra, loops_run);
+        if (r < 0) { // we return -1 on interrupt, 1 on timeout (no "error" on timeout)
+            uasserted(16810, mongoutils::str::stream() << indexNamespace() << ": optimize killed.");
         }
     }
 
