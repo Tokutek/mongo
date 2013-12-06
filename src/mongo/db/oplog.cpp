@@ -452,12 +452,12 @@ namespace mongo {
         return hours * millisPerHour;
     }
 
-    void hotOptimizeOplogTo(GTID gtid, uint64_t* loops_run) {
+    void hotOptimizeOplogTo(GTID gtid, const int timeout, uint64_t *loops_run) {
         Client::ReadContext ctx(rsoplog);
 
         // do a hot optimize up until gtid;
         BSONObjBuilder q;
         addGTIDToBSON("", gtid, q);
-        rsOplogDetails->optimizePK(minKey, q.done(), loops_run);
+        rsOplogDetails->optimizePK(minKey, q.done(), timeout, loops_run);
     }
 }

@@ -192,7 +192,8 @@ namespace mongo {
         uint32_t getReadPageSize() const;
         void getStat64(DB_BTREE_STAT64* stats) const;
         void optimize(const storage::Key &leftSKey, const storage::Key &rightSKey,
-                      const bool sendOptimizeMessage, uint64_t* loops_run);
+                      const bool sendOptimizeMessage, const int timeout,
+                      uint64_t* loops_run);
         void acquireTableLock();
 
         struct UniqueCheckExtra : public ExceptionSaver {
@@ -307,7 +308,14 @@ namespace mongo {
             return _db->db();
         }
 
-        static int hot_opt_callback(void *extra, float progress);
+        struct hot_optimize_callback_extra {
+            hot_optimize_callback_extra(const int t) :
+                timeout(t) {
+            }
+            Timer timer;
+            const int timeout;
+        };
+        static int hot_optimize_callback(void *extra, float progress);
 
         // Info about the index. Stored on disk in the database.ns dictionary
         // for this database as a BSON object.
