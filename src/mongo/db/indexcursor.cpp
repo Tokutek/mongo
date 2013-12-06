@@ -191,6 +191,8 @@ namespace mongo {
     {
         verify( _d != NULL );
         TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
+        DBC* cursor = _cursor.dbc();
+        cursor->c_set_check_interrupt_callback(cursor, cursor_check_interrupt, &_interrupt_extra);
         initializeDBC();
     }
 
@@ -222,6 +224,8 @@ namespace mongo {
         _endKey = _bounds->endKey();
         _endKeyInclusive = _bounds->endKeyInclusive();
         TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
+        DBC* cursor = _cursor.dbc();
+        cursor->c_set_check_interrupt_callback(cursor, cursor_check_interrupt, &_interrupt_extra);
         initializeDBC();
 
         // Fairly bad hack:
@@ -250,6 +254,17 @@ namespace mongo {
     IndexCursor::~IndexCursor() {
         // Book-keeping for index access patterns.
         _idx.noteQuery(_nscanned, _nscannedObjects);
+    }
+
+    bool IndexCursor::cursor_check_interrupt(void* extra) {
+        struct cursor_interrupt_extra *info = static_cast<struct cursor_interrupt_extra *>(extra);
+        try {
+            killCurrentOp.checkForInterrupt(info->c); // uasserts if we should stop
+        } catch (const std::exception &ex) {
+            info->saveException(ex);
+            return true;
+        }
+        return false;
     }
 
     int IndexCursor::cursor_getf(const DBT *key, const DBT *val, void *extra) {
@@ -516,6 +531,9 @@ namespace mongo {
         if ( extra.ex != NULL ) {
             throw *extra.ex;
         }
+        if (r == TOKUDB_INTERRUPTED) {
+            _interrupt_extra.throwException();
+        }
         if ( r != 0 && r != DB_NOTFOUND ) {
             extra.throwException();
             storage::handle_ydb_error(r);
@@ -709,6 +727,9 @@ again:      while ( !allInclusive && ok() ) {
         }
         if ( extra.ex != NULL ) {
             throw *extra.ex;
+        }
+        if (r == TOKUDB_INTERRUPTED) {
+            _interrupt_extra.throwException();
         }
         if ( r != 0 && r != DB_NOTFOUND ) {
             extra.throwException();

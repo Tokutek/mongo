@@ -309,6 +309,13 @@ namespace mongo {
         bool checkCurrentAgainstBounds();
         void skipPrefix(const BSONObj &key, const int k);
         int skipToNextKey(const BSONObj &currentKey);
+
+        struct cursor_interrupt_extra : public ExceptionSaver {
+            Client &c;
+            cursor_interrupt_extra() : c(cc()) {
+            }
+        };
+        static bool cursor_check_interrupt(void* extra);
         /**
          * Attempt to locate the next index key matching _bounds.  This may mean advancing to the
          * next successive key in the index, or skipping to a new position in the index.  If an
@@ -371,6 +378,9 @@ namespace mongo {
         // of bulk fetch so we know an appropriate amount of rows to fetch.
         RowBuffer _buffer;
         int _getf_iteration;
+
+        // for interrupt checking
+        struct cursor_interrupt_extra _interrupt_extra;
     };
 
     /**
