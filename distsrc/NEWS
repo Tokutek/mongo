@@ -11,10 +11,39 @@ General
     - This release is focused on bug fixes since 1.3.2.
 
 
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Added an optimization to the execution of aggregation pipelines that
+      greatly speeds up all range queries done for aggregations.  (#802)
+
+
 Bug fixes
 ~~~~~~~~~
 
-    - 
+    - In TokuMX 1.3.2 and earlier, part of the oplog trimming process (an
+      optimization step) tended to hold a read lock for long periods of
+      time.  Now in 1.3.3, this component works in 4-second periods, which
+      is configurable with the parameter `optimizeOplogQuantum`, which can
+      be set dynamically with `setParameter`.  (#777)
+
+      Valid values are:
+
+      * `N > 0`: Work in periods of `N` seconds.
+
+      * `N = 0`: Do not optimize the oplog at all.
+
+      * `N < 0`: The 1.3.2 behavior, optimize aggressively without
+        yielding.
+
+    - Removed an unnecessary step in a replica set secondary's startup
+      process that had the potential to cause long stalls and pileups.
+      (#806)
+
+    - Certain query operations sometimes spend a long time in the storage
+      layer, searching through entries that were deleted but not garbage
+      collected.  Added a mechanism by which such operations can be killed
+      like normal operations.  (#813)
 
 
 tokumx 1.3.2
