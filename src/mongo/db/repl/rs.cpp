@@ -1209,6 +1209,12 @@ namespace mongo {
         _replOplogPurgeRunning = false;
     }
     
+    // By default the optimize oplog thread performs its work in 4 second quanta.
+    // This bounds the amount of time the DBRead lock is held doing optimize work.
+    static int optimizeOplogQuantum = 4;
+    ExportedServerParameter<int> OptimizeOplogQuantum(
+            ServerParameterSet::getGlobal(), "optimizeOplogQuantum", &optimizeOplogQuantum, true, true);
+
     void ReplSetImpl::optimizeOplogThread() {
         _replOplogOptimizeRunning = true;
         Client::initThread("optimizeOplog");
@@ -1220,10 +1226,20 @@ namespace mongo {
                     boost::unique_lock<boost::mutex> lock(_purgeMutex);
                     gtid = _lastPurgedGTID;
                 }
-                if (!gtid.isInitial()) {
+                // quantum < 0 : run optimize for as long as it takes
+                // quantum > 0 : run optimize for this many seconds before backing off
+                // quantum == 0 : do not run optimize at all
+                if (!gtid.isInitial() && optimizeOplogQuantum != 0) {
                     uint64_t loops_run = 0;
-                    hotOptimizeOplogTo(gtid, &loops_run);
+                    // timeout of 0 means no timeout. this is slightly different than the
+                    // semantics of optimzeOplogQuantum, which is supposed to be more expressive.
+                    const int timeout = optimizeOplogQuantum < 0 ? 0 : optimizeOplogQuantum;
+                    hotOptimizeOplogTo(gtid, timeout, &loops_run);
                     LOG(2) << "hotOptimizeOplog completed running " << loops_run << " loops." << rsLog;
+                } else if (optimizeOplogQuantum == 0) {
+                    // Sleep for a second to avoid spinning.
+                    // If the quantum becomes non-zero in future, we'll do real work.
+                    sleepmillis(1000);
                 }
                 {
                     boost::unique_lock<boost::mutex> lock(_purgeMutex);
