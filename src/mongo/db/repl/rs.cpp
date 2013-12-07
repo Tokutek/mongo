@@ -1208,7 +1208,7 @@ namespace mongo {
         _replOplogPurgeRunning = false;
     }
     
-    // By default the optimize oplog thread performs its work in 4 second quantums.
+    // By default the optimize oplog thread performs its work in 4 second quanta.
     // This bounds the amount of time the DBRead lock is held doing optimize work.
     static int optimizeOplogQuantum = 4;
     ExportedServerParameter<int> OptimizeOplogQuantum(
