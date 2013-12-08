@@ -29,6 +29,10 @@ assert.eq(0, t.count({ _id: { $gt: 1 } })); // test $gt on non-inclusive lower b
 assert.eq(0, t.count({ _id: { $lt: 1 } })); // test $lt on non-inclusive upper bound
 assert.eq(1, t.count({ _id: { $gte: 1 } })); // test $gt on inclusive lower bound
 assert.eq(1, t.count({ _id: { $lte: 1 } })); // test $lt on inclusive upper bound
+t.save({ _id: 2 });
+assert.eq(0, t.count({ _id: { $gt: 1, $lt: 2 } }));
+assert.eq(1, t.count({ _id: { $gte: 1, $lt: 2 } }));
+assert.eq(1, t.count({ _id: { $gt: 1, $lte: 2 } }));
 
 t.drop();
 t.insert([{_id:1},{_id:2},{_id:3},{_id:4},{_id:5},{_id:6},{_id:7}]);

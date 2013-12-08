@@ -234,9 +234,13 @@ namespace mongo {
         // See IndexCursor::skipToNextKey()
         //
         // Do a single advance here - the PK is unique so the next key is guaranteed to be
-        // strictly greater than the start key.
+        // strictly greater than the start key. We have to play games with _nscanned because
+        // advance()'s checkCurrentAgainstBounds() is going to increment it by 1 (we don't want that).
         if (ok() && _d->isPKIndex(_idx) && !_bounds->startKeyInclusive() && _currKey == _startKey) {
-            _advance();
+            const long long oldNScanned = _nscanned;
+            advance();
+            verify(oldNScanned <= _nscanned);
+            _nscanned = oldNScanned;
         }
         DEV {
             // At this point, the current key should be consistent with
