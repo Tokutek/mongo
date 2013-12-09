@@ -257,6 +257,7 @@ namespace mongo {
     public:
         CmdUpdateSlave() : Command("updateSlave") {}
         virtual bool slaveOk() const { return true; }
+        virtual bool requiresShardedOperationScope() const { return false; }
         virtual LockType locktype() const { return NONE; }
         virtual bool requiresSync() const { return false; }
         virtual bool needsTxn() const { return false; }

@@ -650,6 +650,7 @@ namespace mongo {
     protected:
         ReplSetCommand(const char * s, bool show=false) : Command(s, show) { }
         virtual bool slaveOk() const { return true; }
+        virtual bool requiresShardedOperationScope() const { return false; }
         virtual bool adminOnly() const { return true; }
         virtual bool logTheOp() { return false; }
         virtual LockType locktype() const { return NONE; }

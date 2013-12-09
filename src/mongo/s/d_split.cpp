@@ -663,6 +663,7 @@ namespace mongo {
 
         virtual bool slaveOk() const { return false; }
         virtual bool adminOnly() const { return true; }
+        virtual bool requiresShardedOperationScope() const { return false; }
         virtual LockType locktype() const { return OPLOCK; }
         virtual bool requiresSync() const { return false; }
         virtual bool needsTxn() const { return false; }

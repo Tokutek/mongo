@@ -37,6 +37,7 @@
 #include "mongo/db/gtid.h"
 #include "mongo/db/txn_context.h"
 #include "mongo/db/opsettings.h"
+#include "mongo/s/d_logic.h"
 #include "mongo/util/paths.h"
 #include "mongo/util/concurrency/threadlocal.h"
 #include "mongo/util/concurrency/rwlock.h"
@@ -118,6 +119,34 @@ namespace mongo {
         ConnectionId getConnectionId() const { return _connectionId; }
 
         LockState& lockState() { return _ls; }
+
+        /**
+         * Creates a scope for the current thread inside of which it is possible to check whether a
+         * message should be handled by the writeback mechanism, and inside of which it is safe to
+         * do write operations without racing with sharding metadata changes.
+         */
+        class ShardedOperationScope : public boost::noncopyable {
+            Client &_c;
+            bool _recursive;
+            void assertStillHasScope() const {
+                massert(17221, "not inside a ShardedOperationScope anymore", _c._scp);
+            }
+          public:
+            ShardedOperationScope();
+            ~ShardedOperationScope();
+            void checkPossiblyShardedMessage(int op, const string &ns) const {
+                assertStillHasScope();
+                _c._scp->checkPossiblyShardedMessage(op, ns);
+            }
+            bool handlePossibleShardedMessage(Message &m, DbResponse *dbresponse) const {
+                assertStillHasScope();
+                return _c._scp->handlePossibleShardedMessage(m, dbresponse);
+            }
+        };
+
+        void leaveShardedOperationScope() {
+            _scp.reset();
+        }
 
         /**
          * A stack of transactions, with parent/child relationships.
@@ -307,6 +336,7 @@ namespace mongo {
         string _threadId; // "" on non support systems
         CurOp * _curOp;
         Context * _context;
+        scoped_ptr<ShardingState::ShardedOperationScope> _scp;
         long long _rootTransactionId;
         shared_ptr<TransactionStack> _transactions;
         shared_ptr<LoadInfo> _loadInfo; // the txn and ns currently under-going bulk load by this client
@@ -438,6 +468,20 @@ namespace mongo {
         Client * c = currentClient.get();
         verify( c );
         return *c;
+    }
+
+    inline Client::ShardedOperationScope::ShardedOperationScope() : _c(cc()), _recursive(false) {
+        if (_c._scp) {
+            _recursive = true;
+        } else {
+            _c._scp.reset(new ShardingState::ShardedOperationScope);
+        }
+    }
+
+    inline Client::ShardedOperationScope::~ShardedOperationScope() {
+        if (!_recursive) {
+            _c._scp.reset();
+        }
     }
 
     inline Client::WithTxnStack::WithTxnStack(shared_ptr<Client::TransactionStack> &stack) : _stack(stack), _released(false) {

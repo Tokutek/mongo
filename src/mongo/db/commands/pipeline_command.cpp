@@ -167,6 +167,8 @@ namespace mongo {
         virtual bool canRunInMultiStmtTxn() const { return true; }
         virtual OpSettings getOpSettings() const { return OpSettings().setBulkFetch(true); }
         virtual bool slaveOk() const;
+        // aggregate is like a query, we don't need to hold this lock
+        virtual bool requiresShardedOperationScope() const { return false; }
         virtual void help(stringstream &help) const;
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,

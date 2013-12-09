@@ -84,6 +84,7 @@ namespace mongo {
         virtual void help(stringstream& h) const { h << "Validate contents of a namespace by scanning its data structures for correctness.  Slow.\n"
                                                         "Add full:true option to do a more thorough check"; }
 
+        virtual bool requiresShardedOperationScope() const { return false; }
         virtual LockType locktype() const { return READ; }
         //{ validate: "collectionnamewithoutthedbpart" [, scandata: <bool>] [, full: <bool> } */
         virtual bool requiresSync() const { return false; }
