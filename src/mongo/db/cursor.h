@@ -335,6 +335,7 @@ namespace mongo {
         set<BSONObj> _dups;
         BSONObj _startKey;
         BSONObj _endKey;
+        storage::Key _endSKey;
         BSONObj _minUnsafeKey;
         bool _endKeyInclusive;
         const bool _multiKey;
@@ -372,6 +373,7 @@ namespace mongo {
         BSONObj _currKey;
         BSONObj _currPK;
         BSONObj _currObj;
+        storage::Key _currSKey;
         BufBuilder _currKeyBufBuilder;
 
         // Row buffer to store rows in using bulk fetch. Also track the iteration

@@ -163,9 +163,18 @@ namespace mongo {
                                                const shared_ptr< FieldRangeVector > &bounds,
                                                int singleIntervalLimit, int direction,
                                                int numWanted ) {
-        return shared_ptr<IndexCursor>( new IndexCursor( d, idx, bounds,
-                                                         singleIntervalLimit, direction,
-                                                         numWanted ) );
+        // Avoid using a bounds-based cursor (which is slower to detect if keys
+        // are in bounds during iteration) when there is a simple, single-interval.
+        if (bounds->startKeyInclusive() && bounds->isSingleInterval()) {
+            return IndexCursor::make( d, idx,
+                                      bounds->startKey(), bounds->endKey(),
+                                      bounds->endKeyInclusive(), direction,
+                                      numWanted );
+        } else {
+            return shared_ptr<IndexCursor>( new IndexCursor( d, idx, bounds,
+                                                             singleIntervalLimit, direction,
+                                                             numWanted ) );
+        }
     }
 
     IndexCursor::IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
@@ -176,6 +185,8 @@ namespace mongo {
         _ordering(Ordering::make(_idx.keyPattern())),
         _startKey(startKey),
         _endKey(endKey),
+        _endSKey(_endKey, _d->isPKIndex(idx) ?
+                          NULL : (endKeyInclusive ? &maxKey : &minKey)), // TODO: Merge this with indexcountcursor's _endSKeyPrefix
         _endKeyInclusive(endKeyInclusive),
         _multiKey(_d->isMultikey(_d->idxNo(_idx))),
         _direction(direction),
@@ -502,12 +513,11 @@ namespace mongo {
     };
 
     void IndexCursor::getCurrentFromBuffer() {
-        storage::Key sKey;
-        _buffer.current(sKey, _currObj);
+        _buffer.current(_currSKey, _currObj);
 
         _currKeyBufBuilder.reset(512);
-        _currKey = sKey.key(_currKeyBufBuilder);
-        _currPK = sKey.pk();
+        _currKey = _currSKey.key(_currKeyBufBuilder);
+        _currPK = _currSKey.pk();
         if (_currPK.isEmpty()) {
             _currPK = BSONObj(_currKey.objdata());
         }
@@ -707,8 +717,8 @@ again:      while ( !allInclusive && ok() ) {
         if ( !ok() ) {
             return;
         }
-        dassert(!_endKey.isEmpty());
-        const int cmp = _endKey.woCompare( _currKey, _ordering );
+        DEV ONCE verify(_endKey == _endSKey.key());
+        const int cmp = _endSKey.woCompare(_currSKey, _ordering);
         const int sign = cmp == 0 ? 0 : (cmp > 0 ? 1 : -1);
         if ( (sign != 0 && sign != _direction) || (sign == 0 && !_endKeyInclusive) ) {
             _ok = false;
@@ -866,6 +876,7 @@ again:      while ( !allInclusive && ok() ) {
         IndexCursor(d, idx, startKey, endKey, endKeyInclusive, 1, 0),
         _bufferedRowCount(0),
         _exhausted(false),
+        // TODO: endSKeyPrefix duplicated code
         _endSKeyPrefix(_endKey, NULL) {
         TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         checkAssumptionsAndInit();

@@ -4,7 +4,7 @@ t.drop();
 t.ensureIndex( {a:1} );
 
 assert.eq.automsg( "2", "t.find( {$or:[{a:{$gt:2}},{a:{$gt:0}}]} ).explain().clauses[ 1 ].indexBounds.a[ 0 ][ 1 ]" );
-assert.eq.automsg( "2", "t.find( {$or:[{a:{$lt:2}},{a:{$lt:4}}]} ).explain().clauses[ 1 ].indexBounds.a[ 0 ][ 0 ]" );
+assert.eq.automsg( "2", "t.find( {$or:[{a:{$lt:2}},{a:{$lt:4}}]} ).explain().clauses[ 1 ].indexBounds.start.a" );
 
 assert.eq.automsg( "2", "t.find( {$or:[{a:{$gt:2,$lt:10}},{a:{$gt:0,$lt:5}}]} ).explain().clauses[ 1 ].indexBounds.a[ 0 ][ 1 ]" );
 
@@ -35,5 +35,5 @@ assert.eq.automsg( "null", "t.find( {$or:[{a:{$in:[1,2]}}, {a:2}]} ).explain().c
 assert.eq( null, t.find( {$or:[{a:{$gt:1,$lt:5},b:{$gt:0,$lt:3},c:6}, {a:3,b:{$gt:1,$lt:2},c:{$gt:0,$lt:10}}]} ).explain().clauses );
 assert.eq( null, t.find( {$or:[{a:{$gt:1,$lt:5},c:6}, {a:3,b:{$gt:1,$lt:2},c:{$gt:0,$lt:10}}]} ).explain().clauses );
 exp = t.find( {$or:[{a:{$gt:1,$lt:5},b:{$gt:0,$lt:3},c:6}, {a:3,b:{$gt:1,$lt:4},c:{$gt:0,$lt:10}}]} ).explain();
-assert.eq( 3, exp.clauses[ 1 ].indexBounds.b[ 0 ][ 0 ] );
-assert.eq( 4, exp.clauses[ 1 ].indexBounds.b[ 0 ][ 1 ] );
+assert.eq( 3, exp.clauses[ 1 ].indexBounds.start.b);
+assert.eq( 4, exp.clauses[ 1 ].indexBounds.end.b);

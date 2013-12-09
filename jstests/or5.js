@@ -10,8 +10,8 @@ printjson( t.find( {$or:[{a:2},{b:3}]} ).sort( {c:1} ).explain() );
 assert.eq.automsg( "'BasicCursor'", "t.find( {$or:[{a:2},{b:3}]} ).sort( {c:1} ).explain().cursor" );
 e = t.find( {$or:[{a:2},{b:3}]} ).sort( {a:1} ).explain();
 assert.eq.automsg( "'IndexCursor a_1'", "e.cursor" );
-assert.eq.automsg( "1", "e.indexBounds.a[ 0 ][ 0 ].$minElement" );
-assert.eq.automsg( "1", "e.indexBounds.a[ 0 ][ 1 ].$maxElement" );
+assert.eq.automsg( "1", "e.indexBounds.start.a.$minElement" );
+assert.eq.automsg( "1", "e.indexBounds.end.a.$maxElement" );
 
 t.ensureIndex( {c:1} );
 
