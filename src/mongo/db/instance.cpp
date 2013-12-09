@@ -140,11 +140,20 @@ namespace mongo {
             DbMessage d(m);
             QueryMessage q(d);
             bool all = q.query["$all"].trueValue();
+            bool allMatching = q.query["$allMatching"].trueValue();
             vector<BSONObj> vals;
+            BSONObjBuilder qb;
+            for (BSONObjIterator it(q.query); it.more(); ) {
+                BSONElement e = it.next();
+                StringData fn(e.fieldName());
+                if (fn != "$all" && fn != "$allMatching") {
+                    qb.append(e);
+                }
+            }
             {
                 Client& me = cc();
                 scoped_lock bl(Client::clientsMutex);
-                scoped_ptr<Matcher> m(new Matcher(q.query));
+                scoped_ptr<Matcher> m(new Matcher(qb.done()));
                 for( set<Client*>::iterator i = Client::clients.begin(); i != Client::clients.end(); i++ ) {
                     Client *c = *i;
                     verify( c );
@@ -153,7 +162,7 @@ namespace mongo {
                         continue;
                     }
                     verify( co );
-                    if( all || co->displayInCurop() ) {
+                    if( all || allMatching || co->displayInCurop() ) {
                         BSONObj info = co->info();
                         if ( all || m->matches( info )) {
                             vals.push_back( info );
