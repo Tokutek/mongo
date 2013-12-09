@@ -31,11 +31,11 @@ s.adminCommand( { enablesharding : dbname } );
 s.adminCommand( { shardcollection : ns , key: { _id : 1 }, numInitialChunks: 1 } );
 
 // start a parallel shell that does an $inc by _id (the pk here) every 10 documents
-startMongoProgramNoConnect( "mongo" ,
-                            "--host" , getHostName() ,
-                            "--port" , st.s0.port ,
-                            "--eval" , "sleep(500); print('Doing update'); for (i = 0; i < 50000; i += 10) { if (i % 10000 == 0) { print(\"update \" + i); } db." + coll + ".update({ _id: i }, {'$inc': {'c': 1} }); assert.eq(null, db.getLastError()); } print('Update finished');" ,
-                            dbname );
+join = waitProgram(startMongoProgramNoConnect( "mongo" ,
+                                               "--host" , getHostName() ,
+                                               "--port" , st.s0.port ,
+                                               "--eval" , "sleep(500); print('Doing update'); for (i = 0; i < 50000; i += 10) { if (i % 10000 == 0) { print(\"update \" + i); } db." + coll + ".update({ _id: i }, {'$inc': {'c': 1} }); assert.eq(null, db.getLastError()); } print('Update finished');" ,
+                                               dbname ));
 
 // migrate while fastupdates are happening
 var moveResult =  s.adminCommand( { moveChunk : ns ,
@@ -46,7 +46,7 @@ assert( moveResult.ok , "migration didn't work while doing updates" );
 print('Chunk move finished');
 
 // let updates finish
-sleep(10 * 1000);
+join();
 
 // Every 10th doc should have 'c' incremented to 1, the rest should see it unchanged.
 // We only update the first 50k docs so the test does not take forever.
