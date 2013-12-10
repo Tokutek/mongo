@@ -31,11 +31,7 @@ s.adminCommand( { enablesharding : dbname } );
 s.adminCommand( { shardcollection : ns , key: { _id : 1 }, numInitialChunks: 1 } );
 
 // start a parallel shell that does an $inc by _id (the pk here) every 10 documents
-join = waitProgram(startMongoProgramNoConnect( "mongo" ,
-                                               "--host" , getHostName() ,
-                                               "--port" , st.s0.port ,
-                                               "--eval" , "sleep(500); print('Doing update'); for (i = 0; i < 50000; i += 10) { if (i % 10000 == 0) { print(\"update \" + i); } db." + coll + ".update({ _id: i }, {'$inc': {'c': 1} }); assert.eq(null, db.getLastError()); } print('Update finished');" ,
-                                               dbname ));
+join = startParallelShell("db = db.getSiblingDB('" + dbname + "'); sleep(500); print('Doing update'); for (i = 0; i < 50000; i += 10) { if (i % 10000 == 0) { print(\"update \" + i); } db." + coll + ".update({ _id: i }, {'$inc': {'c': 1} }); assert.eq(null, db.getLastError()); } print('Update finished');", st.s0.port);
 
 // migrate while fastupdates are happening
 var moveResult =  s.adminCommand( { moveChunk : ns ,
