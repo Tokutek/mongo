@@ -45,6 +45,9 @@ Bug fixes
       collected.  Added a mechanism by which such operations can be killed
       like normal operations.  (#813)
 
+    - Fixed a memory allocation size issue that could cause crashes when
+      dealing with very large leaf entries.  (#822)
+
 
 tokumx 1.3.2
 ------------
