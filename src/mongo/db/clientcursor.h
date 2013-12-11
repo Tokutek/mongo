@@ -359,6 +359,7 @@ namespace mongo {
     public:
         shared_ptr<ParsedQuery> pq;
         shared_ptr<Projection> fields; // which fields query wants returned
+        static int idleAgeTimeoutMillis;
 
     private: // static members
 
