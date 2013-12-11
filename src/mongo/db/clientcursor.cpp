@@ -31,6 +31,8 @@
 #include <time.h>
 #include <vector>
 
+#include "mongo/base/init.h"
+#include "mongo/base/status.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
@@ -47,6 +49,7 @@
 #include "mongo/db/repl_block.h"
 #include "mongo/db/parsed_query.h"
 #include "mongo/db/scanandorder.h"
+#include "mongo/db/server_parameters.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/platform/random.h"
 #include "mongo/util/processinfo.h"
@@ -128,10 +131,41 @@ namespace mongo {
         }
     }
 
+    int ClientCursor::idleAgeTimeoutMillis = 600000;
+    /**
+     * CursorTimeoutParameter is only for use by cursor_timeout.js right now.
+     * Someday it might be worth exporting as a feature, but that doesn't seem too useful right now.
+     */
+    class CursorTimeoutParameter : public ExportedServerParameter<int> {
+      public:
+        CursorTimeoutParameter()
+                : ExportedServerParameter<int>( ServerParameterSet::getGlobal(), "cursorTimeout",
+                                                &ClientCursor::idleAgeTimeoutMillis, false, true ) {}
+      protected:
+        virtual Status validate(const int& potentialNewValue) {
+            if (potentialNewValue <= 0) {
+                return Status(ErrorCodes::BadValue, "cursorTimeout must be > 0");
+            }
+            return Status::OK();
+        }
+    };
+    MONGO_INITIALIZER(RegisterCursorTimeoutParameter)(InitializerContext* context) {
+        if (Command::testCommandsEnabled) {
+            // Leaked intentionally: a ServerParameter registers itself when constructed.
+            new CursorTimeoutParameter();
+        }
+        return Status::OK();
+    }
+
     /* note called outside of locks (other than ccmutex) so care must be exercised */
     bool ClientCursor::shouldTimeout( unsigned millis ) {
         _idleAgeMillis += millis;
-        return _idleAgeMillis > 600000 && _pinValue == 0;
+        dassert(idleAgeTimeoutMillis > 0);
+        return _idleAgeMillis > static_cast<unsigned>(idleAgeTimeoutMillis) && _pinValue == 0;
+    }
+
+    void ClientCursor::resetIdleAge() {
+        _idleAgeMillis = 0;
     }
 
     /* called every 4 seconds.  millis is amount of idle time passed since the last call -- could be zero */
