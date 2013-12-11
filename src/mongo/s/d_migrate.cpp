@@ -1926,8 +1926,12 @@ namespace mongo {
             for (int i = 0; t.seconds() <= 300; ++i) {
                 log() << "Waiting for commit to finish" << endl;
                 sleepmillis( 1 << std::min( i , 10 ) );
-                if ( state == DONE )
+                if (state == FAIL) {
+                    return false;
+                }
+                if (state == DONE) {
                     return true;
+                }
             }
             state = FAIL;
             log() << "startCommit never finished!" << migrateLog;
