@@ -239,6 +239,7 @@ namespace mongo {
             }
             
             if ( client_cursor ) {
+                client_cursor->resetIdleAge();
                 exhaust = client_cursor->queryOptions() & QueryOption_Exhaust;
             } else if (!cursorPartOfMultiStatementTxn) {
                 // This cursor is done and it wasn't part of a multi-statement

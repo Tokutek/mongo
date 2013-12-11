@@ -293,6 +293,7 @@ namespace mongo {
          * @param millis amount of idle passed time since last call
          */
         bool shouldTimeout( unsigned millis );
+        void resetIdleAge();
 
         void storeOpForSlave( BSONObj curr );
         void updateSlaveLocation( CurOp& curop );
@@ -366,6 +367,7 @@ namespace mongo {
     public:
         shared_ptr<ParsedQuery> pq;
         shared_ptr<Projection> fields; // which fields query wants returned
+        static int idleAgeTimeoutMillis;
 
     private: // static members
 
