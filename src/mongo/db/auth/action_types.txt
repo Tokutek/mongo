@@ -108,6 +108,7 @@
 "writebacklisten",
 "writeBacksQueued",
 "_migrateClone",
+"_migrateStartCloneTransaction",
 "_recvChunkAbort",
 "_recvChunkCommit",
 "_recvChunkStart",

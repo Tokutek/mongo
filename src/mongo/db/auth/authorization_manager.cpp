@@ -245,6 +245,7 @@ namespace {
         internalActions.addAction(ActionType::updateSlave);
         internalActions.addAction(ActionType::writebacklisten);
         internalActions.addAction(ActionType::_migrateClone);
+        internalActions.addAction(ActionType::_migrateStartCloneTransaction);
         internalActions.addAction(ActionType::_recvChunkAbort);
         internalActions.addAction(ActionType::_recvChunkCommit);
         internalActions.addAction(ActionType::_recvChunkStart);
