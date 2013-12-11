@@ -164,6 +164,10 @@ namespace mongo {
         return _idleAgeMillis > static_cast<unsigned>(idleAgeTimeoutMillis) && _pinValue == 0;
     }
 
+    void ClientCursor::resetIdleAge() {
+        _idleAgeMillis = 0;
+    }
+
     /* called every 4 seconds.  millis is amount of idle time passed since the last call -- could be zero */
     void ClientCursor::idleTimeReport(unsigned millis) {
         bool foundSomeToTimeout = false;

@@ -286,6 +286,7 @@ namespace mongo {
          * @param millis amount of idle passed time since last call
          */
         bool shouldTimeout( unsigned millis );
+        void resetIdleAge();
 
         void storeOpForSlave( BSONObj curr );
         void updateSlaveLocation( CurOp& curop );
