@@ -263,6 +263,82 @@ namespace SpillableVectorTests {
         }
     };
 
+    class BackedBase : public stack<shared_ptr<SpillableVector> > {
+        static void cb(BSONObj &obj) {
+            db.insert(_ns, obj);
+        }
+      protected:
+        static const string _ns;
+        static DBDirectClient db;
+        void push_new(size_t maxSize) {
+            SpillableVector *parent = empty() ? NULL : top().get();
+            shared_ptr<SpillableVector> new_vec(new SpillableVector(cb, maxSize, parent));
+            push(new_vec);
+        }
+
+      public:
+        class WithSpillableVector : boost::noncopyable {
+            BackedBase &_b;
+          public:
+            WithSpillableVector(BackedBase *b, size_t maxSize) : _b(*b) {
+                _b.push_new(maxSize);
+            }
+            ~WithSpillableVector() {
+                _b.pop();
+            }
+        };
+    };
+
+    const string BackedBase::_ns = "test.backedbase.refs";
+    DBDirectClient BackedBase::db;
+
+    class SpillableVectorIteratorInMemory : BackedBase {
+      public:
+        void run() {
+            WithSpillableVector v(this, 1<<10);
+            for (int i = 0; i < 10; ++i) {
+                top()->append(BSON("i" << i));
+            }
+            BSONObjBuilder b;
+            top()->getObjectsOrRef(b);
+            BSONObj obj = b.done();
+            SpillableVectorIterator vec(obj, db, _ns);
+            for (int i = 0; i < 10; ++i) {
+                ASSERT_TRUE(vec.more());
+                BSONObj o = vec.next();
+                ASSERT_EQUALS(i, o["i"].numberLong());
+            }
+            ASSERT_FALSE(vec.more());
+        }
+    };
+
+    class SpillableVectorIteratorNotInMemory : BackedBase {
+      public:
+        void run() {
+            BSONObj sample = BSON("i" << 1);
+            size_t oneObject = sample.objsize();
+            // This calculation is very sloppy and is entirely guesswork.
+            // I think the raw BSON overhead is 4 bytes, maybe?  The _id is a subdocument so that gets doubled.
+            // The header is three 3-byte field names, a 12-byte OID, and an 8-byte int, so 29 bytes.  Call it 32.
+            // Each object also has some overhead for the array it's in, let's say another 4 bytes, per object
+            // We want to fit 50 objects per stored reference object.  Add 1 for fencepost errors, I guess.
+            WithSpillableVector v(this, 8 + (oneObject + 4) * 50 + 32 + 1);
+            for (int i = 0; i < 100; ++i) {
+                top()->append(BSON("i" << i));
+            }
+            BSONObjBuilder b;
+            top()->getObjectsOrRef(b);
+            BSONObj obj = b.done();
+            ASSERT_TRUE(obj.hasField("refOID"));
+            SpillableVectorIterator vec(obj, db, _ns);
+            for (int i = 0; i < 100; ++i) {
+                ASSERT_TRUE(vec.more());
+                BSONObj o = vec.next();
+                ASSERT_EQUALS(i, o["i"].numberLong());
+            }
+        }
+    };
+
     class All : public Suite {
       public:
         All() : Suite("spillablevector") {}
@@ -273,6 +349,8 @@ namespace SpillableVectorTests {
             add<ParentForcesChildSpill>();
             add<ConcurrentVectorsGetDifferentOids>();
             add<ChildAbort>();
+            add<SpillableVectorIteratorInMemory>();
+            add<SpillableVectorIteratorNotInMemory>();
         }
     } all;
 
