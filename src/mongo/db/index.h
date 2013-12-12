@@ -217,21 +217,13 @@ namespace mongo {
 
         // Index access statistics
         struct AccessStats {
-#pragma pack(8)
-            // If each word sits on its own cache line, we prevent false-sharing
-            // in the cache and reduce cache-invalidation stalls.
-            struct CacheLineWord : AtomicWord<uint64_t> {
-                char _pad[64 - sizeof(AtomicWord<uint64_t>)];
-            };
-#pragma pack()
-            BOOST_STATIC_ASSERT(sizeof(CacheLineWord) == 64);
-            CacheLineWord queries;
-            CacheLineWord nscanned;
-            CacheLineWord nscannedObjects;
-            CacheLineWord inserts;
-            CacheLineWord deletes;
-            // Not sure how to capture updates just yet
-            //CacheLineWord updates;
+            // ensures that the next member does not sit on the same cacheline as any real data.
+            AtomicWordOnCacheLine _dummyCounter;
+            AtomicWordOnCacheLine queries;
+            AtomicWordOnCacheLine nscanned;
+            AtomicWordOnCacheLine nscannedObjects;
+            AtomicWordOnCacheLine inserts;
+            AtomicWordOnCacheLine deletes;
         };
 
         const AccessStats &getAccessStats() const {

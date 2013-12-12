@@ -35,37 +35,28 @@ namespace mongo {
     public:
 
         OpCounters();
-        void incInsertInWriteLock(int n) { _insert.x += n; }
-        void gotInsert() { _insert++; }
-        void gotQuery() { _query++; }
-        void gotUpdate() { _update++; }
-        void gotDelete() { _delete++; }
-        void gotGetMore() { _getmore++; }
-        void gotCommand() { _command++; }
+        void gotInsert(const int n = 1) { _insert.fetchAndAdd(n); }
+        void gotQuery() { _query.fetchAndAdd(1); }
+        void gotUpdate() { _update.fetchAndAdd(1); }
+        void gotDelete() { _delete.fetchAndAdd(1); }
+        void gotGetMore() { _getmore.fetchAndAdd(1); }
+        void gotCommand() { _command.fetchAndAdd(1); }
 
         void gotOp( int op , bool isCommand );
 
         BSONObj getObj() const;
         
-        // thse are used by snmp, and other things, do not remove
-        const AtomicUInt * getInsert() const { return &_insert; }
-        const AtomicUInt * getQuery() const { return &_query; }
-        const AtomicUInt * getUpdate() const { return &_update; }
-        const AtomicUInt * getDelete() const { return &_delete; }
-        const AtomicUInt * getGetMore() const { return &_getmore; }
-        const AtomicUInt * getCommand() const { return &_command; }
-
     private:
         void _checkWrap();
         
-        // todo: there will be a lot of cache line contention on these.  need to do something 
-        //       else eventually.
-        AtomicUInt _insert;
-        AtomicUInt _query;
-        AtomicUInt _update;
-        AtomicUInt _delete;
-        AtomicUInt _getmore;
-        AtomicUInt _command;
+        // ensures that the next member does not sit on the same cacheline as any real data.
+        AtomicWordOnCacheLine _dummyCounter;
+        AtomicWordOnCacheLine _insert;
+        AtomicWordOnCacheLine _query;
+        AtomicWordOnCacheLine _update;
+        AtomicWordOnCacheLine _delete;
+        AtomicWordOnCacheLine _getmore;
+        AtomicWordOnCacheLine _command;
     };
 
     extern OpCounters globalOpCounters;
@@ -73,17 +64,15 @@ namespace mongo {
 
     class NetworkCounter {
     public:
-        NetworkCounter() : _bytesIn(0), _bytesOut(0), _requests(0), _overflows(0) {}
-        void hit( long long bytesIn , long long bytesOut );
-        void append( BSONObjBuilder& b );
+        NetworkCounter() { }
+        void hit(const long long bytesIn, const long long bytesOut);
+        void append(BSONObjBuilder &b);
     private:
-        long long _bytesIn;
-        long long _bytesOut;
-        long long _requests;
-
-        long long _overflows;
-
-        SpinLock _lock;
+        // ensures that the next member does not sit on the same cacheline as any real data.
+        AtomicWordOnCacheLine _dummyCounter;
+        AtomicWordOnCacheLine _bytesIn;
+        AtomicWordOnCacheLine _bytesOut;
+        AtomicWordOnCacheLine _requests;
     };
 
     extern NetworkCounter networkCounter;

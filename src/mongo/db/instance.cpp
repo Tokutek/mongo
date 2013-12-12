@@ -865,7 +865,7 @@ namespace mongo {
         insertObjects(ns, objs, keepGoing, 0, true);
         transaction.commit();
         size_t n = objs.size();
-        globalOpCounters.incInsertInWriteLock(n);
+        globalOpCounters.gotInsert(n);
         op.debug().ninserted = n;
     }
 

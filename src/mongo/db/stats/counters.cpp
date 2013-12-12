@@ -24,7 +24,6 @@ namespace mongo {
     OpCounters::OpCounters() {}
 
     void OpCounters::gotOp( int op , bool isCommand ) {
-        RARELY _checkWrap();
         switch ( op ) {
         case dbInsert: /*gotInsert();*/ break; // need to handle multi-insert
         case dbQuery:
@@ -45,67 +44,27 @@ namespace mongo {
         }
     }
 
-    void OpCounters::_checkWrap() {
-        const unsigned MAX = 1 << 30;
-        
-        bool wrap =
-            _insert.get() > MAX ||
-            _query.get() > MAX ||
-            _update.get() > MAX ||
-            _delete.get() > MAX ||
-            _getmore.get() > MAX ||
-            _command.get() > MAX;
-        
-        if ( wrap ) {
-            _insert.zero();
-            _query.zero();
-            _update.zero();
-            _delete.zero();
-            _getmore.zero();
-            _command.zero();
-        }
-    }
-
     BSONObj OpCounters::getObj() const {
         BSONObjBuilder b;
-        b.append( "insert" , _insert.get() );
-        b.append( "query" , _query.get() );
-        b.append( "update" , _update.get() );
-        b.append( "delete" , _delete.get() );
-        b.append( "getmore" , _getmore.get() );
-        b.append( "command" , _command.get() );
+        b.append("insert", _insert.loadRelaxed());
+        b.append("query", _query.loadRelaxed());
+        b.append("update", _update.loadRelaxed());
+        b.append("delete", _delete.loadRelaxed());
+        b.append("getmore", _getmore.loadRelaxed());
+        b.append("command", _command.loadRelaxed());
         return b.obj();
     }
 
-    void NetworkCounter::hit( long long bytesIn , long long bytesOut ) {
-        const long long MAX = 1ULL << 60;
-
-        // don't care about the race as its just a counter
-        bool overflow = _bytesIn > MAX || _bytesOut > MAX;
-
-        if ( overflow ) {
-            _lock.lock();
-            _overflows++;
-            _bytesIn = bytesIn;
-            _bytesOut = bytesOut;
-            _requests = 1;
-            _lock.unlock();
-        }
-        else {
-            _lock.lock();
-            _bytesIn += bytesIn;
-            _bytesOut += bytesOut;
-            _requests++;
-            _lock.unlock();
-        }
+    void NetworkCounter::hit(const long long bytesIn, const long long bytesOut) {
+        _bytesIn.fetchAndAdd(bytesIn);
+        _bytesOut.fetchAndAdd(bytesOut);
+        _requests.fetchAndAdd(1);
     }
 
-    void NetworkCounter::append( BSONObjBuilder& b ) {
-        _lock.lock();
-        b.appendNumber( "bytesIn" , _bytesIn );
-        b.appendNumber( "bytesOut" , _bytesOut );
-        b.appendNumber( "numRequests" , _requests );
-        _lock.unlock();
+    void NetworkCounter::append(BSONObjBuilder &b) {
+        b.appendNumber("bytesIn", _bytesIn.loadRelaxed());
+        b.appendNumber("bytesOut" , _bytesOut.loadRelaxed());
+        b.appendNumber("numRequests", _requests.loadRelaxed());
     }
 
     OpCounters globalOpCounters;
