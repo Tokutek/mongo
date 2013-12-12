@@ -964,10 +964,11 @@ namespace NamespaceTests {
                 if ( !nsd() )
                     return;
                 _transaction.commit();
+                string s( ns() );
                 string errmsg;
                 BSONObjBuilder result;
                 Client::Transaction droptxn(DB_SERIALIZABLE);
-                nsd()->drop(errmsg, result);
+                dropCollection( s, errmsg, result );
                 droptxn.commit();
             }
             Client::Context &ctx() {

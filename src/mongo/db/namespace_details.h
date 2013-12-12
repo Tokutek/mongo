@@ -54,6 +54,10 @@ namespace mongo {
     // such as insert, some updates, and create index
     NamespaceDetails* getAndMaybeCreateNS(const StringData& ns, bool logop);
 
+    void dropCollection(const StringData &name, string &errmsg, BSONObjBuilder &result, bool can_drop_system = false);
+
+    void dropDatabase(const StringData &db);
+
     /**
      * Record that a new namespace exists in <dbname>.system.namespaces.
      */
@@ -335,8 +339,7 @@ namespace mongo {
         virtual void optimizePK(const BSONObj &leftPK, const BSONObj &rightPK,
                                 const int timeout, uint64_t *loops_run);
 
-        virtual void drop(string &errmsg, BSONObjBuilder &result, const bool mayDropSystem = false);
-        virtual bool dropIndexes(const StringData& name, string &errmsg,
+        virtual bool dropIndexes(const StringData& ns, const StringData& name, string &errmsg,
                                  BSONObjBuilder &result, bool mayDeleteIdIndex);
 
         virtual void validateConnectionId(const ConnectionId &id) {

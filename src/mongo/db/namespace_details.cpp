@@ -917,7 +917,7 @@ namespace mongo {
                         const int timeout, uint64_t *loops_run) {
             uasserted( 16921, "Cannot optimize a collection under-going bulk load." );
         }
-        bool dropIndexes(const StringData& name, string &errmsg,
+        bool dropIndexes(const StringData& ns, const StringData& name, string &errmsg,
                          BSONObjBuilder &result, bool mayDeleteIdIndex) {
             uasserted( 16894, "Cannot perform drop/dropIndexes on of a collection under-going bulk load." );
         }
@@ -1669,15 +1669,16 @@ namespace mongo {
     // The parameters mayDeleteIdIndex is here for the case where we call dropIndexes
     // through dropCollection, in which case we are dropping an entire collection,
     // hence the _id_ index will have to go.
-    bool NamespaceDetails::dropIndexes(const StringData& name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex) {
-        Lock::assertWriteLocked(_ns);
+    bool NamespaceDetails::dropIndexes(const StringData& ns, const StringData& name, string &errmsg, BSONObjBuilder &result, bool mayDeleteIdIndex) {
+        Lock::assertWriteLocked(ns);
         TOKULOG(1) << "dropIndexes " << name << endl;
 
+        const int idxNum = findIndexByName(name);
         uassert( 16904, "Cannot drop indexes: a hot index build in progress.",
                         !_indexBuildInProgress );
 
-        ClientCursor::invalidate(_ns);
-        const int idxNum = findIndexByName(name);
+        ClientCursor::invalidate(ns);
+
         if (name == "*") {
             result.append("nIndexesWas", (double) _nIndexes);
             for (int i = 0; i < _nIndexes; ) {
@@ -1711,30 +1712,6 @@ namespace mongo {
         }
 
         return true;
-    }
-
-    void NamespaceDetails::drop(string &errmsg, BSONObjBuilder &result, const bool mayDropSystem) {
-        // Check that we are allowed to drop the namespace.
-        StringData database = nsToDatabaseSubstring(_ns);
-        verify(database == cc().database()->name());
-        if (NamespaceString::isSystem(_ns) && !mayDropSystem) {
-            if (nsToCollectionSubstring(_ns) == "system.profile") {
-                uassert(10087, "turn off profiling before dropping system.profile collection", cc().database()->profile() == 0);
-            } else {
-                uasserted(12502, "can't drop system ns");
-            }
-        }
-
-        // Invalidate cursors, then drop all of the indexes.
-        ClientCursor::invalidate(_ns);
-        dropIndexes("*", errmsg, result, true);
-        verify(_nIndexes == 0);
-        removeNamespaceFromCatalog(_ns);
-
-        // If everything succeeds, kill the namespace from the nsindex.
-        Top::global.collectionDropped(_ns);
-        nsindex(_ns)->kill_ns(_ns);
-        result.append("ns", _ns);
     }
 
     void NamespaceDetails::optimizeAll() {
@@ -1904,6 +1881,56 @@ namespace mongo {
             uassert(16746, "failed to get collection after creating", details);
         }
         return details;
+    }
+
+    void dropDatabase(const StringData& name) {
+        TOKULOG(1) << "dropDatabase " << name << endl;
+        Lock::assertWriteLocked(name);
+        Database *d = cc().database();
+        verify(d != NULL);
+        verify(d->name() == name);
+
+        // Disable dropDatabase in a multi-statement transaction until
+        // we have the time/patience to test/debug it.
+        if (cc().txnStackSize() > 1) {
+            uasserted(16777, "Cannot dropDatabase in a multi-statement transaction.");
+        }
+
+        nsindex(name)->drop();
+        Database::closeDatabase(d->name().c_str(), d->path());
+    }
+
+    // TODO: Put me in NamespaceDetails
+    void dropCollection(const StringData& name, string &errmsg, BSONObjBuilder &result, bool can_drop_system) {
+        TOKULOG(1) << "dropCollection " << name << endl;
+        NamespaceDetails *d = nsdetails(name);
+        if (d == NULL) {
+            return;
+        }
+
+        // Check that we are allowed to drop the namespace.
+        StringData database = nsToDatabaseSubstring(name);
+        verify(database == cc().database()->name());
+        if (NamespaceString::isSystem(name) && !can_drop_system) {
+            if (nsToCollectionSubstring(name) == "system.profile") {
+                uassert(10087, "turn off profiling before dropping system.profile collection", cc().database()->profile() == 0);
+            } else {
+                uasserted(12502, "can't drop system ns");
+            }
+        }
+
+        // Invalidate cursors, then drop all of the indexes.
+        ClientCursor::invalidate(name.rawData());
+
+        LOG(1) << "\t dropIndexes done" << endl;
+        d->dropIndexes(name, "*", errmsg, result, true);
+        verify(d->nIndexes() == 0);
+        removeNamespaceFromCatalog(name);
+
+        // If everything succeeds, kill the namespace from the nsindex.
+        Top::global.collectionDropped(name);
+        nsindex(name)->kill_ns(name);
+        result.append("ns", name);
     }
 
     /* add a new namespace to the system catalog (<dbname>.system.namespaces).

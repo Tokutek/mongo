@@ -24,8 +24,6 @@
 
 namespace mongo {
 
-    void dropDatabase(const StringData &db);
-
     /**
      * Database represents an set of namespaces. It has an index mapping
      * namespace name to NamespaceDetails object, if it exists and is open.

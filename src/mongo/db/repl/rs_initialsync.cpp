@@ -20,7 +20,6 @@
 #include "mongo/client/remote_transaction.h"
 #include "mongo/db/client.h"
 #include "mongo/db/cursor.h"
-#include "mongo/db/database.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/jsobjmanipulator.h"
 #include "mongo/db/oplog.h"
