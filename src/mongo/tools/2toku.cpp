@@ -316,6 +316,8 @@ public:
         add_options()
         ("ts" , po::value<string>() , "max OpTime already applied (secs:inc)" )
         ("from", po::value<string>() , "host to pull from" )
+        ("ruser", po::value<string>(), "user on source host if auth required (must be on admin db)")
+        ("rpass", po::value<string>(), "password on source host")
         ("oplogns", po::value<string>()->default_value( "local.oplog.rs" ) , "ns to pull from" )
         ("reportingPeriod", po::value<int>()->default_value(10) , "seconds between progress reports" )
         ;
@@ -373,6 +375,19 @@ public:
         LOG(1) << "going to connect" << endl;
         
         _rconn.reset(ScopedDbConnection::getScopedDbConnection(getParam("from")));
+
+        if (hasParam("ruser")) {
+            if (!hasParam("rpass")) {
+                log() << "if using auth on source, must specify both --ruser and --rpass" << endl;
+                return -1;
+            }
+            string authErr;
+            bool authOk = _rconn->conn().auth("admin", getParam("ruser"), getParam("rpass"), authErr);
+            if (!authOk) {
+                error() << "error authenticating to admin db on source: " << authErr << endl;
+                return -1;
+            }
+        }
 
         LOG(1) << "connected" << endl;
 
