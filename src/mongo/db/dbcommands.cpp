@@ -1560,7 +1560,7 @@ namespace mongo {
             NamespaceDetails *d = nsdetails( ns );
             massert( 13429, "emptycapped no such collection", d );
             massert( 13424, "collection must be capped", d->isCapped() );
-            CappedCollection *cl = d->toSubclass<CappedCollection>();
+            CappedCollection *cl = d->as<CappedCollection>();
             cl->empty();
             return true;
         }

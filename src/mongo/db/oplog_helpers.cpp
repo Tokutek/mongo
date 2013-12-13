@@ -299,7 +299,7 @@ namespace mongo {
             NamespaceDetails *nsd = nsdetails(ns);
 
             verify(nsd->isCapped());
-            CappedCollection *cl = nsd->toSubclass<CappedCollection>();
+            CappedCollection *cl = nsd->as<CappedCollection>();
             // overwrite set to true because we are running on a secondary
             const uint64_t flags = NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE;
             cl->insertObjectWithPK(pk, row, flags);
@@ -325,7 +325,7 @@ namespace mongo {
             const BSONObj pk = op[KEY_STR_PK].Obj();
 
             verify(nsd->isCapped());
-            CappedCollection *cl = nsd->toSubclass<CappedCollection>();
+            CappedCollection *cl = nsd->as<CappedCollection>();
             const uint64_t flags = NamespaceDetails::NO_LOCKTREE;
             cl->deleteObjectWithPK(pk, row, flags);
             cl->notifyOfWriteOp();

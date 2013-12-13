@@ -295,7 +295,7 @@ namespace mongo {
     }
 
     void IndexCursor::refreshMinUnsafeEndKey() {
-        TailableCollection *cl = _d->toSubclass<TailableCollection>();
+        TailableCollection *cl = _d->as<TailableCollection>();
         _endKey = cl->minUnsafeKey();
     }
 

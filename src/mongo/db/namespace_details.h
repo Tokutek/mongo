@@ -362,7 +362,7 @@ namespace mongo {
                                       uint64_t flags = 0);
 
         // Interpret this NamespaceDetails as a subclass. Asserts if conversion fails.
-        template <class T> T *toSubclass() {
+        template <class T> T *as() {
             T *subclass = dynamic_cast<T *>(this);
             massert(17223, "bug: failed to dynamically cast NamespaceDetails to desired subclass", subclass != NULL);
             return subclass;

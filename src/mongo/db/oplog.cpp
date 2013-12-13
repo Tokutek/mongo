@@ -476,7 +476,7 @@ namespace mongo {
         addGTIDToBSON("", gtid, q);
 
         // TODO: rsOplogDetails should be stored as OplogCollection, not NamespaceDetails
-        OplogCollection *cl = rsOplogDetails->toSubclass<OplogCollection>();
+        OplogCollection *cl = rsOplogDetails->as<OplogCollection>();
         cl->optimizePK(minKey, q.done(), timeout, loops_run);
     }
 }

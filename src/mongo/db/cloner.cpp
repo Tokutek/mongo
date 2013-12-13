@@ -231,7 +231,7 @@ namespace mongo {
                                 }
                             }
                             BSONObj row = rowBuilder.obj();
-                            CappedCollection *cl = d->toSubclass<CappedCollection>();
+                            CappedCollection *cl = d->as<CappedCollection>();
                             cl->insertObjectWithPK(pk, row, NamespaceDetails::NO_LOCKTREE);
                         }
                         else {

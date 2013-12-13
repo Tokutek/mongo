@@ -44,7 +44,7 @@ namespace mongo {
             NamespaceIndex *ni = nsindex(ns.c_str());
             NamespaceDetails *d = ni->find_ns(ns.c_str());
             if (d != NULL && d->isCapped()) {
-                CappedCollection *cl = d->toSubclass<CappedCollection>();
+                CappedCollection *cl = d->as<CappedCollection>();
                 if (committed) {
                     cl->noteCommit(minPK, nDelta, sizeDelta);
                 } else {

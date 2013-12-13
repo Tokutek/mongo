@@ -333,7 +333,7 @@ namespace mongo {
         // Possibly validate the connection if the collection
         // is under-going bulk load.
         if (d != NULL && d->bulkLoading()) {
-            BulkLoadedCollection *cl = d->toSubclass<BulkLoadedCollection>();
+            BulkLoadedCollection *cl = d->as<BulkLoadedCollection>();
             cl->validateConnectionId(cc().getConnectionId());
         }
         return d;

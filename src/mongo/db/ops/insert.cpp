@@ -66,7 +66,7 @@ namespace mongo {
                     // special case capped colletions until all oplog writing
                     // for inserts is handled in the collection class, not here.
                     validateInsert(obj);
-                    CappedCollection *cl = d->toSubclass<CappedCollection>();
+                    CappedCollection *cl = d->as<CappedCollection>();
                     cl->insertObjectAndLogOps(objModified, flags);
                     cl->notifyOfWriteOp();
                 }
