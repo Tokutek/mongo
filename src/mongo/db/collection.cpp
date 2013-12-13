@@ -399,11 +399,6 @@ namespace mongo {
         result.appendNumber("cappedSizeCurrent", _currentSize.load());
     }
 
-    bool CappedCollection::isCapped() const {
-        dassert(_options["capped"].trueValue());
-        return true;
-    }
-
     // @return the maximum safe key to read for a tailable cursor.
     BSONObj CappedCollection::minUnsafeKey() {
         SimpleMutex::scoped_lock lk(_mutex);

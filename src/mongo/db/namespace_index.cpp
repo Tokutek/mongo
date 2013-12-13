@@ -17,6 +17,7 @@
 
 #include "mongo/pch.h"
 
+#include "mongo/db/collection.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/json.h"
@@ -30,11 +31,11 @@
 namespace mongo {
 
     NamespaceIndex::NamespaceIndex(const string &dir, const StringData& database) :
-            _dir(dir),
-            _nsdbFilename(database.toString() + ".ns"),
-            _database(database.toString()),
-            _openRWLock("nsOpenRWLock")
-    {}
+        _dir(dir),
+        _nsdbFilename(database.toString() + ".ns"),
+        _database(database.toString()),
+        _openRWLock("nsOpenRWLock") {
+    }
 
     NamespaceIndex::~NamespaceIndex() {
         for (NamespaceDetailsMap::const_iterator it = _namespaces.begin(); it != _namespaces.end(); ++it) {
@@ -299,6 +300,43 @@ namespace mongo {
         if (r != 0) {
             storage::handle_ydb_error_fatal(r);
         }
+    }
+
+    NamespaceDetails *NamespaceIndex::find_ns(const StringData& ns) {
+        init();
+        if (!allocated()) {
+            return NULL;
+        }
+
+        SimpleRWLock::Shared lk(_openRWLock);
+        return find_ns_locked(ns);
+    }
+
+    NamespaceDetails *NamespaceIndex::details(const StringData &ns) {
+        init();
+        if (!allocated()) {
+            return NULL;
+        }
+
+        NamespaceDetails *d = NULL;
+        {
+            // Try to find the ns in a shared lock. If it's there, we're done.
+            SimpleRWLock::Shared lk(_openRWLock);
+            d = find_ns_locked(ns);
+        }
+
+        if (d == NULL) {
+            // The ns doesn't exist, or it's not opened.
+            d = open_ns(ns);
+        }
+
+        // Possibly validate the connection if the collection
+        // is under-going bulk load.
+        if (d != NULL && d->bulkLoading()) {
+            BulkLoadedCollection *cl = d->toSubclass<BulkLoadedCollection>();
+            cl->validateConnectionId(cc().getConnectionId());
+        }
+        return d;
     }
 
     void NamespaceIndex::drop() {

@@ -326,14 +326,14 @@ namespace mongo {
         virtual void drop(string &errmsg, BSONObjBuilder &result, const bool mayDropSystem = false);
         virtual bool dropIndexes(const StringData& name, string &errmsg,
                                  BSONObjBuilder &result, bool mayDeleteIdIndex);
-
-        virtual void validateConnectionId(const ConnectionId &id) {
-            // By default, the calling connection id is valid.
-            // Other implementations may decide otherwise.
-        }
         
         // optional to implement, populate the obj builder with collection specific stats
         virtual void fillSpecificStats(BSONObjBuilder &result, int scale) const {
+        }
+
+        // return true if the namespace is currently under-going bulk load.
+        virtual bool bulkLoading() const {
+            return false;
         }
 
         // optional to implement, return true if the namespace is capped
@@ -533,43 +533,13 @@ namespace mongo {
 
         // Find an NamespaceDetails in the nsindex.
         // Will not open the if its closed, unlike nsdetails()
-        NamespaceDetails *find_ns(const StringData& ns) {
-            init();
-            if (!allocated()) {
-                return NULL;
-            }
-
-            SimpleRWLock::Shared lk(_openRWLock);
-            return find_ns_locked(ns);
-        }
+        NamespaceDetails *find_ns(const StringData &ns);
 
         // Every namespace that exists has an entry in _namespaces. Some
         // entries may be "closed" in the sense that the key exists but the
         // value is null. If the desired namespace is closed, we open it,
         // which must succeed, by the first invariant.
-        NamespaceDetails *details(const StringData& ns) {
-            init();
-            if (!allocated()) {
-                return NULL;
-            }
-
-            {
-                // Try to find the ns in a shared lock. If it's there, we're done.
-                SimpleRWLock::Shared lk(_openRWLock);
-                NamespaceDetails *d = find_ns_locked(ns);
-                if (d != NULL) {
-                    d->validateConnectionId(cc().getConnectionId());
-                    return d;
-                }
-            }
-
-            // The ns doesn't exist, or it's not opened.
-            NamespaceDetails *d = open_ns(ns);
-            if (d != NULL) {
-                d->validateConnectionId(cc().getConnectionId());
-            }
-            return d;
-        }
+        NamespaceDetails *details(const StringData &ns);
 
         bool allocated() const { return _nsdb; }
 

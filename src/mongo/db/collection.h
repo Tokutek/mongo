@@ -133,7 +133,7 @@ namespace mongo {
 
         void fillSpecificStats(BSONObjBuilder &result, int scale) const;
 
-        bool isCapped() const;
+        bool isCapped() const { return true; }
 
         // @return the maximum safe key to read for a tailable cursor.
         BSONObj minUnsafeKey();
@@ -250,6 +250,8 @@ namespace mongo {
     class BulkLoadedCollection : public IndexedCollection {
     public:
         BulkLoadedCollection(const BSONObj &serialized);
+
+        bool bulkLoading() const { return true; }
 
         void close(const bool abortingLoad);
 
