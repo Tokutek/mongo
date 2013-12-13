@@ -74,15 +74,20 @@ namespace mongo {
         void enterScopedLock( Lock::ScopedLock* lock );
         Lock::ScopedLock* leaveScopedLock();
 
-        void lockedNestable( Lock::Nestable what , int type );
+        void lockedNestable( Lock::Nestable what , int type, const string &context );
         void unlockedNestable();
-        void lockedOther( const StringData& db , int type , WrapperForRWLock* lock );
-        void lockedOther( int type );  // "same lock as last time" case 
+        void lockedOther( const StringData& db , int type , WrapperForRWLock* lock, const string &context );
+        void lockedOther( int type, const string &context );  // "same lock as last time" case
         void unlockedOther();
 
         LockStat* getRelevantLockStat();
         void recordLockTime() { _scopedLk->recordTime(); }
         void resetLockTime() { _scopedLk->resetTime(); }
+
+        const string &context() const {
+            dassert(_context != NULL);
+            return *_context;
+        }
         
     private:
         unsigned _recursive;           // we allow recursively asking for a lock; we track that here
@@ -104,6 +109,8 @@ namespace mongo {
         
         bool _lockPending;
         bool _lockPendingParallelWriter;
+
+        const string *_context;
 
         friend class Acquiring;
         friend class AcquiringParallelWriter;

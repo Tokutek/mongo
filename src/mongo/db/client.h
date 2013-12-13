@@ -445,7 +445,7 @@ namespace mongo {
          */
         class ReadContext : boost::noncopyable { 
         public:
-            ReadContext(const StringData &ns, const StringData &path=dbpath);
+            ReadContext(const StringData &ns, const string &context = "");
             Context& ctx() { return _c; }
         private:
             Lock::DBRead _lk;
@@ -454,7 +454,7 @@ namespace mongo {
 
         class WriteContext : boost::noncopyable {
         public:
-            WriteContext(const StringData &ns, const StringData &path=dbpath);
+            WriteContext(const StringData &ns, const string &context = "");
             Context& ctx() { return _c; }
         private:
             Lock::DBWrite _lk;

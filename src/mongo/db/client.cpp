@@ -211,19 +211,15 @@ namespace mongo {
         _finishInit();
     }
 
-    /** "read lock, and set my context, all in one operation" 
-     *  This handles (if not recursively locked) opening an unopened database.
-     */
-    Client::ReadContext::ReadContext(const StringData& ns, const StringData& path)
-        : _lk( ns ) ,
-          _c(ns, path) {
+    // Locking and context in one operation
+    Client::ReadContext::ReadContext(const StringData& ns, const string &context)
+        : _lk(ns, context) ,
+          _c(ns, dbpath) {
     }
-
-    Client::WriteContext::WriteContext(const StringData& ns, const StringData& path)
-        : _lk( ns ) ,
-          _c(ns, path) {
+    Client::WriteContext::WriteContext(const StringData& ns, const string &context)
+        : _lk(ns, context) ,
+          _c(ns, dbpath) {
     }
-
 
     void Client::Context::checkNotStale() const { 
         switch ( _client->_curOp->getOp() ) {

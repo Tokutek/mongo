@@ -279,17 +279,17 @@ namespace mongo {
         _timer.reset();
     }
     
-    Lock::GlobalWrite::GlobalWrite(bool sg, int timeoutms)
+    Lock::GlobalWrite::GlobalWrite(const string &context, const int timeoutms)
         : ScopedLock('W') {
         char ts = threadState();
         noop = false;
-        if( ts == 'W' ) { 
+        if( ts == 'W' ) {
             noop = true;
             return;
         }
         dassert( ts == 0 );
 
-        Acquiring a(this,lockState());
+        Acquiring a(this, lockState());
         
         if ( timeoutms != -1 ) {
             bool success = qlk.lock_W_try( timeoutms );
@@ -308,12 +308,12 @@ namespace mongo {
         }
     }
 
-    Lock::GlobalRead::GlobalRead( int timeoutms ) 
+    Lock::GlobalRead::GlobalRead(const string &context, const int timeoutms)
         : ScopedLock( 'R' ) {
         LockState& ls = lockState();
         char ts = ls.threadState();
         noop = false;
-        if( ts == 'R' || ts == 'W' ) { 
+        if( ts == 'R' || ts == 'W' ) {
             noop = true;
             return;
         }
@@ -335,7 +335,7 @@ namespace mongo {
         }
     }
 
-    void Lock::DBWrite::lockNestable(Nestable db) { 
+    void Lock::DBWrite::lockNestable(Nestable db, const string &context) {
         _nested = true;
         LockState& ls = lockState();
         if( ls.nestableCount() ) { 
@@ -347,26 +347,26 @@ namespace mongo {
         }
         else {
             fassert(16132,_weLocked==0);
-            ls.lockedNestable(db, 1);
+            ls.lockedNestable(db, 1, context);
             _weLocked = nestableLocks[db];
             _weLocked->lock();
         }
     }
-    void Lock::DBRead::lockNestable(Nestable db) { 
+    void Lock::DBRead::lockNestable(Nestable db, const string &context) {
         _nested = true;
         LockState& ls = lockState();
         if( ls.nestableCount() ) { 
             // we are nested in our locking of local.  previous lock could be read OR write lock on local.
         }
         else {
-            ls.lockedNestable(db,-1);
+            ls.lockedNestable(db,-1,context);
             fassert(16133,_weLocked==0);
             _weLocked = nestableLocks[db];
             _weLocked->lock_shared();
         }
     }
 
-    void Lock::DBWrite::lockOther(const StringData& db) {
+    void Lock::DBWrite::lockOther(const StringData& db, const string &context) {
         fassert( 16252, !db.empty() );
         LockState& ls = lockState();
 
@@ -386,11 +386,11 @@ namespace mongo {
             WrapperForRWLock*& lock = r[db];
             if( lock == 0 )
                 lock = new WrapperForRWLock(db);
-            ls.lockedOther( db , 1 , lock );
+            ls.lockedOther( db , 1 , lock, context );
         }
         else { 
             DEV OCCASIONALLY { dassert( dblocks.get(db) == ls.otherLock() ); }
-            ls.lockedOther(1);
+            ls.lockedOther(1, context);
         }
         
         fassert(16134,_weLocked==0);
@@ -406,7 +406,7 @@ namespace mongo {
         return Lock::notnestable;
     }
 
-    void Lock::DBWrite::lockDB(const string& ns) {
+    void Lock::DBWrite::lockDB(const string& ns, const string &context) {
         fassert( 16253, !ns.empty() );
         LockState& ls = lockState();
         
@@ -430,10 +430,10 @@ namespace mongo {
                 return;
             } 
             if( !nested )
-                lockOther(db);
+                lockOther(db, context);
             lockTop(ls);
             if( nested )
-                lockNestable(nested);
+                lockNestable(nested, context);
         } 
         else {
             qlk.lock_W();
@@ -441,7 +441,7 @@ namespace mongo {
         }
     }
 
-    void Lock::DBRead::lockDB(const string& ns) {
+    void Lock::DBRead::lockDB(const string& ns, const string &context) {
         fassert( 16254, !ns.empty() );
         LockState& ls = lockState();
         
@@ -455,10 +455,10 @@ namespace mongo {
             StringData db = nsToDatabaseSubstring(ns);
             Nestable nested = n(db);
             if( !nested )
-                lockOther(db);
+                lockOther(db, context);
             lockTop(ls);
             if( nested )
-                lockNestable(nested);
+                lockNestable(nested, context);
         } 
         else {
             qlk.lock_R();
@@ -466,14 +466,14 @@ namespace mongo {
         }
     }
 
-    Lock::DBWrite::DBWrite( const StringData& ns )
+    Lock::DBWrite::DBWrite( const StringData& ns, const string &context )
         : ScopedLock( 'w' ), _what(ns.toString()), _nested(false) {
-        lockDB( _what );
+        lockDB( _what, context );
     }
 
-    Lock::DBRead::DBRead( const StringData& ns )
+    Lock::DBRead::DBRead( const StringData& ns, const string &context )
         : ScopedLock( 'r' ), _what(ns.toString()), _nested(false) {
-        lockDB( _what );
+        lockDB( _what, context );
     }
 
     Lock::DBWrite::~DBWrite() {
@@ -555,7 +555,7 @@ namespace mongo {
         }
     }
 
-    void Lock::DBRead::lockOther(const StringData& db) {
+    void Lock::DBRead::lockOther(const StringData& db, const string &context) {
         fassert( 16255, !db.empty() );
         LockState& ls = lockState();
 
@@ -575,11 +575,11 @@ namespace mongo {
             WrapperForRWLock*& lock = r[db];
             if( lock == 0 )
                 lock = new WrapperForRWLock(db);
-            ls.lockedOther( db , -1 , lock );
+            ls.lockedOther( db , -1 , lock, context );
         }
         else { 
             DEV OCCASIONALLY { dassert( dblocks.get(db) == ls.otherLock() ); }
-            ls.lockedOther(-1);
+            ls.lockedOther(-1, context);
         }
         fassert(16135,_weLocked==0);
         ls.otherLock()->lock_shared();
@@ -614,12 +614,23 @@ namespace mongo {
         lockState().resetLockTime();
     }
 
-    writelocktry::writelocktry( int tryms ) : 
+    Lock::DBWrite::Downgrade::Downgrade(scoped_ptr<Lock::DBWrite> &wrlk)
+            : _ns(wrlk->_what), _context(lockState().context()), _wrlk(wrlk) {
+        _wrlk.reset();
+        _rdlk.reset(new Lock::DBRead(_ns, _context));
+    }
+
+    Lock::DBWrite::Downgrade::~Downgrade() {
+        _rdlk.reset();
+        _wrlk.reset(new Lock::DBWrite(_ns, _context));
+    }
+
+    writelocktry::writelocktry(int tryms, const string &context) :
         _got( false ),
         _dbwlock( NULL )
     { 
         try { 
-            _dbwlock.reset(new Lock::GlobalWrite( false, tryms ));
+            _dbwlock.reset(new Lock::GlobalWrite(context, tryms));
         }
         catch ( DBTryLockTimeoutException & ) {
             return;
@@ -629,12 +640,12 @@ namespace mongo {
     writelocktry::~writelocktry() { 
     }
 
-    readlocktry::readlocktry( int tryms ) :
+    readlocktry::readlocktry(int tryms, const string &context) :
         _got( false ),
         _dbrlock( NULL )
     {
         try { 
-            _dbrlock.reset(new Lock::GlobalRead( tryms ));
+            _dbrlock.reset(new Lock::GlobalRead(context, tryms));
         }
         catch ( DBTryLockTimeoutException & ) {
             return;

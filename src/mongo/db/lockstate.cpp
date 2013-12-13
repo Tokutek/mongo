@@ -36,8 +36,8 @@ namespace mongo {
           _otherLock(NULL),
           _scopedLk(NULL),
           _lockPending(false),
-          _lockPendingParallelWriter(false)
-    {
+          _lockPendingParallelWriter(false),
+          _context(NULL) {
     }
 
     bool LockState::isRW() const { 
@@ -131,7 +131,10 @@ namespace mongo {
         BSONObj o = b.obj();
         if( !o.isEmpty() ) 
             res.append("locks", o);
-        res.append( "waitingForLock" , _lockPending );
+        if (_context) {
+            res.append("context", *_context);
+        }
+        res.append("waitingForLock", _lockPending);
     }
 
     void LockState::Dump() {
@@ -187,33 +190,38 @@ namespace mongo {
         return temp;
     }
 
-    void LockState::lockedNestable( Lock::Nestable what , int type) {
+    void LockState::lockedNestable( Lock::Nestable what , int type, const string &context ) {
         verify( type );
         _whichNestable = what;
         _nestableCount += type;
+        _context = &context;
     }
 
     void LockState::unlockedNestable() {
         _whichNestable = Lock::notnestable;
         _nestableCount = 0;
+        _context = NULL;
     }
 
-    void LockState::lockedOther( int type ) {
+    void LockState::lockedOther( int type, const string &context ) {
         fassert( 16231 , _otherCount == 0 );
         _otherCount = type;
+        _context = &context;
     }
 
-    void LockState::lockedOther( const StringData& other , int type , WrapperForRWLock* lock ) {
+    void LockState::lockedOther( const StringData& other , int type , WrapperForRWLock* lock, const string &context  ) {
         fassert( 16170 , _otherCount == 0 );
         _otherName = other.toString();
         _otherCount = type;
         _otherLock = lock;
+        _context = &context;
     }
 
     void LockState::unlockedOther() {
         _otherName = "";
         _otherCount = 0;
         _otherLock = 0;
+        _context = NULL;
     }
 
     LockStat* LockState::getRelevantLockStat() {
