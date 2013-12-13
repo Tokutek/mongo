@@ -52,7 +52,9 @@ function undo_and_redo_entries(replTest, conns, txnLimit) {
         assert(c.hasNext());
         c.next();
     }
-    var entryID = c.next()._id;
+    var entry = c.next();
+    printjson(entry);
+    var entryID = entry._id;
 
     // now let's undo this entry
     print("undoing, but keeping entry " + entryID.hex());
@@ -63,7 +65,9 @@ function undo_and_redo_entries(replTest, conns, txnLimit) {
         assert(c.hasNext());
         c.next();
     }
-    entryID = c.next()._id;
+    entry = c.next();
+    printjson(entry);
+    entryID = entry._id;
     // set minLive and minUnapplied GTID to be something sensible now
     print("undoing " + entryID.hex());
     r = admindb.runCommand({replUndoOplogEntry:1, GTID : entryID});
@@ -104,6 +108,17 @@ doTest = function (signal, txnLimit, startPort) {
     }
     replTest.awaitReplication();
 
+    undo_and_redo_entries(replTest, conns, txnLimit);
+
+    print("updating 30 documents on master with $inc optimization");
+	assert.commandWorked(a.getSisterDB('admin').runCommand({ setParameter: 1, fastupdates: true }))
+    for (i=0; i < 30; i++) {
+        a.foo.update({_id:10}, {$inc:{a:1}});
+    }
+    replTest.awaitReplication();
+	// even though we are updating the same element above,
+	// it should be ok to undo and redo selected entries
+	// because of how $inc operates.
     undo_and_redo_entries(replTest, conns, txnLimit);
 
     print("updating 30 documents on master");
