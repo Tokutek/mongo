@@ -1731,10 +1731,14 @@ namespace mongo {
         verify(_nIndexes == 0);
         removeNamespaceFromCatalog(_ns);
 
-        // If everything succeeds, kill the namespace from the nsindex.
         Top::global.collectionDropped(_ns);
-        nsindex(_ns)->kill_ns(_ns);
         result.append("ns", _ns);
+
+        // Kill the ns from the nsindex.
+        //
+        // Will delete "this" NamespaceDetails object, since it's lifetime is managed
+        // by a shared pointer in the map we're going to delete from.
+        nsindex(_ns)->kill_ns(_ns);
     }
 
     void NamespaceDetails::optimizeAll() {
