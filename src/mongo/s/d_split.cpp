@@ -944,7 +944,8 @@ namespace mongo {
             }
 
             if (newChunks.size() == 2){
-                Client::ReadContext ctx( ns );
+                LOCK_REASON(lockReason, "sharding: checking whether new chunk should migrate");
+                Client::ReadContext ctx( ns, lockReason );
                 Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
                 // If one of the chunks has only one object in it we should move it
                 for (int i=1; i >= 0 ; i--){ // high chunk more likely to have only one obj

@@ -210,7 +210,8 @@ namespace mongo {
         }
 
         static void runColdIndexFromOplog(const char *ns, const BSONObj &row) {
-            Client::WriteContext ctx(ns);
+            LOCK_REASON(lockReason, "repl: cold index build");
+            Client::WriteContext ctx(ns, lockReason);
             NamespaceDetails* nsd = nsdetails(ns);
             const string &coll = row["ns"].String();
 
@@ -232,7 +233,8 @@ namespace mongo {
             // the indexer destructor gets called in a write locked.
             // These MUST NOT be reordered, the context must destruct
             // after the indexer.
-            scoped_ptr<Lock::DBWrite> lk(new Lock::DBWrite(ns));
+            LOCK_REASON(lockReason, "repl: hot index build");
+            scoped_ptr<Lock::DBWrite> lk(new Lock::DBWrite(ns, lockReason));
             scoped_ptr<NamespaceDetails::HotIndexer> indexer;
 
             {
@@ -280,7 +282,8 @@ namespace mongo {
                 }
             }
             else {
-                Client::ReadContext ctx(ns);
+                LOCK_REASON(lockReason, "repl: applying insert");
+                Client::ReadContext ctx(ns, lockReason);
                 NamespaceDetails* nsd = nsdetails(ns);
 
                 // overwrite set to true because we are running on a secondary
@@ -294,7 +297,8 @@ namespace mongo {
             const BSONObj pk = op[KEY_STR_PK].Obj();
             const BSONObj row = op[KEY_STR_ROW].Obj();
 
-            Client::ReadContext ctx(ns);
+            LOCK_REASON(lockReason, "repl: applying capped insert");
+            Client::ReadContext ctx(ns, lockReason);
             NamespaceDetails *nsd = nsdetails(ns);
 
             // overwrite set to true because we are running on a secondary
@@ -305,7 +309,8 @@ namespace mongo {
         }
 
         static void runDeleteFromOplog(const char *ns, const BSONObj &op) {
-            Client::ReadContext ctx(ns);
+            LOCK_REASON(lockReason, "repl: applying delete");
+            Client::ReadContext ctx(ns, lockReason);
             NamespaceDetails* nsd = nsdetails(ns);
 
             const BSONObj row = op[KEY_STR_ROW].Obj();
@@ -316,7 +321,8 @@ namespace mongo {
         }
         
         static void runCappedDeleteFromOplog(const char *ns, const BSONObj &op) {
-            Client::ReadContext ctx(ns);
+            LOCK_REASON(lockReason, "repl: applying capped delete");
+            Client::ReadContext ctx(ns, lockReason);
             NamespaceDetails* nsd = nsdetails(ns);
 
             const BSONObj row = op[KEY_STR_ROW].Obj();
@@ -328,7 +334,8 @@ namespace mongo {
         }
 
         static void runUpdateFromOplog(const char *ns, const BSONObj &op, bool isRollback) {
-            Client::ReadContext ctx(ns);
+            LOCK_REASON(lockReason, "repl: applying update");
+            Client::ReadContext ctx(ns, lockReason);
             NamespaceDetails* nsd = nsdetails(ns);
 
             const char *names[] = {
@@ -358,7 +365,8 @@ namespace mongo {
         }
 
         static void runUpdateModsFromOplog(const char *ns, const BSONObj &op, bool isRollback) {
-            Client::ReadContext ctx(ns);
+            LOCK_REASON(lockReason, "repl: applying update with mods");
+            Client::ReadContext ctx(ns, lockReason);
             NamespaceDetails* nsd = nsdetails(ns);
 
             const char *names[] = { KEY_STR_PK, KEY_STR_MODS };

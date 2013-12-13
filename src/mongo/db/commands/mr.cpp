@@ -328,8 +328,9 @@ namespace mongo {
                     // which aborts if the create fails.
                     // If the create fails, the child's abort hooks will clean up
                     // the nsindex inside mongod (therefore not leaving a
+                    LOCK_REASON(lockReason, "m/r: creating incremental collection");
+                    Client::WriteContext ctx( _config.incLong, lockReason );
                     Client::Transaction transaction(0);
-                    Client::WriteContext ctx( _config.incLong );
                     string err;
                     // Specifying { natural : 1 } creates a "natural order" collection,
                     // which does not automatically add/index the _id field.
@@ -348,8 +349,9 @@ namespace mongo {
             // create temp collection
             {
                 // See above for why userCreateNS must be called in its own child transaction.
+                LOCK_REASON(lockReason, "m/r: creating temp collection");
+                Client::WriteContext ctx( _config.tempNamespace, lockReason );
                 Client::Transaction transaction(0);
-                Client::WriteContext ctx( _config.tempNamespace.c_str() );
                 string errmsg;
                 if ( ! userCreateNS( _config.tempNamespace.c_str() , BSONObj() , errmsg , true ) ) {
                     uasserted(13630, str::stream() << "userCreateNS failed for mr tempNamespace ns: "
@@ -379,7 +381,8 @@ namespace mongo {
                     BSONObj indexToInsert = b.obj();
 
                     string sysIndexes = getSisterNS( _config.tempNamespace, "system.indexes" );
-                    Client::WriteContext ctx( sysIndexes.c_str() );
+                    LOCK_REASON(lockReason, "m/r: creating output indexes");
+                    Client::WriteContext ctx( sysIndexes, lockReason );
                     insert( sysIndexes.c_str() , indexToInsert );
                 }
 
@@ -533,7 +536,8 @@ namespace mongo {
                                "M/R Merge Post Processing Progress",
                                _safeCount(_db, _config.tempNamespace, BSONObj()));
                 {
-                    Client::ReadContext ctx( _config.outputOptions.finalNamespace );
+                    LOCK_REASON(lockReason, "m/r: merge post processing");
+                    Client::ReadContext ctx( _config.outputOptions.finalNamespace, lockReason );
                     auto_ptr<DBClientCursor> cursor = _db.query( _config.tempNamespace , BSONObj() );
                     while ( cursor->more() ) {
                         BSONObj o = cursor->next();
@@ -551,7 +555,8 @@ namespace mongo {
                                "M/R Reduce Post Processing Progress",
                                _safeCount(_db, _config.tempNamespace, BSONObj()));
                 {
-                    Client::ReadContext ctx( _config.outputOptions.finalNamespace );
+                    LOCK_REASON(lockReason, "m/r: reduce post processing");
+                    Client::ReadContext ctx( _config.outputOptions.finalNamespace, lockReason );
                     auto_ptr<DBClientCursor> cursor = _db.query( _config.tempNamespace , BSONObj() );
                     while ( cursor->more() ) {
                         BSONObj temp = cursor->next();
@@ -586,7 +591,8 @@ namespace mongo {
         void State::insert( const string& ns , const BSONObj& o ) {
             verify( _onDisk );
 
-            Client::ReadContext ctx( ns.c_str() );
+            LOCK_REASON(lockReason, "m/r: insert");
+            Client::ReadContext ctx( ns, lockReason );
             insertObject( ns.c_str() , o );
         }
 
@@ -875,7 +881,8 @@ namespace mongo {
                 verify( foundIndex );
             }
 
-            Client::ReadContext ctx( _config.incLong );
+            LOCK_REASON(lockReason, "m/r: final reduce to collection");
+            Client::ReadContext ctx( _config.incLong, lockReason );
 
             BSONObj prev;
             BSONList all;
@@ -948,7 +955,8 @@ namespace mongo {
                     // only 1 value for this key
                     if ( _onDisk ) {
                         // this key has low cardinality, so just write to collection
-                        Client::ReadContext ctx(_config.incLong.c_str());
+                        LOCK_REASON(lockReason, "m/r: reducing into collection");
+                        Client::ReadContext ctx(_config.incLong, lockReason);
                         _insertToInc( *(all.begin()) );
                     }
                     else {
@@ -975,7 +983,8 @@ namespace mongo {
             if ( ! _onDisk )
                 return;
 
-            Client::ReadContext ctx(_config.incLong);
+            LOCK_REASON(lockReason, "m/r: dumping in memory state to collection");
+            Client::ReadContext ctx(_config.incLong, lockReason);
 
             for ( InMemory::iterator i=_temp->begin(); i!=_temp->end(); i++ ) {
                 BSONList& all = i->second;
@@ -1187,7 +1196,8 @@ namespace mongo {
                         wassert( config.limit < 0x4000000 ); // see case on next line to 32 bit unsigned
                         long long mapTime = 0;
                         {
-                            Client::ReadContext ctx( config.ns );
+                            LOCK_REASON(lockReason, "m/r: emit phase");
+                            Client::ReadContext ctx(config.ns, lockReason);
 
                             // obtain full cursor on data to apply mr to
                             shared_ptr<Cursor> temp = getOptimizedCursor( config.ns.c_str(), config.filter, config.sort );

@@ -466,11 +466,12 @@ namespace mongo {
                 LOG(1) << "note: not profiling because recursive read lock" << endl;
             }
             else {
+                LOCK_REASON(lockReason, "writing to system.profile collection");
                 try {
-                    Lock::DBRead lk( currentOp.getNS() );
+                    Lock::DBRead lk( currentOp.getNS(), lockReason );
                     lockedDoProfile( c, op, currentOp );
                 } catch (RetryWithWriteLock &e) {
-                    Lock::DBWrite lk( currentOp.getNS() );
+                    Lock::DBWrite lk( currentOp.getNS(), lockReason );
                     lockedDoProfile( c, op, currentOp );
                 }
             }
@@ -563,12 +564,13 @@ namespace mongo {
             return;
         }
 
+        LOCK_REASON(lockReason, "update");
         try {
-            Lock::DBRead lk(ns);
+            Lock::DBRead lk(ns, lockReason);
             lockedReceivedUpdate(ns, m, op, updateobj, query, upsert, multi);
         }
         catch (RetryWithWriteLock &e) {
-            Lock::DBWrite lk(ns);
+            Lock::DBWrite lk(ns, lockReason);
             lockedReceivedUpdate(ns, m, op, updateobj, query, upsert, multi);
         }
     }
@@ -601,7 +603,8 @@ namespace mongo {
             return;
         }
 
-        Lock::DBRead lk(ns);
+        LOCK_REASON(lockReason, "delete");
+        Lock::DBRead lk(ns, lockReason);
 
         // writelock is used to synchronize stepdowns w/ writes
         uassert(10056, "not master", isMasterNs(ns));
@@ -688,7 +691,8 @@ namespace mongo {
                     }
                 }
 
-                Client::ReadContext ctx(ns);
+                LOCK_REASON(lockReason, "getMore");
+                Client::ReadContext ctx(ns, lockReason);
 
                 // call this readlocked so state can't change
                 replVerifyReadsOk();
@@ -808,7 +812,8 @@ namespace mongo {
             verify(!sc.handlePossibleShardedMessage(m, 0));
         }
 
-        scoped_ptr<Lock::DBWrite> lk(new Lock::DBWrite(ns));
+        LOCK_REASON(lockReason, "building hot index");
+        scoped_ptr<Lock::DBWrite> lk(new Lock::DBWrite(ns, lockReason));
 
         uassert(16902, "not master", isMasterNs(ns));
 
@@ -913,12 +918,13 @@ namespace mongo {
             }
         }
 
+        LOCK_REASON(lockReason, "insert");
         try {
-            Lock::DBRead lk(ns);
+            Lock::DBRead lk(ns, lockReason);
             lockedReceivedInsert(ns, m, objs, op, keepGoing);
         }
         catch (RetryWithWriteLock &e) {
-            Lock::DBWrite lk(ns);
+            Lock::DBWrite lk(ns, lockReason);
             lockedReceivedInsert(ns, m, objs, op, keepGoing);
         }
     }
@@ -963,7 +969,8 @@ namespace mongo {
     bool replHasDatabases() {
         vector<string> names;
         {
-            Lock::GlobalRead lk;
+            LOCK_REASON(lockReason, "repl: checking for existing data");
+            Lock::GlobalRead lk(lockReason);
             Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
             getDatabaseNames(names);
             txn.commit();
@@ -974,7 +981,8 @@ namespace mongo {
                 return true;
             // we have a local database.  return true if oplog isn't empty
             {
-                Client::ReadContext ctx(rsoplog);
+                LOCK_REASON(lockReason, "repl: checking for non-empty oplog");
+                Client::ReadContext ctx(rsoplog, lockReason);
                 Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
                 NamespaceDetails *d = nsdetails(rsoplog);
                 BSONObj o;
@@ -1035,7 +1043,8 @@ namespace mongo {
         string errmsg;
         int errCode;
 
-        Client::ReadContext ctx(ns);
+        LOCK_REASON(lockReason, "count");
+        Client::ReadContext ctx(ns, lockReason);
         Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
         long long res = runCount( ns.c_str() , _countCmd( ns , query , options , limit , skip ) , errmsg, errCode );
         if ( res == -1 ) {
@@ -1087,7 +1096,8 @@ namespace mongo {
         boost::thread close_socket_thread( boost::bind(MessagingPort::closeAllSockets, 0) );
 
         {
-            Lock::GlobalWrite lk;
+            LOCK_REASON(lockReason, "shutting down");
+            Lock::GlobalWrite lk(lockReason);
             log() << "shutdown: going to close databases..." << endl;
             dbHolderW().closeDatabases(dbpath);
             log() << "shutdown: going to unload all plugins..." << endl;
@@ -1123,7 +1133,8 @@ namespace mongo {
 
 
         {
-            Lock::GlobalWrite lk;
+            LOCK_REASON(lockReason, "exiting cleanly");
+            Lock::GlobalWrite lk(lockReason);
             log() << "aborting any live transactions" << endl;
             Client::abortLiveTransactions();
             log() << "now exiting" << endl;

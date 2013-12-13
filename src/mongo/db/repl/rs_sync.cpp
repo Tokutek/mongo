@@ -161,7 +161,8 @@ namespace mongo {
                 // this is messy
                 // replLock is already locked on input here
                 // see usage of this function in manager.cpp
-                Lock::GlobalWrite writeLock;
+                LOCK_REASON(lockReason, "repl: blocking sync");
+                Lock::GlobalWrite writeLock(lockReason);
                 // do this here, because tryToGoLiveAsASecondary depends on it
                 _blockSync = block;
                 tryToGoLiveAsASecondary();

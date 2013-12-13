@@ -213,7 +213,8 @@ namespace mongo {
                 }
                 else {
                     try {
-                        Client::ReadContext ctx(to_collection);
+                        LOCK_REASON(lockReason, "cloner: copying documents into local collection");
+                        Client::ReadContext ctx(to_collection, lockReason);
                         if (_isCapped) {
                             NamespaceDetails *d = nsdetails(to_collection);
                             verify(d->isCapped());
@@ -297,7 +298,8 @@ namespace mongo {
         for ( list<BSONObj>::iterator i = storedForLater.begin(); i!=storedForLater.end(); i++ ) {
             BSONObj js = *i;
             try {
-                Client::WriteContext ctx(js.getStringField("ns"));
+                LOCK_REASON(lockReason, "cloner: creating indexes");
+                Client::WriteContext ctx(js.getStringField("ns"), lockReason);
                 insertObject(to_collection, js, 0, logForRepl);
             }
             catch( UserException& e ) {
@@ -870,7 +872,8 @@ namespace mongo {
             
             RemoteTransaction rtxn(*conn, "mvcc");
 
-            Client::WriteContext ctx(collection);
+            LOCK_REASON(lockReason, "cloner: copying collection");
+            Client::WriteContext ctx(collection, lockReason);
             Client::Transaction txn(DB_SERIALIZABLE);
             
             Cloner c(conn);
@@ -1029,7 +1032,8 @@ namespace mongo {
                     return false;
                 }
 
-                lk.reset(static_cast<Lock::ScopedLock *>(new Lock::DBWrite(todb)));
+                LOCK_REASON(lockReason, "cloner: locking todb");
+                lk.reset(static_cast<Lock::ScopedLock *>(new Lock::DBWrite(todb, lockReason)));
                 conn = cc().authConn();
                 // we are not using a direct client, so we should
                 // create a multi statement transaction for the work
@@ -1043,7 +1047,8 @@ namespace mongo {
             }
             else {
                 {
-                    Client::ReadContext rctx(todb); // this is annoying, checkSelfClone needs cc().database()
+                    LOCK_REASON(lockReason, "cloner: checking for self-clone");
+                    Client::ReadContext rctx(todb, lockReason); // this is annoying, checkSelfClone needs cc().database()
                     // check if the input parameters are asking for a self-clone
                     // if so, gracefully exit
                     if (!checkSelfClone(fromhost.c_str(), fromdb, errmsg)) {
@@ -1053,11 +1058,13 @@ namespace mongo {
 
                 if (masterSameProcess(fromhost.c_str())) {
                     // SERVER-4328 todo lock just the two db's not everything for the fromself case
-                    lk.reset(static_cast<Lock::ScopedLock *>(new Lock::GlobalWrite()));
+                    LOCK_REASON(lockReason, "cloner: locking both dbs for self-clone");
+                    lk.reset(static_cast<Lock::ScopedLock *>(new Lock::GlobalWrite(lockReason)));
                     conn = boost::make_shared<DBDirectClient>();
                 }
                 else {
-                    lk.reset(static_cast<Lock::ScopedLock *>(new Lock::DBWrite(todb)));
+                    LOCK_REASON(lockReason, "cloner: locking todb");
+                    lk.reset(static_cast<Lock::ScopedLock *>(new Lock::DBWrite(todb, lockReason)));
                     conn = makeConnection(fromhost.c_str(), errmsg);
                     if (!conn) {
                         // errmsg should be set

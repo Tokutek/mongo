@@ -43,7 +43,8 @@ namespace mongo {
         bool ok = false;
         try {
             Client::GodScope gs;
-            Client::ReadContext ctx(usersNamespace);
+            LOCK_REASON(lockReason, "auth: looking up user");
+            Client::ReadContext ctx(usersNamespace, lockReason);
             // we want all authentication stuff to happen on an alternate stack
             Client::AlternateTransactionStack altStack;
 

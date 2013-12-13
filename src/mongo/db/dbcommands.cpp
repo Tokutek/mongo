@@ -361,7 +361,8 @@ namespace mongo {
             theReplSet->shutdown();
         }
 
-        writelocktry wlt( 2 * 60 * 1000 );
+        LOCK_REASON(lockReason, "shutdown command");
+        writelocktry wlt(2 * 60 * 1000, lockReason);
         uassert( 13455 , "dbexit timed out getting lock" , wlt.got() );
         return shutdownHelper();
     }
@@ -465,11 +466,12 @@ namespace mongo {
 
     public:
         bool run(const string& dbname, BSONObj& cmdObj, int i, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            LOCK_REASON(lockReason, "profile command");
             try {
-                Client::ReadContext ctx(dbname);
+                Client::ReadContext ctx(dbname, lockReason);
                 return _run(dbname, cmdObj, i, errmsg, result, fromRepl);
             } catch (RetryWithWriteLock &e) {
-                Client::WriteContext ctx(dbname);
+                Client::WriteContext ctx(dbname, lockReason);
                 return _run(dbname, cmdObj, i, errmsg, result, fromRepl);
             }
         }
@@ -975,7 +977,8 @@ namespace mongo {
                 totalSize += size;
                 
                 if (1) {
-                    Client::ReadContext rc( getSisterNS(*i, "system.namespaces") );
+                    LOCK_REASON(lockReason, "listDatabases: checking for empty db");
+                    Client::ReadContext rc( getSisterNS(*i, "system.namespaces"), lockReason );
                     b.appendBool( "empty", rc.ctx().db()->isEmpty() );
                 }
                 
@@ -987,7 +990,8 @@ namespace mongo {
             // TODO: erh 1/1/2010 I think this is broken where path != dbpath ??
             set<string> allShortNames;
             if (!jsobj.hasElement( "onDiskOnly" )) {
-                Lock::GlobalRead lk;
+                LOCK_REASON(lockReason, "listDatabases: looking for dbs on disk");
+                Lock::GlobalRead lk(lockReason);
                 dbHolder().getAllShortNames( allShortNames );
             }
             
@@ -1002,7 +1006,8 @@ namespace mongo {
                 b.append( "sizeOnDisk" , (double)1.0 );
 
                 if (1) {
-                    Client::ReadContext ctx( name );
+                    LOCK_REASON(lockReason, "listDatabases: checking for empty db");
+                    Client::ReadContext ctx( name, lockReason );
                     b.appendBool( "empty", ctx.ctx().db()->isEmpty() );
                 }
 
@@ -1503,12 +1508,13 @@ namespace mongo {
             int secs = 100;
             if ( cmdObj["secs"].isNumber() )
                 secs = cmdObj["secs"].numberInt();
+            LOCK_REASON(lockReason, "sleep command");
             if( cmdObj.getBoolField("w") ) {
-                Lock::GlobalWrite lk;
+                Lock::GlobalWrite lk(lockReason);
                 sleepsecs(secs);
             }
             else {
-                Lock::GlobalRead lk;
+                Lock::GlobalRead lk(lockReason);
                 sleepsecs(secs);
             }
             return true;
@@ -1739,6 +1745,7 @@ namespace mongo {
 
         std::string errmsg;
         bool retval = false;
+        LOCK_REASON(lockReason, "command");
         OpSettings settings = c->getOpSettings();
         cc().setOpSettings(settings);
         if ( c->locktype() == Command::NONE ) {
@@ -1758,11 +1765,11 @@ namespace mongo {
             // sufficient. Upgrade to a global read lock. Note that the db may close
             // between lock acquisions, but that's okay - we'll uassert later in the
             // Client::Context constructor and the user must retry the command.
-            scoped_ptr<Client::ReadContext> rctx(new Client::ReadContext(ns));
+            scoped_ptr<Client::ReadContext> rctx(new Client::ReadContext(ns, lockReason));
             scoped_ptr<Lock::GlobalRead> lk;
             if (c->lockGlobally()) {
                 rctx.reset();
-                lk.reset(new Lock::GlobalRead());
+                lk.reset(new Lock::GlobalRead(lockReason));
             }
             Client::Context ctx(ns, dbpath);
             if (!canRunCommand(c, dbname, queryOptions, fromRepl, errmsg, result)) {
@@ -1797,8 +1804,8 @@ namespace mongo {
                 }
             }
             scoped_ptr<Lock::ScopedLock> lk(global
-                                            ? static_cast<Lock::ScopedLock*>(new Lock::GlobalWrite())
-                                            : static_cast<Lock::ScopedLock*>(new Lock::DBWrite(dbname)));
+                                            ? static_cast<Lock::ScopedLock*>(new Lock::GlobalWrite(lockReason))
+                                            : static_cast<Lock::ScopedLock*>(new Lock::DBWrite(dbname, lockReason)));
             if (!canRunCommand(c, dbname, queryOptions, fromRepl, errmsg, result)) {
                 appendCommandStatus(result, false, errmsg);
                 return;

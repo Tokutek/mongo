@@ -373,7 +373,8 @@ namespace mongo {
             CursorId id;
             {
                 // Set up cursor
-                Client::ReadContext ctx(ns);
+                LOCK_REASON(lockReason, "aggregate: creating aggregation cursor");
+                Client::ReadContext ctx(ns, lockReason);
                 shared_ptr<Cursor> cursor(new PipelineCursor(pPipeline));
                 // cc will be owned by cursor manager
                 ClientCursor* cc = new ClientCursor(0, cursor, ns, cmdObj.getOwned());

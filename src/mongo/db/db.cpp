@@ -243,7 +243,8 @@ namespace mongo {
 
         BSONObj o = toLog.obj();
 
-        Lock::GlobalWrite lk;
+        LOCK_REASON(lockReason, "startup: creating startup_log");
+        Lock::GlobalWrite lk(lockReason);
         Client::GodScope gs;
         DBDirectClient c;
         const char* name = "local.startup_log";
@@ -279,7 +280,8 @@ namespace mongo {
      *          --replset.
      */
     unsigned long long checkIfReplMissingFromCommandLine() {
-        Lock::GlobalWrite lk;
+        LOCK_REASON(lockReason, "startup: checking whether --replSet is missing");
+        Lock::GlobalWrite lk(lockReason);
         if( !cmdLine.usingReplSets() ) {
             Client::GodScope gs;
             DBDirectClient c;
@@ -383,12 +385,14 @@ namespace mongo {
         if( !noauth ) {
             // open admin db in case we need to use it later. TODO this is not the right way to
             // resolve this.
-            Client::WriteContext c("admin");
+            LOCK_REASON(lockReason, "startup: opening admin db");
+            Client::WriteContext c("admin", lockReason);
         }
 
         {
             // Upgrade any system.users collections if they need it.
-            Lock::GlobalWrite lk;
+            LOCK_REASON(lockReason, "startup: upgrading system.users collections");
+            Lock::GlobalWrite lk(lockReason);
             Client::UpgradingSystemUsersScope usus;
             Client::Transaction txn(DB_SERIALIZABLE);
 

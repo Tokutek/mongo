@@ -39,7 +39,8 @@ namespace mongo {
                         !loadInProgress() );
 
         shared_ptr<Client::LoadInfo> loadInfo(new Client::LoadInfo(ns));
-        Client::WriteContext ctx(ns);
+        LOCK_REASON(lockReason, "loader: beginning load");
+        Client::WriteContext ctx(ns, lockReason);
         beginBulkLoad(ns, indexes, options);
         _loadInfo = loadInfo;
     }
@@ -53,7 +54,8 @@ namespace mongo {
         const string &ns = loadInfo->bulkLoadNS();
 
         {
-            Client::WriteContext ctx(ns);
+            LOCK_REASON(lockReason, "loader: committing load");
+            Client::WriteContext ctx(ns, lockReason);
             commitBulkLoad(ns);
         }
         loadInfo->commitTxn();
@@ -66,7 +68,8 @@ namespace mongo {
         shared_ptr<Client::LoadInfo> loadInfo = _loadInfo;
         _loadInfo.reset();
         const string &ns = loadInfo->bulkLoadNS();
-        Client::WriteContext ctx(ns);
+        LOCK_REASON(lockReason, "loader: aborting load");
+        Client::WriteContext ctx(ns, lockReason);
         abortBulkLoad(ns);
     }
 

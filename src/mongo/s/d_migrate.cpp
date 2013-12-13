@@ -230,7 +230,8 @@ namespace mongo {
                     return;
                 }
 
-                Client::ReadContext ctx(ns);
+                LOCK_REASON(lockReason, "sharding: deleting old documents after migrate");
+                Client::ReadContext ctx(ns, lockReason);
                 Client::Transaction txn(DB_SERIALIZABLE);
                 long long numDeleted =
                         deleteIndexRange( ns,
@@ -375,8 +376,9 @@ namespace mongo {
         void clearMigrateLog() {
             string err;
             BSONObjBuilder res;
+            LOCK_REASON(lockReason, "sharding: clearing migratelog");
             try {
-                Client::WriteContext ctx(MIGRATE_LOG_NS);
+                Client::WriteContext ctx(MIGRATE_LOG_NS, lockReason);
                 Client::Transaction txn(DB_SERIALIZABLE);
                 NamespaceDetails *d = nsdetails(MIGRATE_LOG_NS);
                 if (d != NULL) {
@@ -399,7 +401,7 @@ namespace mongo {
                 throw e;
             }
             try {
-                Client::WriteContext ctx(MIGRATE_LOG_REF_NS);
+                Client::WriteContext ctx(MIGRATE_LOG_REF_NS, lockReason);
                 Client::Transaction txn(DB_SERIALIZABLE);
                 NamespaceDetails *d = nsdetails(MIGRATE_LOG_REF_NS);
                 if (d != NULL) {
@@ -483,13 +485,15 @@ namespace mongo {
         }
 
         void writeObjToMigrateLog(BSONObj &obj) {
-            Client::ReadContext ctx(MIGRATE_LOG_NS);
+            LOCK_REASON(lockReason, "sharding: writing to migratelog");
+            Client::ReadContext ctx(MIGRATE_LOG_NS, lockReason);
             insertOneObject(_migrateLogDetails, obj,
                             NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
         }
 
         void writeObjToMigrateLogRef(BSONObj &obj) {
-            Client::ReadContext ctx(MIGRATE_LOG_REF_NS);
+            LOCK_REASON(lockReason, "sharding: writing to migratelog.refs");
+            Client::ReadContext ctx(MIGRATE_LOG_REF_NS, lockReason);
             insertOneObject(_migrateLogRefDetails, obj,
                             NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
         }
@@ -565,7 +569,8 @@ namespace mongo {
             NamespaceDetails *d;
             if (_cc.get() == NULL) {
                 dassert(!_txn);
-                Client::WriteContext ctx(_ns);
+                LOCK_REASON(lockReason, "sharding: enabling migratelog");
+                Client::WriteContext ctx(_ns, lockReason);
                 enableLogTxnOpsForSharding(mongo::shouldLogOpForSharding,
                                            mongo::shouldLogUpdateOpForSharding,
                                            mongo::startObjForMigrateLog,
@@ -602,7 +607,8 @@ namespace mongo {
 
             {
                 Client::WithTxnStack wts(_txnStack);
-                Client::ReadContext ctx(_ns);
+                LOCK_REASON(lockReason, "sharding: cloning documents from donor for migrate");
+                Client::ReadContext ctx(_ns, lockReason);
 
                 BSONArrayBuilder a(result.subarrayStart("objects"));
 
@@ -1583,7 +1589,8 @@ namespace mongo {
 
             {
                 // 0. copy system.namespaces entry if collection doesn't already exist
-                Client::WriteContext ctx( ns );
+                LOCK_REASON(lockReason, "sharding: creating collection and indexes for migrate");
+                Client::WriteContext ctx( ns, lockReason );
                 Client::Transaction txn(DB_SERIALIZABLE);
                 const string &dbname = cc().database()->name();
 
@@ -1625,7 +1632,8 @@ namespace mongo {
                 }
 
                 // 2. delete any data already in range
-                Client::ReadContext ctx(ns);
+                LOCK_REASON(lockReason, "sharding: deleting old documents before migrate");
+                Client::ReadContext ctx(ns, lockReason);
                 Client::Transaction txn(DB_SERIALIZABLE);
                 long long num = deleteIndexRange( ns, min, max, indexKeyPattern,
                                                   false, /*maxInclusive*/
@@ -1643,7 +1651,8 @@ namespace mongo {
                 // 3. initial bulk clone
                 state = CLONE;
 
-                Client::ReadContext ctx(ns);
+                LOCK_REASON(lockReason, "sharding: cloning documents on recipient for migrate");
+                Client::ReadContext ctx(ns, lockReason);
                 Client::Transaction txn(DB_SERIALIZABLE);
 
                 while ( true ) {
@@ -1843,7 +1852,8 @@ namespace mongo {
                 lastGTID = &dummy;
             }
 
-            Client::ReadContext ctx(ns);
+            LOCK_REASON(lockReason, "sharding: applying mods for migrate");
+            Client::ReadContext ctx(ns, lockReason);
             Client::Transaction txn(DB_SERIALIZABLE);
 
             for (vector<BSONElement>::const_iterator it = modElements.begin(); it != modElements.end(); ++it) {

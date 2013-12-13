@@ -97,7 +97,8 @@ namespace mongo {
                     settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
                     cc().setOpSettings(settings);
 
-                    Client::ReadContext ctx(ns);
+                    LOCK_REASON(lockReason, "ttl: deleting expired documents");
+                    Client::ReadContext ctx(ns, lockReason);
                     Client::Transaction transaction(DB_SERIALIZABLE);
                     NamespaceDetails* nsd = nsdetails(ns);
                     if (!nsd) {
@@ -136,7 +137,8 @@ namespace mongo {
 
                 set<string> dbs;
                 {
-                    Lock::DBRead lk( "local" );
+                    LOCK_REASON(lockReason, "ttl: getting list of dbs");
+                    Lock::DBRead lk("local", lockReason);
                     dbHolder().getAllShortNames( dbs );
                 }
                 

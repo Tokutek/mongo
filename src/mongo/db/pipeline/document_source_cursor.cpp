@@ -28,8 +28,8 @@
 
 namespace mongo {
 
-    DocumentSourceCursor::CursorWithContext::CursorWithContext( const string& ns )
-            : _context(ns)
+    DocumentSourceCursor::CursorWithContext::CursorWithContext( const string& ns, const string &reason )
+            : _context(ns, reason)
             , _txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY)
             , _chunkMgr(shardingState.needShardChunkManager( ns )
                         ? shardingState.getShardChunkManager( ns )

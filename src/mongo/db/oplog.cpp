@@ -100,7 +100,8 @@ namespace mongo {
     }
     
     static void _logTransactionOps(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) {
-        Lock::DBRead lk1("local");
+        LOCK_REASON(lockReason, "repl: logging to oplog");
+        Lock::DBRead lk1("local", lockReason);
 
         BSONObjBuilder b;
         addGTIDToBSON("_id", gtid, b);
@@ -138,7 +139,8 @@ namespace mongo {
     }
 
     void logTransactionOpsRef(GTID gtid, uint64_t timestamp, uint64_t hash, OID& oid) {
-        Lock::DBRead lk1("local");
+        LOCK_REASON(lockReason, "repl: logging to oplog");
+        Lock::DBRead lk1("local", lockReason);
         BSONObjBuilder b;
         addGTIDToBSON("_id", gtid, b);
         b.appendDate("ts", timestamp);
@@ -150,7 +152,8 @@ namespace mongo {
     }
 
     void logOpsToOplogRef(BSONObj o) {
-        Lock::DBRead lk("local");
+        LOCK_REASON(lockReason, "repl: logging to oplog.refs");
+        Lock::DBRead lk("local", lockReason);
         writeEntryToOplogRefs(o);
     }
 
@@ -192,7 +195,8 @@ namespace mongo {
     }
 
     bool getLastGTIDinOplog(GTID* gtid) {
-        Client::ReadContext ctx(rsoplog);
+        LOCK_REASON(lockReason, "repl: looking up last GTID in oplog");
+        Client::ReadContext ctx(rsoplog, lockReason);
         // TODO: Should this be using rsOplogDetails, verifying non-null?
         NamespaceDetails *d = nsdetails(rsoplog);
         shared_ptr<Cursor> c( BasicCursor::make(d, -1) );
@@ -204,7 +208,8 @@ namespace mongo {
     }
 
     bool gtidExistsInOplog(GTID gtid) {
-        Client::ReadContext ctx(rsoplog);
+        LOCK_REASON(lockReason, "repl: querying for GTID in oplog");
+        Client::ReadContext ctx(rsoplog, lockReason);
         // TODO: Should this be using rsOplogDetails, verifying non-null?
         NamespaceDetails *d = nsdetails(rsoplog);
         BSONObjBuilder q;
@@ -256,7 +261,8 @@ namespace mongo {
     // Copy a range of documents to the local oplog.refs collection
     static void copyOplogRefsRange(OplogReader &r, OID oid) {
         shared_ptr<DBClientCursor> c = r.getOplogRefsCursor(oid);
-        Client::ReadContext ctx(rsOplogRefs);
+        LOCK_REASON(lockReason, "repl: copying oplog.refs range");
+        Client::ReadContext ctx(rsOplogRefs, lockReason);
         while (c->more()) {
             BSONObj b = c->next();
             BSONElement eOID = b.getFieldDotted("_id.oid");
@@ -277,7 +283,8 @@ namespace mongo {
             *bigTxn = true;
         }
 
-        Client::ReadContext ctx(rsoplog);
+        LOCK_REASON(lockReason, "repl: copying entry to local oplog");
+        Client::ReadContext ctx(rsoplog, lockReason);
         replicateTransactionToOplog(o);
     }
 
@@ -303,7 +310,8 @@ namespace mongo {
         while (1) {
             BSONObj entry;
             {
-                Client::ReadContext ctx(rsOplogRefs);
+                LOCK_REASON(lockReason, "repl: finding oplog.refs entry to apply");
+                Client::ReadContext ctx(rsOplogRefs, lockReason);
                 // TODO: Should this be using rsOplogRefsDetails, verifying non-null?
                 NamespaceDetails *d = nsdetails(rsOplogRefs);
                 if (d == NULL || !d->findOne(BSON("_id" << BSON("$gt" << BSON("oid" << oid << "seq" << seq))), entry, true)) {
@@ -342,7 +350,8 @@ namespace mongo {
             // this entry has been applied to collections
             BSONElementManipulator(entry["a"]).setBool(true);
             {
-                Lock::DBRead lk1("local");
+                LOCK_REASON(lockReason, "repl: setting oplog entry's applied bit");
+                Lock::DBRead lk1("local", lockReason);
                 writeEntryToOplog(entry, false);
             }
             // If this code fails, it is impossible to recover from
@@ -379,7 +388,8 @@ namespace mongo {
         while (1) {
             BSONObj currEntry;
             {
-                Client::ReadContext ctx(rsOplogRefs);
+                LOCK_REASON(lockReason, "repl: rolling back entry from oplog.refs");
+                Client::ReadContext ctx(rsOplogRefs, lockReason);
                 verify(rsOplogRefsDetails != NULL);
                 shared_ptr<IndexCursor> c(
                     IndexCursor::make(
@@ -424,7 +434,8 @@ namespace mongo {
             }
         }
         {
-            Lock::DBRead lk1("local");
+            LOCK_REASON(lockReason, "repl: purging entry from oplog");
+            Lock::DBRead lk1("local", lockReason);
             if (purgeEntry) {
                 purgeEntryFromOplog(entry);
             }
@@ -442,7 +453,8 @@ namespace mongo {
         verify(rsOplogDetails);
         if (entry.hasElement("ref")) {
             OID oid = entry["ref"].OID();
-            Client::ReadContext ctx(rsOplogRefs);
+            LOCK_REASON(lockReason, "repl: purging oplog.refs for oplog entry");
+            Client::ReadContext ctx(rsOplogRefs, lockReason);
             Client::Transaction txn(DB_SERIALIZABLE);
             deleteIndexRange(
                 rsOplogRefs,
@@ -468,7 +480,8 @@ namespace mongo {
     }
 
     void hotOptimizeOplogTo(GTID gtid, const int timeout, uint64_t *loops_run) {
-        Client::ReadContext ctx(rsoplog);
+        LOCK_REASON(lockReason, "repl: optimizing oplog");
+        Client::ReadContext ctx(rsoplog, lockReason);
 
         // do a hot optimize up until gtid;
         BSONObjBuilder q;

@@ -29,6 +29,9 @@
 #include "mongo/util/concurrency/mutex.h"
 #include "mongo/util/concurrency/rwlock.h"
 
+#define STRINGIFY_MACRO(x) #x
+#define LOCK_REASON(var, s) static const string var(s " (" __FILE__ ":" STRINGIFY_MACRO(__LINE__) ")")
+
 namespace mongo {
 
     class WrapperForRWLock;

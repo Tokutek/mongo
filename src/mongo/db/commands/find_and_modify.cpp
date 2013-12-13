@@ -92,8 +92,9 @@ namespace mongo {
                 return false;
             }
 
+            LOCK_REASON(lockReason, "findAndModify");
             try {
-                Client::ReadContext ctx(ns);
+                Client::ReadContext ctx(ns, lockReason);
                 Client::Transaction txn(DB_SERIALIZABLE);
 
                 bool ok = runNoDirectClient( ns ,
@@ -106,7 +107,7 @@ namespace mongo {
                 return ok;
             }
             catch (RetryWithWriteLock &e) {
-                Client::WriteContext ctx(ns);
+                Client::WriteContext ctx(ns, lockReason);
                 Client::Transaction txn(DB_SERIALIZABLE);
 
                 bool ok = runNoDirectClient( ns ,

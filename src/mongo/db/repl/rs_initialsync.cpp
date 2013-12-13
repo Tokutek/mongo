@@ -266,7 +266,8 @@ namespace mongo {
     }
 
     void ReplSetImpl::_fillGaps(OplogReader* r) {
-        Client::ReadContext ctx(rsoplog);
+        LOCK_REASON(lockReason, "repl: filling gaps");
+        Client::ReadContext ctx(rsoplog, lockReason);
         Client::Transaction catchupTransaction(0);
         NamespaceDetails *d = nsdetails(rsReplInfo);
         
@@ -318,8 +319,9 @@ namespace mongo {
         std::deque<BSONObj> unappliedTransactions;
         {
             // accumulate a list of transactions that are unapplied
-            Client::ReadContext ctx(rsoplog);
-            Client::Transaction catchupTransaction(0);        
+            LOCK_REASON(lockReason, "repl: initial sync applying missing ops");
+            Client::ReadContext ctx(rsoplog, lockReason);
+            Client::Transaction catchupTransaction(0);
             NamespaceDetails *d = nsdetails(rsReplInfo);
 
             // now we should have replInfo on this machine,
@@ -415,7 +417,8 @@ namespace mongo {
             }
 
             {
-                Lock::GlobalWrite lk;
+                LOCK_REASON(lockReason, "repl: initial sync drop all databases");
+                Lock::GlobalWrite lk(lockReason);
                 Client::Transaction dropTransaction(DB_SERIALIZABLE);
                 sethbmsg("initial sync drop all databases", 0);
                 dropAllDatabasesExceptLocal();
@@ -426,7 +429,8 @@ namespace mongo {
             // first delete any existing data in the oplog
 
             {
-                Lock::DBWrite lk("local");
+                LOCK_REASON(lockReason, "repl: create oplog");
+                Lock::DBWrite lk("local", lockReason);
                 Client::Transaction fileOpsTransaction(DB_SERIALIZABLE);
                 deleteOplogFiles();
                 // now recreate the oplog
@@ -451,7 +455,8 @@ namespace mongo {
                 // later causes an abort. So, to be cautious, they are separate
 
                 {
-                    Lock::GlobalWrite lk;
+                    LOCK_REASON(lockReason, "repl: initial sync");
+                    Lock::GlobalWrite lk(lockReason);
                     Client::Transaction cloneTransaction(DB_SERIALIZABLE);
                     bool ret = _syncDoInitialSync_clone(sourceHostname.c_str(), dbs, conn);
 
@@ -507,7 +512,8 @@ namespace mongo {
             }
         }
         else {
-            Lock::DBWrite lk("local");
+            LOCK_REASON(lockReason, "repl: opening oplog files");
+            Lock::DBWrite lk("local", lockReason);
             openOplogFiles();
         }
         if (needGapsFilled) {

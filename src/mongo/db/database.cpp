@@ -133,7 +133,8 @@ namespace mongo {
                 dassert(db->name() == it->first);
                 // This erases dbs[db->name] for us, can't lift it out yet until we understand the callers of closeDatabase().
                 // That's why we have a weird loop here.
-                Client::WriteContext ctx(db->name());
+                LOCK_REASON(lockReason, "closing databases");
+                Client::WriteContext ctx(db->name(), lockReason);
                 db->closeDatabase(db->name(), path);
             }
             _paths.erase(path);

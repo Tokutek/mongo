@@ -246,15 +246,16 @@ namespace mongo {
 
     } restHandler;
 
-    void openAdminDb() { 
+    void openAdminDb() {
+        LOCK_REASON(lockReason, "restapi: opening admin db");
         {
-            readlocktry rl(/*"admin.system.users", */10000);
+            readlocktry rl(10000, lockReason);
             uassert( 16172 , "couldn't get readlock to open admin db" , rl.got() );
             if( dbHolder().get("admin.system.users",dbpath) )
                 return;
         }
 
-        writelocktry wl(10000);
+        writelocktry wl(10000, lockReason);
         verify( wl.got() );
         Client::Context cx("admin.system.users", dbpath);
     }
@@ -262,7 +263,8 @@ namespace mongo {
     bool RestAdminAccess::haveAdminUsers() const {
         Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
         openAdminDb();
-        readlocktry rl(/*"admin.system.users", */10000);
+        LOCK_REASON(lockReason, "restapi: getting admin auth credentials");
+        readlocktry rl(10000, lockReason);
         uassert( 16173 , "couldn't get read lock to get admin auth credentials" , rl.got() );
         Client::Context cx("admin.system.users", dbpath);
         BSONObj o;
@@ -276,7 +278,8 @@ namespace mongo {
         Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
         openAdminDb();
         Client::GodScope gs;
-        readlocktry rl(/*"admin.system.users", */10000);
+        LOCK_REASON(lockReason, "restapi: checking admin user");
+        readlocktry rl(10000, lockReason);
         uassert( 16174 , "couldn't get read lock to check admin user" , rl.got() );
         Client::Context cx( "admin.system.users" );
         BSONObj user;
@@ -313,7 +316,8 @@ namespace mongo {
 
         virtual void run( stringstream& ss ) {
             Timer t;
-            readlocktry lk( 300 );
+            LOCK_REASON(lockReason, "restapi: getting mongod status");
+            readlocktry lk(300, lockReason);
             if ( lk.got() ) {
                 _gotLock( t.millis() , ss );
             }

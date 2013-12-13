@@ -67,7 +67,8 @@ namespace mongo {
         log() << "replSet info saving a newer config version to local.system.replset" << rsLog;
         {
             // TODO: does this really need to be a global lock?
-            Lock::GlobalWrite lk;
+            LOCK_REASON(lockReason, "repl: saving new replset config");
+            Lock::GlobalWrite lk(lockReason);
             Client::Context cx( rsConfigNs );
             Client::Transaction transaction(DB_SERIALIZABLE);    
             if (onInitiate) {

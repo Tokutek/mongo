@@ -373,7 +373,7 @@ namespace mongo {
          */
         struct CursorWithContext {
             /** Takes a read lock that will be held for the lifetime of the object. */
-            CursorWithContext( const string& ns );
+            CursorWithContext( const string& ns, const string &reason = "" );
             ~CursorWithContext();
 
             // Must be the first struct member for proper construction and destruction, as other

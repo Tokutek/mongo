@@ -223,7 +223,8 @@ namespace mongo {
                 // later.  of course it could be stuck then, but this check lowers the risk if weird things
                 // are up - we probably don't want a change to apply 30 minutes after the initial attempt.
                 time_t t = time(0);
-                Lock::GlobalWrite lk;
+                LOCK_REASON(lockReason, "repl: testing write lock time");
+                Lock::GlobalWrite lk(lockReason);
                 if( time(0)-t > 20 ) {
                     errmsg = "took a long time to get write lock, so not initiating.  Initiate when server less busy?";
                     return false;
@@ -592,7 +593,8 @@ namespace mongo {
             bool foundLocally = false;
             // now let's find the oplog entry
             {
-                Client::ReadContext ctx(rsoplog);
+                LOCK_REASON(lockReason, "repl: looking for oplog entry to undo");
+                Client::ReadContext ctx(rsoplog, lockReason);
                 Client::Transaction transaction(DB_TXN_READ_ONLY | DB_READ_UNCOMMITTED);
                 NamespaceDetails *d = nsdetails( rsoplog );
                 foundLocally = d != NULL && d->findOne( q.done(), oplogEntry);
@@ -611,7 +613,8 @@ namespace mongo {
                 // the user drops and recreates any oplog related
                 // files.
                 if (!oplogFilesOpen()) {
-                    Lock::DBRead lk("local");
+                    LOCK_REASON(lockReason, "repl: opening oplog for replUndoOplogEntry");
+                    Lock::DBRead lk("local", lockReason);
                     openOplogFiles();
                 }
                 bool purgeEntry = true;
@@ -663,7 +666,8 @@ namespace mongo {
                 return false;
             }
 
-            Lock::DBRead lk("local");
+            LOCK_REASON(lockReason, "repl: logging info");
+            Lock::DBRead lk("local", lockReason);
             if (!oplogFilesOpen()) {
                 openOplogFiles();
             }

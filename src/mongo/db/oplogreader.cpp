@@ -52,7 +52,8 @@ namespace mongo {
             BSONObj user;
             {
                 StringData ns("local.system.users");
-                Client::ReadContext ctx(ns);
+                LOCK_REASON(lockReason, "repl: authenticating with local db");
+                Client::ReadContext ctx(ns, lockReason);
                 NamespaceDetails *d = nsdetails(ns);
                 if( d == NULL || !d->findOne(userReplQuery, user) ||
                                  // try the first user in local
@@ -107,12 +108,13 @@ namespace mongo {
 
     bool replHandshake(DBClientConnection *conn) {
         BSONObj me;
+        LOCK_REASON(lockReason, "repl: handshake");
         try {
-            Client::ReadContext ctx("local");
+            Client::ReadContext ctx("local", lockReason);
             getMe(me);
         }
         catch (RetryWithWriteLock &e) {
-            Client::WriteContext ctx("local");
+            Client::WriteContext ctx("local", lockReason);
             getMe(me);
         }
 

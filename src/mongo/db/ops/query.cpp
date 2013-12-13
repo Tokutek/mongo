@@ -997,7 +997,8 @@ namespace mongo {
         // Begin a read-only, snapshot transaction under normal circumstances.
         // If the cursor is tailable, we need to be able to read uncommitted data.
         const int txnFlags = (tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT) | DB_TXN_READ_ONLY;
-        Client::ReadContext ctx(ns);
+        LOCK_REASON(lockReason, "query");
+        Client::ReadContext ctx(ns, lockReason);
         scoped_ptr<Client::Transaction> transaction(!inMultiStatementTxn ?
                                                     new Client::Transaction(txnFlags) : NULL);
 

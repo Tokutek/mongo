@@ -563,7 +563,8 @@ namespace mongo {
                 addGTIDToBSON("_id", remoteGTID, localQuery);
                 bool foundLocally = false;
                 {
-                    Client::ReadContext ctx(rsoplog);
+                    LOCK_REASON(lockReason, "repl: looking up oplog entry for rollback");
+                    Client::ReadContext ctx(rsoplog, lockReason);
                     Client::Transaction transaction(DB_SERIALIZABLE);
                     NamespaceDetails *d = nsdetails( rsoplog );
                     foundLocally = d != NULL && d->findOne( localQuery.done(), localObj);
@@ -624,7 +625,8 @@ namespace mongo {
         {
             // so we know nothing is simultaneously occurring
             RWLockRecursive::Exclusive e(operationLock);
-            Lock::GlobalWrite lk;
+            LOCK_REASON(lockReason, "repl: killing all operations for rollback");
+            Lock::GlobalWrite lk(lockReason);
             ClientCursor::invalidateAllCursors();
             Client::abortLiveTransactions();
             theReplSet->goToRollbackState();
@@ -651,7 +653,8 @@ namespace mongo {
             while (true) {
                 BSONObj o;
                 {
-                    Lock::DBRead lk(rsoplog);
+                    LOCK_REASON(lockReason, "repl: checking for oplog data");
+                    Lock::DBRead lk(rsoplog, lockReason);
                     Client::Transaction txn(DB_SERIALIZABLE);
                     // if there is nothing in the oplog, break
                     o = getLastEntryInOplog();

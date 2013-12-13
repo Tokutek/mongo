@@ -726,7 +726,8 @@ namespace mongo {
 
     inline BSONObj getLastEntryInOplog() {
         BSONObj o;
-        Client::ReadContext lk(rsoplog);
+        LOCK_REASON(lockReason, "repl: getting last entry in oplog");
+        Client::ReadContext lk(rsoplog, lockReason);
         NamespaceDetails *d = nsdetails(rsoplog);
         shared_ptr<Cursor> c( BasicCursor::make(d, -1) );
         return c->ok() ? c->current().copy() : BSONObj();

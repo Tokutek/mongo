@@ -126,7 +126,8 @@ namespace mongo {
         // will get running operations to interrupt so
         // acquisition of global lock will be faster
         NoteStateTransition nst;
-        Lock::GlobalWrite lk;
+        LOCK_REASON(lockReason, "repl: transitioning to primary");
+        Lock::GlobalWrite lk(lockReason);
 
         gtidManager->verifyReadyToBecomePrimary();
 
@@ -163,14 +164,16 @@ namespace mongo {
             RSBase::lock lk(this);
             // Lock here to prevent state from changing between checking the state and changing it
             // also, grab GlobalWrite here, because it must be grabbed after rslock
-            Lock::GlobalWrite writeLock;
+            LOCK_REASON(lockReason, "repl: entering maintenance mode");
+            Lock::GlobalWrite writeLock(lockReason);
             _maintenanceMode++;
             changeState(MemberState::RS_RECOVERING);
         }
         else {
             // Lock here to prevent state from changing between checking the state and changing it
             RSBase::lock lk(this);
-            Lock::GlobalWrite writeLock;
+            LOCK_REASON(lockReason, "repl: leaving maintenance mode");
+            Lock::GlobalWrite writeLock(lockReason);
             // user error
             if (_maintenanceMode <= 0) {
                 errmsg = "cannot set maintenance mode to false when not in maintenance mode to begin with";
@@ -219,7 +222,8 @@ namespace mongo {
             // so no operations are simultaneously occurring
             RWLockRecursive::Exclusive e(operationLock);
             // so we know writes are not simultaneously occurring
-            Lock::GlobalWrite lk;
+            LOCK_REASON(lockReason, "repl: stepping down from primary");
+            Lock::GlobalWrite lk(lockReason);
 
             LOG(2) << "replSet attempting to relinquish" << endl;
             if( box.getState().primary() ) {
@@ -492,7 +496,8 @@ namespace mongo {
     }
 
     void ReplSetImpl::loadGTIDManager() {
-        Lock::DBWrite lk(rsoplog);
+        LOCK_REASON(lockReason, "repl: initializing GTID manager");
+        Lock::DBWrite lk(rsoplog, lockReason);
         Client::Transaction txn(DB_SERIALIZABLE);
         const BSONObj o = getLastEntryInOplog();
         if (!o.isEmpty()) {
@@ -548,7 +553,8 @@ namespace mongo {
                 theReplSet->myConfig().potentiallyHot()
                 )
             {
-                Lock::GlobalWrite lk;
+                LOCK_REASON(lockReason, "repl: stepping up as primary");
+                Lock::GlobalWrite lk(lockReason);
                 theReplSet->gtidManager->catchUnappliedToLive();
                 openOplogFiles();
                 changeState(MemberState::RS_PRIMARY);
@@ -560,7 +566,8 @@ namespace mongo {
                 // a full clone from someone
                 syncDoInitialSync();
                 {
-                    Client::ReadContext ctx(rsoplog);
+                    LOCK_REASON(lockReason, "repl: updating GTID manager after initial sync");
+                    Client::ReadContext ctx(rsoplog, lockReason);
                     Client::Transaction transaction(0);
                     BSONObj o = getLastEntryInOplog();
                     verify(!o.isEmpty());
@@ -587,7 +594,8 @@ namespace mongo {
         if (goLiveAsSecondary) {
             boost::unique_lock<boost::mutex> lock(stateChangeMutex);
             RSBase::lock lk(this);
-            Lock::GlobalWrite writeLock;
+            LOCK_REASON(lockReason, "repl: going live as a secondary");
+            Lock::GlobalWrite writeLock(lockReason);
             // temporarily change state to secondary to follow pattern
             // that all threads going live as secondary are transitioning
             // from RS_RECOVERING.
@@ -1110,7 +1118,8 @@ namespace mongo {
                 // to get up to 1000 entries and delete them, all with a single
                 // transaction.
                 try {
-                    Client::ReadContext ctx(rsoplog);
+                    LOCK_REASON(lockReason, "repl: purging oplog");
+                    Client::ReadContext ctx(rsoplog, lockReason);
                     Client::Transaction transaction(DB_READ_UNCOMMITTED);
                     NamespaceDetails *d = nsdetails(rsoplog);
                     vector<BSONObj> docs;
@@ -1263,7 +1272,8 @@ namespace mongo {
         GTID minLiveGTID;
         verify(gtidManager != NULL);
         gtidManager->getMins(&minLiveGTID, &minUnappliedGTID);
-        Lock::DBRead lk("local");
+        LOCK_REASON(lockReason, "repl: force updating repl info");
+        Lock::DBRead lk("local", lockReason);
         Client::Transaction transaction(DB_SERIALIZABLE);
         logToReplInfo(minLiveGTID, minUnappliedGTID);
         transaction.commit();
@@ -1292,7 +1302,8 @@ namespace mongo {
                         GTID::cmp(lastMinUnappliedGTID, minUnappliedGTID) != 0
                         )
                     {
-                        Lock::DBRead lk("local");
+                        LOCK_REASON(lockReason, "repl: updating repl info");
+                        Lock::DBRead lk("local", lockReason);
                         Client::Transaction transaction(DB_SERIALIZABLE);
                         logToReplInfo(minLiveGTID, minUnappliedGTID);
                         lastMinUnappliedGTID = minUnappliedGTID;
