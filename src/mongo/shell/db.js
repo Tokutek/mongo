@@ -787,131 +787,21 @@ DB.tsToSeconds = function(x){
   *                          of date than that, it can't recover without a complete resync
 */
 DB.prototype.getReplicationInfo = function() { 
-    var db = this.getSiblingDB("local");
-
     var result = { };
-    var oplog;
-    if (db.system.namespaces.findOne({name:"local.oplog.rs"}) != null) {
-        oplog = 'oplog.rs';
-    }
-    else if (db.system.namespaces.findOne({name:"local.oplog.$main"}) != null) {
-        oplog = 'oplog.$main';
-    }
-    else {
-        result.errmsg = "neither master/slave nor replica set replication detected";
-        return result;
-    }
-    
-    var ol_entry = db.system.namespaces.findOne({name:"local."+oplog});
-    if( ol_entry && ol_entry.options ) {
-	result.logSizeMB = ol_entry.options.size / ( 1024 * 1024 );
-    } else {
-        result.errmsg  = "local."+oplog+", or its options, not found in system.namespaces collection";
-        return result;
-    }
-    ol = db.getCollection(oplog);
-
-    result.usedMB = ol.stats().size / ( 1024 * 1024 );
-    result.usedMB = Math.ceil( result.usedMB * 100 ) / 100;
-    
-    var firstc = ol.find().sort({$natural:1}).limit(1);
-    var lastc = ol.find().sort({$natural:-1}).limit(1);
-    if( !firstc.hasNext() || !lastc.hasNext() ) { 
-	result.errmsg = "objects not found in local.oplog.$main -- is this a new and empty db instance?";
-	result.oplogMainRowCount = ol.count();
-	return result;
-    }
-
-    var first = firstc.next();
-    var last = lastc.next();
-    {
-	var tfirst = first.ts;
-	var tlast = last.ts;
-        
-	if( tfirst && tlast ) { 
-	    tfirst = DB.tsToSeconds( tfirst ); 
-	    tlast = DB.tsToSeconds( tlast );
-	    result.timeDiff = tlast - tfirst;
-	    result.timeDiffHours = Math.round(result.timeDiff / 36)/100;
-	    result.tFirst = (new Date(tfirst*1000)).toString();
-	    result.tLast  = (new Date(tlast*1000)).toString();
-	    result.now = Date();
-	}
-	else { 
-	    result.errmsg = "ts element not found in oplog objects";
-	}
-    }
-
+	result.errmsg = "getReplicationInfo currently unsupported. Try running rs.status() for replica set information."
     return result;
 };
 
 DB.prototype.printReplicationInfo = function() {
-    var result = this.getReplicationInfo();
-    if( result.errmsg ) {
-        if (!this.isMaster().ismaster) {
-            print("this is a slave, printing slave replication info.");
-            this.printSlaveReplicationInfo();
-            return;
-        }
-	print(tojson(result));
-	return;
-    }
-    print("configured oplog size:   " + result.logSizeMB + "MB");
-    print("log length start to end: " + result.timeDiff + "secs (" + result.timeDiffHours + "hrs)");
-    print("oplog first event time:  " + result.tFirst);
-    print("oplog last event time:   " + result.tLast);
-    print("now:                     " + result.now);
+    var result = { };
+	result.errmsg = "printReplicationInfo currently unsupported. Try running rs.status() for replica set information."
+    return result;
 }
 
 DB.prototype.printSlaveReplicationInfo = function() {
-    function getReplLag(st) {
-        var now = new Date();
-        print("\t syncedTo: " + st.toString() );
-        var ago = (now-st)/1000;
-        var hrs = Math.round(ago/36)/100;
-        print("\t\t = " + Math.round(ago) + " secs ago (" + hrs + "hrs)");
-    };
-    
-    function g(x) {
-        assert( x , "how could this be null (printSlaveReplicationInfo gx)" )
-        print("source:   " + x.host);
-        if ( x.syncedTo ){
-            var st = new Date( DB.tsToSeconds( x.syncedTo ) * 1000 );
-            getReplLag(st);
-        }
-        else {
-            print( "\t doing initial sync" );
-        }
-    };
-
-    function r(x) {
-        assert( x , "how could this be null (printSlaveReplicationInfo rx)" );
-        if ( x.state == 1 ) {
-            return;
-        }
-        
-        print("source:   " + x.name);
-        if ( x.optime ) {
-            getReplLag(x.optimeDate);
-        }
-        else {
-            print( "\t no replication info, yet.  State: " + x.stateStr );
-        }
-    };
-    
-    var L = this.getSiblingDB("local");
-
-    if (L.system.replset.count() != 0) {
-        var status = this.adminCommand({'replSetGetStatus' : 1});
-        status.members.forEach(r);
-    }
-    else if( L.sources.count() != 0 ) {
-        L.sources.find().forEach(g);
-    }
-    else {
-        print("local.sources is empty; is this db a --slave?");
-        return;
-    }
+    var result = { };
+	result.errmsg = "printSlaveReplicationInfo currently unsupported. Try running rs.status() for replica set information."
+    return result;
 }
 
 DB.prototype.engineStatus = function(){
