@@ -17,6 +17,13 @@ New features and improvements
     - Added an optimization to the execution of aggregation pipelines that
       greatly speeds up all range queries done for aggregations.  (#802)
 
+    - The `mongo2toku` migration tool supports authentication with a
+      MongoDB replica set using new options `--ruser` and `--rpass`.
+      (#836)
+
+    - The `mongo2toku` migration tool now prints OpTimes in human-readable
+      form.  (#839)
+
 
 Bug fixes
 ~~~~~~~~~
@@ -51,6 +58,8 @@ Bug fixes
     - Cursors no longer automatically timeout after 10 minutes regardless
       of continued activity, now continuing to use a cursor will preserve
       it indefinitely.  (#826)
+
+    - Fixed some miscellaneous bugs in `mongo2toku`.  (#834, #837, #838)
 
 
 tokumx 1.3.2
