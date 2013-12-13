@@ -52,6 +52,7 @@
 #include "mongo/db/server_parameters.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/platform/random.h"
+#include "mongo/util/debug_util.h"
 #include "mongo/util/processinfo.h"
 #include "mongo/util/timer.h"
 
@@ -159,44 +160,19 @@ namespace mongo {
 
     /* called every 4 seconds.  millis is amount of idle time passed since the last call -- could be zero */
     void ClientCursor::idleTimeReport(unsigned millis) {
-        bool foundSomeToTimeout = false;
-
-        // two passes so that we don't need to readlock unless we really do some timeouts
-        // we assume here that incrementing _idleAgeMillis outside readlock is ok.
-        {
-            recursive_scoped_lock lock(ccmutex);
-            {
-                unsigned sz = clientCursorsById.size();
-                static time_t last;
-                if( sz >= 100000 ) { 
-                    if( time(0) - last > 300 ) {
-                        last = time(0);
-                        log() << "warning number of open cursors is very large: " << sz << endl;
-                    }
-                }
-            }
-            for ( CCById::iterator i = clientCursorsById.begin(); i != clientCursorsById.end();  ) {
-                CCById::iterator j = i;
-                i++;
-                if( j->second->shouldTimeout( millis ) ) {
-                    foundSomeToTimeout = true;
-                }
-            }
+        LockedIterator i;
+        unsigned sz = clientCursorsById.size();
+        if (sz >= 100000) { 
+            RATELIMITED(300000) log() << "warning number of open cursors is very large: " << sz << endl;
         }
-
-        if( foundSomeToTimeout ) {
-            Lock::GlobalRead lk;
-            for( LockedIterator i; i.ok(); ) {
-                ClientCursor *cc = i.current();
-                if( cc->shouldTimeout(0) ) {
-                    numberTimedOut++;
-                    LOG(1) << "killing old cursor " << cc->_cursorid << ' ' << cc->_ns
-                           << " idle:" << cc->idleTime() << "ms\n" << endl;
-                    i.deleteAndAdvance();
-                }
-                else {
-                    i.advance();
-                }
+        while (i.ok()) {
+            ClientCursor *cc = i.current();
+            if (cc->shouldTimeout(millis)) {
+                LOG(1) << "killing old cursor " << cc->_cursorid << ' ' << cc->_ns
+                       << " idle:" << cc->idleTime() << "ms" << endl;
+                i.deleteAndAdvance();
+            } else {
+                i.advance();
             }
         }
     }
