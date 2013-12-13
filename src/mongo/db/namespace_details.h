@@ -40,7 +40,13 @@
 
 namespace mongo {
 
-    class CollectionMap;
+    // Gets a collection - opens it if necessary, but does not create.
+    NamespaceDetails *nsdetails(const StringData& ns);
+
+    // Used by operations that are supposed to automatically create a collection
+    // if it does not exist. Examples include inserts, upsert-style updates, and
+    // ensureIndex.
+    NamespaceDetails *getOrCreateCollection(const StringData &ns, const bool logop);
 
     /** @return true if a client can modify this namespace even though it is under ".system."
         For example <dbname>.system.users is ok for regular clients to update.
@@ -49,10 +55,6 @@ namespace mongo {
     bool legalClientSystemNS( const StringData& ns , bool write );
 
     bool userCreateNS(const StringData& ns, BSONObj options, string& err, bool logForReplication);
-
-    // used for operations that are supposed to create the namespace if it does not exist,
-    // such as insert, some updates, and create index
-    NamespaceDetails* getAndMaybeCreateNS(const StringData& ns, bool logop);
 
     // Add a new entry to the the indexes or namespaces catalog
     void addToIndexesCatalog(const BSONObj &info);
@@ -490,9 +492,6 @@ namespace mongo {
 
         friend class CollectionMap;
     }; // NamespaceDetails
-
-    NamespaceDetails *nsdetails(const StringData& ns);
-    NamespaceDetails *nsdetails_maybe_create(const StringData& ns, BSONObj options = BSONObj());
 
     inline IndexDetails& NamespaceDetails::idx(int idxNo) const {
         verify( idxNo < NIndexesMax );

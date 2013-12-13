@@ -385,7 +385,7 @@ namespace mongo {
                 _nextMigrateLogId.store(0);
                 _nextIdToTransfer = 0;
                 _nextRefSeqToTransfer = 0;
-                _migrateLogDetails = getAndMaybeCreateNS(MIGRATE_LOG_NS, false);
+                _migrateLogDetails = getOrCreateCollection(MIGRATE_LOG_NS, false);
                 verify(_migrateLogDetails != NULL);
                 txn.commit();
             }
@@ -405,7 +405,7 @@ namespace mongo {
                 if (d != NULL) {
                     d->drop(err, res, false);
                 }
-                _migrateLogRefDetails = getAndMaybeCreateNS(MIGRATE_LOG_REF_NS, false);
+                _migrateLogRefDetails = getOrCreateCollection(MIGRATE_LOG_REF_NS, false);
                 verify(_migrateLogRefDetails != NULL);
                 txn.commit();
             }

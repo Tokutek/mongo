@@ -259,7 +259,7 @@ namespace mongo {
                    << " query: " << patternOrig
                    << " upsert: " << upsert << " multi: " << multi << endl;
 
-        NamespaceDetails *d = getAndMaybeCreateNS(ns, logop);
+        NamespaceDetails *d = getOrCreateCollection(ns, logop);
 
         // Fast-path for simple primary key updates.
         //

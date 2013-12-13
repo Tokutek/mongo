@@ -56,7 +56,7 @@ namespace mongo {
 
     // Does not check magic system collection inserts.
     void _insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags, bool logop ) {
-        NamespaceDetails *d = getAndMaybeCreateNS(ns, logop);
+        NamespaceDetails *d = getOrCreateCollection(ns, logop);
         for (size_t i = 0; i < objs.size(); i++) {
             const BSONObj &obj = objs[i];
             try {
@@ -108,7 +108,7 @@ namespace mongo {
             // Trying to insert into a system collection.  Fancy side-effects go here:
             if (nsToCollectionSubstring(ns) == "system.indexes") {
                 BSONObj obj = stripDropDups(objs[0]);
-                NamespaceDetails *d = getAndMaybeCreateNS(obj["ns"].Stringdata(), logop);
+                NamespaceDetails *d = getOrCreateCollection(obj["ns"].Stringdata(), logop);
                 bool ok = d->ensureIndex(obj);
                 if (!ok) {
                     // Already had that index

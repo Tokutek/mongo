@@ -822,11 +822,11 @@ namespace mongo {
         // the NamespaceDetails as having an index build in progress.
         {
             Client::Context ctx(ns);
-            NamespaceDetails *d = getAndMaybeCreateNS(coll, true);
+            NamespaceDetails *d = getOrCreateCollection(coll, true);
             if (d->findIndexByKeyPattern(info["key"].Obj()) >= 0) {
                 // No error or action if the index already exists. We need to commit
                 // the transaction in case this is an ensure index on the _id field
-                // and the ns was created by getAndMaybeCreateNS()
+                // and the ns was created by getOrCreateCollection()
                 transaction->commit();
                 return;
             }

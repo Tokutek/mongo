@@ -64,7 +64,22 @@ namespace mongo {
         return collectionMap(ns)->getCollection(ns);
     }
 
-    NamespaceDetails *nsdetails_maybe_create(const StringData& ns, BSONObj options) {
+    // External getOrCreate: runs the "create" command if necessary.
+    NamespaceDetails *getOrCreateCollection(const StringData& ns, bool logop) {
+        NamespaceDetails* details = nsdetails(ns);
+        if (details == NULL) {
+            string err;
+            BSONObj options;
+            bool created = userCreateNS(ns, options, err, logop);
+            uassert(16745, "failed to create collection", created);
+            details = nsdetails(ns);
+            uassert(16746, "failed to get collection after creating", details);
+        }
+        return details;
+    }
+
+    // Internal getOrCreate: Does not run the create command.
+    NamespaceDetails *_getOrCreateCollection(const StringData &ns, const BSONObj options = BSONObj()) {
         CollectionMap *cm = collectionMap(ns);
         if (!cm->allocated()) {
             // Must make sure we loaded any existing namespaces before checking, or we might create one that already exists.
@@ -1004,7 +1019,7 @@ namespace mongo {
         }
 
         // This creates the namespace as well as its _id index
-        nsdetails_maybe_create(ns, options);
+        _getOrCreateCollection(ns, options);
         if ( logForReplication ) {
             if ( options.getField( "create" ).eoo() ) {
                 BSONObjBuilder b;
@@ -1016,19 +1031,6 @@ namespace mongo {
             OpLogHelpers::logCommand(logNs.c_str(), options);
         }
         return true;
-    }
-
-    NamespaceDetails *getAndMaybeCreateNS(const StringData& ns, bool logop) {
-        NamespaceDetails* details = nsdetails(ns);
-        if (details == NULL) {
-            string err;
-            BSONObj options;
-            bool created = userCreateNS(ns, options, err, logop);
-            uassert(16745, "failed to create collection", created);
-            details = nsdetails(ns);
-            uassert(16746, "failed to get collection after creating", details);
-        }
-        return details;
     }
 
     /* add a new namespace to the system catalog (<dbname>.system.namespaces).
@@ -1050,7 +1052,7 @@ namespace mongo {
         BSONObj info = b.done();
 
         string system_ns = getSisterNS(ns, "system.namespaces");
-        NamespaceDetails *d = nsdetails_maybe_create(system_ns);
+        NamespaceDetails *d = _getOrCreateCollection(system_ns);
         insertOneObject(d, info);
     }
 
@@ -1062,7 +1064,7 @@ namespace mongo {
         }
 
         string ns = getSisterNS(indexns, "system.indexes");
-        NamespaceDetails *d = nsdetails_maybe_create(ns);
+        NamespaceDetails *d = _getOrCreateCollection(ns);
         BSONObj objMod = info;
         insertOneObject(d, objMod);
     }
