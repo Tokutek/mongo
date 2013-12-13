@@ -370,7 +370,9 @@ public:
 
         _oplogns = getParam("oplogns");
 
-        Client::initThread( "mongo2toku" );
+        if (currentClient.get() == 0) {
+            Client::initThread( "mongo2toku" );
+        }
 
         LOG(1) << "going to connect" << endl;
         
