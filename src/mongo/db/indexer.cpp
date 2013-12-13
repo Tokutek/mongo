@@ -111,7 +111,7 @@ namespace mongo {
         _d->_indexes.push_back(_idx);
         _d->_indexBuildInProgress = true;
 
-        addNewNamespaceToCatalog(_idx->indexNamespace());
+        addToNamespacesCatalog(_idx->indexNamespace());
 
         _prepare();
     }

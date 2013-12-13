@@ -56,8 +56,8 @@
 
 namespace mongo {
 
-    static void removeNamespaceFromCatalog(const StringData &ns);
-    static void removeFromSysIndexes(const StringData &ns, const StringData &name);
+    static void removeFromNamespacesCatalog(const StringData &ns);
+    static void removeFromIndexesCatalog(const StringData &ns, const StringData &name);
 
     NamespaceIndex *nsindex(const StringData& ns) {
         Database *database = cc().database();
@@ -382,7 +382,7 @@ namespace mongo {
         }
     }
 
-    static void addIndexToCatalog(const BSONObj &info) {
+    static void addToIndexesCatalog(const BSONObj &info) {
         const StringData &indexns = info["ns"].Stringdata();
         if (nsToCollectionSubstring(indexns).startsWith("system.indexes")) {
             // system.indexes holds all the others, so it is not explicitly listed in the catalog.
@@ -418,7 +418,7 @@ namespace mongo {
             if (idx < 0) {
                 BSONObj info = extendedSystemUsersIndexInfo(_ns);
                 createIndex(info);
-                addIndexToCatalog(info);
+                addToIndexesCatalog(info);
             }
             idx = findIndexByKeyPattern(oldSystemUsersKeyPattern);
             if (idx >= 0) {
@@ -1023,7 +1023,7 @@ namespace mongo {
             // If this throws, it's safe to call close() because we just created the index.
             // Therefore we have a write lock, and nobody else could have any uncommitted
             // modifications to this index, so close() should succeed, and #29 is irrelevant.
-            addNewNamespaceToCatalog(ns, !options.isEmpty() ? &options : NULL);
+            addToNamespacesCatalog(ns, !options.isEmpty() ? &options : NULL);
         }
         catch (...) {
             close();
@@ -1659,9 +1659,9 @@ namespace mongo {
         rollback.noteNs(_ns);
 
         // Remove this index from the system catalogs
-        removeNamespaceFromCatalog(idx.indexNamespace());
+        removeFromNamespacesCatalog(idx.indexNamespace());
         if (nsToCollectionSubstring(_ns) != "system.indexes") {
-            removeFromSysIndexes(_ns, idx.indexName());
+            removeFromIndexesCatalog(_ns, idx.indexName());
         }
 
         idx.kill_idx();
@@ -1739,7 +1739,7 @@ namespace mongo {
         ClientCursor::invalidate(_ns);
         dropIndexes("*", errmsg, result, true);
         verify(_nIndexes == 0);
-        removeNamespaceFromCatalog(_ns);
+        removeFromNamespacesCatalog(_ns);
 
         Top::global.collectionDropped(_ns);
         result.append("ns", _ns);
@@ -1836,7 +1836,7 @@ namespace mongo {
         //uncomment it:
         //dassert(_nIndexes == 1 || (_nIndexes == 2 && findIdIndex() == 1));
         for (int i = 0; i < nIndexes(); i++) {
-            addIndexToCatalog(_indexes[i]->info());
+            addToIndexesCatalog(_indexes[i]->info());
         }
     }
 
@@ -1923,7 +1923,7 @@ namespace mongo {
     /* add a new namespace to the system catalog (<dbname>.system.namespaces).
        options: { capped : ..., size : ... }
     */
-    void addNewNamespaceToCatalog(const StringData& ns, const BSONObj *options) {
+    void addToNamespacesCatalog(const StringData& ns, const BSONObj *options) {
         LOG(1) << "New namespace: " << ns << endl;
         StringData coll = nsToCollectionSubstring(ns);
         if (coll.startsWith("system.namespaces")) {
@@ -1943,7 +1943,7 @@ namespace mongo {
         insertOneObject(d, info);
     }
 
-    static void removeNamespaceFromCatalog(const StringData &ns) {
+    static void removeFromNamespacesCatalog(const StringData &ns) {
         StringData coll = nsToCollectionSubstring(ns);
         if (!coll.startsWith("system.namespaces")) {
             string system_namespaces = getSisterNS(cc().database()->name(), "system.namespaces");
@@ -1952,10 +1952,10 @@ namespace mongo {
         }
     }
 
-    static void removeFromSysIndexes(const StringData &ns, const StringData &name) {
+    static void removeFromIndexesCatalog(const StringData &ns, const StringData &name) {
         string system_indexes = getSisterNS(cc().database()->name(), "system.indexes");
         BSONObj obj = BSON("ns" << ns << "name" << name);
-        TOKULOG(2) << "removeFromSysIndexes removing " << obj << endl;
+        TOKULOG(2) << "removeFromIndexesCatalog removing " << obj << endl;
         const int n = _deleteObjects(system_indexes.c_str(), obj, false, false);
         verify(n == 1);
     }
@@ -2023,8 +2023,8 @@ namespace mongo {
                 storage::db_rename(oldIdxNS, newIdxNS);
 
                 BSONObj newIndexSpec = replaceNSField( oldIndexSpec, to );
-                addIndexToCatalog( newIndexSpec );
-                addNewNamespaceToCatalog( newIdxNS, newIndexSpec.isEmpty() ? 0 : &newIndexSpec );
+                addToIndexesCatalog( newIndexSpec );
+                addToNamespacesCatalog( newIdxNS, newIndexSpec.isEmpty() ? 0 : &newIndexSpec );
                 _deleteObjects( sysNamespaces.c_str(), BSON( "name" << oldIdxNS ), false, false );
             }
             // Clean out the old entries from system.indexes. We already removed them
@@ -2050,7 +2050,7 @@ namespace mongo {
                 }
             }
             newSpec = b.obj();
-            addNewNamespaceToCatalog( to, newSpec.isEmpty() ? 0 : &newSpec );
+            addToNamespacesCatalog( to, newSpec.isEmpty() ? 0 : &newSpec );
             _deleteObjects( sysNamespaces.c_str(), BSON( "name" << from ), false, false );
         }
 
@@ -2109,7 +2109,7 @@ namespace mongo {
             uassert( 16887, "Each index spec must have a string name field.",
                             info["name"].ok() && info["name"].type() == mongo::String );
             if (d->ensureIndex(info)) {
-                addIndexToCatalog(info);
+                addToIndexesCatalog(info);
             }
         }
 

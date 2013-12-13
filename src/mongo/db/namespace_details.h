@@ -54,10 +54,8 @@ namespace mongo {
     // such as insert, some updates, and create index
     NamespaceDetails* getAndMaybeCreateNS(const StringData& ns, bool logop);
 
-    /**
-     * Record that a new namespace exists in <dbname>.system.namespaces.
-     */
-    void addNewNamespaceToCatalog(const StringData& name, const BSONObj *options = NULL);
+    // Add a new entry to the system.namespaces catalog
+    void addToNamespacesCatalog(const StringData& name, const BSONObj *options = NULL);
 
     // Rename a namespace within current 'client' db.
     // (Arguments should include db name)
