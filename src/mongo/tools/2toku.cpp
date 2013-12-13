@@ -452,6 +452,7 @@ public:
                     if (!tsElt.ok()) {
                         log() << "oplog format error: " << firstObj << " missing 'ts' field." << endl;
                         logPosition();
+                        cursor.reset();
                         _rconn->done();
                         _rconn.reset();
                         return -1;
@@ -462,6 +463,7 @@ public:
                                   << ", but didn't find anything before " << fmtOpTime(firstTime) << "!" << endl;
                         warning() << "This may mean your oplog has been truncated past the point you are trying to resume from." << endl;
                         warning() << "Either retry with a different value of --ts, or restart your migration procedure." << endl;
+                        cursor.reset();
                         _rconn->done();
                         _rconn.reset();
                         return -1;
@@ -478,6 +480,7 @@ public:
                         bool ok = _player->processObj(obj);
                         if (!ok) {
                             logPosition();
+                            cursor.reset();
                             _rconn->done();
                             _rconn.reset();
                             return -1;
