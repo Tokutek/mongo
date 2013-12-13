@@ -160,6 +160,9 @@ namespace mongo {
                               const bool logop, const bool fromMigrate,
                               uint64_t flags);
 
+        // Remove everything from this capped collection
+        void empty();
+
     protected:
         void _insertObject(const BSONObj &obj, uint64_t flags);
 
@@ -197,9 +200,6 @@ namespace mongo {
         void _deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
 
         void trim(int objsize, bool logop);
-
-        // Remove everything from this capped collection
-        void empty();
 
         const long long _maxSize;
         const long long _maxObjects;

@@ -782,13 +782,6 @@ namespace mongo {
         }
     }
 
-    void NamespaceDetails::empty() {
-        for (shared_ptr<Cursor> c( BasicCursor::make(this) ); c->ok(); c->advance()) {
-            deleteObject(c->currPK(), c->current(), 0);
-        }
-        resetTransient();
-    }
-
     // Wrapper for offline (write locked) indexing.
     void NamespaceDetails::createIndex(const BSONObj &info) {
         const string sourceNS = info["ns"].String();

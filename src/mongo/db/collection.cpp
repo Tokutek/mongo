@@ -787,10 +787,6 @@ namespace mongo {
         uasserted( 17218, "Cannot update a collection under-going bulk load." );
     }
 
-    void BulkLoadedCollection::empty() {
-        uasserted( 16868, "Cannot empty a collection under-going bulk load." );
-    }
-
     void BulkLoadedCollection::optimizeAll() {
         uasserted( 16895, "Cannot optimize a collection under-going bulk load." );
     }

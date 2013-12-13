@@ -371,9 +371,6 @@ namespace mongo {
                                       const bool logop, const bool fromMigrate,
                                       uint64_t flags = 0);
 
-        // remove everything from a collection
-        virtual void empty();
-
         // note the commit/abort of a transaction, given:
         // minPK: the minimal PK inserted
         // nDelta: the number of inserts minus the number of deletes
@@ -523,7 +520,6 @@ namespace mongo {
         static int findByPKCallback(const DBT *key, const DBT *value, void *extra);
 
         friend class NamespaceIndex;
-        friend class EmptyCapped; // for empty() only
     }; // NamespaceDetails
 
     /* NamespaceIndex is the the "system catalog" if you will: at least the core parts.

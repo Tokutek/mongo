@@ -50,6 +50,7 @@
 #include "mongo/db/instance.h"
 #include "mongo/db/lasterror.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/query_optimizer.h"
 #include "mongo/db/ops/count.h"
@@ -1556,10 +1557,11 @@ namespace mongo {
             string coll = cmdObj[ "emptycapped" ].valuestrsafe();
             uassert( 13428, "emptycapped must specify a collection", !coll.empty() );
             string ns = dbname + "." + coll;
-            NamespaceDetails *nsd = nsdetails( ns );
-            massert( 13429, "emptycapped no such collection", nsd );
-            massert( 13424, "collection must be capped", nsd->isCapped() );
-            nsd->empty();
+            NamespaceDetails *d = nsdetails( ns );
+            massert( 13429, "emptycapped no such collection", d );
+            massert( 13424, "collection must be capped", d->isCapped() );
+            CappedCollection *cl = d->toSubclass<CappedCollection>();
+            cl->empty();
             return true;
         }
     };
