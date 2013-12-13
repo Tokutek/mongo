@@ -383,7 +383,7 @@ namespace mongo {
         if( !noauth ) {
             // open admin db in case we need to use it later. TODO this is not the right way to
             // resolve this.
-            Client::WriteContext c("admin", dbpath);
+            Client::WriteContext c("admin");
         }
 
         {
