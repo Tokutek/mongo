@@ -432,14 +432,11 @@ public:
             while (running) {
                 const int tailingQueryOptions = QueryOption_SlaveOk | QueryOption_CursorTailable | QueryOption_OplogReplay | QueryOption_AwaitData;
 
-                BSONObjBuilder queryBuilder;
-                BSONObjBuilder gteBuilder(queryBuilder.subobjStart("ts"));
-                gteBuilder.appendTimestamp("$gte", _player->maxOpTimeSynced().asDate());
-                gteBuilder.doneFast();
-                BSONObj query = queryBuilder.done();
 
                 BSONObj res;
-                auto_ptr<DBClientCursor> cursor(_rconn->conn().query(_oplogns, query, 0, 0, &res, tailingQueryOptions));
+                auto_ptr<DBClientCursor> cursor(_rconn->conn().query(
+                    _oplogns, QUERY("ts" << GTE << _player->maxOpTimeSynced()),
+                    0, 0, &res, tailingQueryOptions));
 
                 if (!cursor->more()) {
                     log() << "oplog query returned no results, sleeping 10 seconds..." << endl;
