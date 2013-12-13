@@ -5,7 +5,7 @@
 
 t = db.cursor_timeout;
 t.drop();
-for (var i = 0; i < 20000; ++i) {
+for (var i = 0; i < 50000; ++i) {
     t.insert({});
 }
 assert.eq(null, db.getLastError());
@@ -13,11 +13,11 @@ assert.eq(null, db.getLastError());
 var res = db.adminCommand({getParameter: 1, cursorTimeout: 1});
 assert.commandWorked(res);
 oldCursorTimeout = res.cursorTimeout;
-assert.commandWorked(db.adminCommand({setParameter: 1, cursorTimeout: 1000}));
+assert.commandWorked(db.adminCommand({setParameter: 1, cursorTimeout: 5000}));
 try {
     startTime = new Date().getTime();
-    assert.eq(20000, t.find(function(o) { sleep(1); return true; }).batchSize(500).itcount());
-    assert.lt(10000, new Date().getTime() - startTime);
+    assert.eq(50000, t.find(function(o) { sleep(1); return true; }).batchSize(100).itcount());
+    assert.lt(30000, new Date().getTime() - startTime);
 }
 finally {
     res = db.adminCommand({setParameter: 1, cursorTimeout: oldCursorTimeout});
