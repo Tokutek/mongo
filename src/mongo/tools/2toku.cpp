@@ -41,7 +41,7 @@ namespace po = boost::program_options;
 
 static string fmtOpTime(const OpTime &t) {
     stringstream ss;
-    ss << t.getSecs() << ":" << t.getInc();
+    ss << t.getSecs() << ":" << t.getInc() << " (" << t.toStringPretty() << ")";
     return ss.str();
 }
 
@@ -279,7 +279,8 @@ public:
                 log() << "Exiting while processing operation with OpTime " << _player->thisTimeStr() << endl;
             }
             report();
-            string tsString = _player->maxOpTimeSyncedStr();
+            OpTime t = _player->maxOpTimeSynced();
+            string tsString = mongoutils::str::stream() << t.getSecs() << ":" << t.getInc();
             log() << "Use --ts=" << tsString << " to resume." << endl;
             try {
                 std::ofstream tsFile;
