@@ -2023,13 +2023,11 @@ namespace mongo {
                 storage::db_rename(oldIdxNS, newIdxNS);
 
                 BSONObj newIndexSpec = replaceNSField( oldIndexSpec, to );
-                addToIndexesCatalog( newIndexSpec );
-                addToNamespacesCatalog( newIdxNS, newIndexSpec.isEmpty() ? 0 : &newIndexSpec );
-                _deleteObjects( sysNamespaces.c_str(), BSON( "name" << oldIdxNS ), false, false );
+                removeFromIndexesCatalog(from, idxName);
+                removeFromNamespacesCatalog(oldIdxNS);
+                addToIndexesCatalog(newIndexSpec);
+                addToNamespacesCatalog(newIdxNS, newIndexSpec.isEmpty() ? 0 : &newIndexSpec);
             }
-            // Clean out the old entries from system.indexes. We already removed them
-            // from system.namespaces in the loop above.
-            _deleteObjects( sysIndexes.c_str(), nsQuery, false, false);
         }
 
         // Rename the namespace in system.namespaces
@@ -2050,8 +2048,8 @@ namespace mongo {
                 }
             }
             newSpec = b.obj();
-            addToNamespacesCatalog( to, newSpec.isEmpty() ? 0 : &newSpec );
-            _deleteObjects( sysNamespaces.c_str(), BSON( "name" << from ), false, false );
+            removeFromNamespacesCatalog(from);
+            addToNamespacesCatalog(to, newSpec.isEmpty() ? 0 : &newSpec);
         }
 
         // Update the namespace index
