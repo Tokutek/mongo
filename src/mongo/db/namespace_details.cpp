@@ -991,14 +991,6 @@ namespace mongo {
         return true;
     }
 
-    void NamespaceDetails::acquireTableLock() {
-        verify(!_indexBuildInProgress);
-        for (int i = 0; i < _nIndexes; i++) {
-            IndexDetails &idx = *_indexes[i];
-            idx.acquireTableLock();
-        }
-    }
-
     /* ------------------------------------------------------------------------- */
 
     bool userCreateNS(const StringData& ns, BSONObj options, string& err, bool logForReplication) {
@@ -1237,7 +1229,6 @@ namespace mongo {
 
         NamespaceIndex *ni = nsindex(ns);
         NamespaceDetails *d = ni->details(ns);
-        d->acquireTableLock();
         for (vector<BSONObj>::const_iterator i = indexes.begin(); i != indexes.end(); i++) {
             BSONObj info = *i;
             const BSONElement &e = info["ns"];
@@ -1256,6 +1247,13 @@ namespace mongo {
             if (d->ensureIndex(info)) {
                 addToIndexesCatalog(info);
             }
+        }
+
+        // Acquire full table locks on each index so that only this
+        // transcation can write to them until the load/txn commits.
+        for (int i = 0; i < d->nIndexes(); i++) {
+            IndexDetails &idx = d->idx(i);
+            idx.acquireTableLock();
         }
 
         // Now the ns exists. Close it and re-open it in "bulk load" mode.

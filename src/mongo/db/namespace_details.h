@@ -144,9 +144,6 @@ namespace mongo {
         // @return whether or the the index was just built.
         bool ensureIndex(const BSONObj &info);
 
-        // Acquire a full table lock on each index.
-        void acquireTableLock();
-
         int nIndexes() const {
             return _nIndexes;
         }
