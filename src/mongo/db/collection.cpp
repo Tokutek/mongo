@@ -414,7 +414,7 @@ namespace mongo {
 
     // run an insertion where the PK is specified
     // Can come from the applier thread on a slave or a cloner 
-    void CappedCollection::insertObjectIntoCappedWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
+    void CappedCollection::insertObjectWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
         SimpleMutex::scoped_lock lk(_mutex);
         long long pkVal = pk[""].Long();
         if (pkVal >= _nextPK.load()) {
@@ -430,7 +430,7 @@ namespace mongo {
 
     }
 
-    void CappedCollection::insertObjectIntoCappedAndLogOps(const BSONObj &obj, uint64_t flags) {
+    void CappedCollection::insertObjectAndLogOps(const BSONObj &obj, uint64_t flags) {
         const BSONObj objWithId = addIdField(obj);
         uassert( 16774 , str::stream() << "document is larger than capped size "
                  << objWithId.objsize() << " > " << _maxSize, objWithId.objsize() <= _maxSize );
@@ -453,7 +453,7 @@ namespace mongo {
 
     // run a deletion where the PK is specified
     // Can come from the applier thread on a slave
-    void CappedCollection::deleteObjectFromCappedWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
+    void CappedCollection::deleteObjectWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
         _deleteObject(pk, obj, flags);
         // just make it easy and invalidate this
         _lastDeletedPK = BSONObj();
@@ -663,20 +663,8 @@ namespace mongo {
         CappedCollection(serialized) {
     }
 
-    void ProfileCollection::insertObjectIntoCappedWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
-        msgasserted( 16847, "bug: The profile collection should not have replicated inserts." );
-    }
-
-    void ProfileCollection::insertObjectIntoCappedAndLogOps(const BSONObj &obj, uint64_t flags) {
-        msgasserted( 16848, "bug: The profile collection should not not log inserts." );
-    }
-
     void ProfileCollection::insertObject(BSONObj &obj, uint64_t flags) {
         _insertObject(obj, flags);
-    }
-
-    void ProfileCollection::deleteObjectFromCappedWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
-        msgasserted( 16849, "bug: The profile collection should not have replicated deletes." );
     }
 
     void ProfileCollection::updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,

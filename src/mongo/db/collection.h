@@ -138,19 +138,10 @@ namespace mongo {
         // @return the maximum safe key to read for a tailable cursor.
         BSONObj minUnsafeKey();
 
-        // run an insertion where the PK is specified
-        // Can come from the applier thread on a slave or a cloner 
-        void insertObjectIntoCappedWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
-
-        void insertObjectIntoCappedAndLogOps(const BSONObj &obj, uint64_t flags);
-
+        // Regular interface
         void insertObject(BSONObj &obj, uint64_t flags);
 
         void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
-
-        // run a deletion where the PK is specified
-        // Can come from the applier thread on a slave
-        void deleteObjectFromCappedWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
 
         void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
                           const bool logop, const bool fromMigrate,
@@ -159,6 +150,13 @@ namespace mongo {
         void updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
                               const bool logop, const bool fromMigrate,
                               uint64_t flags);
+
+        // Hacked interface for handling oplogging and replaying ops from a secondary.
+        void insertObjectAndLogOps(const BSONObj &obj, uint64_t flags);
+
+        void insertObjectWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
+
+        void deleteObjectWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
 
         // Remove everything from this capped collection
         void empty();

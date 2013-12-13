@@ -39,6 +39,7 @@
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/database.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/storage/exception.h"
 
@@ -230,7 +231,8 @@ namespace mongo {
                                 }
                             }
                             BSONObj row = rowBuilder.obj();
-                            d->insertObjectIntoCappedWithPK(pk, row, NamespaceDetails::NO_LOCKTREE);
+                            CappedCollection *cl = d->toSubclass<CappedCollection>();
+                            cl->insertObjectWithPK(pk, row, NamespaceDetails::NO_LOCKTREE);
                         }
                         else {
                             insertObject(to_collection, js, 0, logForRepl);

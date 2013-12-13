@@ -368,18 +368,6 @@ namespace mongo {
                                       const bool logop, const bool fromMigrate,
                                       uint64_t flags = 0);
 
-        virtual void insertObjectIntoCappedAndLogOps(const BSONObj &obj, uint64_t flags) {
-            msgasserted( 16775, "bug: should not call insertObjectIntoCappedAndLogOps into non-capped collection" );
-        }
-
-        virtual void insertObjectIntoCappedWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
-            msgasserted( 16772, "bug: should not call insertObjectIntoCappedWithPK into non-capped collection" );
-        }
-        
-        virtual void deleteObjectFromCappedWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
-            msgasserted( 16773, "bug: should not call deleteObjectFromCappedWithPK into non-capped collection" );
-        }
-
         // Interpret this NamespaceDetails as a subclass. Asserts if conversion fails.
         template <class T> T *toSubclass() {
             T *subclass = dynamic_cast<T *>(this);

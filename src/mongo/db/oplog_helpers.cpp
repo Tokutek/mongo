@@ -15,6 +15,7 @@
 */
 
 #include "mongo/pch.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/txn_context.h"
 #include "mongo/db/repl_block.h"
@@ -297,11 +298,12 @@ namespace mongo {
             Client::ReadContext ctx(ns);
             NamespaceDetails *nsd = nsdetails(ns);
 
+            verify(nsd->isCapped());
+            CappedCollection *cl = nsd->toSubclass<CappedCollection>();
             // overwrite set to true because we are running on a secondary
-            const uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);        
-            BSONObj obj = row;
-            nsd->insertObjectIntoCappedWithPK(pk, obj, flags);
-            nsd->notifyOfWriteOp();
+            const uint64_t flags = NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE;
+            cl->insertObjectWithPK(pk, row, flags);
+            cl->notifyOfWriteOp();
         }
 
         static void runDeleteFromOplog(const char *ns, const BSONObj &op) {
@@ -322,9 +324,11 @@ namespace mongo {
             const BSONObj row = op[KEY_STR_ROW].Obj();
             const BSONObj pk = op[KEY_STR_PK].Obj();
 
-            uint64_t flags = NamespaceDetails::NO_LOCKTREE;
-            nsd->deleteObjectFromCappedWithPK(pk, row, flags);
-            nsd->notifyOfWriteOp();
+            verify(nsd->isCapped());
+            CappedCollection *cl = nsd->toSubclass<CappedCollection>();
+            const uint64_t flags = NamespaceDetails::NO_LOCKTREE;
+            cl->deleteObjectWithPK(pk, row, flags);
+            cl->notifyOfWriteOp();
         }
 
         static void runUpdateFromOplog(const char *ns, const BSONObj &op, bool isRollback) {
