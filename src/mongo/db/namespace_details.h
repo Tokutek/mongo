@@ -368,17 +368,6 @@ namespace mongo {
                                       const bool logop, const bool fromMigrate,
                                       uint64_t flags = 0);
 
-        // note the commit/abort of a transaction, given:
-        // minPK: the minimal PK inserted
-        // nDelta: the number of inserts minus the number of deletes
-        // sizeDelta: the size of inserts minus the size of deletes
-        virtual void noteCommit(const BSONObj &minPK, long long nDelta, long long sizeDelta) {
-            msgasserted( 16756, "bug: noted a commit, but it wasn't implemented" );
-        }
-        virtual void noteAbort(const BSONObj &minPK, long long nDelta, long long sizeDelta) {
-            msgasserted( 16757, "bug: noted an abort, but it wasn't implemented" );
-        }
-
         virtual void insertObjectIntoCappedAndLogOps(const BSONObj &obj, uint64_t flags) {
             msgasserted( 16775, "bug: should not call insertObjectIntoCappedAndLogOps into non-capped collection" );
         }

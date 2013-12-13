@@ -19,6 +19,7 @@
 
 #include "mongo/db/client.h"
 #include "mongo/db/clientcursor.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/databaseholder.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/txn_context.h"
@@ -38,13 +39,16 @@ namespace mongo {
             // only party capable of closing/reopening the ns due to file-ops.
             // So, if the ns is open, note the commit/abort to fix up in-memory
             // stats and do nothing otherwise since there are no stats to fix.
+            //
+            // Only matters for capped collections.
             NamespaceIndex *ni = nsindex(ns.c_str());
             NamespaceDetails *d = ni->find_ns(ns.c_str());
-            if (d != NULL) {
+            if (d != NULL && d->isCapped()) {
+                CappedCollection *cl = d->toSubclass<CappedCollection>();
                 if (committed) {
-                    d->noteCommit(minPK, nDelta, sizeDelta);
+                    cl->noteCommit(minPK, nDelta, sizeDelta);
                 } else {
-                    d->noteAbort(minPK, nDelta, sizeDelta);
+                    cl->noteAbort(minPK, nDelta, sizeDelta);
                 }
             }
         }

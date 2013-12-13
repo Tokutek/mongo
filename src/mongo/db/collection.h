@@ -163,9 +163,6 @@ namespace mongo {
         // Remove everything from this capped collection
         void empty();
 
-    protected:
-        void _insertObject(const BSONObj &obj, uint64_t flags);
-
         // Note the commit of a transaction, which simple notes completion under the lock.
         // We don't need to do anything with nDelta and sizeDelta because those changes
         // are already applied to in-memory stats, and this transaction has committed.
@@ -176,6 +173,9 @@ namespace mongo {
         // The given deltas are signed values that represent changes to the collection.
         // We need to roll back those changes. Therefore, we subtract from the current value.
         void noteAbort(const BSONObj &minPK, long long nDelta, long long sizeDelta);
+
+    protected:
+        void _insertObject(const BSONObj &obj, uint64_t flags);
 
     private:
         // requires: _mutex is held
