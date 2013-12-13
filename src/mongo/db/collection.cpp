@@ -24,6 +24,7 @@
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/repl/rs.h"
+#include "mongo/db/storage/key.h"
 
 namespace mongo {
 
@@ -184,6 +185,16 @@ namespace mongo {
         else {
             return minKey;
         }
+    }
+
+    // @param left/rightPK [ left, right ] primary key range to run
+    // hot optimize on. no optimize message is sent.
+    void OplogCollection::optimizePK(const BSONObj &leftPK, const BSONObj &rightPK,
+                                     const int timeout, uint64_t *loops_run) {
+        IndexDetails &idx = getPKIndex();
+        const storage::Key leftSKey(leftPK, NULL);
+        const storage::Key rightSKey(rightPK, NULL);
+        idx.optimize(leftSKey, rightSKey, false, timeout, loops_run);
     }
 
     // ------------------------------------------------------------------------
@@ -782,11 +793,6 @@ namespace mongo {
 
     void BulkLoadedCollection::optimizeAll() {
         uasserted( 16895, "Cannot optimize a collection under-going bulk load." );
-    }
-
-    void BulkLoadedCollection::optimizePK(const BSONObj &leftPK, const BSONObj &rightPK,
-                                          const int timeout, uint64_t *loops_run) {
-        uasserted( 16921, "Cannot optimize a collection under-going bulk load." );
     }
 
     bool BulkLoadedCollection::dropIndexes(const StringData& name, string &errmsg,

@@ -62,6 +62,10 @@ namespace mongo {
 
         // @return the maximum safe key to read for a tailable cursor.
         BSONObj minUnsafeKey();
+
+        // For cleaning up after oplog trimming.
+        void optimizePK(const BSONObj &leftPK, const BSONObj &rightPK,
+                        const int timeout, uint64_t *loops_run);
     };
 
     class NaturalOrderCollection : public NamespaceDetails {
@@ -266,9 +270,6 @@ namespace mongo {
         void empty();
 
         void optimizeAll();
-
-        void optimizePK(const BSONObj &leftPK, const BSONObj &rightPK,
-                        const int timeout, uint64_t *loops_run);
 
         bool dropIndexes(const StringData& name, string &errmsg,
                          BSONObjBuilder &result, bool mayDeleteIdIndex);

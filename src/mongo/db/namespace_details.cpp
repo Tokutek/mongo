@@ -922,14 +922,6 @@ namespace mongo {
         }
     }
 
-    void NamespaceDetails::optimizePK(const BSONObj &leftKey, const BSONObj &rightKey,
-                                      const int timeout, uint64_t *loops_run) {
-        IndexDetails &idx = getPKIndex();
-        storage::Key leftSKey(leftKey, NULL);
-        storage::Key rightSKey(rightKey, NULL);
-        idx.optimize(leftSKey, rightSKey, false, timeout, loops_run);
-    }
-
     void NamespaceDetails::fillCollectionStats(
         Stats &aggStats,
         BSONObjBuilder *result,

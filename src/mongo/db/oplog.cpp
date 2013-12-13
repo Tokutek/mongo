@@ -34,6 +34,7 @@
 #include "mongo/db/stats/timer_stats.h"
 #include "mongo/db/query_optimizer_internal.h"
 #include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/instance.h"
@@ -473,6 +474,9 @@ namespace mongo {
         // do a hot optimize up until gtid;
         BSONObjBuilder q;
         addGTIDToBSON("", gtid, q);
-        rsOplogDetails->optimizePK(minKey, q.done(), timeout, loops_run);
+
+        // TODO: rsOplogDetails should be stored as OplogCollection, not NamespaceDetails
+        OplogCollection *cl = rsOplogDetails->toSubclass<OplogCollection>();
+        cl->optimizePK(minKey, q.done(), timeout, loops_run);
     }
 }
