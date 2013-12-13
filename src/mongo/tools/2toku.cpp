@@ -124,10 +124,20 @@ class VanillaOplogPlayer : boost::noncopyable {
 
         // nop
         if (op == "n") {
+            if (!_insertBuf.empty()) {
+                flushInserts();
+            }
+            _maxOpTimeSynced = _thisTime;
+            _thisTime = OpTime();
             return true;
         }
         // "presence of a database"
         if (op == "db") {
+            if (!_insertBuf.empty()) {
+                flushInserts();
+            }
+            _maxOpTimeSynced = _thisTime;
+            _thisTime = OpTime();
             return true;
         }
         if (op != "c" && op != "i" && op != "u" && op != "d") {
