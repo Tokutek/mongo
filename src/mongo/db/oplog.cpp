@@ -58,11 +58,22 @@ namespace mongo {
         // TODO: code review this for possible error cases
         // although, I don't think we care about error cases,
         // just that after we exit, oplog files don't exist
+        NamespaceDetails *d;
         BSONObjBuilder out;
         string errmsg;
-        dropCollection(rsoplog, errmsg, out);
-        dropCollection(rsOplogRefs, errmsg, out);
-        dropCollection(rsReplInfo, errmsg, out);
+
+        d = nsdetails(rsoplog);
+        if (d != NULL) {
+            d->drop(errmsg, out);
+        }
+        d = nsdetails(rsOplogRefs);
+        if (d != NULL) {
+            d->drop(errmsg, out);
+        }
+        d = nsdetails(rsReplInfo);
+        if (d != NULL) {
+            d->drop(errmsg, out);
+        }
     }
 
     bool oplogFilesOpen() {
