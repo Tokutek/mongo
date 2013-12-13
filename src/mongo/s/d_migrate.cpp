@@ -52,7 +52,7 @@
 #include "mongo/db/kill_current_op.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/txn_context.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/delete.h"
@@ -89,10 +89,10 @@ namespace mongo {
                                           const BSONObj& shardKeyPattern,
                                           BSONObj* indexPattern ) {
         verify( Lock::isLocked() );
-        NamespaceDetails* nsd = nsdetails( ns );
-        if ( !nsd )
+        Collection *cl = getCollection( ns );
+        if ( !cl )
             return false;
-        const IndexDetails* idx = nsd->findIndexByPrefix( shardKeyPattern , true );  /* require single key */
+        const IndexDetails* idx = cl->findIndexByPrefix( shardKeyPattern , true );  /* require single key */
         if ( !idx )
             return false;
         *indexPattern = idx->keyPattern().getOwned();
@@ -303,8 +303,8 @@ namespace mongo {
                   _active(false),
                   _memoryUsed(0),
                   _workLock("MigrateFromStatus::workLock"),
-                  _migrateLogDetails(NULL),
-                  _migrateLogRefDetails(NULL),
+                  _migrateLogCollection(NULL),
+                  _migrateLogRefCollection(NULL),
                   _nextMigrateLogId(0),
                   _snapshotTaken(false) {}
 
@@ -378,15 +378,15 @@ namespace mongo {
             try {
                 Client::WriteContext ctx(MIGRATE_LOG_NS);
                 Client::Transaction txn(DB_SERIALIZABLE);
-                NamespaceDetails *d = nsdetails(MIGRATE_LOG_NS);
-                if (d != NULL) {
-                    d->drop(err, res, false);
+                Collection *cl = getCollection(MIGRATE_LOG_NS);
+                if (cl != NULL) {
+                    cl->drop(err, res, false);
                 }
                 _nextMigrateLogId.store(0);
                 _nextIdToTransfer = 0;
                 _nextRefSeqToTransfer = 0;
-                _migrateLogDetails = getOrCreateCollection(MIGRATE_LOG_NS, false);
-                verify(_migrateLogDetails != NULL);
+                _migrateLogCollection = getOrCreateCollection(MIGRATE_LOG_NS, false);
+                verify(_migrateLogCollection != NULL);
                 txn.commit();
             }
             catch (DBException &e) {
@@ -401,12 +401,12 @@ namespace mongo {
             try {
                 Client::WriteContext ctx(MIGRATE_LOG_REF_NS);
                 Client::Transaction txn(DB_SERIALIZABLE);
-                NamespaceDetails *d = nsdetails(MIGRATE_LOG_REF_NS);
-                if (d != NULL) {
-                    d->drop(err, res, false);
+                Collection *cl = getCollection(MIGRATE_LOG_REF_NS);
+                if (cl != NULL) {
+                    cl->drop(err, res, false);
                 }
-                _migrateLogRefDetails = getOrCreateCollection(MIGRATE_LOG_REF_NS, false);
-                verify(_migrateLogRefDetails != NULL);
+                _migrateLogRefCollection = getOrCreateCollection(MIGRATE_LOG_REF_NS, false);
+                verify(_migrateLogRefCollection != NULL);
                 txn.commit();
             }
             catch (DBException &e) {
@@ -484,14 +484,14 @@ namespace mongo {
 
         void writeObjToMigrateLog(BSONObj &obj) {
             Client::ReadContext ctx(MIGRATE_LOG_NS);
-            insertOneObject(_migrateLogDetails, obj,
-                            NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
+            insertOneObject(_migrateLogCollection, obj,
+                            Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE);
         }
 
         void writeObjToMigrateLogRef(BSONObj &obj) {
             Client::ReadContext ctx(MIGRATE_LOG_REF_NS);
-            insertOneObject(_migrateLogRefDetails, obj,
-                            NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
+            insertOneObject(_migrateLogRefCollection, obj,
+                            Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE);
         }
 
         /**
@@ -562,7 +562,7 @@ namespace mongo {
                 return false;
             }
 
-            NamespaceDetails *d;
+            Collection *cl;
             if (_cc.get() == NULL) {
                 dassert(!_txn);
                 Client::WriteContext ctx(_ns);
@@ -574,14 +574,14 @@ namespace mongo {
                 _snapshotTaken = true;
                 _txn.reset(new Client::Transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY));
 
-                d = nsdetails(_ns);
-                if (d == NULL) {
+                cl = getCollection(_ns);
+                if (cl == NULL) {
                     errmsg = "ns not found, should be impossible";
                     _txn.reset();
                     return false;
                 }
 
-                const IndexDetails *idx = d->findIndexByPrefix( _shardKeyPattern ,
+                const IndexDetails *idx = cl->findIndexByPrefix( _shardKeyPattern ,
                                                                 true );  /* require single key */
 
                 if ( idx == NULL ) {
@@ -594,7 +594,7 @@ namespace mongo {
                 BSONObj min = KeyPattern::toKeyFormat( kp.extendRangeBound( _min, false ) );
                 BSONObj max = KeyPattern::toKeyFormat( kp.extendRangeBound( _max, false ) );
 
-                shared_ptr<Cursor> idxCursor(IndexCursor::make( d , *idx , min , max , false , 1 ));
+                shared_ptr<Cursor> idxCursor(IndexCursor::make( cl , *idx , min , max , false , 1 ));
                 _cc.reset(new ClientCursor(QueryOption_NoCursorTimeout, idxCursor, _ns));
 
                 cc().swapTransactionStack(_txnStack);
@@ -712,8 +712,8 @@ namespace mongo {
 
         static const char MIGRATE_LOG_NS[];
         static const char MIGRATE_LOG_REF_NS[];
-        NamespaceDetails *_migrateLogDetails;
-        NamespaceDetails *_migrateLogRefDetails;
+        Collection *_migrateLogCollection;
+        Collection *_migrateLogRefCollection;
         AtomicWord<long long> _nextMigrateLogId;
         long long _nextIdToTransfer;
         long long _nextRefSeqToTransfer;
@@ -1588,7 +1588,7 @@ namespace mongo {
                 const string &dbname = cc().database()->name();
 
                 // Only copy if ns doesn't already exist
-                if (!nsdetails(ns)) {
+                if (!getCollection(ns)) {
                     string system_namespaces = dbname + ".system.namespaces";
                     BSONObj entry = conn->findOne( system_namespaces, BSON( "name" << ns ) );
                     if ( entry["options"].isABSONObj() ) {

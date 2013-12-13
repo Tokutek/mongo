@@ -20,8 +20,7 @@
 #pragma once
 
 #include "mongo/db/commands.h"
-#include "mongo/db/index.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/oplogreader.h"
 #include "mongo/db/repl/rs_config.h"
@@ -727,8 +726,8 @@ namespace mongo {
     inline BSONObj getLastEntryInOplog() {
         BSONObj o;
         Client::ReadContext lk(rsoplog);
-        NamespaceDetails *d = nsdetails(rsoplog);
-        shared_ptr<Cursor> c( BasicCursor::make(d, -1) );
+        Collection *cl = getCollection(rsoplog);
+        shared_ptr<Cursor> c(BasicCursor::make(cl, -1));
         return c->ok() ? c->current().copy() : BSONObj();
     }
 

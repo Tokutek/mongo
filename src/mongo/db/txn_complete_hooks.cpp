@@ -22,7 +22,6 @@
 #include "mongo/db/collection.h"
 #include "mongo/db/collection_map.h"
 #include "mongo/db/databaseholder.h"
-#include "mongo/db/namespace_details.h"
 #include "mongo/db/txn_context.h"
 
 namespace mongo {
@@ -43,13 +42,13 @@ namespace mongo {
             //
             // Only matters for capped collections.
             CollectionMap *cm = collectionMap(ns);
-            NamespaceDetails *d = cm->find_ns(ns);
-            if (d != NULL && d->isCapped()) {
-                CappedCollection *cl = d->as<CappedCollection>();
+            Collection *cl = cm->find_ns(ns);
+            if (cl != NULL && cl->isCapped()) {
+                CappedCollection *cappedCl = cl->as<CappedCollection>();
                 if (committed) {
-                    cl->noteCommit(minPK, nDelta, sizeDelta);
+                    cappedCl->noteCommit(minPK, nDelta, sizeDelta);
                 } else {
-                    cl->noteAbort(minPK, nDelta, sizeDelta);
+                    cappedCl->noteAbort(minPK, nDelta, sizeDelta);
                 }
             }
         }

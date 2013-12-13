@@ -32,7 +32,7 @@
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/index.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/util/timer.h"
 
@@ -92,16 +92,16 @@ namespace mongo {
                     bool touch_indexes, 
                     BSONObjBuilder& result ) {
 
-            NamespaceDetails *nsd = nsdetails(ns);
-            if (!nsd) {
+            Collection *cl = getCollection(ns);
+            if (!cl) {
                 errmsg = "ns not found";
                 return false;
             }
 
-            for (int i = 0; i < nsd->nIndexes(); i++) {
-                IndexDetails &idx = nsd->idx(i);
-                if ((nsd->isPKIndex(idx) && touch_data) || (!nsd->isPKIndex(idx) && touch_indexes)) {
-                    for (shared_ptr<Cursor> c(IndexCursor::make(nsd, idx, minKey, maxKey, true, 1)); c->ok(); c->advance()) {
+            for (int i = 0; i < cl->nIndexes(); i++) {
+                IndexDetails &idx = cl->idx(i);
+                if ((cl->isPKIndex(idx) && touch_data) || (!cl->isPKIndex(idx) && touch_indexes)) {
+                    for (shared_ptr<Cursor> c(IndexCursor::make(cl, idx, minKey, maxKey, true, 1)); c->ok(); c->advance()) {
                         c->current();
                     }
                 }

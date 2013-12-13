@@ -1112,12 +1112,12 @@ namespace mongo {
                 try {
                     Client::ReadContext ctx(rsoplog);
                     Client::Transaction transaction(DB_READ_UNCOMMITTED);
-                    NamespaceDetails *d = nsdetails(rsoplog);
+                    Collection *cl = getCollection(rsoplog);
                     vector<BSONObj> docs;
                     // We set the default wait time to 2 seconds.
                     // If we find nothing in the oplog, we will wait 2 seconds
                     millisToWait = 2000;
-                    if (d != NULL) {
+                    if (cl != NULL) {
                         BSONObjBuilder query;
                         BSONObjBuilder q(query.subobjStart("_id"));
                         addGTIDToBSON("$gte", _lastPurgedGTID, q);

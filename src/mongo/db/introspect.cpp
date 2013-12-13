@@ -96,9 +96,9 @@ namespace {
         }
 
         // get or create the profiling collection
-        NamespaceDetails *details = getOrCreateProfileCollection(db);
-        if (details) {
-            insertOneObject(details, p);
+        Collection *cl = getOrCreateProfileCollection(db);
+        if (cl) {
+            insertOneObject(cl, p);
         }
     }
 
@@ -119,12 +119,12 @@ namespace {
         }
     }
 
-    NamespaceDetails* getOrCreateProfileCollection(Database *db, bool force) {
+    Collection *getOrCreateProfileCollection(Database *db, bool force) {
         fassert(16372, db);
-        const char* profileName = db->profileName().c_str();
-        NamespaceDetails* details = nsdetails(profileName);
-        if (!details && (cmdLine.defaultProfile || force)) {
-            // system.profile namespace doesn't exist; create it
+        const char *profileName = db->profileName().c_str();
+        Collection *cl = getCollection(profileName);
+        if (!cl && (cmdLine.defaultProfile || force)) {
+            // system.profile collection doesn't exist; create it
             log() << "creating profile collection: " << profileName << endl;
             string errmsg;
             if (!userCreateNS(profileName,
@@ -133,9 +133,9 @@ namespace {
                 log() << "could not create ns " << profileName << ": " << errmsg << endl;
                 return NULL;
             }
-            details = nsdetails(profileName);
+            cl = getCollection(profileName);
         }
-        if (!details) {
+        if (!cl) {
             // failed to get or create profile collection
             static time_t last = time(0) - 10;  // warn the first time
             if( time(0) > last+10 ) {
@@ -143,7 +143,7 @@ namespace {
                 last = time(0);
             }
         }
-        return details;
+        return cl;
     }
 
 } // namespace mongo

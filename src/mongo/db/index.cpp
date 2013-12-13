@@ -21,7 +21,7 @@
 
 #include <boost/checked_delete.hpp>
 
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/index.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/cursor.h"
@@ -120,7 +120,7 @@ namespace mongo {
             const shared_ptr<CoveredIndexMatcher> forceDocMatcher(
                     new CoveredIndexMatcher(query, BSONObj()));
 
-            NamespaceDetails *d = nsdetails(parentNS());
+            Collection *cl = getCollection(parentNS());
 
             // Construct a new query based on the hashes of the previous point-intervals
             // e.g. {a : {$in : [ hash(1) , hash(3) , hash(6) ]}}
@@ -131,7 +131,7 @@ namespace mongo {
                  i != intervals.end(); ++i ){
                 if (!i->equality()){
                     const shared_ptr<mongo::Cursor> exhaustiveCursor(
-                            new IndexScanCursor(d, *this, 1));
+                            new IndexScanCursor(cl, *this, 1));
                     exhaustiveCursor->setMatcher(forceDocMatcher);
                     return exhaustiveCursor;
                 }
@@ -146,7 +146,7 @@ namespace mongo {
             shared_ptr<FieldRangeVector> newVector(
                     new FieldRangeVector(newfrs, _keyPattern, 1));
             const shared_ptr<mongo::Cursor> cursor(
-                    IndexCursor::make(d, *this, newVector, false, 1, numWanted));
+                    IndexCursor::make(cl, *this, newVector, false, 1, numWanted));
             cursor->setMatcher(forceDocMatcher);
             return cursor;
         }
@@ -191,7 +191,7 @@ namespace mongo {
         }
         bool ok = idx->open(may_create);
         if (!ok) {
-            // This signals NamespaceDetails::make that we got ENOENT due to #673
+            // This signals Collection::make that we got ENOENT due to #673
             return shared_ptr<IndexDetails>();
         }
         return idx;
@@ -386,7 +386,7 @@ namespace mongo {
         DBT kdbt = skey.dbt();
         DBT vdbt = storage::dbt_make(msg.objdata(), msg.objsize());
 
-        const int update_flags = (flags & NamespaceDetails::NO_LOCKTREE) ? DB_PRELOCKED_WRITE : 0;
+        const int update_flags = (flags & Collection::NO_LOCKTREE) ? DB_PRELOCKED_WRITE : 0;
         const int r = db()->update(db(), cc().txn().db_txn(), &kdbt, &vdbt, update_flags);
         if (r != 0) {
             storage::handle_ydb_error(r);

@@ -20,7 +20,7 @@
 #include "mongo/db/ops/count.h"
 #include "mongo/db/client.h"
 #include "mongo/db/clientcursor.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/query_optimizer.h"
 #include "mongo/client/dbclientinterface.h"
@@ -52,8 +52,8 @@ namespace mongo {
     } _countPlanPolicies;
 
     long long runCount( const char *ns, const BSONObj &cmd, string &err, int &errCode ) {
-        NamespaceDetails *d = nsdetails( ns );
-        if ( !d ) {
+        Collection *cl = getCollection( ns );
+        if (cl == NULL) {
             err = "ns missing";
             return -1;
         }

@@ -22,7 +22,7 @@
 #include "mongo/db/queryutil.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/clientcursor.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/query_optimizer.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/query.h"
@@ -31,9 +31,9 @@
 
 namespace mongo {
 
-    void deleteOneObject(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
-        d->deleteObject(pk, obj, flags);
-        d->notifyOfWriteOp();
+    void deleteOneObject(Collection *cl, const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
+        cl->deleteObject(pk, obj, flags);
+        cl->notifyOfWriteOp();
     }
     
     // Special-cased helper for deleting ranges out of an index.
@@ -43,12 +43,12 @@ namespace mongo {
                                const BSONObj &keyPattern,
                                const bool maxInclusive,
                                const bool fromMigrate) {
-        NamespaceDetails *d = nsdetails(ns);
-        if (d == NULL) {
+        Collection *cl = getCollection(ns);
+        if (cl == NULL) {
             return 0;
         }
 
-        IndexDetails &i = d->idx(d->findIndexByKeyPattern(keyPattern));
+        IndexDetails &i = cl->idx(cl->findIndexByKeyPattern(keyPattern));
         // Extend min to get (min, MinKey, MinKey, ....)
         KeyPattern kp(keyPattern);
         BSONObj newMin = KeyPattern::toKeyFormat(kp.extendRangeBound(min, false));
@@ -57,35 +57,35 @@ namespace mongo {
         BSONObj newMax = KeyPattern::toKeyFormat(kp.extendRangeBound(max, maxInclusive));
 
         long long nDeleted = 0;
-        for (shared_ptr<Cursor> c(IndexCursor::make(d, i, newMin, newMax, maxInclusive, 1));
+        for (shared_ptr<Cursor> c(IndexCursor::make(cl, i, newMin, newMax, maxInclusive, 1));
              c->ok(); c->advance()) {
             const BSONObj pk = c->currPK();
             const BSONObj obj = c->current();
             OpLogHelpers::logDelete(ns.c_str(), obj, fromMigrate);
-            deleteOneObject(d, pk, obj);
+            deleteOneObject(cl, pk, obj);
             nDeleted++;
         }
         return nDeleted;
     }
 
     long long _deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop) {
-        NamespaceDetails *d = nsdetails(ns);
-        if (d == NULL) {
+        Collection *cl = getCollection(ns);
+        if (cl == NULL) {
             return 0;
         }
 
-        uassert(10101, "can't remove from a capped collection", !d->isCapped());
+        uassert(10101, "can't remove from a capped collection", !cl->isCapped());
 
         BSONObj obj;
-        BSONObj pk = d->getSimplePKFromQuery(pattern);
+        BSONObj pk = cl->getSimplePKFromQuery(pattern);
 
         // Fast-path for simple primary key deletes.
         if (!pk.isEmpty()) {
-            if (queryByPKHack(d, pk, pattern, obj)) {
+            if (queryByPKHack(cl, pk, pattern, obj)) {
                 if (logop) {
                     OpLogHelpers::logDelete(ns, obj, false);
                 }
-                deleteOneObject(d, pk, obj);
+                deleteOneObject(cl, pk, obj);
                 return 1;
             }
             return 0;
@@ -123,7 +123,7 @@ namespace mongo {
             if (logop) {
                 OpLogHelpers::logDelete(ns, obj, false);
             }
-            deleteOneObject(d, pk, obj);
+            deleteOneObject(cl, pk, obj);
             nDeleted++;
 
             if (justOne) {
@@ -139,10 +139,6 @@ namespace mongo {
     */
     long long deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop) {
         if (NamespaceString::isSystem(ns)) {
-            /* note a delete from system.indexes would corrupt the db
-               if done here, as there are pointers into those objects in
-               NamespaceDetails.
-            */
             uassert(12050, "cannot delete from system namespace",
                     legalClientSystemNS(ns, true));
         }

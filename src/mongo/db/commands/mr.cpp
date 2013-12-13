@@ -557,8 +557,8 @@ namespace mongo {
                         BSONObj temp = cursor->next();
                         BSONObj old;
 
-                        NamespaceDetails *d = nsdetails(_config.outputOptions.finalNamespace);
-                        const bool found = d != NULL && d->findOne( temp["_id"].wrap() , old , true );
+                        Collection *cl = getCollection(_config.outputOptions.finalNamespace);
+                        const bool found = cl != NULL && cl->findOne( temp["_id"].wrap() , old , true );
                         if ( found ) {
                             // need to reduce
                             values.clear();

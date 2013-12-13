@@ -88,7 +88,7 @@ namespace mongo {
             if ( !cmdLine.quiet )
                 tlog() << "CMD: clean " << dropns << endl;
 
-            NamespaceDetails *d = nsdetails(dropns);
+            Collection *cl = getCollection(dropns);
 
             if ( ! d ) {
                 errmsg = "ns not found";
@@ -213,7 +213,7 @@ namespace mongo {
 
         bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
             string ns = dbname + "." + cmdObj.firstElement().valuestrsafe();
-            NamespaceDetails * d = nsdetails( ns );
+            Collection *cl = getCollection( ns );
             if ( !cmdLine.quiet )
                 tlog() << "CMD: validate " << ns << endl;
 
@@ -229,7 +229,7 @@ namespace mongo {
 
     private:
         void validateNS(const char *ns,
-                        NamespaceDetails *d,
+                        Collection *cl,
                         const BSONObj& cmdObj,
                         BSONObjBuilder& result) {
             const bool full = cmdObj["full"].trueValue();

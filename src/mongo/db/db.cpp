@@ -24,6 +24,7 @@
 #include <fstream>
 
 #include "mongo/base/initializer.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/client.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/cmdline.h"
@@ -397,9 +398,9 @@ namespace mongo {
             for (vector<string>::const_iterator it = databases.begin(); it != databases.end(); ++it) {
                 string ns = getSisterNS(*it, "system.users");
                 Client::Context ctx(ns);
-                // Just by calling nsdetails, if a collection that needed upgrade is opened, it'll
+                // Just by calling getCollection, if a collection that needed upgrade is opened, it'll
                 // get upgraded.  This fixes #674.
-                nsdetails(ns);
+                getCollection(ns);
             }
             txn.commit();
         }

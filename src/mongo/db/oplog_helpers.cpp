@@ -19,7 +19,6 @@
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/txn_context.h"
 #include "mongo/db/repl_block.h"
-#include "mongo/db/namespace_details.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/delete.h"
@@ -212,11 +211,11 @@ namespace mongo {
 
         static void runColdIndexFromOplog(const char *ns, const BSONObj &row) {
             Client::WriteContext ctx(ns);
-            NamespaceDetails* nsd = nsdetails(ns);
+            Collection *sysCl = getCollection(ns);
             const string &coll = row["ns"].String();
 
-            NamespaceDetails* collNsd = nsdetails(coll);
-            const bool ok = collNsd->ensureIndex(row);
+            Collection *cl = getCollection(coll);
+            const bool ok = cl->ensureIndex(row);
             if (!ok) {
                 // the index already exists, so this is a no-op
                 // Note that for create index and drop index, we
@@ -225,7 +224,7 @@ namespace mongo {
                 return;
             }
             BSONObj obj = row;
-            insertOneObject(nsd, obj, NamespaceDetails::NO_UNIQUE_CHECKS);
+            insertOneObject(sysCl, obj, Collection::NO_UNIQUE_CHECKS);
         }
 
         static void runHotIndexFromOplog(const char *ns, const BSONObj &row) {
@@ -234,15 +233,15 @@ namespace mongo {
             // These MUST NOT be reordered, the context must destruct
             // after the indexer.
             scoped_ptr<Lock::DBWrite> lk(new Lock::DBWrite(ns));
-            scoped_ptr<NamespaceDetails::HotIndexer> indexer;
+            shared_ptr<Collection::Indexer> indexer;
 
             {
                 Client::Context ctx(ns);
-                NamespaceDetails* nsd = nsdetails(ns);
+                Collection *sysCl = getCollection(ns);
 
                 const string &coll = row["ns"].String();
-                NamespaceDetails* collNsd = nsdetails(coll);
-                if (collNsd->findIndexByKeyPattern(row["key"].Obj()) >= 0) {
+                Collection *cl = getCollection(coll);
+                if (cl->findIndexByKeyPattern(row["key"].Obj()) >= 0) {
                     // the index already exists, so this is a no-op
                     // Note that for create index and drop index, we
                     // are tolerant of the fact that the operation may
@@ -250,8 +249,8 @@ namespace mongo {
                     return;
                 }
                 BSONObj obj = row;
-                insertOneObject(nsd, obj, NamespaceDetails::NO_UNIQUE_CHECKS);
-                indexer.reset(new NamespaceDetails::HotIndexer(collNsd, row));
+                insertOneObject(sysCl, obj, Collection::NO_UNIQUE_CHECKS);
+                indexer = cl->newIndexer(row, true);
                 indexer->prepare();
             }
 
@@ -282,12 +281,12 @@ namespace mongo {
             }
             else {
                 Client::ReadContext ctx(ns);
-                NamespaceDetails* nsd = nsdetails(ns);
+                Collection *cl = getCollection(ns);
 
                 // overwrite set to true because we are running on a secondary
-                uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);        
+                const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
                 BSONObj obj = row;
-                insertOneObject(nsd, obj, flags);
+                insertOneObject(cl, obj, flags);
             }
         }
 
@@ -296,44 +295,44 @@ namespace mongo {
             const BSONObj row = op[KEY_STR_ROW].Obj();
 
             Client::ReadContext ctx(ns);
-            NamespaceDetails *nsd = nsdetails(ns);
+            Collection *cl = getCollection(ns);
 
-            verify(nsd->isCapped());
-            CappedCollection *cl = nsd->as<CappedCollection>();
+            verify(cl->isCapped());
+            CappedCollection *cappedCl = cl->as<CappedCollection>();
             // overwrite set to true because we are running on a secondary
-            const uint64_t flags = NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE;
-            cl->insertObjectWithPK(pk, row, flags);
-            cl->notifyOfWriteOp();
+            const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
+            cappedCl->insertObjectWithPK(pk, row, flags);
+            cappedCl->notifyOfWriteOp();
         }
 
         static void runDeleteFromOplog(const char *ns, const BSONObj &op) {
             Client::ReadContext ctx(ns);
-            NamespaceDetails* nsd = nsdetails(ns);
+            Collection *cl = getCollection(ns);
 
             const BSONObj row = op[KEY_STR_ROW].Obj();
             // Use "validated" version for paranoia, which checks for bad types like regex
-            const BSONObj pk = nsd->getValidatedPKFromObject(row);
-            const uint64_t flags = NamespaceDetails::NO_LOCKTREE;
-            deleteOneObject(nsd, pk, row, flags);
+            const BSONObj pk = cl->getValidatedPKFromObject(row);
+            const uint64_t flags = Collection::NO_LOCKTREE;
+            deleteOneObject(cl, pk, row, flags);
         }
         
         static void runCappedDeleteFromOplog(const char *ns, const BSONObj &op) {
             Client::ReadContext ctx(ns);
-            NamespaceDetails* nsd = nsdetails(ns);
+            Collection *cl = getCollection(ns);
 
             const BSONObj row = op[KEY_STR_ROW].Obj();
             const BSONObj pk = op[KEY_STR_PK].Obj();
 
-            verify(nsd->isCapped());
-            CappedCollection *cl = nsd->as<CappedCollection>();
-            const uint64_t flags = NamespaceDetails::NO_LOCKTREE;
-            cl->deleteObjectWithPK(pk, row, flags);
-            cl->notifyOfWriteOp();
+            verify(cl->isCapped());
+            CappedCollection *cappedCl = cl->as<CappedCollection>();
+            const uint64_t flags = Collection::NO_LOCKTREE;
+            cappedCl->deleteObjectWithPK(pk, row, flags);
+            cappedCl->notifyOfWriteOp();
         }
 
         static void runUpdateFromOplog(const char *ns, const BSONObj &op, bool isRollback) {
             Client::ReadContext ctx(ns);
-            NamespaceDetails* nsd = nsdetails(ns);
+            Collection *cl = getCollection(ns);
 
             const char *names[] = {
                 KEY_STR_PK,
@@ -349,29 +348,29 @@ namespace mongo {
             // what is passed as the before image, and what is passed
             // as after. In normal replication, we replace oldRow with newRow.
             // In rollback, we replace newRow with oldRow
-            uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);        
+            const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
             if (isRollback) {
                 // if this is a rollback, then the newRow is what is in the
                 // collections, that we want to replace with oldRow
-                updateOneObject(nsd, pk, newRow, oldRow, false, false, flags);
+                updateOneObject(cl, pk, newRow, oldRow, false, false, flags);
             }
             else {
                 // normal replication case
-                updateOneObject(nsd, pk, oldRow, newRow, false, false, flags);
+                updateOneObject(cl, pk, oldRow, newRow, false, false, flags);
             }
         }
 
         static void runUpdateModsFromOplog(const char *ns, const BSONObj &op, bool isRollback) {
             Client::ReadContext ctx(ns);
-            NamespaceDetails* nsd = nsdetails(ns);
+            Collection *cl = getCollection(ns);
 
             const char *names[] = { KEY_STR_PK, KEY_STR_MODS };
             BSONElement fields[2];
             op.getFields(2, names, fields);
             const BSONObj pk = fields[0].Obj();
             const BSONObj updateobj = fields[1].Obj();
-            uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);        
-            updateByPK(nsd, pk, pk /* patternOrig, the "full" query */,
+            const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
+            updateByPK(cl, pk, pk /* patternOrig, the "full" query */,
                        // for rollback, we need to invert the update object to 'roll back' the update.
                        !isRollback ? updateobj : invertUpdateMods(updateobj),
                        false, true /* fastupdates always okay on secondary */,

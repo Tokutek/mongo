@@ -266,8 +266,8 @@ namespace mongo {
         uassert( 16173 , "couldn't get read lock to get admin auth credentials" , rl.got() );
         Client::Context cx("admin.system.users", dbpath);
         BSONObj o;
-        NamespaceDetails *d = nsdetails( "admin.system.users" );
-        bool ok = d != NULL && d->findOne(BSONObj(), o);
+        Collection *cl = getCollection( "admin.system.users" );
+        bool ok = cl != NULL && cl->findOne(BSONObj(), o);
         txn.commit();
         return ok;
     }
@@ -280,8 +280,8 @@ namespace mongo {
         uassert( 16174 , "couldn't get read lock to check admin user" , rl.got() );
         Client::Context cx( "admin.system.users" );
         BSONObj user;
-        NamespaceDetails *d = nsdetails( "admin.system.users" );
-        if ( d != NULL && d->findOne( BSON( "user" << username ) , user ) ) {
+        Collection *cl = getCollection( "admin.system.users" );
+        if ( cl != NULL && cl->findOne( BSON( "user" << username ) , user ) ) {
             txn.commit();
             return user.copy();
         }

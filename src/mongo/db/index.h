@@ -37,7 +37,7 @@
 namespace mongo {
 
     class Cursor; 
-    class NamespaceDetails;
+    class Collection;
     class FieldRangeSet;
 
     // Represents an index of a collection.
@@ -338,7 +338,7 @@ namespace mongo {
         // Only IndexDetails::make() calls the constructor / open.
         bool open(const bool may_create);
 
-        friend class NamespaceDetails;
+        friend class CollectionBase;
         friend class BulkLoadedCollection;
     };
 

@@ -83,7 +83,7 @@ namespace mongo {
 
     // Class to handle rollback of in-memory modifications to the namespace index
     // On abort, we simply reload the map entry for each ns touched, bringing it in
-    // sync with whatever is on disk in the nsdb.
+    // sync with whatever is on disk in the metadb.
     class CollectionMapRollback : boost::noncopyable {
     public:
         // Called after txn commit.

@@ -33,21 +33,6 @@ namespace mongo {
         return _dbHolder;
     }
 
-    CollectionMap *collectionMap(const StringData &ns) {
-        Database *database = cc().database();
-        verify(database);
-        DEV {
-            StringData db = nsToDatabaseSubstring(ns);
-            if (db != database->name()) {
-                out() << "ERROR: attempt to write to wrong database\n";
-                out() << " ns:" << ns << '\n';
-                out() << " database->name:" << database->name() << endl;
-                verify(db == database->name());
-            }
-        }
-        return &database->_collectionMap;
-    }
-
     Database::Database(const StringData &name, const StringData &path)
         : _name(name.toString()), _path(path.toString()), _collectionMap( _path, _name ),
           _profileName(getSisterNS(_name, "system.profile"))

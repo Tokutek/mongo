@@ -22,7 +22,6 @@
 #include "mongo/db/cmdline.h"
 #include "mongo/db/collection.h"
 #include "mongo/db/collection_map.h"
-#include "mongo/db/namespace_details.h"
 
 namespace mongo {
 
@@ -30,7 +29,7 @@ namespace mongo {
 
     /**
      * Database represents an set of namespaces. It has an index mapping
-     * namespace name to NamespaceDetails object, if it exists and is open.
+     * namespace name to Collection object, if it exists and is open.
      * The database is represented on disk as a TokuMX dictionary named dbname.ns
     */
     class Database {

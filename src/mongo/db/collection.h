@@ -25,7 +25,21 @@
 
 namespace mongo {
 
-    class IndexedCollection : public NamespaceDetails {
+    class CollectionMap;
+
+    // Gets a collection - opens it if necessary, but does not create.
+    Collection *getCollection(const StringData& ns);
+
+    // Gets the collection map (ns -> Collection) for this client threads' current database.
+    // You pass the namespace you want so we can verify you're accessing the right database.
+    CollectionMap *collectionMap(const StringData &ns);
+
+    // Used by operations that are supposed to automatically create a collection
+    // if it does not exist. Examples include inserts, upsert-style updates, and
+    // ensureIndex.
+    Collection *getOrCreateCollection(const StringData &ns, const bool logop);
+
+    class IndexedCollection : public CollectionBase {
     private:
         BSONObj determinePrimaryKey(const BSONObj &options);
 
@@ -79,7 +93,7 @@ namespace mongo {
                         const int timeout, uint64_t *loops_run);
     };
 
-    class NaturalOrderCollection : public NamespaceDetails {
+    class NaturalOrderCollection : public CollectionBase {
     public:
         NaturalOrderCollection(const StringData &ns, const BSONObj &options);
         NaturalOrderCollection(const BSONObj &serialized);

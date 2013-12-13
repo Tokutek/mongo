@@ -17,7 +17,8 @@
 #include "mongo/db/query_plan.h"
 
 #include "mongo/db/cmdline.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/parsed_query.h"
 #include "mongo/db/query_plan_summary.h"
 #include "mongo/db/queryutil.h"
@@ -39,7 +40,7 @@ namespace mongo {
         return 1;
     }
 
-    QueryPlan* QueryPlan::make( NamespaceDetails* d,
+    QueryPlan* QueryPlan::make( Collection *cl,
                                 int idxNo,
                                 const FieldRangeSetPair& frsp,
                                 const FieldRangeSetPair* originalFrsp,
@@ -49,7 +50,7 @@ namespace mongo {
                                 const BSONObj& startKey,
                                 const BSONObj& endKey,
                                 const std::string& special ) {
-        auto_ptr<QueryPlan> ret( new QueryPlan( d,
+        auto_ptr<QueryPlan> ret( new QueryPlan( cl,
                                                 idxNo,
                                                 frsp,
                                                 originalQuery,
@@ -60,17 +61,17 @@ namespace mongo {
         return ret.release();
     }
     
-    QueryPlan::QueryPlan( NamespaceDetails* d,
+    QueryPlan::QueryPlan( Collection *cl,
                           int idxNo,
                           const FieldRangeSetPair& frsp,
                           const BSONObj& originalQuery,
                           const BSONObj& order,
                           const shared_ptr<const ParsedQuery>& parsedQuery,
                           const std::string& special ) :
-        _d( d ),
+        _cl( cl ),
         _idxNo( idxNo ),
-        _frs( frsp.frsForIndex( _d, _idxNo ) ),
-        _frsMulti( frsp.frsForIndex( _d, -1 ) ),
+        _frs( frsp.frsForIndex( _cl, _idxNo ) ),
+        _frsMulti( frsp.frsForIndex( _cl, -1 ) ),
         _originalQuery( originalQuery ),
         _order( order ),
         _parsedQuery( parsedQuery ),
@@ -90,7 +91,7 @@ namespace mongo {
         _endKeyInclusive = endKey.isEmpty();
         _startOrEndSpec = !startKey.isEmpty() || !endKey.isEmpty();
         
-        BSONObj idxKey = _idxNo < 0 ? BSONObj() : _d->idx( _idxNo ).keyPattern();
+        BSONObj idxKey = _idxNo < 0 ? BSONObj() : _cl->idx( _idxNo ).keyPattern();
 
         if ( !_frs.matchPossibleForIndex( idxKey ) ) {
             _utility = Impossible;
@@ -104,7 +105,7 @@ namespace mongo {
             return;
         }
 
-        _index = &_d->idx(_idxNo);
+        _index = &_cl->idx(_idxNo);
 
         // If the parsing or index indicates this is a special query, don't continue the processing
         if (!_special.empty() ||
@@ -201,7 +202,7 @@ doneCheckOrder:
         }
 
         if ( originalFrsp ) {
-            _originalFrv.reset( new FieldRangeVector( originalFrsp->frsForIndex( _d, _idxNo ),
+            _originalFrv.reset( new FieldRangeVector( originalFrsp->frsForIndex( _cl, _idxNo ),
                                                       idxKey,
                                                       _direction ) );
         }
@@ -229,9 +230,9 @@ doneCheckOrder:
             _utility = Disallowed;
         }
 
-        if ( _parsedQuery && _parsedQuery->getFields() && !_d->isMultikey( _idxNo ) ) {
+        if ( _parsedQuery && _parsedQuery->getFields() && !_cl->isMultikey( _idxNo ) ) {
             // Does not check modifiedKeys()
-            _keyFieldsOnly.reset( _parsedQuery->getFields()->checkKey( _index->keyPattern(), _d->pkPattern() ) );
+            _keyFieldsOnly.reset( _parsedQuery->getFields()->checkKey( _index->keyPattern(), _cl->pkPattern() ) );
         }
     }
 
@@ -256,13 +257,13 @@ doneCheckOrder:
         if ( willScanTable() ) {
             checkTableScanAllowed();
             const int direction = _order.getField("$natural").number() >= 0 ? 1 : -1;
-            NamespaceDetails *d = nsdetails( _frs.ns() );
-            return shared_ptr<Cursor>( BasicCursor::make( d, direction ) );
+            Collection *cl = getCollection( _frs.ns() );
+            return shared_ptr<Cursor>( BasicCursor::make( cl, direction ) );
         }
 
         if ( _startOrEndSpec ) {
             // we are sure to spec _endKeyInclusive
-            return shared_ptr<Cursor>( IndexCursor::make( _d,
+            return shared_ptr<Cursor>( IndexCursor::make( _cl,
                                                           *_index,
                                                           _startKey,
                                                           _endKey,
@@ -275,11 +276,11 @@ doneCheckOrder:
         // cannot provide meaningful results for currPK/currKey/current(), we must not
         // use them for multikey indexes where manual deduplication is required.
         if (requestCountingCursor && _utility == Optimal && _frv->isSingleInterval() && !isMultiKey()) {
-            return shared_ptr<Cursor>( new IndexCountCursor( _d, *_index, _frv ) );
+            return shared_ptr<Cursor>( new IndexCountCursor( _cl, *_index, _frv ) );
         }
 
         if ( _index->special() ) {
-            return shared_ptr<Cursor>( IndexCursor::make( _d,
+            return shared_ptr<Cursor>( IndexCursor::make( _cl,
                                                           *_index,
                                                           _frv->startKey(),
                                                           _frv->endKey(),
@@ -287,7 +288,7 @@ doneCheckOrder:
                                                           _direction >= 0 ? 1 : -1 ) );
         }
 
-        return shared_ptr<Cursor>( IndexCursor::make( _d,
+        return shared_ptr<Cursor>( IndexCursor::make( _cl,
                                                       *_index,
                                                       _frv,
                                                       independentRangesSingleIntervalLimit(),
@@ -312,12 +313,12 @@ doneCheckOrder:
             return;
         }
 
-        NamespaceDetails *d = nsdetails(ns());
-        if (d != NULL) {
-            NamespaceDetails::QueryCacheRWLock::Exclusive lk(d);
+        Collection *cl = getCollection(ns());
+        if (cl != NULL) {
+            Collection::QueryCacheRWLock::Exclusive lk(cl);
             QueryPattern queryPattern = _frs.pattern( _order );
             CachedQueryPlan queryPlanToCache( indexKey(), nScanned, candidatePlans );
-            d->registerCachedQueryPlanForPattern( queryPattern, queryPlanToCache );
+            cl->registerCachedQueryPlanForPattern( queryPattern, queryPlanToCache );
         }
     }
     
@@ -335,7 +336,7 @@ doneCheckOrder:
         if( str::startsWith( ns(), "local." ) )
             return;
 
-        if ( !nsdetails( ns() ) )
+        if ( !getCollection( ns() ) )
             return;
 
         uassert( 10111, (string)"table scans not allowed:" + ns(), !cmdLine.noTableScan );
@@ -471,7 +472,7 @@ doneCheckOrder:
     bool QueryPlan::isMultiKey() const {
         if ( _idxNo < 0 )
             return false;
-        return _d->isMultikey( _idxNo );
+        return _cl->isMultikey( _idxNo );
     }
 
     std::ostream& operator<< ( std::ostream& out, const QueryPlan::Utility& utility ) {

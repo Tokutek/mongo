@@ -18,15 +18,48 @@
 
 #include "mongo/base/init.h"
 #include "mongo/db/collection.h"
+#include "mongo/db/database.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/index.h"
 #include "mongo/db/index_set.h"
-#include "mongo/db/namespace_details.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/storage/key.h"
 
 namespace mongo {
+
+    CollectionMap *collectionMap(const StringData &ns) {
+        Database *database = cc().database();
+        verify(database);
+        DEV {
+            StringData db = nsToDatabaseSubstring(ns);
+            if (db != database->name()) {
+                out() << "ERROR: attempt to write to wrong database\n";
+                out() << " ns:" << ns << '\n';
+                out() << " database->name:" << database->name() << endl;
+                verify(db == database->name());
+            }
+        }
+        return &database->_collectionMap;
+    }
+
+    Collection *getCollection(const StringData& ns) {
+        return collectionMap(ns)->getCollection(ns);
+    }
+
+    // External getOrCreate: runs the "create" command if necessary.
+    Collection *getOrCreateCollection(const StringData& ns, bool logop) {
+        Collection *cl = getCollection(ns);
+        if (cl == NULL) {
+            string err;
+            BSONObj options;
+            bool created = userCreateNS(ns, options, err, logop);
+            uassert(16745, "failed to create collection", created);
+            cl = getCollection(ns);
+            uassert(16746, "failed to get collection after creating", cl);
+        }
+        return cl;
+    }
 
     static BSONObj addIdField(const BSONObj &obj) {
         if (obj.hasField("_id")) {
@@ -80,7 +113,7 @@ namespace mongo {
     }
 
     IndexedCollection::IndexedCollection(const StringData &ns, const BSONObj &options) :
-        NamespaceDetails(ns, determinePrimaryKey(options), options),
+        CollectionBase(ns, determinePrimaryKey(options), options),
         // determinePrimaryKey() was called, so whatever the pk is, it
         // exists in _indexes. Thus, we know we have an _id primary key
         // if we can find an index with pattern "_id: 1" at this point.
@@ -95,11 +128,11 @@ namespace mongo {
     }
 
     IndexedCollection::IndexedCollection(const BSONObj &serialized) :
-        NamespaceDetails(serialized),
+        CollectionBase(serialized),
         _idPrimaryKey(idx(findIndexByKeyPattern(BSON("_id" << 1))).clustering()) {
     }
 
-    // inserts an object into this namespace, taking care of secondary indexes if they exist
+    // inserts an object into this collection, taking care of secondary indexes if they exist
     void IndexedCollection::insertObject(BSONObj &obj, uint64_t flags) {
         obj = addIdField(obj);
         const BSONObj pk = getValidatedPKFromObject(obj);
@@ -116,7 +149,7 @@ namespace mongo {
         const BSONObj newObjWithId = inheritIdField(oldObj, newObj);
 
         if (_idPrimaryKey) {
-            NamespaceDetails::updateObject(pk, oldObj, newObjWithId, logop, fromMigrate, flags | NO_PK_UNIQUE_CHECKS);
+            CollectionBase::updateObject(pk, oldObj, newObjWithId, logop, fromMigrate, flags | NO_PK_UNIQUE_CHECKS);
         } else {
             const BSONObj newPK = getValidatedPKFromObject(newObjWithId);
             dassert(newPK.nFields() == pk.nFields());
@@ -130,7 +163,7 @@ namespace mongo {
                 }
             } else {
                 // Skip unique checks on the primary key - we know it did not change.
-                NamespaceDetails::updateObject(pk, oldObj, newObjWithId, logop, fromMigrate, flags | NO_PK_UNIQUE_CHECKS);
+                CollectionBase::updateObject(pk, oldObj, newObjWithId, logop, fromMigrate, flags | NO_PK_UNIQUE_CHECKS);
             }
         }
     }
@@ -143,7 +176,7 @@ namespace mongo {
                     e.type() != RegEx && e.type() != Undefined); // already checked in ops/insert.cpp
             return e.wrap("");
         } else {
-            return NamespaceDetails::getValidatedPKFromObject(obj);
+            return CollectionBase::getValidatedPKFromObject(obj);
         }
     }
 
@@ -159,7 +192,7 @@ namespace mongo {
             }
             return BSONObj();
         } else {
-            return NamespaceDetails::getSimplePKFromQuery(query);
+            return CollectionBase::getSimplePKFromQuery(query);
         }
     }
 
@@ -200,12 +233,12 @@ namespace mongo {
     // ------------------------------------------------------------------------
 
     NaturalOrderCollection::NaturalOrderCollection(const StringData &ns, const BSONObj &options) :
-        NamespaceDetails(ns, BSON("$_" << 1), options),
+        CollectionBase(ns, BSON("$_" << 1), options),
         _nextPK(0) {
     }
 
     NaturalOrderCollection::NaturalOrderCollection(const BSONObj &serialized) :
-        NamespaceDetails(serialized),
+        CollectionBase(serialized),
         _nextPK(0) {
         Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
         {
@@ -436,7 +469,7 @@ namespace mongo {
                  << objWithId.objsize() << " > " << _maxSize, objWithId.objsize() <= _maxSize );
 
         const BSONObj pk = getNextPK();
-        checkUniqueAndInsert(pk, objWithId, flags | NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE, false);
+        checkUniqueAndInsert(pk, objWithId, flags | NO_UNIQUE_CHECKS | NO_LOCKTREE, false);
         OpLogHelpers::logInsertForCapped(_ns.c_str(), pk, objWithId);
         checkGorged(obj, true);
     }
@@ -466,7 +499,7 @@ namespace mongo {
         long long diff = newObjWithId.objsize() - oldObj.objsize();
         uassert( 10003 , "failing update: objects in a capped ns cannot grow", diff <= 0 );
 
-        NamespaceDetails::updateObject(pk, oldObj, newObjWithId, logop, fromMigrate, flags);
+        CollectionBase::updateObject(pk, oldObj, newObjWithId, logop, fromMigrate, flags);
         if (diff < 0) {
             _currentSize.addAndFetch(diff);
         }
@@ -484,7 +517,7 @@ namespace mongo {
                  << obj.objsize() << " > " << _maxSize, obj.objsize() <= _maxSize );
 
         const BSONObj pk = getNextPK();
-        checkUniqueAndInsert(pk, obj, flags | NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE, false);
+        checkUniqueAndInsert(pk, obj, flags | NO_UNIQUE_CHECKS | NO_LOCKTREE, false);
         checkGorged(obj, false);
     }
 
@@ -785,7 +818,7 @@ namespace mongo {
     void BulkLoadedCollection::_close() {
         _loader.reset();
         _multiKeyTrackers.reset();
-        NamespaceDetails::close();
+        CollectionBase::close();
     }
 
     void BulkLoadedCollection::createIndex(const BSONObj &info) {

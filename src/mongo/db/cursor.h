@@ -28,7 +28,7 @@
 
 namespace mongo {
 
-    class NamespaceDetails;
+    class Collection;
     class CoveredIndexMatcher;
 
     /**
@@ -187,13 +187,13 @@ namespace mongo {
     public:
 
         // Create a cursor over a specific start, end key range.
-        static shared_ptr<IndexCursor> make( NamespaceDetails *d, const IndexDetails &idx,
+        static shared_ptr<IndexCursor> make( Collection *cl, const IndexDetails &idx,
                                              const BSONObj &startKey, const BSONObj &endKey,
                                              bool endKeyInclusive, int direction,
                                              int numWanted = 0);
 
         // Create a cursor over a set of one or more field ranges.
-        static shared_ptr<IndexCursor> make( NamespaceDetails *d, const IndexDetails &idx,
+        static shared_ptr<IndexCursor> make( Collection *cl, const IndexDetails &idx,
                                              const shared_ptr< FieldRangeVector > &bounds,
                                              int singleIntervalLimit, int direction,
                                              int numWanted = 0);
@@ -264,11 +264,11 @@ namespace mongo {
         // - Ascending/forward, return false.
         static bool reverseMinMaxBoundsOrder(const Ordering &ordering, const int direction);
 
-        IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
+        IndexCursor( Collection *cl, const IndexDetails &idx,
                      const BSONObj &startKey, const BSONObj &endKey,
                      bool endKeyInclusive, int direction, int numWanted = 0);
 
-        IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
+        IndexCursor( Collection *cl, const IndexDetails &idx,
                      const shared_ptr< FieldRangeVector > &bounds,
                      int singleIntervalLimit, int direction, int numWanted = 0);
 
@@ -330,7 +330,7 @@ namespace mongo {
     protected:
         virtual void checkEnd();
 
-        NamespaceDetails *const _d;
+        Collection *const _cl;
         const IndexDetails &_idx;
         const Ordering _ordering;
 
@@ -403,7 +403,7 @@ namespace mongo {
      */
     class IndexScanCursor : public IndexCursor, ScanCursor {
     public:
-        IndexScanCursor( NamespaceDetails *d, const IndexDetails &idx,
+        IndexScanCursor( Collection *cl, const IndexDetails &idx,
                          int direction, int numWanted = 0);
     private:
         // Implemented as a no-op, since "scan" cursors are always in bounds.
@@ -417,11 +417,11 @@ namespace mongo {
      */
     class IndexCountCursor : public IndexCursor {
     public:
-        IndexCountCursor( NamespaceDetails *d, const IndexDetails &idx,
+        IndexCountCursor( Collection *cl, const IndexDetails &idx,
                           const BSONObj &startKey, const BSONObj &endKey,
                           const bool endKeyInclusive );
 
-        IndexCountCursor( NamespaceDetails *d, const IndexDetails &idx,
+        IndexCountCursor( Collection *cl, const IndexDetails &idx,
                           const shared_ptr< FieldRangeVector > &bounds );
 
         virtual string toString() const {
@@ -485,7 +485,7 @@ namespace mongo {
      */
     class IndexScanCountCursor : public IndexCountCursor, ScanCursor {
     public:
-        IndexScanCountCursor( NamespaceDetails *d, const IndexDetails &idx );
+        IndexScanCountCursor( Collection *cl, const IndexDetails &idx );
     };
 
     /**
@@ -493,7 +493,7 @@ namespace mongo {
      */
     class BasicCursor : public IndexScanCursor {
     public:
-        static shared_ptr<Cursor> make( NamespaceDetails *d, int direction = 1 );
+        static shared_ptr<Cursor> make(Collection *cl, int direction = 1);
 
         BSONObj currKey() const { return BSONObj(); }
         virtual BSONObj indexKeyPattern() const { return BSONObj(); }
@@ -507,7 +507,7 @@ namespace mongo {
         virtual void explainDetails( BSONObjBuilder& b ) const { return; }
 
     private:
-        BasicCursor( NamespaceDetails *d, int direction );
+        BasicCursor( Collection *cl, int direction );
     };
 
     /**

@@ -19,7 +19,7 @@
 
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/opsettings.h"
 #include "mongo/util/log.h"
 
@@ -99,11 +99,11 @@ namespace mongo {
 
         bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
             string ns = dbname + "." + cmdObj.firstElement().valuestrsafe();
-            NamespaceDetails * d = nsdetails(ns);
+            Collection *cl = getCollection(ns);
             if ( !cmdLine.quiet )
                 tlog() << "CMD: validate " << ns << endl;
 
-            if ( ! d ) {
+            if ( ! cl ) {
                 errmsg = "ns not found";
                 return false;
             }

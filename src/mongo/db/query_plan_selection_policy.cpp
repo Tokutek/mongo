@@ -17,7 +17,7 @@
 #include "mongo/db/query_plan_selection_policy.h"
 
 #include "mongo/db/query_optimizer_internal.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 
 namespace mongo {
 

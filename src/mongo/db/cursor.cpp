@@ -20,7 +20,7 @@
 #include "mongo/db/curop.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/kill_current_op.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 
 namespace mongo {
 
@@ -44,9 +44,9 @@ namespace mongo {
         return reverseMinMaxBoundsOrder(Ordering::make(keyPattern), direction) ? minKey : maxKey;
     }
 
-    IndexScanCursor::IndexScanCursor( NamespaceDetails *d, const IndexDetails &idx,
+    IndexScanCursor::IndexScanCursor( Collection *cl, const IndexDetails &idx,
                                       int direction, int numWanted ) :
-        IndexCursor( d, idx,
+        IndexCursor( cl, idx,
                      ScanCursor::startKey(idx.keyPattern(), direction),
                      ScanCursor::endKey(idx.keyPattern(), direction),
                      true, direction, numWanted ) {
@@ -65,16 +65,16 @@ namespace mongo {
         }
     }
 
-    shared_ptr<Cursor> BasicCursor::make( NamespaceDetails *d, int direction ) {
-        if ( d != NULL ) {
-            return shared_ptr<Cursor>(new BasicCursor(d, direction));
+    shared_ptr<Cursor> BasicCursor::make( Collection *cl, int direction ) {
+        if ( cl != NULL ) {
+            return shared_ptr<Cursor>(new BasicCursor(cl, direction));
         } else {
             return shared_ptr<Cursor>(new DummyCursor(direction));
         }
     }
 
-    BasicCursor::BasicCursor( NamespaceDetails *d, int direction ) :
-        IndexScanCursor( d, d->getPKIndex(), direction ) {
+    BasicCursor::BasicCursor( Collection *cl, int direction ) :
+        IndexScanCursor( cl, cl->getPKIndex(), direction ) {
     }
 
 } // namespace mongo

@@ -21,7 +21,7 @@
 #pragma once
 
 #include "mongo/db/client.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 
 #include "mongo/pch.h"
 #include "jsobj.h"
@@ -39,8 +39,8 @@ namespace mongo {
      *
      * @param   db      Database in which to create the profile collection
      * @param   force   Always create the collection if it does not exist
-     * @return  NamespaceDetails for the newly created collection, or NULL on error
+     * @return  Collection for the newly created collection, or NULL on error
     **/
-    NamespaceDetails* getOrCreateProfileCollection(Database *db, bool force = false);
+    Collection *getOrCreateProfileCollection(Database *db, bool force = false);
 
 } // namespace mongo

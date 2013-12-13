@@ -1,4 +1,4 @@
-// namespace_details.h
+// collection.h
 
 /**
 *    Copyright (C) 2008 10gen Inc.
@@ -28,12 +28,8 @@
 
 namespace mongo {
 
-    class NamespaceDetails;
+    class Collection;
     class CollectionMap;
-
-    // Gets the collection map (ns -> Collection) for this client threads' current database.
-    // You pass the namespace you want so we can verify you're accessing the right database.
-    CollectionMap *collectionMap(const StringData &ns);
 
     /* CollectionMap maps namespace string to collection.
      * If a collection is not found, it may exist, but not be open.
@@ -51,7 +47,7 @@ namespace mongo {
         bool close_ns(const StringData &ns, const bool aborting = false);
 
         // The index entry for ns is removed and brought up-to-date with the _metadb on txn abort.
-        void add_ns(const StringData &ns, shared_ptr<NamespaceDetails> details);
+        void add_ns(const StringData &ns, shared_ptr<Collection> details);
 
         // The index entry for ns is removed and brought up-to-date with the _metadb on txn abort.
         void kill_ns(const StringData &ns);
@@ -60,15 +56,15 @@ namespace mongo {
         // call this to persist it to the _metadb.
         void update_ns(const StringData &ns, const BSONObj &serialized, bool overwrite);
 
-        // Find an NamespaceDetails in the map.
+        // Find an Collection in the map.
         // Will not open the ns if it is closed.
-        NamespaceDetails *find_ns(const StringData &ns);
+        Collection *find_ns(const StringData &ns);
 
-        // Every namespace that exists has an entry in _namespaces. Some
+        // Every namespace that exists has an entry in _collections. Some
         // entries may be "closed" in the sense that the key exists but the
         // value is null. If the desired namespace is closed, we open it,
         // which must succeed, by the first invariant.
-        NamespaceDetails *getCollection(const StringData &ns);
+        Collection *getCollection(const StringData &ns);
 
         bool allocated() const { return _metadb; }
 
@@ -79,31 +75,31 @@ namespace mongo {
 
         void rollbackCreate();
 
-        typedef StringMap<shared_ptr<NamespaceDetails> > NamespaceDetailsMap;
+        typedef StringMap<shared_ptr<Collection> > CollectionStringMap;
 
     private:
         int _openMetadb(bool may_create);
         void _init(bool may_create);
 
-        // @return NamespaceDetails object if the ns is currently open, NULL otherwise.
+        // @return Collection object if the ns is currently open, NULL otherwise.
         // requires: openRWLock is locked, either shared or exclusively.
-        NamespaceDetails *find_ns_locked(const StringData &ns) {
-            NamespaceDetailsMap::const_iterator it = _namespaces.find(ns);
-            if (it != _namespaces.end()) {
+        Collection *find_ns_locked(const StringData &ns) {
+            CollectionStringMap::const_iterator it = _collections.find(ns);
+            if (it != _collections.end()) {
                 verify(it->second.get() != NULL);
                 return it->second.get();
             }
             return NULL;
         }
 
-        // @return NamespaceDetails object if the ns existed and is now open, NULL otherwise.
+        // @return Collection object if the ns existed and is now open, NULL otherwise.
         // called with no locks held - synchronization is done internally.
-        NamespaceDetails *open_ns(const StringData &ns, const bool bulkLoad = false);
+        Collection *open_ns(const StringData &ns, const bool bulkLoad = false);
 
         // Only beginBulkLoad may call open_ns with bulkLoad = true.
         friend void beginBulkLoad(const StringData &ns, const vector<BSONObj> &indexes, const BSONObj &options);
 
-        NamespaceDetailsMap _namespaces;
+        CollectionStringMap _collections;
         const string _dir;
         const string _metadname;
         const string _database;
@@ -114,9 +110,9 @@ namespace mongo {
 
         // It isn't necessary to hold either of these locks in a a DBWrite lock.
 
-        // This lock protects access to the _namespaces variable
+        // This lock protects access to the _collections variable
         // With a DBRead lock and this shared lock, one can retrieve
-        // a NamespaceDetails that has already been opened
+        // a Collection that has already been opened
         SimpleRWLock _openRWLock;
     };
 

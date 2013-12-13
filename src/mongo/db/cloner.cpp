@@ -40,7 +40,6 @@
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/database.h"
 #include "mongo/db/collection.h"
-#include "mongo/db/namespace_details.h"
 #include "mongo/db/storage/exception.h"
 
 namespace mongo {
@@ -216,8 +215,8 @@ namespace mongo {
                     try {
                         Client::ReadContext ctx(to_collection);
                         if (_isCapped) {
-                            NamespaceDetails *d = nsdetails(to_collection);
-                            verify(d->isCapped());
+                            Collection *cl = getCollection(to_collection);
+                            verify(cl->isCapped());
                             BSONObj pk = js["$_"].Obj();
                             BSONObjBuilder rowBuilder;                        
                             BSONObjIterator it(js);
@@ -231,8 +230,8 @@ namespace mongo {
                                 }
                             }
                             BSONObj row = rowBuilder.obj();
-                            CappedCollection *cl = d->as<CappedCollection>();
-                            cl->insertObjectWithPK(pk, row, NamespaceDetails::NO_LOCKTREE);
+                            CappedCollection *cappedCl = cl->as<CappedCollection>();
+                            cappedCl->insertObjectWithPK(pk, row, Collection::NO_LOCKTREE);
                         }
                         else {
                             insertObject(to_collection, js, 0, logForRepl);
@@ -618,19 +617,19 @@ namespace mongo {
         }
       private:
         bool checkCollection(const StringData &ns, string &errmsg) {
-            NamespaceDetails *d;
+            Collection *cl;
             try {
-                d = nsdetails(ns);
+                cl = getCollection(ns);
             }
             catch (storage::SystemException::Enoent &e) {
-                d = NULL;
+                cl = NULL;
             }
-            if (d == NULL) {
+            if (cl == NULL) {
                 errmsg = mongoutils::str::stream() << "collection " << ns << " was dropped";
                 return false;
             }
             try {
-                shared_ptr<Cursor> c(BasicCursor::make(d));
+                shared_ptr<Cursor> c(BasicCursor::make(cl));
             }
             catch (storage::RetryableException::MvccDictionaryTooNew &e) {
                 errmsg = mongoutils::str::stream() << "collection " << ns << " was dropped and re-created";

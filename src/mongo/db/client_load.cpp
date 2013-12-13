@@ -25,7 +25,7 @@
 #include <db.h>
 
 #include "mongo/db/client.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 
 namespace mongo {
 

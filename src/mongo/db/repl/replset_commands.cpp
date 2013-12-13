@@ -594,8 +594,8 @@ namespace mongo {
             {
                 Client::ReadContext ctx(rsoplog);
                 Client::Transaction transaction(DB_TXN_READ_ONLY | DB_READ_UNCOMMITTED);
-                NamespaceDetails *d = nsdetails( rsoplog );
-                foundLocally = d != NULL && d->findOne( q.done(), oplogEntry);
+                Collection *cl = getCollection( rsoplog );
+                foundLocally = cl != NULL && cl->findOne( q.done(), oplogEntry);
             }
             if (!foundLocally) {
                 errmsg = "GTID not found in oplog";

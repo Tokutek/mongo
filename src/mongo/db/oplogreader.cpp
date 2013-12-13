@@ -15,7 +15,7 @@
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/repl/connections.h"
 #include "mongo/db/instance.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/relock.h"
 #include "mongo/db/ops/delete.h"
@@ -53,10 +53,10 @@ namespace mongo {
             {
                 StringData ns("local.system.users");
                 Client::ReadContext ctx(ns);
-                NamespaceDetails *d = nsdetails(ns);
-                if( d == NULL || !d->findOne(userReplQuery, user) ||
-                                 // try the first user in local
-                                 !d->findOne(BSONObj(), user) ) {
+                Collection *cl = getCollection(ns);
+                if( cl == NULL || !cl->findOne(userReplQuery, user) ||
+                                  // try the first user in local
+                                  !cl->findOne(BSONObj(), user) ) {
                     log() << "replauthenticate: no user in local.system.users to use for authentication\n";
                     return false;
                 }
@@ -79,10 +79,10 @@ namespace mongo {
     void getMe(BSONObj& me) {
         string myname = getHostName();
         Client::Transaction transaction(0);            
-        NamespaceDetails *d = nsdetails("local.me");
+        Collection *cl = getCollection("local.me");
         // local.me is an identifier for a server for getLastError w:2+
-        if ( d == NULL || !d->findOne( BSONObj(), me ) ||
-                          !me.hasField("host") ||
+        if ( cl == NULL || !cl->findOne( BSONObj(), me ) ||
+                           !me.hasField("host") ||
              me["host"].String() != myname ) {
         
             // cleaning out local.me requires write

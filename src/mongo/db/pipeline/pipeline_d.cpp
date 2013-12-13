@@ -21,7 +21,7 @@
 #include "mongo/db/cursor.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/query_optimizer.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/pipeline/document_source.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/cursor.h"

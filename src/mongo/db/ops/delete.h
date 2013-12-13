@@ -24,9 +24,9 @@
 
 namespace mongo {
 
-    class NamespaceDetails;
+    class Collection;
 
-    void deleteOneObject(NamespaceDetails *details, const BSONObj &pk, const BSONObj &obj, uint64_t flags = 0);
+    void deleteOneObject(Collection *cl, const BSONObj &pk, const BSONObj &obj, uint64_t flags = 0);
 
     /**
      * Takes a range, specified by a min and max, and an index, specified by
