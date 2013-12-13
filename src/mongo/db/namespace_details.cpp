@@ -56,6 +56,9 @@
 
 namespace mongo {
 
+    static void removeNamespaceFromCatalog(const StringData &ns);
+    static void removeFromSysIndexes(const StringData &ns, const StringData &name);
+
     NamespaceIndex *nsindex(const StringData& ns) {
         Database *database = cc().database();
         verify( database );
@@ -1648,12 +1651,19 @@ namespace mongo {
         verify(!_indexBuildInProgress);
         verify(idxNum < (int) _indexes.size());
 
+        IndexDetails &idx = *_indexes[idxNum];
+
         // Note this ns in the rollback so if this transaction aborts, we'll
         // close this ns, forcing the next user to reload in-memory metadata.
         NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
         rollback.noteNs(_ns);
 
-        IndexDetails &idx = *_indexes[idxNum];
+        // Remove this index from the system catalogs
+        removeNamespaceFromCatalog(idx.indexNamespace());
+        if (nsToCollectionSubstring(_ns) != "system.indexes") {
+            removeFromSysIndexes(_ns, idx.indexName());
+        }
+
         idx.kill_idx();
         _indexes.erase(_indexes.begin() + idxNum);
         _nIndexes--;
@@ -1933,7 +1943,7 @@ namespace mongo {
         insertOneObject(d, info);
     }
 
-    void removeNamespaceFromCatalog(const StringData& ns) {
+    static void removeNamespaceFromCatalog(const StringData &ns) {
         StringData coll = nsToCollectionSubstring(ns);
         if (!coll.startsWith("system.namespaces")) {
             string system_namespaces = getSisterNS(cc().database()->name(), "system.namespaces");
@@ -1942,7 +1952,7 @@ namespace mongo {
         }
     }
 
-    void removeFromSysIndexes(const StringData& ns, const StringData& name) {
+    static void removeFromSysIndexes(const StringData &ns, const StringData &name) {
         string system_indexes = getSisterNS(cc().database()->name(), "system.indexes");
         BSONObj obj = BSON("ns" << ns << "name" << name);
         TOKULOG(2) << "removeFromSysIndexes removing " << obj << endl;

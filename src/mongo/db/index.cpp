@@ -225,9 +225,6 @@ namespace mongo {
     // Open the dictionary. Creates it if necessary.
     bool IndexDetails::open(const bool may_create) {
         const string dname = indexNamespace();
-        if (may_create) {
-            addNewNamespaceToCatalog(dname);
-        }
 
         TOKULOG(1) << "Opening IndexDetails " << dname << endl;
         try {
@@ -286,16 +283,9 @@ namespace mongo {
 
     void IndexDetails::kill_idx() {
         const string ns = indexNamespace();
-        const string parentns = parentNS();
 
         close();
         storage::db_remove(ns);
-
-        // Removing this index's ns from the system.indexes/namespaces catalog.
-        removeNamespaceFromCatalog(ns);
-        if (nsToCollectionSubstring(parentns) != "system.indexes") {
-            removeFromSysIndexes(parentns, indexName());
-        }
     }
 
     void IndexDetails::getKeysFromObject(const BSONObj &obj, BSONObjSet &keys) const {
