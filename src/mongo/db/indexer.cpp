@@ -24,6 +24,7 @@
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/index.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/db/collection_map.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/stringutils.h"
@@ -102,7 +103,7 @@ namespace mongo {
 
         // Note this ns in the rollback so if this transaction aborts, we'll
         // close this ns, forcing the next user to reload in-memory metadata.
-        NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
+        CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
         rollback.noteNs(_d->_ns);
 
         // Store the index in the _indexes array so that others know an
@@ -128,7 +129,7 @@ namespace mongo {
         _d->_nIndexes++;
 
         // Pass true for includeHotIndex to serialize()
-        nsindex(_d->_ns)->update_ns(_d->_ns, _d->serialize(true), _isSecondaryIndex);
+        collectionMap(_d->_ns)->update_ns(_d->_ns, _d->serialize(true), _isSecondaryIndex);
         _d->resetTransient();
     }
 

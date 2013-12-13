@@ -49,6 +49,7 @@
 #include "mongo/db/commands/server_status.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/lasterror.h"
+#include "mongo/db/collection_map.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/collection.h"
 #include "mongo/db/namespacestring.h"
@@ -1346,9 +1347,9 @@ namespace mongo {
             }
 
             list<string> collections;
-            NamespaceIndex *ni = nsindex(dbname.c_str());
-            if ( ni != NULL ) {
-                ni->getNamespaces( collections );
+            CollectionMap *cm = collectionMap(dbname.c_str());
+            if (cm != NULL) {
+                cm->getNamespaces( collections );
             }
 
             uint64_t ncollections = 0;
@@ -1420,9 +1421,10 @@ namespace mongo {
             }
 
             list<string> colls;
-            NamespaceIndex *ni = nsindex(dbname.c_str());
-            if ( ni != NULL )
-                ni->getNamespaces( colls );
+            CollectionMap *cm = collectionMap(dbname.c_str());
+            if (cm != NULL) {
+                cm->getNamespaces( colls );
+            }
             colls.sort();
 
             result.appendNumber( "numCollections" , (long long)colls.size() );

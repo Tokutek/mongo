@@ -688,10 +688,10 @@ namespace mongo {
     BulkLoadedCollection::BulkLoadedCollection(const BSONObj &serialized) :
         IndexedCollection(serialized),
         _bulkLoadConnectionId(cc().getConnectionId()) {
-        // By noting this ns in the nsindex rollback, we will automatically
+        // By noting this ns in the collection map rollback, we will automatically
         // abort the load if the calling transaction aborts, because close()
         // will be called with aborting = true. See BulkLoadedCollection::close()
-        NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
+        CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
         rollback.noteNs(_ns);
 
         const int n = _nIndexes;

@@ -328,10 +328,10 @@ namespace mongo {
         // These rollback items must be processed after the ydb transaction completes.
         if (hasParent()) {
             _cappedRollback.transfer(_parent->_cappedRollback);
-            _nsIndexRollback.transfer(_parent->_nsIndexRollback);
+            _collectionMapRollback.transfer(_parent->_collectionMapRollback);
         } else {
             _cappedRollback.commit();
-            _nsIndexRollback.commit();
+            _collectionMapRollback.commit();
         }
         _retired = true;
     }
@@ -339,7 +339,7 @@ namespace mongo {
     void TxnContext::abort() {
         verify(!_retired);
         _clientCursorRollback.preComplete();
-        _nsIndexRollback.preAbort();
+        _collectionMapRollback.preAbort();
         _txnOps.abort();
         _txn.abort();
         _cappedRollback.abort();
@@ -435,16 +435,16 @@ namespace mongo {
 
     /* --------------------------------------------------------------------- */
 
-    void NamespaceIndexRollback::commit() {
+    void CollectionMapRollback::commit() {
         // nothing to do on commit
     }
 
-    void NamespaceIndexRollback::preAbort() {
+    void CollectionMapRollback::preAbort() {
         _completeHooks->noteTxnAbortedFileOps(_namespaces, _dbs);
     }
 
-    void NamespaceIndexRollback::transfer(NamespaceIndexRollback &parent) {
-        TOKULOG(1) << "NamespaceIndexRollback::transfer processing "
+    void CollectionMapRollback::transfer(CollectionMapRollback &parent) {
+        TOKULOG(1) << "CollectionMapRollback::transfer processing "
                    << _namespaces.size() + _dbs.size() << " roll items." << endl;
 
         // Promote rollback entries to parent.
@@ -452,11 +452,11 @@ namespace mongo {
         parent._dbs.insert(_dbs.begin(), _dbs.end());
     }
 
-    void NamespaceIndexRollback::noteNs(const StringData& ns) {
+    void CollectionMapRollback::noteNs(const StringData& ns) {
         _namespaces.insert(ns.toString());
     }
 
-    void NamespaceIndexRollback::noteCreate(const StringData& dbname) {
+    void CollectionMapRollback::noteCreate(const StringData& dbname) {
         _dbs.insert(dbname.toString());
     }
 

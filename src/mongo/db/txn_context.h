@@ -84,7 +84,7 @@ namespace mongo {
     // Class to handle rollback of in-memory modifications to the namespace index
     // On abort, we simply reload the map entry for each ns touched, bringing it in
     // sync with whatever is on disk in the nsdb.
-    class NamespaceIndexRollback : boost::noncopyable {
+    class CollectionMapRollback : boost::noncopyable {
     public:
         // Called after txn commit.
         void commit();
@@ -92,7 +92,7 @@ namespace mongo {
         // Called before txn abort.
         void preAbort();
 
-        void transfer(NamespaceIndexRollback &parent);
+        void transfer(CollectionMapRollback &parent);
 
         void noteNs(const StringData& ns);
 
@@ -260,7 +260,7 @@ namespace mongo {
         bool _initiatingRS;
 
         CappedCollectionRollback _cappedRollback;
-        NamespaceIndexRollback _nsIndexRollback;
+        CollectionMapRollback _collectionMapRollback;
         ClientCursorRollback _clientCursorRollback;
 
     public:
@@ -296,8 +296,8 @@ namespace mongo {
             return _cappedRollback;
         }
 
-        NamespaceIndexRollback &nsIndexRollback() {
-            return _nsIndexRollback;
+        CollectionMapRollback &collectionMapRollback() {
+            return _collectionMapRollback;
         }
 
         ClientCursorRollback &clientCursorRollback() {

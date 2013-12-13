@@ -327,7 +327,7 @@ namespace mongo {
                     // Creating a collection must be done in a child transaction,
                     // which aborts if the create fails.
                     // If the create fails, the child's abort hooks will clean up
-                    // the nsindex inside mongod (therefore not leaving a
+                    // the collection map inside mongod.
                     Client::Transaction transaction(0);
                     Client::WriteContext ctx( _config.incLong );
                     string err;

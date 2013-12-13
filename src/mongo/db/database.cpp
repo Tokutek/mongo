@@ -19,11 +19,8 @@
 
 #include "mongo/pch.h"
 
-#include "mongo/db/database.h"
-
-#include <boost/filesystem/operations.hpp>
-
 #include "mongo/db/clientcursor.h"
+#include "mongo/db/database.h"
 #include "mongo/db/databaseholder.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/introspect.h"
@@ -36,8 +33,23 @@ namespace mongo {
         return _dbHolder;
     }
 
+    CollectionMap *collectionMap(const StringData &ns) {
+        Database *database = cc().database();
+        verify(database);
+        DEV {
+            StringData db = nsToDatabaseSubstring(ns);
+            if (db != database->name()) {
+                out() << "ERROR: attempt to write to wrong database\n";
+                out() << " ns:" << ns << '\n';
+                out() << " database->name:" << database->name() << endl;
+                verify(db == database->name());
+            }
+        }
+        return &database->_collectionMap;
+    }
+
     Database::Database(const StringData &name, const StringData &path)
-        : _name(name.toString()), _path(path.toString()), _nsIndex( _path, _name ),
+        : _name(name.toString()), _path(path.toString()), _collectionMap( _path, _name ),
           _profileName(getSisterNS(_name, "system.profile"))
     {
         try {
@@ -65,7 +77,7 @@ namespace mongo {
             _profile = cmdLine.defaultProfile;
             // The underlying dbname.ns dictionary is opend if it exists,
             // and created lazily on the next write.
-            _nsIndex.init();
+            _collectionMap.init();
         } catch (std::exception &e) {
             log() << "warning database " << _path << " " << _name << " could not be opened" << endl;
             DBException* dbe = dynamic_cast<DBException*>(&e);
@@ -189,7 +201,7 @@ namespace mongo {
             uasserted(16777, "Cannot dropDatabase in a multi-statement transaction.");
         }
 
-        nsindex(name)->drop();
+        collectionMap(name)->drop();
         Database::closeDatabase(d->name().c_str(), d->path());
     }
 

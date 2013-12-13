@@ -40,7 +40,7 @@
 
 namespace mongo {
 
-    class NamespaceDetails;
+    class CollectionMap;
 
     /** @return true if a client can modify this namespace even though it is under ".system."
         For example <dbname>.system.users is ok for regular clients to update.
@@ -81,9 +81,11 @@ namespace mongo {
     bool isOplogCollection(const StringData &ns);
     bool isSystemUsersCollection(const StringData &ns);
 
-    /* NamespaceDetails : this is the "header" for a namespace that has all its details.
-       It is stored in the NamespaceIndex (a TokuMX dictionary named foo.ns, for Database foo).
+    /* NamespaceDetails : this is the information about a namespace.
+       It is stored in a serialized form (see serialize()) in the CollectionMap, stored
+       on disk as a ydb dictionary named foo.ns, for Database foo).
     */
+
     class NamespaceDetails : boost::noncopyable {
     public:
         static const int NIndexesMax = 64;
@@ -486,93 +488,9 @@ namespace mongo {
         };
         static int findByPKCallback(const DBT *key, const DBT *value, void *extra);
 
-        friend class NamespaceIndex;
+        friend class CollectionMap;
     }; // NamespaceDetails
 
-    /* NamespaceIndex is the the "system catalog" if you will: at least the core parts.
-     * (Additional info in system.* collections.) */
-    class NamespaceIndex {
-    public:
-        NamespaceIndex(const string &dir, const StringData& database);
-
-        ~NamespaceIndex();
-
-        void init(bool may_create = false);
-
-        // @return true if the ns existed and was closed, false otherwise.
-        bool close_ns(const StringData& ns, const bool aborting = false);
-
-        // The index entry for ns is removed and brought up-to-date with the nsdb on txn abort.
-        void add_ns(const StringData& ns, shared_ptr<NamespaceDetails> details);
-
-        // The index entry for ns is removed and brought up-to-date with the nsdb on txn abort.
-        void kill_ns(const StringData& ns);
-
-        // If something changes that causes details->serialize() to be different,
-        // call this to persist it to the nsdb.
-        void update_ns(const StringData& ns, const BSONObj &serialized, bool overwrite);
-
-        // Find an NamespaceDetails in the nsindex.
-        // Will not open the if its closed, unlike nsdetails()
-        NamespaceDetails *find_ns(const StringData &ns);
-
-        // Every namespace that exists has an entry in _namespaces. Some
-        // entries may be "closed" in the sense that the key exists but the
-        // value is null. If the desired namespace is closed, we open it,
-        // which must succeed, by the first invariant.
-        NamespaceDetails *details(const StringData &ns);
-
-        bool allocated() const { return _nsdb; }
-
-        void getNamespaces( list<string>& tofill );
-
-        // drop all collections and the nsindex, we're removing this database
-        void drop();
-
-        void rollbackCreate();
-
-        typedef StringMap<shared_ptr<NamespaceDetails> > NamespaceDetailsMap;
-
-    private:
-        int _openNsdb(bool may_create);
-        void _init(bool may_create);
-
-        // @return NamespaceDetails object is the ns is currently open, NULL otherwise.
-        // requires: openRWLock is locked, either shared or exclusively.
-        NamespaceDetails *find_ns_locked(const StringData& ns) {
-            NamespaceDetailsMap::const_iterator it = _namespaces.find(ns);
-            if (it != _namespaces.end()) {
-                verify(it->second.get() != NULL);
-                return it->second.get();
-            }
-            return NULL;
-        }
-
-        // @return NamespaceDetails object if the ns existed and is now open, NULL otherwise.
-        // called with no locks held - synchronization is done internally.
-        NamespaceDetails *open_ns(const StringData& ns, const bool bulkLoad = false);
-        // Only beginBulkLoad may call open_ns with bulkLoad = true.
-        friend void beginBulkLoad(const StringData &ns, const vector<BSONObj> &indexes, const BSONObj &options);
-
-        NamespaceDetailsMap _namespaces;
-        const string _dir;
-        const string _nsdbFilename;
-        const string _database;
-
-        // The underlying ydb dictionary that stores namespace information.
-        // - May not transition _nsdb from non-null to null in a DBRead lock.
-        shared_ptr<storage::Dictionary> _nsdb;
-
-        // It isn't necessary to hold either of these locks in a a DBWrite lock.
-
-        // This lock protects access to the _namespaces variable
-        // With a DBRead lock and this shared lock, one can retrieve
-        // a NamespaceDetails that has already been opened
-        SimpleRWLock _openRWLock;
-    };
-
-    // Gets the namespace objects for this client threads' current database.
-    NamespaceIndex *nsindex(const StringData& ns);
     NamespaceDetails *nsdetails(const StringData& ns);
     NamespaceDetails *nsdetails_maybe_create(const StringData& ns, BSONObj options = BSONObj());
 

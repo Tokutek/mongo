@@ -20,6 +20,7 @@
 #include "mongo/db/client.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/collection.h"
+#include "mongo/db/collection_map.h"
 #include "mongo/db/databaseholder.h"
 #include "mongo/db/namespace_details.h"
 #include "mongo/db/txn_context.h"
@@ -41,8 +42,8 @@ namespace mongo {
             // stats and do nothing otherwise since there are no stats to fix.
             //
             // Only matters for capped collections.
-            NamespaceIndex *ni = nsindex(ns.c_str());
-            NamespaceDetails *d = ni->find_ns(ns.c_str());
+            CollectionMap *cm = collectionMap(ns);
+            NamespaceDetails *d = cm->find_ns(ns);
             if (d != NULL && d->isCapped()) {
                 CappedCollection *cl = d->as<CappedCollection>();
                 if (committed) {
@@ -72,14 +73,14 @@ namespace mongo {
             }
 
             // The ydb requires that a txn closes any dictionaries it created beforeaborting.
-            // Hold a write lock while trying to close the namespace in the nsindex.
+            // Hold a write lock while trying to close the namespace in the collectionMap.
             Lock::DBWrite lk(ns);
             if (dbHolder().__isLoaded(ns, dbpath)) {
                 scoped_ptr<Client::Context> ctx(cc().getContext() == NULL ?
                                                 new Client::Context(ns) : NULL);
                 // Pass aborting = true to close_ns(), which hints to the implementation
                 // that the calling transaction is about to abort.
-                (void) nsindex(ns)->close_ns(ns, true);
+                (void) collectionMap(ns)->close_ns(ns, true);
             }
         }
 
@@ -96,7 +97,7 @@ namespace mongo {
             if (dbHolder().__isLoaded(db, dbpath)) {
                 scoped_ptr<Client::Context> ctx(cc().getContext() == NULL ?
                                                 new Client::Context(db) : NULL);
-                nsindex(db.c_str())->rollbackCreate();
+                collectionMap(db)->rollbackCreate();
             }
         }
     }

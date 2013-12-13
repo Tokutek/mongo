@@ -60,32 +60,17 @@ namespace mongo {
     static void removeFromNamespacesCatalog(const StringData &ns);
     static void removeFromIndexesCatalog(const StringData &ns, const StringData &name);
 
-    NamespaceIndex *nsindex(const StringData& ns) {
-        Database *database = cc().database();
-        verify( database );
-        DEV {
-            StringData db = nsToDatabaseSubstring(ns);
-            if ( db != database->name() ) {
-                out() << "ERROR: attempt to write to wrong database\n";
-                out() << " ns:" << ns << '\n';
-                out() << " database->name:" << database->name() << endl;
-                verify( db == database->name() );
-            }
-        }
-        return &database->_nsIndex;
-    }
-
     NamespaceDetails *nsdetails(const StringData& ns) {
-        return nsindex(ns)->details(ns);
+        return collectionMap(ns)->getCollection(ns);
     }
 
     NamespaceDetails *nsdetails_maybe_create(const StringData& ns, BSONObj options) {
-        NamespaceIndex *ni = nsindex(ns);
-        if (!ni->allocated()) {
+        CollectionMap *cm = collectionMap(ns);
+        if (!cm->allocated()) {
             // Must make sure we loaded any existing namespaces before checking, or we might create one that already exists.
-            ni->init(true);
+            cm->init(true);
         }
-        NamespaceDetails *details = ni->details(ns);
+        NamespaceDetails *details = cm->getCollection(ns);
         if (details == NULL) {
             TOKULOG(2) << "Didn't find nsdetails(" << ns << "), creating it." << endl;
             if (!Lock::isWriteLocked(ns)) {
@@ -93,9 +78,9 @@ namespace mongo {
             }
 
             shared_ptr<NamespaceDetails> new_details( NamespaceDetails::make(ns, options) );
-            ni->add_ns(ns, new_details);
+            cm->add_ns(ns, new_details);
 
-            details = ni->details(ns);
+            details = cm->getCollection(ns);
             details->addDefaultIndexesToCatalog();
 
             // Keep the call to 'str()', it allows us to call it in gdb.
@@ -242,7 +227,7 @@ namespace mongo {
         }
         if (reserialize) {
             // Write a clean version of this collection's info to the namespace index, now that we've rectified it.
-            nsindex(_ns)->update_ns(_ns, serialize(), true);
+            collectionMap(_ns)->update_ns(_ns, serialize(), true);
         }
         computeIndexKeys();
     }
@@ -765,7 +750,7 @@ namespace mongo {
         }
 
         _multiKeyIndexBits |= x;
-        nsindex(_ns)->update_ns(_ns, serialize(), true);
+        collectionMap(_ns)->update_ns(_ns, serialize(), true);
         resetTransient();
     }
 
@@ -804,7 +789,7 @@ namespace mongo {
 
         // Note this ns in the rollback so if this transaction aborts, we'll
         // close this ns, forcing the next user to reload in-memory metadata.
-        NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
+        CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
         rollback.noteNs(_ns);
 
         // Remove this index from the system catalogs
@@ -820,8 +805,8 @@ namespace mongo {
         _multiKeyIndexBits = ((_multiKeyIndexBits & ((1ULL << idxNum) - 1)) |
                              ((_multiKeyIndexBits >> (idxNum + 1)) << idxNum));
         resetTransient();
-        // Updated whatever in memory structures are necessary, now update the nsindex.
-        nsindex(_ns)->update_ns(_ns, serialize(), true);
+        // Updated whatever in memory structures are necessary, now update the collectionMap.
+        collectionMap(_ns)->update_ns(_ns, serialize(), true);
     }
 
     // Normally, we cannot drop the _id_ index.
@@ -893,11 +878,11 @@ namespace mongo {
         Top::global.collectionDropped(_ns);
         result.append("ns", _ns);
 
-        // Kill the ns from the nsindex.
+        // Kill the ns from the collectionMap.
         //
         // Will delete "this" NamespaceDetails object, since it's lifetime is managed
         // by a shared pointer in the map we're going to delete from.
-        nsindex(_ns)->kill_ns(_ns);
+        collectionMap(_ns)->kill_ns(_ns);
     }
 
     void NamespaceDetails::optimizeAll() {
@@ -1135,7 +1120,7 @@ namespace mongo {
         // This will close the underlying dictionaries and allow us to
         // rename them in the environment.
         BSONObj serialized = from_details->serialize();
-        bool closed = nsindex(from)->close_ns(from);
+        bool closed = collectionMap(from)->close_ns(from);
         verify(closed);
 
         // Rename each index in system.indexes and system.namespaces
@@ -1203,11 +1188,11 @@ namespace mongo {
                                                                  newIndexesArray.arr());
             // Kill the old entry and replace it with the new name and modified spec.
             // The next user of the newly-named namespace will need to open it.
-            NamespaceIndex *ni = nsindex( from );
-            ni->kill_ns( from );
-            ni->update_ns( to, newSerialized, false );
-            verify( nsdetails(to) != NULL );
-            verify( nsdetails(from) == NULL );
+            CollectionMap *cm = collectionMap( from );
+            cm->kill_ns(from);
+            cm->update_ns(to, newSerialized, false);
+            verify(nsdetails(to) != NULL);
+            verify(nsdetails(from) == NULL);
         }
     }
 
@@ -1227,8 +1212,8 @@ namespace mongo {
         const bool created = userCreateNS(ns, options, errmsg, false);
         verify(created);
 
-        NamespaceIndex *ni = nsindex(ns);
-        NamespaceDetails *d = ni->details(ns);
+        CollectionMap *cm = collectionMap(ns);
+        NamespaceDetails *d = cm->getCollection(ns);
         for (vector<BSONObj>::const_iterator i = indexes.begin(); i != indexes.end(); i++) {
             BSONObj info = *i;
             const BSONElement &e = info["ns"];
@@ -1257,23 +1242,23 @@ namespace mongo {
         }
 
         // Now the ns exists. Close it and re-open it in "bulk load" mode.
-        const bool closed = ni->close_ns(ns);
+        const bool closed = cm->close_ns(ns);
         verify(closed);
-        const bool opened = ni->open_ns(ns, true);
+        const bool opened = cm->open_ns(ns, true);
         verify(opened);
     }
 
     void commitBulkLoad(const StringData &ns) {
-        NamespaceIndex *ni = nsindex(ns);
-        const bool closed = ni->close_ns(ns);
+        CollectionMap *cm = collectionMap(ns);
+        const bool closed = cm->close_ns(ns);
         verify(closed);
     }
 
     void abortBulkLoad(const StringData &ns) {
-        NamespaceIndex *ni = nsindex(ns);
+        CollectionMap *cm = collectionMap(ns);
         // Close the ns with aborting = true, which will hint to the
         // BulkLoadedCollection that it should abort the load.
-        const bool closed = ni->close_ns(ns, true);
+        const bool closed = cm->close_ns(ns, true);
         verify(closed);
     }
 

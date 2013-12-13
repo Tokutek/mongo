@@ -20,6 +20,8 @@
 #pragma once
 
 #include "mongo/db/cmdline.h"
+#include "mongo/db/collection.h"
+#include "mongo/db/collection_map.h"
 #include "mongo/db/namespace_details.h"
 
 namespace mongo {
@@ -40,9 +42,9 @@ namespace mongo {
         */
         static void closeDatabase( const StringData &db, const StringData& path );
 
-        // TODO: This is wrong. The nsindex may not be initialized yet,
+        // TODO: This is wrong. The collection map may not be initialized yet,
         // (ie: it's not open) but that doesn't mean it's empty.
-        bool isEmpty() { return !_nsIndex.allocated(); }
+        bool isEmpty() { return !_collectionMap.allocated(); }
 
         int profile() const { return _profile; }
 
@@ -61,15 +63,15 @@ namespace mongo {
         const string _name;
         const string _path;
 
-        NamespaceIndex _nsIndex;
+        CollectionMap _collectionMap;
         int _profile; // 0=off.
         const string _profileName; // "alleyinsider.system.profile"
         int _magic; // used for making sure the object is still loaded in memory
 
         ~Database() { }
 
-        friend class NamespaceIndex;
-        friend NamespaceIndex *nsindex(const StringData&);
+        friend class CollectionMap;
+        friend CollectionMap *collectionMap(const StringData&);
     };
 
 } // namespace mongo
