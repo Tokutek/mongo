@@ -299,31 +299,13 @@ namespace mongo {
             qlk.lock_W();
         }
     }
+
     Lock::GlobalWrite::~GlobalWrite() {
-        if( noop ) { 
+        if (!noop) {
+            recordTime();  // for lock stats
+            qlk.unlock_W();
             return;
         }
-        recordTime();  // for lock stats
-        if( threadState() == 'R' ) { // we downgraded
-            qlk.unlock_R();
-        }
-        else {
-            qlk.unlock_W();
-        }
-    }
-    void Lock::GlobalWrite::downgrade() { 
-        verify( !noop );
-        verify( threadState() == 'W' );
-        qlk.W_to_R();
-        lockState().changeLockState( 'R' );
-    }
-
-    // you will deadlock if 2 threads doing this
-    void Lock::GlobalWrite::upgrade() { 
-        verify( !noop );
-        verify( threadState() == 'R' );
-        qlk.R_to_W();
-        lockState().changeLockState( 'W' );
     }
 
     Lock::GlobalRead::GlobalRead( int timeoutms ) 

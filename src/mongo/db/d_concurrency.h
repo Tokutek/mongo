@@ -89,8 +89,6 @@ namespace mongo {
             // timeoutms is only for writelocktry -- deprecated -- do not use
             GlobalWrite(bool stopGreed = false, int timeoutms = -1 ); 
             virtual ~GlobalWrite();
-            void downgrade(); // W -> R
-            void upgrade();   // caution see notes
         };
         class GlobalRead : public ScopedLock { // recursive is ok
         public:

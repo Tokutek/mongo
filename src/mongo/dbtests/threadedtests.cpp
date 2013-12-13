@@ -104,8 +104,6 @@ namespace ThreadedTests {
             Client::initThread("mongomutextest");
             sleepmillis(0);
             for( int i = 0; i < N; i++ ) {
-                int x = std::rand();
-                bool sometimes = (x % 15 == 0);
                 if( i % 7 == 0 ) {
                     Lock::GlobalRead r; // nested test
                     Lock::GlobalRead r2;
@@ -120,10 +118,6 @@ namespace ThreadedTests {
                     Lock::GlobalWrite w;
                     ASSERT( Lock::isW() );
                     ASSERT( Lock::isW() );
-                    if( sometimes ) { 
-                        w.downgrade();
-                        w.upgrade();
-                    }
                 }
                 else if( i % 7 == 2 ) {
                     Lock::GlobalWrite w;
