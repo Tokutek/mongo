@@ -401,6 +401,13 @@ namespace mongo {
             msgasserted( 16773, "bug: should not call deleteObjectFromCappedWithPK into non-capped collection" );
         }
 
+        // Interpret this NamespaceDetails as a subclass. Asserts if conversion fails.
+        template <class T> T *toSubclass() {
+            T *subclass = dynamic_cast<T *>(this);
+            massert(17223, "bug: failed to dynamically cast NamespaceDetails to desired subclass", subclass != NULL);
+            return subclass;
+        }
+
         class Indexer : boost::noncopyable {
         public:
             // Prepare an index build. Must be write locked.
