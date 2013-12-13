@@ -23,6 +23,7 @@
 
 #include "mongo/db/jsobj.h"
 #include "mongo/db/txn_complete_hooks.h"
+#include "mongo/db/spillable_vector.h"
 #include "mongo/db/stats/timer_stats.h"
 #include "mongo/db/storage/txn.h"
 
@@ -115,69 +116,6 @@ namespace mongo {
     private:
         void _complete();
         set<long long> _cursorIds;
-    };
-
-    /**
-       SpillableVector holds a vector of BSONObjs, and if that vector gets too big (>= maxSize), it
-       starts spilling those objects to a backing collection, to be referenced later.
-
-       SpillableVector labels each of the spilled entries with an OID and a sequence number in the
-       _id field.  Each entry in the collection is of the form (where n is from a sequence of
-       integers starting with 0 for each new OID):
-
-           {
-             _id: {"oid": ObjectID("..."),
-                   "seq": n},
-               a: [
-                    ..., // user objects are here
-                  ]
-           }
-
-       SpillableVector supports getObjectsOrRef(), which appends to a given BSONObjBuilder either a
-       reference to the OID used to spill objects, or a BSONArray containing the spilled objects.
-
-       SpillableVector also supports transfer(), which appends its objects to a parent
-       SpillableVector.
-    */
-    class SpillableVector : boost::noncopyable {
-        void (*_writeObjToRef)(BSONObj &);
-        vector<BSONObj> _vec;
-        size_t _curSize;
-        const size_t _maxSize;
-        SpillableVector *_parent;
-        OID _oid;
-
-        bool _curObjInited;
-        BufBuilder _buf;
-        long long _seq;
-        long long *_curSeqNo;
-        scoped_ptr<BSONObjBuilder> _curObjBuilder;
-        scoped_ptr<BSONArrayBuilder> _curArrayBuilder;
-      public:
-        SpillableVector(void (*writeObjToRef)(BSONObj &), size_t maxSize, SpillableVector *parent);
-
-        /** @return true iff there have been no objects appended yet. */
-        bool empty() const {
-            bool isEmpty = _curSize == 0;
-            if (isEmpty) {
-                dassert(_vec.empty());
-            }
-            return isEmpty;
-        }
-
-        void append(const BSONObj &o);
-        void getObjectsOrRef(BSONObjBuilder &b);
-        void transfer();
-
-      private:
-        bool spilling() const {
-            return _curSize >= _maxSize;
-        }
-        void initCurObj();
-        void finish();
-        void spillCurObj();
-        void spillOneObject(BSONObj obj);
-        void spillAllObjects();
     };
 
     // Each TxnOplog gathers a transaction's operations that need to be put in the oplog

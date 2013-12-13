@@ -50,6 +50,7 @@
 #include "mongo/db/repl.h"
 #include "mongo/db/keypattern.h"
 #include "mongo/db/kill_current_op.h"
+#include "mongo/db/ops/query.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/txn_context.h"
 #include "mongo/db/namespace_details.h"
@@ -97,13 +98,6 @@ namespace mongo {
             return false;
         *indexPattern = idx->keyPattern().getOwned();
         return true;
-    }
-
-    bool findShardKeyIndexPattern_unlocked( const string& ns,
-                                            const BSONObj& shardKeyPattern,
-                                            BSONObj* indexPattern ) {
-        Client::ReadContext context( ns );
-        return findShardKeyIndexPattern_locked( ns, shardKeyPattern, indexPattern );
     }
 
     Tee* migrateLog = new RamLog( "migrate" );
@@ -191,80 +185,6 @@ namespace mongo {
 
     };
 
-    struct OldDataCleanup {
-        static AtomicUInt _numThreads; // how many threads are doing async cleanup
-
-        string ns;
-        BSONObj min;
-        BSONObj max;
-        BSONObj shardKeyPattern;
-        set<CursorId> initial;
-
-        OldDataCleanup(){
-            _numThreads++;
-        }
-        OldDataCleanup( const OldDataCleanup& other ) {
-            ns = other.ns;
-            min = other.min.getOwned();
-            max = other.max.getOwned();
-            shardKeyPattern = other.shardKeyPattern.getOwned();
-            initial = other.initial;
-            _numThreads++;
-        }
-        ~OldDataCleanup(){
-            _numThreads--;
-        }
-
-        string toString() const {
-            return str::stream() << ns << " from " << min << " -> " << max;
-        }
-
-        void doRemove() {
-            ShardForceVersionOkModeBlock sf;
-            {
-                log() << "moveChunk starting delete for: " << this->toString() << migrateLog;
-
-                BSONObj indexKeyPattern;
-                if ( !findShardKeyIndexPattern_unlocked( ns, shardKeyPattern, &indexKeyPattern ) ) {
-                    warning() << "collection or index dropped before data could be cleaned" << endl;
-                    return;
-                }
-
-                LOCK_REASON(lockReason, "sharding: deleting old documents after migrate");
-                Client::ReadContext ctx(ns, lockReason);
-                Client::Transaction txn(DB_SERIALIZABLE);
-                long long numDeleted =
-                        deleteIndexRange( ns,
-                                          min,
-                                          max,
-                                          indexKeyPattern,
-                                          false, /*maxInclusive*/
-                                          true ); /*fromMigrate*/
-                txn.commit();
-
-                log() << "moveChunk deleted " << numDeleted << " documents for "
-                      << this->toString() << migrateLog;
-            }
-
-            GTID lastGTID = cc().getLastOp();
-            Timer t;
-            for ( int i=0; i<3600; i++ ) {
-                if ( opReplicatedEnough( lastGTID, ( getSlaveCount() / 2 ) + 1 ) ) {
-                    LOG(t.seconds() < 30 ? 1 : 0) << "moveChunk repl sync took " << t.seconds() << " seconds" << migrateLog;
-                    return;
-                }
-                sleepsecs(1);
-            }
-
-            warning() << "moveChunk repl sync timed out after " << t.seconds() << " seconds" << migrateLog;
-        }
-
-    };
-
-    AtomicUInt OldDataCleanup::_numThreads = 0;
-
-    static const char * const cleanUpThreadName = "cleanupOldData";
-
     class ChunkCommandHelper : public Command {
     public:
         ChunkCommandHelper( const char * name )
@@ -302,8 +222,6 @@ namespace mongo {
                 : _mutex("MigrateFromStatus"),
                   _inCriticalSection(false),
                   _active(false),
-                  _memoryUsed(0),
-                  _workLock("MigrateFromStatus::workLock"),
                   _migrateLogDetails(NULL),
                   _migrateLogRefDetails(NULL),
                   _nextMigrateLogId(0),
@@ -317,13 +235,6 @@ namespace mongo {
                     const BSONObj& min ,
                     const BSONObj& max ,
                     const BSONObj& shardKeyPattern ) {
-
-            //
-            // Do not hold _workLock
-            //
-
-            //scoped_lock ll(_workLock);
-
             scoped_lock l(_mutex); // reads and writes _active
 
             if (_active) {
@@ -339,11 +250,6 @@ namespace mongo {
             _max = max;
             _shardKeyPattern = shardKeyPattern;
 
-            verify( _clonePKs.size() == 0 );
-            verify( _deleted.size() == 0 );
-            verify( _reload.size() == 0 );
-            verify( _memoryUsed == 0 );
-
             _snapshotTaken = false;
             clearMigrateLog();
             _active = true;
@@ -355,14 +261,6 @@ namespace mongo {
                     "section" << endl;
             ShardingState::SetVersionScope sc;
             log() << "MigrateFromStatus::done write lock acquired" << endl;
-
-            {
-                scoped_spinlock lk( _trackerLocks );
-                _deleted.clear();
-                _reload.clear();
-                _clonePKs.clear();
-            }
-            _memoryUsed = 0;
 
             scoped_lock l(_mutex);
             disableLogTxnOpsForSharding();
@@ -439,21 +337,6 @@ namespace mongo {
                       mongoutils::str::equals(opstr, OpLogHelpers::OP_STR_CAPPED_DELETE)));
 
             if (!_snapshotTaken) {
-                return false;
-            }
-
-            if (mongoutils::str::equals(opstr, OpLogHelpers::OP_STR_DELETE) &&
-                getThreadName().find(cleanUpThreadName) == 0) {
-                // This really shouldn't happen but I'm having a hard time proving it right now.
-                problem() << "Someone tried to log a delete for migration while we're cleaning up a migration."
-                          << " This doesn't make sense since those deletes should be marked fromMigrate."
-                          << " The op is"
-                          << " opstr: " << opstr
-                          << " ns: " << ns
-                          << " obj: " << obj << endl;
-                // we don't want to xfer things we're cleaning
-                // as then they'll be deleted on TO
-                // which is bad
                 return false;
             }
 
@@ -554,6 +437,45 @@ namespace mongo {
         }
 
         /**
+         * Start a transaction that will be used for cloning by the recipient, and start building the migratelog.
+         * This needs to be exclusive with the old clone path, _migrateClone, and we sadly need to support both in the case of mixed-version clusters.
+         */
+        CursorId startCloneTransaction(const BSONObj &cmdobj, string &errmsg, BSONObjBuilder &result) {
+            string ns(cmdobj["ns"].String());
+            LOCK_REASON(lockReason, "sharding: starting clone transaction for migrate");
+            Client::WriteContext ctx(ns, lockReason);
+            massert(17223, "can't _migrateStartCloneTransaction with active snapshot", !_snapshotTaken);
+            enableLogTxnOpsForSharding(mongo::shouldLogOpForSharding,
+                                       mongo::shouldLogUpdateOpForSharding,
+                                       mongo::startObjForMigrateLog,
+                                       mongo::writeObjToMigrateLog,
+                                       mongo::writeObjToMigrateLogRef);
+            _snapshotTaken = true;
+            Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
+
+            NamespaceDetails *d = nsdetails(ns);
+            if (d == NULL) {
+                errmsg = "ns not found, should be impossible";
+                return 0;
+            }
+
+            const IndexDetails *idx = d->findIndexByPrefix(cmdobj["keyPattern"].Obj(), true);
+            if (idx == NULL) {
+                errmsg = mongoutils::str::stream() << "can't find index for " << cmdobj["keyPattern"].Obj() << " in _migrateStartCloneTransaction";
+                return 0;
+            }
+
+            KeyPattern kp(idx->keyPattern());
+            BSONObj min = KeyPattern::toKeyFormat(kp.extendRangeBound(cmdobj["min"].Obj(), false));
+            BSONObj max = KeyPattern::toKeyFormat(kp.extendRangeBound(cmdobj["max"].Obj(), false));
+            ClientCursor::Holder ccPointer(new ClientCursor(0, IndexCursor::make(d, *idx, min, max, false, 1), ns, cmdobj.getOwned()));
+            CursorId cursorid = ccPointer->cursorid();
+            cc().swapTransactionStack(ccPointer->transactions);
+            ccPointer.release();
+            return cursorid;
+        }
+
+        /**
          * Get the BSONs that belong to the chunk migrated in shard key order.
          *
          * @param maxChunkSize number of bytes beyond which a chunk's base data (no indices) is considered too large to move
@@ -571,6 +493,7 @@ namespace mongo {
                 dassert(!_txn);
                 LOCK_REASON(lockReason, "sharding: enabling migratelog");
                 Client::WriteContext ctx(_ns, lockReason);
+                massert(17224, "can't start _migrateClone with active snapshot", !_snapshotTaken);
                 enableLogTxnOpsForSharding(mongo::shouldLogOpForSharding,
                                            mongo::shouldLogUpdateOpForSharding,
                                            mongo::startObjForMigrateLog,
@@ -636,8 +559,6 @@ namespace mongo {
             return true;
         }
 
-        long long mbUsed() const { return _memoryUsed / ( 1024 * 1024 ); }
-
         bool getInCriticalSection() const {
             scoped_lock l(_mutex);
             return _inCriticalSection;
@@ -670,23 +591,8 @@ namespace mongo {
 
         bool isActive() const { return _getActive(); }
         
-        void doRemove( OldDataCleanup& cleanup ) {
-            for (int it = 0; true; it++) {
-                if ( it > 20 && it % 10 == 0 ) {
-                    log() << "doRemote iteration " << it << " for: " << cleanup << endl;
-                }
-                scoped_lock ll(_workLock);
-                if ( ! _active ) {
-                    Client::ReadContext ctx(cleanup.ns);
-                    Client::Transaction txn(DB_SERIALIZABLE);
-                    cleanup.doRemove();
-                    txn.commit();
-                    return;
-                }
-                sleepmillis( 1000 );
-            }
-        }
-
+        static const char MIGRATE_LOG_NS[];
+        static const char MIGRATE_LOG_REF_NS[];
     private:
         mutable mongo::mutex _mutex; // protect _inCriticalSection and _active
         boost::condition _inCriticalSectionCV;
@@ -699,25 +605,6 @@ namespace mongo {
         BSONObj _max;
         BSONObj _shardKeyPattern;
 
-        // we need the lock in case there is a malicious _migrateClone for example
-        // even though it shouldn't be needed under normal operation
-        SpinLock _trackerLocks;
-
-        // primary keys yet to be transferred from here to the other side
-        // no locking needed because built initially by 1 thread in a read lock
-        // emptied by 1 thread in a read lock
-        // updates applied by 1 thread in a write lock
-        set<BSONObj> _clonePKs;
-
-        list<BSONObj> _reload; // objects that were modified that must be recloned
-        list<BSONObj> _deleted; // objects deleted during clone that should be deleted later
-        long long _memoryUsed; // bytes in _reload + _deleted
-
-        mutable mongo::mutex _workLock; // this is used to make sure only 1 thread is doing serious work
-                                        // for now, this means migrate or removing old chunk data
-
-        static const char MIGRATE_LOG_NS[];
-        static const char MIGRATE_LOG_REF_NS[];
         NamespaceDetails *_migrateLogDetails;
         NamespaceDetails *_migrateLogRefDetails;
         AtomicWord<long long> _nextMigrateLogId;
@@ -758,67 +645,6 @@ namespace mongo {
         bool _isAnotherMigrationActive;
     };
 
-    void _cleanupOldData( OldDataCleanup cleanup ) {
-
-        Client::initThread((string(cleanUpThreadName) + string("-") +
-                                                        OID::gen().toString()).c_str());
-
-        if (!noauth) {
-            cc().getAuthorizationManager()->grantInternalAuthorization("_cleanupOldData");
-        }
-
-        log() << " (start) waiting to cleanup " << cleanup
-              << ", # cursors remaining: " << cleanup.initial.size() << migrateLog;
-
-        int loops = 0;
-        Timer t;
-        while ( t.seconds() < 900 ) { // 15 minutes
-            verify( !Lock::isLocked() );
-            sleepmillis( 20 );
-
-            set<CursorId> now;
-            ClientCursor::find( cleanup.ns , now );
-
-            set<CursorId> left;
-            for ( set<CursorId>::iterator i=cleanup.initial.begin(); i!=cleanup.initial.end(); ++i ) {
-                CursorId id = *i;
-                if ( now.count(id) )
-                    left.insert( id );
-            }
-
-            if ( left.size() == 0 )
-                break;
-            cleanup.initial = left;
-
-            if ( ( loops++ % 200 ) == 0 ) {
-                log() << " (looping " << loops << ") waiting to cleanup " << cleanup.ns << " from " << cleanup.min << " -> " << cleanup.max << "  # cursors:" << cleanup.initial.size() << migrateLog;
-
-                stringstream ss;
-                for ( set<CursorId>::iterator i=cleanup.initial.begin(); i!=cleanup.initial.end(); ++i ) {
-                    CursorId id = *i;
-                    ss << id << " ";
-                }
-                log() << " cursors: " << ss.str() << migrateLog;
-            }
-        }
-
-        migrateFromStatus.doRemove( cleanup );
-
-        cc().shutdown();
-    }
-
-    void cleanupOldData( OldDataCleanup cleanup ) {
-        try {
-            _cleanupOldData( cleanup );
-        }
-        catch ( std::exception& e ) {
-            log() << " error cleaning old data:" << e.what() << migrateLog;
-        }
-        catch ( ... ) {
-            log() << " unknown error cleaning old data" << migrateLog;
-        }
-    }
-
     bool shouldLogOpForSharding(const char *opstr, const char *ns, const BSONObj &obj) {
         return migrateFromStatus.shouldLogOp(opstr, ns, obj);
     }
@@ -854,6 +680,53 @@ namespace mongo {
         }
     } transferModsCommand;
 
+    class StartCloneTransactionCommand : public ChunkCommandHelper {
+    public:
+        StartCloneTransactionCommand() : ChunkCommandHelper( "_migrateStartCloneTransaction" ) {}
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::_migrateStartCloneTransaction);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
+        bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
+            CursorId id = migrateFromStatus.startCloneTransaction(cmdObj, errmsg, result);
+            if (id == 0) {
+                return false;
+            }
+
+            ClientCursor::Pin pin(id);
+            ClientCursor *cursor = pin.c();
+            massert(17227, "Cursor shouldn't have been deleted", cursor);
+
+            BufBuilder &bb = result.bb();
+            int lenBefore = bb.len();
+            try {
+                BSONObjBuilder cursorObj(result.subobjStart("cursor"));
+                cursorObj.append("id", id);
+                cursorObj.append("ns", cmdObj["ns"].Stringdata());
+                BSONArrayBuilder ab(cursorObj.subarrayStart("firstBatch"));
+                for (; cursor->ok(); cursor->advance()) {
+                    BSONObj obj = cursor->current();
+                    if (obj.objsize() + ab.len() >= MaxBytesToReturnToClientAtOnce) {
+                        break;
+                    }
+                    ab.append(obj);
+                }
+                ab.done();
+                cursorObj.done();
+                return true;
+            }
+            catch (...) {
+                // Clean up anything we may have added to the result already.
+                bb.setlen(lenBefore);
+                pin.release();
+                ClientCursor::erase(id);
+                throw;
+            }
+        }
+    } startCloneTransactionCommand;
 
     class InitialCloneCommand : public ChunkCommandHelper {
     public:
@@ -870,6 +743,45 @@ namespace mongo {
         }
     } initialCloneCommand;
 
+    void cleanupOldData(const string &ns, const BSONObj &shardKeyPattern, const BSONObj &min, const BSONObj &max) {
+        LOG(0) << "moveChunk starting delete for: " << ns << " from " << min << " -> " << max << migrateLog;
+        {
+            ShardForceVersionOkModeBlock sf;
+            LOCK_REASON(lockReason, "sharding: deleting old documents after migrate");
+            Client::ReadContext ctx(ns, lockReason);
+
+            BSONObj indexKeyPattern;
+            if (!findShardKeyIndexPattern_locked(ns, shardKeyPattern, &indexKeyPattern)) {
+                warning() << "collection or index dropped before data could be cleaned" << endl;
+                return;
+            }
+
+            Client::Transaction txn(DB_SERIALIZABLE);
+            long long numDeleted =
+                    deleteIndexRange(ns,
+                                     min,
+                                     max,
+                                     indexKeyPattern,
+                                     false, /*maxInclusive*/
+                                     true); /*fromMigrate*/
+            txn.commit();
+
+            LOG(0) << "moveChunk deleted " << numDeleted << " documents for "
+                   << ns << " from " << min << " -> " << max << migrateLog;
+        }
+
+        GTID lastGTID = cc().getLastOp();
+        Timer t;
+        for (int i=0; i<3600; i++) {
+            if (opReplicatedEnough(lastGTID, (getSlaveCount() / 2) + 1)) {
+                LOG(t.seconds() < 30 ? 1 : 0) << "moveChunk repl sync took " << t.seconds() << " seconds" << migrateLog;
+                return;
+            }
+            sleepsecs(1);
+        }
+
+        warning() << "moveChunk repl sync timed out after " << t.seconds() << " seconds" << migrateLog;
+    }
 
     /**
      * this is the main entry for moveChunk
@@ -1181,7 +1093,7 @@ namespace mongo {
 
                 conn->done();
 
-                LOG(0) << "moveChunk data transfer progress: " << res << " my mem used: " << migrateFromStatus.mbUsed() << migrateLog;
+                LOG(0) << "moveChunk data transfer progress: " << res << migrateLog;
 
                 if ( ! ok || res["state"].String() == "fail" ) {
                     warning() << "moveChunk error transferring data caused migration abort: " << res << migrateLog;
@@ -1192,22 +1104,6 @@ namespace mongo {
 
                 if ( res["state"].String() == "steady" )
                     break;
-
-                if ( migrateFromStatus.mbUsed() > (500 * 1024 * 1024) ) {
-                    // this is too much memory for us to use for this
-                    // so we're going to abort the migrate
-                    scoped_ptr<ScopedDbConnection> conn(
-                            ScopedDbConnection::getScopedDbConnection( toShard.getConnString() ) );
-
-                    BSONObj res;
-                    conn->get()->runCommand( "admin" , BSON( "_recvChunkAbort" << 1 ) , res );
-                    res = res.getOwned();
-                    conn->done();
-                    error() << "aborting migrate because too much memory used res: " << res << migrateLog;
-                    errmsg = "aborting migrate because too much memory used";
-                    result.appendBool( "split" , true );
-                    return false;
-                }
 
                 killCurrentOp.checkForInterrupt();
             }
@@ -1490,22 +1386,12 @@ namespace mongo {
             migrateFromStatus.done();
             timing.done(5);
 
-            {
-                // 6.
-                OldDataCleanup c;
-                c.ns = ns;
-                c.min = min.getOwned();
-                c.max = max.getOwned();
-                c.shardKeyPattern = shardKeyPattern.getOwned();
-                // Vanilla MongoDB checks for cursors in the chunk, and if any exist, it starts a background thread that waits for those cursors to leave before doing the delete.
-                // We have MVCC so we don't need to wait, we can just do the delete.
-                // TODO: get rid of the OldDataCleanup class and just do the removeRange right here.
-                c.doRemove();
-            }
+            // 6.
+            // Vanilla MongoDB checks for cursors in the chunk, and if any exist, it starts a background thread that waits for those cursors to leave before doing the delete.
+            // We have MVCC so we don't need to wait, we can just do the delete.
+            cleanupOldData(ns, shardKeyPattern, min, max);
             timing.done(6);
-
             return true;
-
         }
 
     } moveChunkCmd;
@@ -1532,9 +1418,11 @@ namespace mongo {
     */
 
     class MigrateStatus {
+        long long _lastAppliedMigrateLogID;
+
     public:
         
-        MigrateStatus() : m_active("MigrateStatus") { active = false; }
+        MigrateStatus() : _lastAppliedMigrateLogID(-1), m_active("MigrateStatus") { active = false; }
 
         void prepare() {
             scoped_lock l(m_active); // reading and writing 'active'
@@ -1547,8 +1435,99 @@ namespace mongo {
             clonedBytes = 0;
             numCatchup = 0;
             numSteady = 0;
+            _lastAppliedMigrateLogID = -1;
 
             active = true;
+        }
+
+        /**
+         * transferMods uses conn to pull operations out of the donor's migratelog and apply them
+         * locally on the recipient.
+         *
+         * There is some fanciness with the locking to avoid holding the read lock during a remote
+         * round-trip.  Note that SpillableVectorIterator will perform round-trips when you call
+         * more(), so we peek at the object even though we shouldn't, to see if it's a real
+         * reference or not.
+         *
+         * The alternative would be to never hold the ReadContext for longer than a single
+         * SpillableVectorIterator's lifetime, but this is also bad because in the common case, each
+         * op will have just one op so we want to be able to hold the lock and transaction for a
+         * whole batch in the outer cursor.
+         *
+         * So, each time we see an op with an "a" field, we start a ReadContext and Transaction if
+         * one wasn't open yet (in the hopes that we'll see more ops with "a" fields and be able to
+         * zip through the current batch with them), and each time we see an op that needs to dive
+         * into the refs collection, we commit and kill the current Transaction and ReadContext so
+         * that we can start one for each batch of the SpillableVectorIterator.
+         */
+        GTID transferMods(ScopedDbConnection &conn) {
+            auto_ptr<DBClientCursor> mlogCursor(conn->query(MigrateFromStatus::MIGRATE_LOG_NS,
+                                                            QUERY("_id" << GTE << _lastAppliedMigrateLogID).hint(BSON("_id" << 1)),
+                                                            0, 0, 0, 0));
+            // Check that what we thought was the last one really is the last one and we don't have a gap.
+            if (_lastAppliedMigrateLogID >= 0) {
+                BSONObj op = mlogCursor->nextSafe();
+                verify(op["_id"].Long() == _lastAppliedMigrateLogID);
+            }
+            while (mlogCursor->more()) {
+                LOCK_REASON(lockReason, "sharding: applying mods for migrate");
+                scoped_ptr<Client::ReadContext> ctxp(new Client::ReadContext(ns, lockReason));
+                scoped_ptr<Client::Transaction> txnp(new Client::Transaction(DB_SERIALIZABLE));
+                while (mlogCursor->moreInCurrentBatch()) {
+                    BSONObj op = mlogCursor->nextSafe();
+                    dassert(op["_id"].Long() == _lastAppliedMigrateLogID + 1);
+                    if (op.hasField("a")) {
+                        if (!txnp) {
+                            ctxp.reset(new Client::ReadContext(ns, lockReason));
+                            txnp.reset(new Client::Transaction(DB_SERIALIZABLE));
+                        }
+                        SpillableVectorIterator it(op, conn.conn(), MigrateFromStatus::MIGRATE_LOG_REF_NS);
+                        while (it.more()) {
+                            OpLogHelpers::applyOperationFromOplog(it.next());
+                            if (state == CATCHUP) {
+                                numCatchup++;
+                            } else {
+                                numSteady++;
+                            }
+                        }
+                    } else {
+                        if (txnp) {
+                            txnp->commit();
+                            txnp.reset();
+                            ctxp.reset();
+                        }
+                        SpillableVectorIterator it(op, conn.conn(), MigrateFromStatus::MIGRATE_LOG_REF_NS);
+                        while (it.more()) {
+                            LOCK_REASON(lockReasonInner, "sharding: applying mods from migratelog.refs for migrate");
+                            Client::ReadContext ctx(ns, lockReasonInner);
+                            Client::Transaction txn(DB_SERIALIZABLE);
+                            while (it.moreInCurrentBatch()) {
+                                OpLogHelpers::applyOperationFromOplog(it.next());
+                                if (state == CATCHUP) {
+                                    numCatchup++;
+                                } else {
+                                    numSteady++;
+                                }
+                            }
+                            txn.commit();
+                        }
+                    }
+                    _lastAppliedMigrateLogID = op["_id"].Long();
+                }
+                if (txnp) {
+                    txnp->commit();
+                }
+                GTID lastGTID = cc().getLastOp();
+                for (Timer t; !opReplicatedEnough(lastGTID); sleepmillis(20)) {
+                    if (t.seconds() > 60) {
+                        RARELY warning() << "secondaries are having a hard time keeping up with migration" << migrateLog;
+                        if (t.seconds() > 600) {
+                            break;
+                        }
+                    }
+                }
+            }
+            return cc().getLastOp();
         }
 
         void go() {
@@ -1621,19 +1600,20 @@ namespace mongo {
                 timing.done(1);
             }
 
+
             {
+                // 2. delete any data already in range
+                LOCK_REASON(lockReason, "sharding: deleting old documents before migrate");
+                Client::ReadContext ctx(ns, lockReason);
 
                 BSONObj indexKeyPattern;
-                if ( !findShardKeyIndexPattern_unlocked( ns, shardKeyPattern, &indexKeyPattern ) ) {
+                if ( !findShardKeyIndexPattern_locked( ns, shardKeyPattern, &indexKeyPattern ) ) {
                     errmsg = "collection or index dropped during migrate";
                     warning() << errmsg << endl;
                     state = FAIL;
                     return;
                 }
 
-                // 2. delete any data already in range
-                LOCK_REASON(lockReason, "sharding: deleting old documents before migrate");
-                Client::ReadContext ctx(ns, lockReason);
                 Client::Transaction txn(DB_SERIALIZABLE);
                 long long num = deleteIndexRange( ns, min, max, indexKeyPattern,
                                                   false, /*maxInclusive*/
@@ -1651,48 +1631,116 @@ namespace mongo {
                 // 3. initial bulk clone
                 state = CLONE;
 
-                LOCK_REASON(lockReason, "sharding: cloning documents on recipient for migrate");
-                Client::ReadContext ctx(ns, lockReason);
-                Client::Transaction txn(DB_SERIALIZABLE);
+                BSONObj res;
 
-                while ( true ) {
-                    BSONObj res;
-                    if ( ! conn->runCommand( "admin" , BSON( "_migrateClone" << 1 ) , res ) ) {  // gets array of objects to copy, in disk order
+                if (!conn->runCommand("admin", BSON("listCommands" << 1), res)) {
+                    state = FAIL;
+                    errmsg = mongoutils::str::stream() << "listCommands failed: " << res.toString();
+                    error() << errmsg << migrateLog;
+                    conn.done();
+                    return;
+                }
+                BSONObj cmds = res["commands"].Obj();
+                bool hasNewCloneCommands = cmds.hasField("_migrateStartCloneTransaction");
+
+                if (hasNewCloneCommands) {
+                    if (!conn->runCommand("admin", BSON("_migrateStartCloneTransaction" << 1 <<
+                                                        "ns" << ns <<
+                                                        "keyPattern" << shardKeyPattern <<
+                                                        "min" << min <<
+                                                        "max" << max), res)) {
                         state = FAIL;
-                        errmsg = "_migrateClone failed: ";
-                        errmsg += res.toString();
+                        errmsg = mongoutils::str::stream() << "_migrateStartCloneTransaction failed: " << res.toString();
                         error() << errmsg << migrateLog;
                         conn.done();
                         return;
                     }
 
-                    BSONObj arr = res["objects"].Obj();
-                    int thisTime = 0;
+                    BSONObj cursorObj = res["cursor"].Obj();
+                    massert(17225, mongoutils::str::stream() << "expected cursor ns " << ns << ", got " << cursorObj["ns"].Stringdata(),
+                            cursorObj["ns"].Stringdata() == ns);
 
-                    BSONObjIterator i( arr );
-                    while( i.more() ) {
-                        BSONObj o = i.next().Obj();
-                        BSONObj id = o["_id"].wrap();
-                        OpDebug debug;
-                        updateObjects(ns.c_str(),
-                                      o,
-                                      id,
-                                      true,  // upsert
-                                      false, // multi
-                                      true,  // logop
-                                      true   // fromMigrate
-                                      );
-
-                        thisTime++;
-                        numCloned++;
-                        clonedBytes += o.objsize();
+                    LOCK_REASON(lockReason, "sharding: cloning documents on recipient for migrate");
+                    {
+                        Client::ReadContext ctx(ns, lockReason);
+                        Client::Transaction txn(DB_SERIALIZABLE);
+                        for (BSONObjIterator it(cursorObj["firstBatch"].Obj()); it.more(); ++it) {
+                            BSONObj obj = (*it).Obj();
+                            updateObjects(ns.c_str(), obj, obj["_id"].wrap(),
+                                          true,   // upsert
+                                          false,  // multi
+                                          true,   // logop
+                                          true);  // fromMigrate
+                            numCloned++;
+                            clonedBytes += obj.objsize();
+                        }
+                        txn.commit();
                     }
 
-                    if ( thisTime == 0 )
-                        break;
+                    for (DBClientCursor cursor(conn.get(), ns, cursorObj["id"].Long(), 0, 0);
+                         cursor.more(); ) {
+                        Client::ReadContext ctx(ns, lockReason);
+                        Client::Transaction txn(DB_SERIALIZABLE);
+                        while (cursor.moreInCurrentBatch()) {
+                            BSONObj obj = cursor.nextSafe();
+                            updateObjects(ns.c_str(), obj, obj["_id"].wrap(),
+                                          true,   // upsert
+                                          false,  // multi
+                                          true,   // logop
+                                          true);  // fromMigrate
+                            numCloned++;
+                            clonedBytes += obj.objsize();
+                        }
+                        txn.commit();
+                    }
+                } else {
+                    // The old path, for compatibility with older TokuMX servers.
+                    LOG(0) << "moveChunk using old migrate path, please upgrade all shards soon" << migrateLog;
+
+                    LOCK_REASON(lockReason, "sharding: cloning documents on recipient for migrate, using old _migrateClone");
+                    Client::ReadContext ctx(ns, lockReason);
+                    Client::Transaction txn(DB_SERIALIZABLE);
+
+                    while ( true ) {
+                        BSONObj res;
+                        if ( ! conn->runCommand( "admin" , BSON( "_migrateClone" << 1 ) , res ) ) {  // gets array of objects to copy, in disk order
+                            state = FAIL;
+                            errmsg = "_migrateClone failed: ";
+                            errmsg += res.toString();
+                            error() << errmsg << migrateLog;
+                            conn.done();
+                            return;
+                        }
+
+                        BSONObj arr = res["objects"].Obj();
+                        int thisTime = 0;
+
+                        BSONObjIterator i( arr );
+                        while( i.more() ) {
+                            BSONObj o = i.next().Obj();
+                            BSONObj id = o["_id"].wrap();
+                            OpDebug debug;
+                            updateObjects(ns.c_str(),
+                                          o,
+                                          id,
+                                          true,  // upsert
+                                          false, // multi
+                                          true,  // logop
+                                          true   // fromMigrate
+                                          );
+
+                            thisTime++;
+                            numCloned++;
+                            clonedBytes += o.objsize();
+                        }
+
+                        if ( thisTime == 0 )
+                            break;
+                    }
+
+                    txn.commit();
                 }
 
-                txn.commit();
                 timing.done(3);
             }
 
@@ -1702,48 +1750,34 @@ namespace mongo {
             {
                 // 4. do bulk of mods
                 state = CATCHUP;
-                while ( true ) {
-                    BSONObj res;
-                    if ( ! conn->runCommand( "admin" , BSON( "_transferMods" << 1 ) , res ) ) {
-                        state = FAIL;
-                        errmsg = "_transferMods failed: ";
-                        errmsg += res.toString();
-                        error() << "_transferMods failed: " << res << migrateLog;
-                        conn.done();
+
+                lastGTID = transferMods(conn);
+
+                const int maxIterations = 60*60*50;
+                int i;
+                for (i = 0; i < maxIterations; ++i) {
+                    if (state == ABORT) {
+                        timing.note("aborted");
                         return;
                     }
-                    vector<BSONElement> modElements = res["mods"].Array();
-                    if (modElements.empty()) {
+
+                    if (opReplicatedEnough(lastGTID)) {
                         break;
                     }
 
-                    apply(modElements, &lastGTID);
-
-                    const int maxIterations = 3600*50;
-                    int i;
-                    for ( i=0;i<maxIterations; i++) {
-                        if ( state == ABORT ) {
-                            timing.note( "aborted" );
-                            return;
-                        }
-
-                        if ( opReplicatedEnough( lastGTID ) )
-                            break;
-
-                        if ( i > 100 ) {
-                            warning() << "secondaries having hard time keeping up with migrate" << migrateLog;
-                        }
-
-                        sleepmillis( 20 );
+                    if (i > 100) {
+                        warning() << "secondaries having hard time keeping up with migrate" << migrateLog;
                     }
 
-                    if ( i == maxIterations ) {
-                        errmsg = "secondary can't keep up with migrate";
-                        error() << errmsg << migrateLog;
-                        conn.done();
-                        state = FAIL;
-                        return;
-                    }
+                    sleepmillis(20);
+                }
+
+                if ( i == maxIterations ) {
+                    errmsg = "secondary can't keep up with migrate";
+                    error() << errmsg << migrateLog;
+                    conn.done();
+                    state = FAIL;
+                    return;
                 }
 
                 timing.done(4);
@@ -1752,13 +1786,12 @@ namespace mongo {
             {
                 // pause to wait for replication
                 // this will prevent us from going into critical section until we're ready
-                Timer t;
-                while ( t.minutes() < 600 ) {
+                for (Timer t; t.minutes() < 600; sleepsecs(1)) {
                     log() << "Waiting for replication to catch up before entering critical section"
                           << endl;
-                    if ( flushPendingWrites( lastGTID ) )
+                    if (opReplicatedEnough(lastGTID)) {
                         break;
-                    sleepsecs(1);
+                    }
                 }
             }
 
@@ -1775,19 +1808,7 @@ namespace mongo {
                     // got logged *after* our _transferMods but *before* the critical section.
                     if ( state == COMMIT_START ) transferAfterCommit = true;
 
-                    BSONObj res;
-                    if ( ! conn->runCommand( "admin" , BSON( "_transferMods" << 1 ) , res ) ) {
-                        log() << "_transferMods failed in STEADY state: " << res << migrateLog;
-                        errmsg = res.toString();
-                        state = FAIL;
-                        conn.done();
-                        return;
-                    }
-
-                    vector<BSONElement> modElements = res["mods"].Array();
-                    if (apply(modElements, &lastGTID)) {
-                        continue;
-                    }
+                    lastGTID = transferMods(conn);
 
                     if ( state == ABORT ) {
                         timing.note( "aborted" );
@@ -1798,8 +1819,10 @@ namespace mongo {
                     // 1) The from side has told us that it has locked writes (COMMIT_START)
                     // 2) We've checked at least one more time for un-transmitted mods
                     if ( state == COMMIT_START && transferAfterCommit == true ) {
-                        if ( flushPendingWrites( lastGTID ) )
+                        if (opReplicatedEnough(lastGTID)) {
+                            storage::log_flush();
                             break;
+                        }
                     }
 
                     // Only sleep if we aren't committing
@@ -1852,7 +1875,7 @@ namespace mongo {
                 lastGTID = &dummy;
             }
 
-            LOCK_REASON(lockReason, "sharding: applying mods for migrate");
+            LOCK_REASON(lockReason, "sharding: applying mods for migrate, using old _transferMods");
             Client::ReadContext ctx(ns, lockReason);
             Client::Transaction txn(DB_SERIALIZABLE);
 
@@ -1875,32 +1898,6 @@ namespace mongo {
             // TODO opReplicatedEnough should eventually honor priorities and geo-awareness
             //      for now, we try to replicate to a sensible number of secondaries
             return mongo::opReplicatedEnough( lastGTID , replSetMajorityCount );
-        }
-
-        bool flushPendingWrites( const GTID& lastGTID ) {
-            if ( ! opReplicatedEnough( lastGTID ) ) {
-                OCCASIONALLY warning() << "migrate commit waiting for " << replSetMajorityCount 
-                                       << " slaves for '" << ns << "' " << min << " -> " << max 
-                                       << " waiting for: " << lastGTID.toString()
-                                       << migrateLog;
-                return false;
-            }
-
-            log() << "migrate commit succeeded flushing to secondaries for '" << ns << "' " << min << " -> " << max << migrateLog;
-
-            {
-                Lock::GlobalRead lk;
-
-                // if durability is on, force a write to journal
-#if 0
-                if ( getDur().commitNow() ) {
-                    log() << "migrate commit flushed to journal for '" << ns << "' " << min << " -> " << max << migrateLog;
-                }
-#endif
-                // TODO: TokuMX What do we have to do here?
-            }
-
-            return true;
         }
 
         string stateString() {
@@ -1929,8 +1926,12 @@ namespace mongo {
             for (int i = 0; t.seconds() <= 300; ++i) {
                 log() << "Waiting for commit to finish" << endl;
                 sleepmillis( 1 << std::min( i , 10 ) );
-                if ( state == DONE )
+                if (state == FAIL) {
+                    return false;
+                }
+                if (state == DONE) {
                     return true;
+                }
             }
             state = FAIL;
             log() << "startCommit never finished!" << migrateLog;
@@ -1996,14 +1997,6 @@ namespace mongo {
                 return false;
             }
             
-            if ( OldDataCleanup::_numThreads > 0 ) {
-                errmsg = 
-                    str::stream() 
-                    << "still waiting for a previous migrates data to get cleaned, can't accept new chunks, num threads: " 
-                    << OldDataCleanup::_numThreads;
-                return false;
-            }
-
             if ( ! configServer.ok() )
                 ShardingState::initialize(cmdObj["configServer"].String());
 

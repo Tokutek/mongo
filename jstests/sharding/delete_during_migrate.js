@@ -26,11 +26,7 @@ s.adminCommand( { enablesharding : dbname } );
 s.adminCommand( { shardcollection : ns , key: { a : 1 } } );
 
 // start a parallel shell that deletes things
-startMongoProgramNoConnect( "mongo" ,
-                            "--host" , getHostName() ,
-                            "--port" , st.s0.port ,
-                            "--eval" , "db." + coll + ".remove({});" ,
-                            dbname );
+join = startParallelShell("db = db.getSiblingDB('" + dbname + "'); sleep(1000); db." + coll + ".remove();", st.s0.port);
 
 // migrate while deletions are happening
 var moveResult =  s.adminCommand( { moveChunk : ns ,
@@ -38,5 +34,7 @@ var moveResult =  s.adminCommand( { moveChunk : ns ,
                                     to : st.getOther( st.getServer( dbname ) ).name } );
 // check if migration worked
 assert( moveResult.ok , "migration didn't work while doing deletes" );
+
+join();
 
 st.stop();
