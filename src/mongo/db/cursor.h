@@ -309,6 +309,8 @@ namespace mongo {
         bool checkCurrentAgainstBounds();
         void skipPrefix(const BSONObj &key, const int k);
         int skipToNextKey(const BSONObj &currentKey);
+        /** for tailable cursors to get a fresh value for minUnsafeKey from a TailableCollection */
+        void refreshMinUnsafeEndKey();
 
         struct cursor_interrupt_extra : public ExceptionSaver {
             Client &c;

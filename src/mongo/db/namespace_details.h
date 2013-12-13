@@ -341,13 +341,6 @@ namespace mongo {
             return false;
         }
 
-        // optional to implement, return the minimum key a tailable cursor
-        // may not read (at the time of this call) to guaruntee that all keys
-        // strictly less than the minUnsafeKey is either committed or aborted.
-        virtual BSONObj minUnsafeKey() {
-            massert(16864, "bug: should not call minUnsafeKey for collection that is not Oplog or capped", false);
-        }
-
         // inserts an object into this namespace, taking care of secondary indexes if they exist
         virtual void insertObject(BSONObj &obj, uint64_t flags = 0) = 0;
 

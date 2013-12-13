@@ -19,10 +19,11 @@
 
 #include "mongo/pch.h"
 #include "mongo/db/curop.h"
+#include "mongo/db/cursor.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/queryutil.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/namespace_details.h"
-#include "mongo/db/cursor.h"
 
 namespace mongo {
 
@@ -293,6 +294,11 @@ namespace mongo {
         return -1;
     }
 
+    void IndexCursor::refreshMinUnsafeEndKey() {
+        TailableCollection *cl = _d->toSubclass<TailableCollection>();
+        _endKey = cl->minUnsafeKey();
+    }
+
     void IndexCursor::setTailable() {
         // tailable cursors may not be created over secondary indexes,
         // and they must intend to read to the end of the collection.
@@ -301,7 +307,7 @@ namespace mongo {
         // mark the cursor as tailable and set the end key bound tothe minimum unsafe
         // key to read from the namespace, non-inclusive.
         _tailable = true;
-        _endKey = _d->minUnsafeKey();
+        refreshMinUnsafeEndKey();
         _endKeyInclusive = false;
         // Tailable cursors _must_ use endKey/endKeyInclusive so the bounds we
         // may or may not have gotten via the constructor is no longer valid.
@@ -776,7 +782,7 @@ again:      while ( !allInclusive && ok() ) {
             if ( tailable() ) {
                 if ( _currKey < _endKey ) {
                     // Read the most up-to-date minUnsafeKey from the namespace
-                    _endKey = _d->minUnsafeKey();
+                    refreshMinUnsafeEndKey();
                     _advance();
                 } else {
                     // reset _currKey, we may have accidentally
@@ -784,7 +790,7 @@ again:      while ( !allInclusive && ok() ) {
                     // and saw something we are not allowed to see.
                     _currKey = _endKey;
                     // Read the most up-to-date minUnsafeKey from the namespace
-                    _endKey = _d->minUnsafeKey();
+                    refreshMinUnsafeEndKey();
                     findKey( _currKey.isEmpty() ? minKey : _currKey );
                 }
             } else {

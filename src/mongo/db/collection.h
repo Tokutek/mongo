@@ -51,7 +51,18 @@ namespace mongo {
         BSONObj getSimplePKFromQuery(const BSONObj &query) const;
     };
 
-    class OplogCollection : public IndexedCollection {
+    // Virtual interface implemented by collections whose cursors may "tail"
+    // the end of the collection for newly arriving data.
+    //
+    // Only the oplog and capped collections suppot this feature.
+    class TailableCollection {
+    public:
+        // @return the minimum key that is not safe to read for any tailable cursor
+        virtual BSONObj minUnsafeKey() = 0;
+        virtual ~TailableCollection() { }
+    };
+
+    class OplogCollection : public IndexedCollection, public TailableCollection {
     public:
         OplogCollection(const StringData &ns, const BSONObj &options);
         // Important: BulkLoadedCollection relies on this constructor
@@ -60,7 +71,7 @@ namespace mongo {
         // modify BulkLoadedCollection to match behavior for the oplog.
         OplogCollection(const BSONObj &serialized);
 
-        // @return the maximum safe key to read for a tailable cursor.
+        // @return the minimum key that is not safe to read for any tailable cursor
         BSONObj minUnsafeKey();
 
         // For cleaning up after oplog trimming.
@@ -116,7 +127,7 @@ namespace mongo {
     // and count of a capped collection is maintained in memory and kept valid
     // on txn abort through a CappedCollectionRollback class in the TxnContext. 
     //
-    // Tailable cursors over capped collections may only read up to one less
+    // TailableCollection cursors over capped collections may only read up to one less
     // than the minimum uncommitted primary key to ensure that they never miss
     // any data. This information is communicated through minUnsafeKey(). On
     // commit/abort, the any primary keys inserted into a capped collection are
@@ -125,7 +136,7 @@ namespace mongo {
     // In the implementation, NaturalOrderCollection::_nextPK and the set of
     // uncommitted primary keys are protected together by _mutex. Trimming
     // work is done under the _deleteMutex.
-    class CappedCollection : public NaturalOrderCollection {
+    class CappedCollection : public NaturalOrderCollection, TailableCollection {
     public:
         CappedCollection(const StringData &ns, const BSONObj &options,
                          const bool mayIndexId = true);
@@ -135,7 +146,7 @@ namespace mongo {
 
         bool isCapped() const { return true; }
 
-        // @return the maximum safe key to read for a tailable cursor.
+        // @return the minimum key that is not safe to read for any tailable cursor
         BSONObj minUnsafeKey();
 
         // Regular interface
@@ -208,7 +219,7 @@ namespace mongo {
         // Each transaction that has done inserts has the minimum PK it
         // inserted in this set.
         //
-        // Tailable cursors must not read at or past the smallest value in this set.
+        // TailableCollection cursors must not read at or past the smallest value in this set.
         BSONObjSet _uncommittedMinPKs;
         SimpleMutex _mutex;
         SimpleMutex _deleteMutex;
