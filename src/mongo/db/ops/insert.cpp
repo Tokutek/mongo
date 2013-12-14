@@ -61,15 +61,23 @@ namespace mongo {
             try {
                 BSONObj objModified = obj;
                 BSONElementManipulator::lookForTimestamps(objModified);
-                if (details->isCapped() && logop) {
-                    // unfortunate hack we need for capped collections
-                    // we do this because the logic for generating the pk
-                    // and what subsequent rows to delete are buried in the
-                    // namespace details object. There is probably a nicer way
-                    // to do this, but this works.
-                    validateInsert(obj);
-                    details->insertObjectIntoCappedAndLogOps(objModified, flags);
-                    details->notifyOfWriteOp();
+                if (details->isCapped()) {
+                    if (cc().txnStackSize() > 1) {
+                        // This is a nightmare to maintain transactionally correct.
+                        // Capped collections will be deprecated one day anyway.
+                        // They are an anathma.
+                        uasserted(17228, "Cannot insert into a capped collection in a multi-statement transaction.");
+                    }
+                    if (logop) {
+                        // unfortunate hack we need for capped collections
+                        // we do this because the logic for generating the pk
+                        // and what subsequent rows to delete are buried in the
+                        // namespace details object. There is probably a nicer way
+                        // to do this, but this works.
+                        validateInsert(obj);
+                        details->insertObjectIntoCappedAndLogOps(objModified, flags);
+                        details->notifyOfWriteOp();
+                    }
                 }
                 else {
                     insertOneObject(details, objModified, flags); // may add _id field
