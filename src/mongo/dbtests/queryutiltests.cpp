@@ -1644,7 +1644,8 @@ namespace QueryUtilTests {
                 return 0;
             }
             int indexno( const BSONObj &key ) {
-                return nsd()->idxNo( *index(key) );
+                IndexDetails &idx = *index(key);
+                return nsd()->idxNo( idx );
             }
             static DBDirectClient client_;
         private:
