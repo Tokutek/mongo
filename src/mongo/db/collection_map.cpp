@@ -17,46 +17,45 @@
 
 #include "mongo/pch.h"
 
-#include "mongo/db/namespace_details.h"
-#include "mongo/db/namespacestring.h"
+#include "mongo/db/collection.h"
+#include "mongo/db/collection_map.h"
 #include "mongo/db/json.h"
 #include "mongo/db/relock.h"
 #include "mongo/db/storage/dictionary.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/key.h"
-
 #include "mongo/util/stringutils.h"
 
 namespace mongo {
 
-    NamespaceIndex::NamespaceIndex(const string &dir, const StringData& database) :
-            _dir(dir),
-            _nsdbFilename(database.toString() + ".ns"),
-            _database(database.toString()),
-            _openRWLock("nsOpenRWLock")
-    {}
+    CollectionMap::CollectionMap(const string &dir, const StringData& database) :
+        _dir(dir),
+        _metadname(database.toString() + ".ns"),
+        _database(database.toString()),
+        _openRWLock("nsOpenRWLock") {
+    }
 
-    NamespaceIndex::~NamespaceIndex() {
-        for (NamespaceDetailsMap::const_iterator it = _namespaces.begin(); it != _namespaces.end(); ++it) {
-            shared_ptr<NamespaceDetails> d = it->second;
+    CollectionMap::~CollectionMap() {
+        for (CollectionStringMap::const_iterator it = _collections.begin(); it != _collections.end(); ++it) {
+            shared_ptr<Collection> cl = it->second;
             try {
-                d->close();
+                cl->close();
             }
             catch (DBException &e) {
                 // shouldn't throw in destructor
-                msgasserted(16779, mongoutils::str::stream() << "caught exception while closing " << (string) it->first << " to close NamespaceIndex " << _database << ": " << e.what());
+                msgasserted(16779, mongoutils::str::stream() << "caught exception while closing " << (string) it->first << " to close CollectionMap " << _database << ": " << e.what());
             }
         }
-        if (_nsdb != NULL) {
-            TOKULOG(1) << "Closing NamespaceIndex " << _database << endl;
-            const int r = _nsdb->close();
+        if (_metadb != NULL) {
+            TOKULOG(1) << "Closing CollectionMap " << _database << endl;
+            const int r = _metadb->close();
             if (r != 0) {
-                msgasserted(16920, mongoutils::str::stream() << "failed to close nsdb for NamespaceIndex " << _database);
+                msgasserted(16920, mongoutils::str::stream() << "failed to close metadb for CollectionMap " << _database);
             }
         }
     }
 
-    void NamespaceIndex::init(bool may_create) {
+    void CollectionMap::init(bool may_create) {
         Lock::assertAtLeastReadLocked(_database);
         if (!allocated()) {
             SimpleRWLock::Exclusive lk(_openRWLock);
@@ -66,15 +65,15 @@ namespace mongo {
         }
     }
 
-    NOINLINE_DECL void NamespaceIndex::_init(bool may_create) {
+    NOINLINE_DECL void CollectionMap::_init(bool may_create) {
         const BSONObj keyPattern = BSON("ns" << 1 );
         const BSONObj info = BSON("key" << keyPattern);
         Descriptor descriptor(keyPattern);
 
         try {
             // Try first without the create flag, because we're not sure if we
-            // have a write lock just yet. It won't matter if the nsdb exists.
-            _nsdb.reset(new storage::Dictionary(_nsdbFilename, info, descriptor, false, false));
+            // have a write lock just yet. It won't matter if the metadb exists.
+            _metadb.reset(new storage::Dictionary(_metadname, info, descriptor, false, false));
         } catch (storage::Dictionary::NeedsCreate) {
             if (!may_create) {
                 // didn't find on disk and we can't create it
@@ -83,26 +82,26 @@ namespace mongo {
                 // We would create it, but we're not write locked. Retry.
                 throw RetryWithWriteLock("creating new database " + _database);
             }
-            NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
+            CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
             rollback.noteCreate(_database);
-            _nsdb.reset(new storage::Dictionary(_nsdbFilename, info, descriptor, true, false));
+            _metadb.reset(new storage::Dictionary(_metadname, info, descriptor, true, false));
         }
     }
 
-    void NamespaceIndex::rollbackCreate() {
+    void CollectionMap::rollbackCreate() {
         if (!allocated()) {
             return;
         }
         // If we are rolling back the database creation, then any collections in that database were
         // created in this transaction.  Since we roll back collection creates before dictionary
         // creates, we would have already rolled back the collection creation, which does close_ns,
-        // which removes the NamespaceDetails from the map.  So this must be empty.
-        verify(_namespaces.empty());
+        // which removes the Collection from the map.  So this must be empty.
+        verify(_collections.empty());
 
         // Closing the DB before the transaction aborts will allow the abort to do the dbremove for us.
-        shared_ptr<storage::Dictionary> nsdb = _nsdb;
-        _nsdb.reset();
-        const int r = nsdb->close();
+        shared_ptr<storage::Dictionary> metadb = _metadb;
+        _metadb.reset();
+        const int r = metadb->close();
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
@@ -132,14 +131,14 @@ namespace mongo {
         }
     }
 
-    void NamespaceIndex::getNamespaces( list<string>& tofill ) {
+    void CollectionMap::getNamespaces( list<string>& tofill ) {
         init();
         if (!allocated()) {
             return;
         }
 
         getNamespacesExtra extra(tofill);
-        storage::Cursor c(_nsdb->db());
+        storage::Cursor c(_metadb->db());
         int r = 0;
         while (r != DB_NOTFOUND) {
             r = c.dbc()->c_getf_next(c.dbc(), 0, getNamespacesCallback, &extra);
@@ -153,7 +152,7 @@ namespace mongo {
         }
     }
 
-    void NamespaceIndex::kill_ns(const StringData& ns) {
+    void CollectionMap::kill_ns(const StringData& ns) {
         init();
         if (!allocated()) { // that's ok, may dropping something that doesn't exist
             return;
@@ -162,22 +161,22 @@ namespace mongo {
             throw RetryWithWriteLock();
         }
 
-        NamespaceDetailsMap::const_iterator it = _namespaces.find(ns);
-        if (it != _namespaces.end()) {
-            // Might not be in the _namespaces map if the ns exists but is closed.
+        CollectionStringMap::const_iterator it = _collections.find(ns);
+        if (it != _collections.end()) {
+            // Might not be in the _collections map if the ns exists but is closed.
             // Note this ns in the rollback, since we are about to modify its entry.
-            NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
+            CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
             rollback.noteNs(ns);
-            shared_ptr<NamespaceDetails> d = it->second;
-            const int r = _namespaces.erase(ns);
+            shared_ptr<Collection> cl = it->second;
+            const int r = _collections.erase(ns);
             verify(r == 1);
-            d->close();
+            cl->close();
         }
 
         BSONObj nsobj = BSON("ns" << ns);
         storage::Key sKey(nsobj, NULL);
         DBT ndbt = sKey.dbt();
-        DB *db = _nsdb->db();
+        DB *db = _metadb->db();
         int r = db->del(db, cc().txn().db_txn(), &ndbt, 0);
         if (r != 0) {
             storage::handle_ydb_error_fatal(r);
@@ -195,8 +194,8 @@ namespace mongo {
     }
 
     // on input, _initLock is held, so this can be called by only one thread at a time,
-    // also, on input, the NamespaceIndex must be allocated
-    NamespaceDetails *NamespaceIndex::open_ns(const StringData& ns, const bool bulkLoad) {
+    // also, on input, the CollectionMap must be allocated
+    Collection *CollectionMap::open_ns(const StringData& ns, const bool bulkLoad) {
         verify(allocated());
         BSONObj serialized;
         BSONObj nsobj = BSON("ns" << ns);
@@ -204,7 +203,7 @@ namespace mongo {
         DBT ndbt = sKey.dbt();
 
         // If this transaction is read only, then we cannot possible already
-        // hold a lock in the nsindex and we certainly don't need to hold one
+        // hold a lock in the metadb and we certainly don't need to hold one
         // for the duration of this operation. So we use an alternate txn stack.
         const bool needAltTxn = !cc().hasTxn() || cc().txn().readOnly();
         scoped_ptr<Client::AlternateTransactionStack> altStack(!needAltTxn ? NULL :
@@ -212,26 +211,26 @@ namespace mongo {
         scoped_ptr<Client::Transaction> altTxn(!needAltTxn ? NULL :
                                                new Client::Transaction(0));
 
-        // Pass flags that get us a write lock on the nsindex row
+        // Pass flags that get us a write lock on the metadb row
         // for the ns we'd like to open.
-        DB *db = _nsdb->db();
+        DB *db = _metadb->db();
         const int r = db->getf_set(db, cc().txn().db_txn(), DB_SERIALIZABLE | DB_RMW,
                                    &ndbt, getf_serialized, &serialized);
         if (r == 0) {
             // We found an entry for this ns and we have the row lock.
             // First check if someone got the lock before us and already
             // did the open.
-            NamespaceDetails *d = find_ns(ns);
-            if (d != NULL) {
-                return d;
+            Collection *cl = find_ns(ns);
+            if (cl != NULL) {
+                return cl;
             }
-            // No need to hold the openRWLock during NamespaceDetails::make(),
+            // No need to hold the openRWLock during Collection::make(),
             // the fact that we have the row lock ensures only one thread will
             // be here for a particular ns at a time.
-            shared_ptr<NamespaceDetails> details = NamespaceDetails::make( serialized, bulkLoad );
+            shared_ptr<Collection> details = Collection::make( serialized, bulkLoad );
             SimpleRWLock::Exclusive lk(_openRWLock);
-            verify(!_namespaces[ns]);
-            _namespaces[ns] = details;
+            verify(!_collections[ns]);
+            _collections[ns] = details;
             return details.get();
         } else if (r != DB_NOTFOUND) {
             storage::handle_ydb_error(r);
@@ -239,61 +238,61 @@ namespace mongo {
         return NULL;
     }
 
-    bool NamespaceIndex::close_ns(const StringData& ns, const bool aborting) {
+    bool CollectionMap::close_ns(const StringData& ns, const bool aborting) {
         Lock::assertWriteLocked(ns);
-        // No need to initialize first. If the nsdb is null at this point,
+        // No need to initialize first. If the metadb is null at this point,
         // we simply say that the ns you want to close wasn't open.
         if (!allocated()) {
             return false;
         }
 
         // Find and erase the old entry, if it exists.
-        NamespaceDetailsMap::const_iterator it = _namespaces.find(ns);
-        if (it != _namespaces.end()) {
+        CollectionStringMap::const_iterator it = _collections.find(ns);
+        if (it != _collections.end()) {
             // TODO: Handle the case where a client tries to close a load they didn't start.
-            shared_ptr<NamespaceDetails> d = it->second;
-            _namespaces.erase(ns);
-            d->close(aborting);
+            shared_ptr<Collection> cl = it->second;
+            _collections.erase(ns);
+            cl->close(aborting);
             return true;
         }
         return false;
     }
 
-    void NamespaceIndex::add_ns(const StringData& ns, shared_ptr<NamespaceDetails> details) {
+    void CollectionMap::add_ns(const StringData& ns, shared_ptr<Collection> cl) {
         if (!Lock::isWriteLocked(ns)) {
             throw RetryWithWriteLock();
         }
 
         init();
-        dassert(allocated()); // cannot add to a non-existent nsdb
+        dassert(allocated()); // cannot add to a non-existent metadb
 
         // Note this ns in the rollback, since we are about to modify its entry.
-        NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
+        CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
         rollback.noteNs(ns);
 
-        verify(!_namespaces[ns]);
-        _namespaces[ns] = details;
+        verify(!_collections[ns]);
+        _collections[ns] = cl;
     }
 
-    void NamespaceIndex::update_ns(const StringData& ns, const BSONObj &serialized, bool overwrite) {
+    void CollectionMap::update_ns(const StringData& ns, const BSONObj &serialized, bool overwrite) {
         if (!Lock::isWriteLocked(ns)) {
             throw RetryWithWriteLock();
         }
 
         init();
-        dassert(allocated()); // cannot update a non-existent nsdb
+        dassert(allocated()); // cannot update a non-existent metadb
 
         // Note this ns in the rollback, even though we aren't modifying
-        // _namespaces directly. But we know this operation is part of
+        // _collections directly. But we know this operation is part of
         // a scheme to create this namespace or change something about it.
-        NamespaceIndexRollback &rollback = cc().txn().nsIndexRollback();
+        CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
         rollback.noteNs(ns);
 
         BSONObj nsobj = BSON("ns" << ns);
         storage::Key sKey(nsobj, NULL);
         DBT ndbt = sKey.dbt();
         DBT ddbt = storage::dbt_make(serialized.objdata(), serialized.objsize());
-        DB *db = _nsdb->db();
+        DB *db = _metadb->db();
         const int flags = overwrite ? 0 : DB_NOOVERWRITE;
         const int r = db->put(db, cc().txn().db_txn(), &ndbt, &ddbt, flags);
         if (r != 0) {
@@ -301,7 +300,44 @@ namespace mongo {
         }
     }
 
-    void NamespaceIndex::drop() {
+    Collection *CollectionMap::find_ns(const StringData& ns) {
+        init();
+        if (!allocated()) {
+            return NULL;
+        }
+
+        SimpleRWLock::Shared lk(_openRWLock);
+        return find_ns_locked(ns);
+    }
+
+    Collection *CollectionMap::getCollection(const StringData &ns) {
+        init();
+        if (!allocated()) {
+            return NULL;
+        }
+
+        Collection *cl = NULL;
+        {
+            // Try to find the ns in a shared lock. If it's there, we're done.
+            SimpleRWLock::Shared lk(_openRWLock);
+            cl = find_ns_locked(ns);
+        }
+
+        if (cl == NULL) {
+            // The ns doesn't exist, or it's not opened.
+            cl = open_ns(ns);
+        }
+
+        // Possibly validate the connection if the collection
+        // is under-going bulk load.
+        if (cl != NULL && cl->bulkLoading()) {
+            BulkLoadedCollection *bulkCl = cl->as<BulkLoadedCollection>();
+            bulkCl->validateConnectionId(cc().getConnectionId());
+        }
+        return cl;
+    }
+
+    void CollectionMap::drop() {
         Lock::assertWriteLocked(_database);
         init();
         if (!allocated()) {
@@ -318,8 +354,8 @@ namespace mongo {
         // - Code is duplicated to handle dropping system system collections in stages.
         vector<string> sysIndexesEntries;
         const string systemNamespacesNs = getSisterNS(_database, "system.namespaces");
-        NamespaceDetails *sysNsd = nsdetails(systemNamespacesNs);
-        for (shared_ptr<Cursor> c(BasicCursor::make(sysNsd)); c->ok(); c->advance()) {
+        Collection *sysCl = getCollection(systemNamespacesNs);
+        for (shared_ptr<Cursor> c(BasicCursor::make(sysCl)); c->ok(); c->advance()) {
             const BSONObj nsObj = c->current();
             const StringData ns = nsObj["name"].Stringdata();
             if (nsToDatabaseSubstring(ns) != _database) {
@@ -330,34 +366,34 @@ namespace mongo {
                 // Save .system.indexes collection for last, because drop() deletes from it.
                 sysIndexesEntries.push_back(ns.toString());
             } else {
-                NamespaceDetails *d = nsdetails(ns);
-                if (d != NULL) {
-                    d->drop(errmsg, result, true);
+                Collection *cl = getCollection(ns);
+                if (cl != NULL) {
+                    cl->drop(errmsg, result, true);
                 }
             }
         }
-        if (sysNsd != NULL) {
+        if (sysCl != NULL) {
             // The .system.namespaces collection does not include itself.
-            sysNsd->drop(errmsg, result, true);
+            sysCl->drop(errmsg, result, true);
         }
         // Now drop the system.indexes entries.
         for (vector<string>::const_iterator it = sysIndexesEntries.begin(); it != sysIndexesEntries.end(); it++) {
             // Need to close any existing handle before drop.
-            NamespaceDetails *d = nsdetails(*it);
-            if (d != NULL) {
-                d->drop(errmsg, result, true);
+            Collection *cl = getCollection(*it);
+            if (cl != NULL) {
+                cl->drop(errmsg, result, true);
             }
         }
         // Everything that was open should have been closed due to drop.
-        verify(_namespaces.empty());
+        verify(_collections.empty());
 
-        shared_ptr<storage::Dictionary> nsdb = _nsdb;
-        _nsdb.reset();
-        const int r = nsdb->close();
+        shared_ptr<storage::Dictionary> metadb = _metadb;
+        _metadb.reset();
+        const int r = metadb->close();
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
-        storage::db_remove(_nsdbFilename);
+        storage::db_remove(_metadname);
     }
 
 } // namespace mongo

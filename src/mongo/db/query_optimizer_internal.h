@@ -295,25 +295,25 @@ namespace mongo {
 
     private:
 
-        bool addShortCircuitPlan( NamespaceDetails* d );
+        bool addShortCircuitPlan( Collection *cl );
 
-        bool addHintPlan( NamespaceDetails* d );
+        bool addHintPlan( Collection *cl );
 
-        bool addSpecialPlan( NamespaceDetails* d );
+        bool addSpecialPlan( Collection *cl );
 
-        void addStandardPlans( NamespaceDetails* d );
+        void addStandardPlans( Collection *cl );
 
-        bool addCachedPlan( NamespaceDetails* d );
+        bool addCachedPlan( Collection *cl );
 
-        shared_ptr<QueryPlan> newPlan( NamespaceDetails* d,
+        shared_ptr<QueryPlan> newPlan( Collection *cl,
                                        int idxNo,
                                        const BSONObj& min = BSONObj(),
                                        const BSONObj& max = BSONObj(),
                                        const string& special = "" ) const;
 
-        bool setUnindexedPlanIf( bool set, NamespaceDetails* d );
+        bool setUnindexedPlanIf( bool set, Collection *cl );
 
-        void setSingleUnindexedPlan( NamespaceDetails* d );
+        void setSingleUnindexedPlan( Collection *cl );
 
         void setHintedPlanForIndex( IndexDetails& id );
 
@@ -737,7 +737,7 @@ namespace mongo {
 
         /** @return true if the index may be useful according to its KeySpec. */
         static bool indexUseful( const FieldRangeSetPair& frsp,
-                                 NamespaceDetails* d,
+                                 Collection *cl,
                                  int idxNo,
                                  const BSONObj& order );
 
@@ -748,7 +748,7 @@ namespace mongo {
         static CachedQueryPlan bestIndexForPatterns( const FieldRangeSetPair& frsp,
                                                      const BSONObj& order );
 
-        static bool uselessOr( const OrRangeGenerator& org, NamespaceDetails* d, int hintIdx );
+        static bool uselessOr( const OrRangeGenerator& org, Collection *cl, int hintIdx );
     };
     
 } // namespace mongo

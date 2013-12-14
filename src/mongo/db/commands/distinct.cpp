@@ -24,7 +24,7 @@
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/clientcursor.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/instance.h"
@@ -70,9 +70,9 @@ namespace mongo {
             long long n = 0; // matches
             MatchDetails md;
 
-            NamespaceDetails * d = nsdetails( ns );
+            Collection *cl = getCollection( ns );
 
-            if ( ! d ) {
+            if ( ! cl ) {
                 result.appendArray( "values" , BSONObj() );
                 result.append( "stats" , BSON( "n" << 0 << "nscanned" << 0 << "nscannedObjects" << 0 ) );
                 return true;
@@ -86,12 +86,11 @@ namespace mongo {
 
                 // query is empty, so lets see if we can find an index
                 // with the key so we don't have to hit the raw data
-                NamespaceDetails::IndexIterator ii = d->ii();
-                while ( ii.more() ) {
-                    IndexDetails& idx = ii.next();
-
-                    if ( d->isMultikey( ii.pos() - 1 ) )
+                for (int i = 0; i < cl->nIndexes(); i++) {
+                    IndexDetails &idx = cl->idx(i);
+                    if (cl->isMultikey(i)) {
                         continue;
+                    }
 
                     if ( idx.inKeyPattern( key ) ) {
                         cursor = getBestGuessCursor( ns.c_str() ,

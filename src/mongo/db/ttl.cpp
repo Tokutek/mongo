@@ -100,8 +100,8 @@ namespace mongo {
                     LOCK_REASON(lockReason, "ttl: deleting expired documents");
                     Client::ReadContext ctx(ns, lockReason);
                     Client::Transaction transaction(DB_SERIALIZABLE);
-                    NamespaceDetails* nsd = nsdetails(ns);
-                    if (!nsd) {
+                    Collection *cl = getCollection(ns);
+                    if (!cl) {
                         // collection was dropped
                         continue;
                     }

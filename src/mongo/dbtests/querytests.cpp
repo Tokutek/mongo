@@ -51,8 +51,8 @@ namespace QueryTests {
         }
         ~Base() {
             try {
-                for( boost::shared_ptr<Cursor> c( BasicCursor::make( nsdetails(ns()) ) ); c->ok(); c->advance() ) {
-                    deleteOneObject( nsdetails(ns()), c->currPK(), c->current() );
+                for( boost::shared_ptr<Cursor> c( BasicCursor::make( getCollection(ns()) ) ); c->ok(); c->advance() ) {
+                    deleteOneObject( getCollection(ns()), c->currPK(), c->current() );
                 }
                 _transaction.commit();
                 DBDirectClient cl;
@@ -94,7 +94,7 @@ namespace QueryTests {
             BSONObj query = fromjson( "{$or:[{b:2},{c:3}]}" );
             BSONObj ret;
             // Check findOne() returning object.
-            NamespaceDetails *d = nsdetails( ns() );
+            Collection *d = getCollection( ns() );
             ASSERT( d->findOne( query, ret, true ) );
             ASSERT_EQUALS( string( "b" ), ret.firstElement().fieldName() );
         }
@@ -106,7 +106,7 @@ namespace QueryTests {
             insert( BSON( "b" << 2 << "_id" << 0 ) );
             BSONObj query = fromjson( "{b:2}" );
             BSONObj ret;
-            NamespaceDetails *d = nsdetails( ns() );
+            Collection *d = getCollection( ns() );
 
             // Check findOne() returning object, allowing unindexed scan.
             ASSERT( d->findOne( query, ret, false ) );

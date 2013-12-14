@@ -566,8 +566,8 @@ namespace mongo {
                     LOCK_REASON(lockReason, "repl: looking up oplog entry for rollback");
                     Client::ReadContext ctx(rsoplog, lockReason);
                     Client::Transaction transaction(DB_SERIALIZABLE);
-                    NamespaceDetails *d = nsdetails( rsoplog );
-                    foundLocally = d != NULL && d->findOne( localQuery.done(), localObj);
+                    Collection *cl = getCollection( rsoplog );
+                    foundLocally = cl != NULL && cl->findOne( localQuery.done(), localObj);
                 }
                 if (foundLocally) {
                     GTID localGTID = getGTIDFromBSON("_id", localObj);

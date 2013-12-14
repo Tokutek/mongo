@@ -33,7 +33,7 @@
 #include "mongo/db/stats/counters.h"
 #include "mongo/db/stats/timer_stats.h"
 #include "mongo/db/query_optimizer_internal.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/instance.h"
@@ -45,9 +45,9 @@
 namespace mongo {
 
     // cached copies of these...so don't rename them, drop them, etc.!!!
-    static NamespaceDetails *rsOplogDetails = NULL;
-    static NamespaceDetails *rsOplogRefsDetails = NULL;
-    static NamespaceDetails *replInfoDetails = NULL;
+    static Collection *rsOplogDetails = NULL;
+    static Collection *rsOplogRefsDetails = NULL;
+    static Collection *replInfoDetails = NULL;
     
     void deleteOplogFiles() {
         rsOplogDetails = NULL;
@@ -58,21 +58,21 @@ namespace mongo {
         // TODO: code review this for possible error cases
         // although, I don't think we care about error cases,
         // just that after we exit, oplog files don't exist
-        NamespaceDetails *d;
+        Collection *cl;
         BSONObjBuilder out;
         string errmsg;
 
-        d = nsdetails(rsoplog);
-        if (d != NULL) {
-            d->drop(errmsg, out);
+        cl = getCollection(rsoplog);
+        if (cl != NULL) {
+            cl->drop(errmsg, out);
         }
-        d = nsdetails(rsOplogRefs);
-        if (d != NULL) {
-            d->drop(errmsg, out);
+        cl = getCollection(rsOplogRefs);
+        if (cl != NULL) {
+            cl->drop(errmsg, out);
         }
-        d = nsdetails(rsReplInfo);
-        if (d != NULL) {
-            d->drop(errmsg, out);
+        cl = getCollection(rsReplInfo);
+        if (cl != NULL) {
+            cl->drop(errmsg, out);
         }
     }
 
@@ -84,17 +84,17 @@ namespace mongo {
         const char *logns = rsoplog;
         if (rsOplogDetails == NULL) {
             Client::Context ctx(logns , dbpath);
-            rsOplogDetails = nsdetails(logns);
+            rsOplogDetails = getCollection(logns);
             massert(13347, "local.oplog.rs missing. did you drop it? if so restart server", rsOplogDetails);
         }
         if (rsOplogRefsDetails == NULL) {
             Client::Context ctx(rsOplogRefs , dbpath);
-            rsOplogRefsDetails = nsdetails(rsOplogRefs);
+            rsOplogRefsDetails = getCollection(rsOplogRefs);
             massert(16814, "local.oplog.refs missing. did you drop it? if so restart server", rsOplogRefsDetails);
         }
         if (replInfoDetails == NULL) {
             Client::Context ctx(rsReplInfo , dbpath);
-            replInfoDetails = nsdetails(rsReplInfo);
+            replInfoDetails = getCollection(rsReplInfo);
             massert(16747, "local.replInfo missing. did you drop it? if so restart server", replInfoDetails);
         }
     }
@@ -123,7 +123,7 @@ namespace mongo {
         b.append("_id", "minLive");
         addGTIDToBSON("GTID", minLiveGTID, b);
         BSONObj bb = b.done();
-        uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
+        const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
         replInfoDetails->insertObject(bb, flags);
 
         bufbuilder.reset();
@@ -164,9 +164,9 @@ namespace mongo {
         const char * oplogNS = rsoplog;
         const char * replInfoNS = rsReplInfo;
         Client::Context ctx(oplogNS);
-        NamespaceDetails * oplogNSD = nsdetails(oplogNS);
-        NamespaceDetails * oplogRefsNSD = nsdetails(rsOplogRefs);        
-        NamespaceDetails * replInfoNSD = nsdetails(replInfoNS);
+        Collection * oplogNSD = getCollection(oplogNS);
+        Collection * oplogRefsNSD = getCollection(rsOplogRefs);        
+        Collection * replInfoNSD = getCollection(replInfoNS);
         if (oplogNSD || replInfoNSD || oplogRefsNSD) {
             // TODO: (Zardosht), figure out if there are any checks to do here
             // not sure under what scenarios we can be here, so
@@ -198,8 +198,8 @@ namespace mongo {
         LOCK_REASON(lockReason, "repl: looking up last GTID in oplog");
         Client::ReadContext ctx(rsoplog, lockReason);
         // TODO: Should this be using rsOplogDetails, verifying non-null?
-        NamespaceDetails *d = nsdetails(rsoplog);
-        shared_ptr<Cursor> c( BasicCursor::make(d, -1) );
+        Collection *cl = getCollection(rsoplog);
+        shared_ptr<Cursor> c( BasicCursor::make(cl, -1) );
         if (c->ok()) {
             *gtid = getGTIDFromOplogEntry(c->current());
             return true;
@@ -211,22 +211,22 @@ namespace mongo {
         LOCK_REASON(lockReason, "repl: querying for GTID in oplog");
         Client::ReadContext ctx(rsoplog, lockReason);
         // TODO: Should this be using rsOplogDetails, verifying non-null?
-        NamespaceDetails *d = nsdetails(rsoplog);
+        Collection *cl = getCollection(rsoplog);
         BSONObjBuilder q;
         BSONObj result;
         addGTIDToBSON("_id", gtid, q);
-        const bool found = d != NULL &&
-            d->findOne(
-               q.done(),
-               result
-               );
+        const bool found = cl != NULL &&
+            cl->findOne(
+                q.done(),
+                result
+                );
         return found;
     }
 
     static void _writeEntryToOplog(BSONObj entry) {
         verify(rsOplogDetails);
 
-        uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
+        const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
         rsOplogDetails->insertObject(entry, flags);
     }
 
@@ -246,7 +246,7 @@ namespace mongo {
         TimerHolder insertTimer(&oplogInsertStats);
         oplogInsertBytesStats.increment(o.objsize());
 
-        uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);
+        const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
         rsOplogRefsDetails->insertObject(o, flags);
     }
 
@@ -313,8 +313,8 @@ namespace mongo {
                 LOCK_REASON(lockReason, "repl: finding oplog.refs entry to apply");
                 Client::ReadContext ctx(rsOplogRefs, lockReason);
                 // TODO: Should this be using rsOplogRefsDetails, verifying non-null?
-                NamespaceDetails *d = nsdetails(rsOplogRefs);
-                if (d == NULL || !d->findOne(BSON("_id" << BSON("$gt" << BSON("oid" << oid << "seq" << seq))), entry, true)) {
+                Collection *cl = getCollection(rsOplogRefs);
+                if (cl == NULL || !cl->findOne(BSON("_id" << BSON("$gt" << BSON("oid" << oid << "seq" << seq))), entry, true)) {
                     break;
                 }
             }
@@ -468,7 +468,7 @@ namespace mongo {
         }
 
         BSONObj pk = entry["_id"].wrap("");
-        uint64_t flags = (NamespaceDetails::NO_LOCKTREE);
+        const uint64_t flags = Collection::NO_LOCKTREE;
         rsOplogDetails->deleteObject(pk, entry, flags);
     }
 
@@ -486,6 +486,9 @@ namespace mongo {
         // do a hot optimize up until gtid;
         BSONObjBuilder q;
         addGTIDToBSON("", gtid, q);
-        rsOplogDetails->optimizePK(minKey, q.done(), timeout, loops_run);
+
+        // TODO: rsOplogDetails should be stored as OplogCollection, not Collection
+        OplogCollection *cl = rsOplogDetails->as<OplogCollection>();
+        cl->optimizePK(minKey, q.done(), timeout, loops_run);
     }
 }

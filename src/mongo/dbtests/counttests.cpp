@@ -38,9 +38,9 @@ namespace CountTests {
         }
         ~Base() {
             try {
-                for( boost::shared_ptr<Cursor> c( BasicCursor::make( nsdetails(ns()) ) );
+                for( boost::shared_ptr<Cursor> c( BasicCursor::make( getCollection(ns()) ) );
                      c->ok(); c->advance() ) {
-                    deleteOneObject( nsdetails(ns()) , c->currPK(), c->current() );
+                    deleteOneObject( getCollection(ns()) , c->currPK(), c->current() );
                 }
                 _transaction.commit();
                 DBDirectClient cl;
@@ -68,7 +68,7 @@ namespace CountTests {
             insert( fromjson( s ) );
         }
         static void insert( const BSONObj &o ) {
-            insertObject( ns(), o, NamespaceDetails::NO_UNIQUE_CHECKS );
+            insertObject( ns(), o, Collection::NO_UNIQUE_CHECKS );
         }
         static BSONObj countCommand( const BSONObj &query ) {
             return BSON( "query" << query );

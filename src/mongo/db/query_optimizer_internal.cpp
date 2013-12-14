@@ -23,7 +23,7 @@
 #include "mongo/db/cursor.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/namespacestring.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/parsed_query.h"
 #include "mongo/db/query_plan_selection_policy.h"
 #include "mongo/db/queryutil.h"
@@ -35,13 +35,12 @@ namespace mongo {
 
     // returns an IndexDetails* for a hint, 0 if hint is $natural.
     // hint must not be eoo()
-    IndexDetails* parseHint( const BSONElement& hint, NamespaceDetails* d ) {
+    IndexDetails* parseHint( const BSONElement& hint, Collection *cl ) {
         massert( 13292, "hint eoo", !hint.eoo() );
         if ( hint.type() == String ) {
             string hintstr = hint.valuestr();
-            NamespaceDetails::IndexIterator i = d->ii();
-            while( i.more() ) {
-                IndexDetails& ii = i.next();
+            for (int i = 0; i < cl->nIndexes(); i++) {
+                IndexDetails &ii = cl->idx(i);
                 if ( ii.indexName() == hintstr ) {
                     return &ii;
                 }
@@ -53,10 +52,9 @@ namespace mongo {
             if ( !strcmp( hintobj.firstElementFieldName(), "$natural" ) ) {
                 return 0;
             }
-            NamespaceDetails::IndexIterator i = d->ii();
-            while( i.more() ) {
-                IndexDetails& ii = i.next();
-                if( ii.keyPattern().woCompare(hintobj) == 0 ) {
+            for (int i = 0; i < cl->nIndexes(); i++) {
+                IndexDetails &ii = cl->idx(i);
+                if ( ii.keyPattern().woCompare(hintobj) == 0 ) {
                     return &ii;
                 }
             }
@@ -345,30 +343,30 @@ namespace mongo {
 
     void QueryPlanGenerator::addInitialPlans() {
         const char* ns = _qps.frsp().ns();
-        NamespaceDetails* d = nsdetails( ns );
+        Collection *cl = getCollection( ns );
         
-        if ( addShortCircuitPlan( d ) ) {
+        if ( addShortCircuitPlan( cl ) ) {
             return;
         }
         
-        addStandardPlans( d );
+        addStandardPlans( cl );
     }
     
     void QueryPlanGenerator::addFallbackPlans() {
         const char* ns = _qps.frsp().ns();
-        NamespaceDetails* d = nsdetails( ns );
-        verify( d );
+        Collection *cl = getCollection( ns );
+        verify( cl );
         
         vector<shared_ptr<QueryPlan> > plans;
         shared_ptr<QueryPlan> optimalPlan;
         shared_ptr<QueryPlan> specialPlan;
-        for( int i = 0; i < d->nIndexes(); ++i ) {
+        for( int i = 0; i < cl->nIndexes(); ++i ) {
             
-            if ( !QueryUtilIndexed::indexUseful( _qps.frsp(), d, i, _qps.order() ) ) {
+            if ( !QueryUtilIndexed::indexUseful( _qps.frsp(), cl, i, _qps.order() ) ) {
                 continue;
             }
             
-            shared_ptr<QueryPlan> p = newPlan( d, i );
+            shared_ptr<QueryPlan> p = newPlan( cl, i );
             switch( p->utility() ) {
                 case QueryPlan::Impossible:
                     _qps.setSinglePlan( p );
@@ -415,39 +413,39 @@ namespace mongo {
         
         // Only add a table-scan plan if no helpful indexes were found.
         if (_qps.nPlans() == 0) {
-            _qps.addCandidatePlan( newPlan( d, -1 ) );
+            _qps.addCandidatePlan( newPlan( cl, -1 ) );
         }
     }
     
-    bool QueryPlanGenerator::addShortCircuitPlan( NamespaceDetails* d ) {
+    bool QueryPlanGenerator::addShortCircuitPlan( Collection *cl ) {
         return
             // The collection is missing.
-            setUnindexedPlanIf( !d, d ) ||
+            setUnindexedPlanIf( !cl, cl ) ||
             // No match is possible.
-            setUnindexedPlanIf( !_qps.frsp().matchPossible(), d ) ||
+            setUnindexedPlanIf( !_qps.frsp().matchPossible(), cl ) ||
             // The hint, min, or max parameters are specified.
-            addHintPlan( d ) ||
+            addHintPlan( cl ) ||
             // A special index operation is requested.
-            addSpecialPlan( d ) ||
+            addSpecialPlan( cl ) ||
             // No indexable ranges or ordering are specified.
-            setUnindexedPlanIf( _qps.frsp().noNonUniversalRanges() && _qps.order().isEmpty(), d ) ||
+            setUnindexedPlanIf( _qps.frsp().noNonUniversalRanges() && _qps.order().isEmpty(), cl ) ||
             // $natural sort is requested.
             setUnindexedPlanIf( !_qps.order().isEmpty() &&
                                 str::equals( _qps.order().firstElementFieldName(), "$natural" ),
-                                d );
+                                cl );
     }
     
-    bool QueryPlanGenerator::addHintPlan( NamespaceDetails* d ) {
+    bool QueryPlanGenerator::addHintPlan( Collection *cl ) {
         BSONElement hint = _hint.firstElement();
         if ( !hint.eoo() ) {
-            IndexDetails* id = parseHint( hint, d );
+            IndexDetails* id = parseHint( hint, cl );
             if ( id ) {
                 setHintedPlanForIndex( *id );
             }
             else {
                 uassert( 10366, "natural order cannot be specified with $min/$max",
                         _min.isEmpty() && _max.isEmpty() );
-                setSingleUnindexedPlan( d );
+                setSingleUnindexedPlan( cl );
             }
             return true;
         }
@@ -461,28 +459,26 @@ namespace mongo {
                                                       _max,
                                                       keyPattern );
             uassert( 10367, errmsg, idx );
-            validateAndSetHintedPlan( newPlan( d, d->idxNo( *idx ), _min, _max ) );
+            validateAndSetHintedPlan( newPlan( cl, cl->idxNo( *idx ), _min, _max ) );
             return true;
         }
         
         return false;
     }
     
-    bool QueryPlanGenerator::addSpecialPlan( NamespaceDetails *d ) {
+    bool QueryPlanGenerator::addSpecialPlan( Collection *cl ) {
         DEBUGQO( "\t special : " << _qps.frsp().getSpecial().toString() );
         SpecialIndices special = _qps.frsp().getSpecial();
         if (!special.empty()) {
             // Try to handle the special part of the query with an index
-            NamespaceDetails::IndexIterator i = d->ii();
-            while( i.more() ) {
-                int j = i.pos();
-                IndexDetails& ii = i.next();
+            for (int i = 0; i < cl->nIndexes(); i++) {
+                IndexDetails &ii = cl->idx(i);
                 // TODO(hk): Make sure we can do a $near and $within query, one using
                 // the index one using the matcher.
                 if (special.has(ii.getSpecialIndexName()) &&
-                    ii.suitability(_qps.frsp().frsForIndex(d, j), _qps.order()) != IndexDetails::USELESS) {
+                    ii.suitability(_qps.frsp().frsForIndex(cl, i), _qps.order()) != IndexDetails::USELESS) {
                     uassert( 16330, "'special' query operator not allowed", _allowSpecial );
-                    _qps.setSinglePlan( newPlan( d, j, BSONObj(), BSONObj(), ii.getSpecialIndexName()));
+                    _qps.setSinglePlan( newPlan( cl, i, BSONObj(), BSONObj(), ii.getSpecialIndexName()));
                     return true;
                 }
             }
@@ -494,13 +490,13 @@ namespace mongo {
         return false;
     }
     
-    void QueryPlanGenerator::addStandardPlans( NamespaceDetails* d ) {
-        if ( !addCachedPlan( d ) ) {
+    void QueryPlanGenerator::addStandardPlans( Collection *cl ) {
+        if ( !addCachedPlan( cl ) ) {
             addFallbackPlans();
         }
     }
     
-    bool QueryPlanGenerator::addCachedPlan( NamespaceDetails* d ) {
+    bool QueryPlanGenerator::addCachedPlan( Collection *cl ) {
         if ( _recordedPlanPolicy == Ignore ) {
             return false;
         }
@@ -513,15 +509,13 @@ namespace mongo {
 
         shared_ptr<QueryPlan> p;
         if ( str::equals( bestIndex.firstElementFieldName(), "$natural" ) ) {
-            p = newPlan( d, -1 );
+            p = newPlan( cl, -1 );
         }
         
-        NamespaceDetails::IndexIterator i = d->ii();
-        while( i.more() ) {
-            int j = i.pos();
-            IndexDetails& ii = i.next();
+        for (int i = 0; i < cl->nIndexes(); i++) {
+            IndexDetails &ii = cl->idx(i);
             if( ii.keyPattern().woCompare(bestIndex) == 0 ) {
-                p = newPlan( d, j );
+                p = newPlan( cl, i );
             }
         }
         
@@ -544,12 +538,12 @@ namespace mongo {
         return true;
     }
 
-    shared_ptr<QueryPlan> QueryPlanGenerator::newPlan( NamespaceDetails* d,
+    shared_ptr<QueryPlan> QueryPlanGenerator::newPlan( Collection *cl,
                                                        int idxNo,
                                                        const BSONObj& min,
                                                        const BSONObj& max,
                                                        const string& special ) const {
-        shared_ptr<QueryPlan> ret( QueryPlan::make( d,
+        shared_ptr<QueryPlan> ret( QueryPlan::make( cl,
                                                     idxNo,
                                                     _qps.frsp(),
                                                     _originalFrsp.get(),
@@ -562,15 +556,15 @@ namespace mongo {
         return ret;
     }
 
-    bool QueryPlanGenerator::setUnindexedPlanIf( bool set, NamespaceDetails* d ) {
+    bool QueryPlanGenerator::setUnindexedPlanIf( bool set, Collection *cl ) {
         if ( set ) {
-            setSingleUnindexedPlan( d );
+            setSingleUnindexedPlan( cl );
         }
         return set;
     }
     
-    void QueryPlanGenerator::setSingleUnindexedPlan( NamespaceDetails* d ) {
-        _qps.setSinglePlan( newPlan( d, -1 ) );
+    void QueryPlanGenerator::setSingleUnindexedPlan( Collection *cl ) {
+        _qps.setSinglePlan( newPlan( cl, -1 ) );
     }
     
     void QueryPlanGenerator::setHintedPlanForIndex( IndexDetails& id ) {
@@ -584,8 +578,8 @@ namespace mongo {
                                                             _max,
                                                             keyPattern ) );
         }
-        NamespaceDetails* d = nsdetails( _qps.frsp().ns() );
-        validateAndSetHintedPlan( newPlan( d, d->idxNo( id ), _min, _max ) );
+        Collection *cl = getCollection( _qps.frsp().ns() );
+        validateAndSetHintedPlan( newPlan( cl, cl->idxNo( id ), _min, _max ) );
     }
 
     void QueryPlanGenerator::validateAndSetHintedPlan( const shared_ptr<QueryPlan>& plan ) {
@@ -1051,7 +1045,7 @@ namespace mongo {
             _tableScanned = true;   
         }
         else {
-            _org->popOrClause( clausePlan.nsd(),
+            _org->popOrClause( clausePlan.cl(),
                                clausePlan.idxNo(),
                                clausePlan.indexed() ? clausePlan.indexKey() : BSONObj() );
         }
@@ -1146,19 +1140,19 @@ namespace mongo {
     }
 
     bool MultiPlanScanner::haveUselessOr() const {
-        NamespaceDetails* nsd = nsdetails( _ns );
-        if ( !nsd ) {
+        Collection *cl = getCollection( _ns );
+        if ( !cl ) {
             return true;
         }
         BSONElement hintElt = _hint.firstElement();
         if ( !hintElt.eoo() ) {
-            IndexDetails* id = parseHint( hintElt, nsd );
+            IndexDetails* id = parseHint( hintElt, cl );
             if ( !id ) {
                 return true;
             }
-            return QueryUtilIndexed::uselessOr( *_org, nsd, nsd->idxNo( *id ) );
+            return QueryUtilIndexed::uselessOr( *_org, cl, cl->idxNo( *id ) );
         }
-        return QueryUtilIndexed::uselessOr( *_org, nsd, -1 );
+        return QueryUtilIndexed::uselessOr( *_org, cl, -1 );
     }
     
     BSONObj MultiPlanScanner::cachedPlanExplainSummary() const {
@@ -1343,8 +1337,8 @@ namespace mongo {
 
         Client::Context ctx( ns );
         IndexDetails* id = 0;
-        NamespaceDetails* d = nsdetails( ns );
-        if ( !d ) {
+        Collection *cl = getCollection( ns );
+        if (cl == NULL) {
             errmsg = "ns not found";
             return 0;
         }
@@ -1355,9 +1349,8 @@ namespace mongo {
             return 0;
         }
         if ( keyPattern.isEmpty() ) {
-            NamespaceDetails::IndexIterator i = d->ii();
-            while( i.more() ) {
-                IndexDetails& ii = i.next();
+            for (int i = 0; i < cl->nIndexes(); i++) {
+                IndexDetails &ii = cl->idx(i);
                 if ( indexWorks( ii.keyPattern(), min.isEmpty() ? max : min, ret.first, ret.second ) ) {
                     if ( !ii.special() ) {
                         id = &ii;
@@ -1373,9 +1366,8 @@ namespace mongo {
                 errmsg = "requested keyPattern does not match specified keys";
                 return 0;
             }
-            NamespaceDetails::IndexIterator i = d->ii();
-            while( i.more() ) {
-                IndexDetails& ii = i.next();
+            for (int i = 0; i < cl->nIndexes(); i++) {
+                IndexDetails &ii = cl->idx(i);
                 if( ii.keyPattern().woCompare(keyPattern) == 0 ) {
                     id = &ii;
                     break;
@@ -1411,45 +1403,45 @@ namespace mongo {
     }
     
     bool QueryUtilIndexed::indexUseful( const FieldRangeSetPair& frsp,
-                                        NamespaceDetails* d,
+                                        Collection *cl,
                                         int idxNo,
                                         const BSONObj& order ) {
-        DEV frsp.assertValidIndex( d, idxNo );
-        BSONObj keyPattern = d->idx( idxNo ).keyPattern();
-        if ( !frsp.matchPossibleForIndex( d, idxNo, keyPattern ) ) {
+        DEV frsp.assertValidIndex( cl, idxNo );
+        BSONObj keyPattern = cl->idx( idxNo ).keyPattern();
+        if ( !frsp.matchPossibleForIndex( cl, idxNo, keyPattern ) ) {
             // No matches are possible in the index so the index may be useful.
             return true;   
         }
-        return d->idx( idxNo ).suitability( frsp.frsForIndex( d , idxNo ) , order )
+        return cl->idx( idxNo ).suitability( frsp.frsForIndex( cl , idxNo ) , order )
                != IndexDetails::USELESS;
     }
     
     void QueryUtilIndexed::clearIndexesForPatterns( const FieldRangeSetPair &frsp, const BSONObj &order ) {
-        NamespaceDetails *d = nsdetails(frsp.ns());
-        if (d != NULL) {
-            NamespaceDetails::QueryCacheRWLock::Exclusive lk(d);
+        Collection *cl = getCollection(frsp.ns());
+        if (cl != NULL) {
+            Collection::QueryCacheRWLock::Exclusive lk(cl);
             CachedQueryPlan noCachedPlan;
-            d->registerCachedQueryPlanForPattern( frsp._singleKey.pattern( order ), noCachedPlan );
-            d->registerCachedQueryPlanForPattern( frsp._multiKey.pattern( order ), noCachedPlan );
+            cl->registerCachedQueryPlanForPattern( frsp._singleKey.pattern( order ), noCachedPlan );
+            cl->registerCachedQueryPlanForPattern( frsp._multiKey.pattern( order ), noCachedPlan );
         }
     }
     
     CachedQueryPlan QueryUtilIndexed::bestIndexForPatterns( const FieldRangeSetPair &frsp, const BSONObj &order ) {
-        NamespaceDetails *d = nsdetails(frsp.ns());
-        if (d != NULL) {
-            NamespaceDetails::QueryCacheRWLock::Shared lk(d);
+        Collection *cl = getCollection(frsp.ns());
+        if (cl != NULL) {
+            Collection::QueryCacheRWLock::Shared lk(cl);
             // TODO Maybe it would make sense to return the index with the lowest
             // nscanned if there are two possibilities.
             {
                 QueryPattern pattern = frsp._singleKey.pattern( order );
-                CachedQueryPlan cachedQueryPlan = d->cachedQueryPlanForPattern( pattern );
+                CachedQueryPlan cachedQueryPlan = cl->cachedQueryPlanForPattern( pattern );
                 if ( !cachedQueryPlan.indexKey().isEmpty() ) {
                     return cachedQueryPlan;
                 }
             }
             {
                 QueryPattern pattern = frsp._multiKey.pattern( order );
-                CachedQueryPlan cachedQueryPlan = d->cachedQueryPlanForPattern( pattern );
+                CachedQueryPlan cachedQueryPlan = cl->cachedQueryPlanForPattern( pattern );
                 if ( !cachedQueryPlan.indexKey().isEmpty() ) {
                     return cachedQueryPlan;
                 }
@@ -1459,20 +1451,20 @@ namespace mongo {
     }
     
     bool QueryUtilIndexed::uselessOr( const OrRangeGenerator& org,
-                                      NamespaceDetails* d,
+                                      Collection *cl,
                                       int hintIdx ) {
         for( list<FieldRangeSetPair>::const_iterator i = org._originalOrSets.begin();
              i != org._originalOrSets.end();
              ++i ) {
             if ( hintIdx != -1 ) {
-                if ( !indexUseful( *i, d, hintIdx, BSONObj() ) ) {
+                if ( !indexUseful( *i, cl, hintIdx, BSONObj() ) ) {
                     return true;   
                 }
             }
             else {
                 bool useful = false;
-                for( int j = 0; j < d->nIndexes(); ++j ) {
-                    if ( indexUseful( *i, d, j, BSONObj() ) ) {
+                for( int j = 0; j < cl->nIndexes(); ++j ) {
+                    if ( indexUseful( *i, cl, j, BSONObj() ) ) {
                         useful = true;
                         break;
                     }

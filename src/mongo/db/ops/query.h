@@ -73,7 +73,7 @@ namespace mongo {
     // @param idQuery, simple pk query, a subset of 'query'
     // @param query, the original query, used for matching
     // @return true if the document found by pk matched 'query' and is in 'result', false otherwise.
-    bool queryByPKHack(NamespaceDetails *d, const BSONObj &pk,
+    bool queryByPKHack(Collection *cl, const BSONObj &pk,
                        const BSONObj &query, BSONObj &result,
                        ResultDetails *resDetails = NULL);
 

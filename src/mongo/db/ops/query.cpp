@@ -85,14 +85,14 @@ namespace mongo {
     }
 
 
-    bool queryByPKHack(NamespaceDetails *d, const BSONObj &pk,
+    bool queryByPKHack(Collection *cl, const BSONObj &pk,
                        const BSONObj &query, BSONObj &result,
                        ResultDetails *resDetails) {
         cc().curop()->debug().idhack = true;
 
         BSONObj obj;
         bool objMatches = true;
-        const bool found = d->findByPK(pk, obj);
+        const bool found = cl->findByPK(pk, obj);
         if (found) {
             // Only use a matcher for queries with more than just an _id
             // component. The _id was already 'matched' by the find.
@@ -104,7 +104,7 @@ namespace mongo {
         }
 
         const bool ok = found && objMatches;
-        d->getPKIndex().noteQuery(ok ? 1 : 0, 0);
+        cl->getPKIndex().noteQuery(ok ? 1 : 0, 0);
         result = ok ? obj : BSONObj();
         return ok;
     }
@@ -864,15 +864,15 @@ namespace mongo {
         BSONObj resObject;
 
         bool found = false;
-        NamespaceDetails *d = nsdetails(ns);
-        if (d == NULL) {
+        Collection *cl = getCollection(ns);
+        if (cl == NULL) {
             return false; // ns doesn't exist, fall through to optimizer for legacy reasons
         }
-        const BSONObj &pk = d->getSimplePKFromQuery(query);
+        const BSONObj &pk = cl->getSimplePKFromQuery(query);
         if (pk.isEmpty()) {
             return false; // unable to query by PK - resort to using the optimizer
         }
-        found = queryByPKHack(d, pk, query, resObject);
+        found = queryByPKHack(cl, pk, query, resObject);
 
         if ( shardingState.needShardChunkManager( ns ) ) {
             ShardChunkManagerPtr m = shardingState.getShardChunkManager( ns );
@@ -1025,8 +1025,8 @@ namespace mongo {
 
                         
                 if (tailable) {
-                    NamespaceDetails *d = nsdetails( ns );
-                    if (d != NULL && !(d->isCapped() || str::equals(ns, rsoplog))) {
+                    Collection *cl = getCollection( ns );
+                    if (cl != NULL && !(cl->isCapped() || str::equals(ns, rsoplog))) {
                         uasserted( 13051, "tailable cursor requested on non-capped, non-oplog collection" );
                     }
                     const BSONObj nat1 = BSON( "$natural" << 1 );

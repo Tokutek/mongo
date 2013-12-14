@@ -23,7 +23,7 @@
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/jsobj.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/storage/exception.h"
 
 namespace mongo {
@@ -49,12 +49,12 @@ namespace mongo {
             Client::AlternateTransactionStack altStack;
 
             Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-            NamespaceDetails *d = nsdetails(usersNamespace);
-            if (d == NULL) {
+            Collection *cl = getCollection(usersNamespace);
+            if (cl == NULL) {
                 return false;
             }
             BSONObj tmpResult;
-            ok = d->findOne(query, result != NULL ? *result : tmpResult);
+            ok = cl->findOne(query, result != NULL ? *result : tmpResult);
             if (ok) {
                 txn.commit();
             }

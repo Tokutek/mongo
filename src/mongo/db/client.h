@@ -325,7 +325,7 @@ namespace mongo {
         /** @return true if a load is in progress. */
         bool loadInProgress() const;
 
-        // HACK we need this until upserts go through the NamespaceDetails class
+        // HACK we need this until upserts go through the Collection class
         //      and can prevent writes on a bulk loaded collection automatically.
         string bulkLoadNS() const { return _loadInfo ? _loadInfo->bulkLoadNS() : ""; }
 
@@ -372,7 +372,7 @@ namespace mongo {
         bool creatingSystemUsers() const;
 
         /* declare that we're upgrading system.users
-           therefore we should look for mismatched namespaceindex objects and handle them properly
+           therefore we should look for mismatched collectionMap objects and handle them properly
            this allows us to repair #672 properly */
         class UpgradingSystemUsersScope : boost::noncopyable {
           public:

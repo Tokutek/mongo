@@ -327,7 +327,7 @@ namespace mongo {
                     // Creating a collection must be done in a child transaction,
                     // which aborts if the create fails.
                     // If the create fails, the child's abort hooks will clean up
-                    // the nsindex inside mongod (therefore not leaving a
+                    // the collection map inside mongod (therefore not leaving a
                     LOCK_REASON(lockReason, "m/r: creating incremental collection");
                     Client::WriteContext ctx( _config.incLong, lockReason );
                     Client::Transaction transaction(0);
@@ -562,8 +562,8 @@ namespace mongo {
                         BSONObj temp = cursor->next();
                         BSONObj old;
 
-                        NamespaceDetails *d = nsdetails(_config.outputOptions.finalNamespace);
-                        const bool found = d != NULL && d->findOne( temp["_id"].wrap() , old , true );
+                        Collection *cl = getCollection(_config.outputOptions.finalNamespace);
+                        const bool found = cl != NULL && cl->findOne( temp["_id"].wrap() , old , true );
                         if ( found ) {
                             // need to reduce
                             values.clear();

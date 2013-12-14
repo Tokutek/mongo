@@ -821,23 +821,23 @@ namespace mongo {
         const StringData &coll = info["ns"].Stringdata();
 
         scoped_ptr<Client::Transaction> transaction(new Client::Transaction(DB_SERIALIZABLE));
-        scoped_ptr<NamespaceDetails::HotIndexer> indexer;
+        shared_ptr<Collection::Indexer> indexer;
 
         // Prepare the index build. Performs index validation and marks
-        // the NamespaceDetails as having an index build in progress.
+        // the collection as having an index build in progress.
         {
             Client::Context ctx(ns);
-            NamespaceDetails *d = getAndMaybeCreateNS(coll, true);
-            if (d->findIndexByKeyPattern(info["key"].Obj()) >= 0) {
+            Collection *cl = getOrCreateCollection(coll, true);
+            if (cl->findIndexByKeyPattern(info["key"].Obj()) >= 0) {
                 // No error or action if the index already exists. We need to commit
                 // the transaction in case this is an ensure index on the _id field
-                // and the ns was created by getAndMaybeCreateNS()
+                // and the ns was created by getOrCreateCollection()
                 transaction->commit();
                 return;
             }
 
             _insertObjects(ns, objs, false, 0, true);
-            indexer.reset(new NamespaceDetails::HotIndexer(d, info));
+            indexer = cl->newIndexer(info, true);
             indexer->prepare();
         }
 
@@ -984,9 +984,9 @@ namespace mongo {
                 LOCK_REASON(lockReason, "repl: checking for non-empty oplog");
                 Client::ReadContext ctx(rsoplog, lockReason);
                 Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
-                NamespaceDetails *d = nsdetails(rsoplog);
+                Collection *cl = getCollection(rsoplog);
                 BSONObj o;
-                if (d != NULL && d->findOne(BSONObj(), o)) {
+                if (cl != NULL && cl->findOne(BSONObj(), o)) {
                     txn.commit();
                     return true;
                 }

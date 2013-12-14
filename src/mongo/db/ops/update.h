@@ -23,7 +23,7 @@
 
 namespace mongo {
 
-    class NamespaceDetails;
+    class Collection;
 
     struct UpdateResult {
         const bool existing; // if existing objects were modified
@@ -44,12 +44,12 @@ namespace mongo {
 
     BSONObj invertUpdateMods(const BSONObj &updateobj);
 
-    void updateOneObject(NamespaceDetails *d, const BSONObj &pk, 
+    void updateOneObject(Collection *cl, const BSONObj &pk, 
                          const BSONObj &oldObj, const BSONObj &newObj, 
                          const bool logop, const bool fromMigrate,
                          uint64_t flags = 0);
 
-    UpdateResult updateByPK(NamespaceDetails *d,
+    UpdateResult updateByPK(Collection *cl,
                             const BSONObj &pk, const BSONObj &patternOrig,
                             const BSONObj &updateobj,
                             const bool upsert, const bool fastupdateOk,

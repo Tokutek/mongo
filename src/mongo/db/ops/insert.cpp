@@ -19,6 +19,7 @@
 #include "pch.h"
 
 #include "mongo/db/client.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/database.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/jsobj.h"
@@ -47,32 +48,30 @@ namespace mongo {
         }
     }
 
-    void insertOneObject(NamespaceDetails *d, BSONObj &obj, uint64_t flags) {
+    void insertOneObject(Collection *cl, BSONObj &obj, uint64_t flags) {
         validateInsert(obj);
-        d->insertObject(obj, flags);
-        d->notifyOfWriteOp();
+        cl->insertObject(obj, flags);
+        cl->notifyOfWriteOp();
     }
 
     // Does not check magic system collection inserts.
     void _insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags, bool logop ) {
-        NamespaceDetails *details = getAndMaybeCreateNS(ns, logop);
+        Collection *cl = getOrCreateCollection(ns, logop);
         for (size_t i = 0; i < objs.size(); i++) {
             const BSONObj &obj = objs[i];
             try {
                 BSONObj objModified = obj;
                 BSONElementManipulator::lookForTimestamps(objModified);
-                if (details->isCapped() && logop) {
-                    // unfortunate hack we need for capped collections
-                    // we do this because the logic for generating the pk
-                    // and what subsequent rows to delete are buried in the
-                    // namespace details object. There is probably a nicer way
-                    // to do this, but this works.
+                if (cl->isCapped() && logop) {
+                    // special case capped colletions until all oplog writing
+                    // for inserts is handled in the collection class, not here.
                     validateInsert(obj);
-                    details->insertObjectIntoCappedAndLogOps(objModified, flags);
-                    details->notifyOfWriteOp();
+                    CappedCollection *cappedCl = cl->as<CappedCollection>();
+                    cappedCl->insertObjectAndLogOps(objModified, flags);
+                    cappedCl->notifyOfWriteOp();
                 }
                 else {
-                    insertOneObject(details, objModified, flags); // may add _id field
+                    insertOneObject(cl, objModified, flags); // may add _id field
                     if (logop) {
                         OpLogHelpers::logInsert(ns, objModified);
                     }
@@ -109,8 +108,8 @@ namespace mongo {
             // Trying to insert into a system collection.  Fancy side-effects go here:
             if (nsToCollectionSubstring(ns) == "system.indexes") {
                 BSONObj obj = stripDropDups(objs[0]);
-                NamespaceDetails *d = getAndMaybeCreateNS(obj["ns"].Stringdata(), logop);
-                bool ok = d->ensureIndex(obj);
+                Collection *cl = getOrCreateCollection(obj["ns"].Stringdata(), logop);
+                bool ok = cl->ensureIndex(obj);
                 if (!ok) {
                     // Already had that index
                     return;

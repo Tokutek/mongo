@@ -19,10 +19,10 @@
 
 #include "mongo/pch.h"
 #include "mongo/db/curop.h"
+#include "mongo/db/cursor.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/queryutil.h"
-#include "mongo/db/namespace_details.h"
-#include "mongo/db/cursor.h"
+#include "mongo/db/collection.h"
 
 namespace mongo {
 
@@ -150,34 +150,34 @@ namespace mongo {
 
     /* ---------------------------------------------------------------------- */
 
-    shared_ptr<IndexCursor> IndexCursor::make( NamespaceDetails *d, const IndexDetails &idx,
+    shared_ptr<IndexCursor> IndexCursor::make( Collection *cl, const IndexDetails &idx,
                                                const BSONObj &startKey, const BSONObj &endKey,
                                                bool endKeyInclusive, int direction,
                                                int numWanted ) {
-        return shared_ptr<IndexCursor>( new IndexCursor( d, idx, startKey, endKey,
+        return shared_ptr<IndexCursor>( new IndexCursor( cl, idx, startKey, endKey,
                                                          endKeyInclusive, direction,
                                                          numWanted ) );
     }
 
-    shared_ptr<IndexCursor> IndexCursor::make( NamespaceDetails *d, const IndexDetails &idx,
+    shared_ptr<IndexCursor> IndexCursor::make( Collection *cl, const IndexDetails &idx,
                                                const shared_ptr< FieldRangeVector > &bounds,
                                                int singleIntervalLimit, int direction,
                                                int numWanted ) {
-        return shared_ptr<IndexCursor>( new IndexCursor( d, idx, bounds,
+        return shared_ptr<IndexCursor>( new IndexCursor( cl, idx, bounds,
                                                          singleIntervalLimit, direction,
                                                          numWanted ) );
     }
 
-    IndexCursor::IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
+    IndexCursor::IndexCursor( Collection *cl, const IndexDetails &idx,
                               const BSONObj &startKey, const BSONObj &endKey,
                               bool endKeyInclusive, int direction, int numWanted ) :
-        _d(d),
+        _cl(cl),
         _idx(idx),
         _ordering(Ordering::make(_idx.keyPattern())),
         _startKey(startKey),
         _endKey(endKey),
         _endKeyInclusive(endKeyInclusive),
-        _multiKey(_d->isMultikey(_d->idxNo(_idx))),
+        _multiKey(_cl->isMultikey(_cl->idxNo(_idx))),
         _direction(direction),
         _bounds(),
         _boundsMustMatch(true),
@@ -189,23 +189,23 @@ namespace mongo {
         _ok(false),
         _getf_iteration(0)
     {
-        verify( _d != NULL );
+        verify( _cl != NULL );
         TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
         DBC* cursor = _cursor.dbc();
         cursor->c_set_check_interrupt_callback(cursor, cursor_check_interrupt, &_interrupt_extra);
         initializeDBC();
     }
 
-    IndexCursor::IndexCursor( NamespaceDetails *d, const IndexDetails &idx,
+    IndexCursor::IndexCursor( Collection *cl, const IndexDetails &idx,
                               const shared_ptr< FieldRangeVector > &bounds,
                               int singleIntervalLimit, int direction, int numWanted ) :
-        _d(d),
+        _cl(cl),
         _idx(idx),
         _ordering(Ordering::make(_idx.keyPattern())),
         _startKey(),
         _endKey(),
         _endKeyInclusive(true),
-        _multiKey(_d->isMultikey(_d->idxNo(_idx))),
+        _multiKey(_cl->isMultikey(_cl->idxNo(_idx))),
         _direction(direction),
         _bounds(bounds),
         _boundsMustMatch(true),
@@ -217,7 +217,7 @@ namespace mongo {
         _ok(false),
         _getf_iteration(0)
     {
-        verify( _d != NULL );
+        verify( _cl != NULL );
         _boundsIterator.reset( new FieldRangeVectorIterator( *_bounds , singleIntervalLimit ) );
         _boundsIterator->prepDive();
         _startKey = _bounds->startKey();
@@ -236,7 +236,7 @@ namespace mongo {
         // Do a single advance here - the PK is unique so the next key is guaranteed to be
         // strictly greater than the start key. We have to play games with _nscanned because
         // advance()'s checkCurrentAgainstBounds() is going to increment it by 1 (we don't want that).
-        if (ok() && _d->isPKIndex(_idx) && !_bounds->startKeyInclusive() && _currKey == _startKey) {
+        if (ok() && _cl->isPKIndex(_idx) && !_bounds->startKeyInclusive() && _currKey == _startKey) {
             const long long oldNScanned = _nscanned;
             advance();
             verify(oldNScanned <= _nscanned);
@@ -293,15 +293,20 @@ namespace mongo {
         return -1;
     }
 
+    void IndexCursor::refreshMinUnsafeEndKey() {
+        TailableCollection *cl = _cl->as<TailableCollection>();
+        _endKey = cl->minUnsafeKey();
+    }
+
     void IndexCursor::setTailable() {
         // tailable cursors may not be created over secondary indexes,
         // and they must intend to read to the end of the collection.
-        verify( _d->isPKIndex(_idx) );
+        verify( _cl->isPKIndex(_idx) );
         verify( _endKey.isEmpty() || _endKey == maxKey );
         // mark the cursor as tailable and set the end key bound tothe minimum unsafe
         // key to read from the namespace, non-inclusive.
         _tailable = true;
-        _endKey = _d->minUnsafeKey();
+        refreshMinUnsafeEndKey();
         _endKeyInclusive = false;
         // Tailable cursors _must_ use endKey/endKeyInclusive so the bounds we
         // may or may not have gotten via the constructor is no longer valid.
@@ -314,7 +319,7 @@ namespace mongo {
     }
 
     void IndexCursor::_prelockRange(const BSONObj &startKey, const BSONObj &endKey) {
-        const bool isSecondary = !_d->isPKIndex(_idx);
+        const bool isSecondary = !_cl->isPKIndex(_idx);
 
         // The ydb requires that we only lock ranges such that the left
         // endpoint is less than or equal to the right endpoint.
@@ -496,7 +501,7 @@ namespace mongo {
     }
 
     void IndexCursor::findKey(const BSONObj &key) {
-        const bool isSecondary = !_d->isPKIndex(_idx);
+        const bool isSecondary = !_cl->isPKIndex(_idx);
         const BSONObj &pk = forward() ? minKey : maxKey;
         setPosition(key, isSecondary ? pk : BSONObj());
     };
@@ -605,7 +610,7 @@ namespace mongo {
 
         // This differs from findKey in that we set PK to max to move forward and min
         // to move backward, resulting in a "skip" of the key prefix, not a "find".
-        const bool isSecondary = !_d->isPKIndex(_idx);
+        const bool isSecondary = !_cl->isPKIndex(_idx);
         const BSONObj &pk = forward() ? maxKey : minKey;
         setPosition( b.done(), isSecondary ? pk : BSONObj() );
     }
@@ -776,7 +781,7 @@ again:      while ( !allInclusive && ok() ) {
             if ( tailable() ) {
                 if ( _currKey < _endKey ) {
                     // Read the most up-to-date minUnsafeKey from the namespace
-                    _endKey = _d->minUnsafeKey();
+                    refreshMinUnsafeEndKey();
                     _advance();
                 } else {
                     // reset _currKey, we may have accidentally
@@ -784,7 +789,7 @@ again:      while ( !allInclusive && ok() ) {
                     // and saw something we are not allowed to see.
                     _currKey = _endKey;
                     // Read the most up-to-date minUnsafeKey from the namespace
-                    _endKey = _d->minUnsafeKey();
+                    refreshMinUnsafeEndKey();
                     findKey( _currKey.isEmpty() ? minKey : _currKey );
                 }
             } else {
@@ -803,7 +808,7 @@ again:      while ( !allInclusive && ok() ) {
         // with the full document on the first call to current().
         if ( _currObj.isEmpty() ) {
             _nscannedObjects++;
-            bool found = _d->findByPK( _currPK, _currObj );
+            bool found = _cl->findByPK( _currPK, _currObj );
             if ( !found ) {
                 // If we didn't find the associated object, we must be either:
                 // - a snapshot transaction whose context deleted the current pk
@@ -812,14 +817,14 @@ again:      while ( !allInclusive && ok() ) {
                 TOKULOG(4) << "current() did not find associated object for pk " << _currPK << endl;
                 advance();
                 if ( ok() ) {
-                    found = _d->findByPK( _currPK, _currObj );
+                    found = _cl->findByPK( _currPK, _currObj );
                     uassert( 16741, str::stream()
                                 << toString() << ": could not find associated document with pk "
                                 << _currPK << ", index key " << _currKey, found );
                 }
             }
         }
-        bool shouldAppendPK = _d->isCapped() && cc().opSettings().shouldCappedAppendPK();
+        bool shouldAppendPK = _cl->isCapped() && cc().opSettings().shouldCappedAppendPK();
         if (shouldAppendPK) {
             BSONObjBuilder b;
             b.appendElements(_currObj);
@@ -860,10 +865,10 @@ again:      while ( !allInclusive && ok() ) {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
-    IndexCountCursor::IndexCountCursor( NamespaceDetails *d, const IndexDetails &idx,
+    IndexCountCursor::IndexCountCursor( Collection *cl, const IndexDetails &idx,
                                         const BSONObj &startKey, const BSONObj &endKey,
                                         const bool endKeyInclusive ) :
-        IndexCursor(d, idx, startKey, endKey, endKeyInclusive, 1, 0),
+        IndexCursor(cl, idx, startKey, endKey, endKeyInclusive, 1, 0),
         _bufferedRowCount(0),
         _exhausted(false),
         _endSKeyPrefix(_endKey, NULL) {
@@ -871,11 +876,11 @@ again:      while ( !allInclusive && ok() ) {
         checkAssumptionsAndInit();
     }
 
-    IndexCountCursor::IndexCountCursor( NamespaceDetails *d, const IndexDetails &idx,
+    IndexCountCursor::IndexCountCursor( Collection *cl, const IndexDetails &idx,
                                         const shared_ptr< FieldRangeVector > &bounds ) :
         // This will position the cursor correctly using bounds, which will do the right
         // thing based on bounds->start/endKey() and bounds->start/endKeyInclusive()
-        IndexCursor(d, idx, bounds, false, 1, 0),
+        IndexCursor(cl, idx, bounds, false, 1, 0),
         _bufferedRowCount(0),
         _exhausted(false),
         _endSKeyPrefix(_endKey, NULL) {
@@ -953,8 +958,8 @@ again:      while ( !allInclusive && ok() ) {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
-    IndexScanCountCursor::IndexScanCountCursor( NamespaceDetails *d, const IndexDetails &idx ) :
-        IndexCountCursor( d, idx,
+    IndexScanCountCursor::IndexScanCountCursor( Collection *cl, const IndexDetails &idx ) :
+        IndexCountCursor( cl, idx,
                           ScanCursor::startKey(idx.keyPattern(), 1), 
                           ScanCursor::endKey(idx.keyPattern(), 1),
                           true ) {
