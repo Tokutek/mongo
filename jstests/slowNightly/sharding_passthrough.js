@@ -95,6 +95,7 @@ files.forEach(function(x) {
 	    '6072_touch|' +
 	    'auth_mst|' +
 	    'lock_diag_size_limit|' +
+	    'cursor_timeout|' +
 	    'dbadmin|' +
 	    'error1|' +
 	    'fsync|' +
