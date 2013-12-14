@@ -302,7 +302,7 @@ namespace mongo {
         // Interpret this Collection as a subclass. Asserts if conversion fails.
         template <class T> T *as() {
             T *subclass = dynamic_cast<T *>(this);
-            massert(17223, "bug: failed to dynamically cast Collection to desired subclass", subclass != NULL);
+            massert(17228, "bug: failed to dynamically cast Collection to desired subclass", subclass != NULL);
             return subclass;
         }
 
@@ -447,7 +447,7 @@ namespace mongo {
                     return it - _indexes.begin();
                 }
             }
-            msgasserted(17224, "E12000 idxNo fails");
+            msgasserted(17229, "E12000 idxNo fails");
             return -1;
         }
 
