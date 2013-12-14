@@ -34,6 +34,7 @@
 #include "mongo/base/string_data.h"
 #include "mongo/client/connpool.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/util/password.h"
 #include "mongo/util/timer.h"
 
 using namespace mongo;
