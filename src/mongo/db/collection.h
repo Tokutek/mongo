@@ -292,7 +292,7 @@ namespace mongo {
         // Interpret this Collection as a subclass. Asserts if conversion fails.
         template <class T> T *as() {
             T *subclass = dynamic_cast<T *>(this);
-            massert(17228, "bug: failed to dynamically cast Collection to desired subclass", subclass != NULL);
+            massert(17230, "bug: failed to dynamically cast Collection to desired subclass", subclass != NULL);
             return subclass;
         }
 

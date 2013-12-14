@@ -326,10 +326,9 @@ namespace mongo {
          * bounds.
          */
         bool skipOutOfRangeKeysAndCheckEnd();
+        void checkEnd();
 
     protected:
-        virtual void checkEnd();
-
         Collection *const _cl;
         const IndexDetails &_idx;
         const Ordering _ordering;
@@ -405,9 +404,6 @@ namespace mongo {
     public:
         IndexScanCursor( Collection *cl, const IndexDetails &idx,
                          int direction, int numWanted = 0);
-    private:
-        // Implemented as a no-op, since "scan" cursors are always in bounds.
-        void checkEnd();
     };
 
     /**

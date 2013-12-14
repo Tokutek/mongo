@@ -712,12 +712,13 @@ again:      while ( !allInclusive && ok() ) {
         if ( !ok() ) {
             return;
         }
-        dassert(!_endKey.isEmpty());
-        const int cmp = _endKey.woCompare( _currKey, _ordering );
-        const int sign = cmp == 0 ? 0 : (cmp > 0 ? 1 : -1);
-        if ( (sign != 0 && sign != _direction) || (sign == 0 && !_endKeyInclusive) ) {
-            _ok = false;
-            TOKULOG(3) << toString() << ": checkEnd() stopping @ curr, end: " << _currKey << _endKey << endl;
+        if ( !_endKey.isEmpty() ) {
+            const int cmp = _endKey.woCompare( _currKey, _ordering );
+            const int sign = cmp == 0 ? 0 : (cmp > 0 ? 1 : -1);
+            if ( (sign != 0 && sign != _direction) || (sign == 0 && !_endKeyInclusive) ) {
+                _ok = false;
+                TOKULOG(3) << toString() << ": checkEnd() stopping @ curr, end: " << _currKey << _endKey << endl;
+            }
         }
     }
 

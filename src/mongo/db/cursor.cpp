@@ -52,21 +52,8 @@ namespace mongo {
                      true, direction, numWanted ) {
     }
 
-    void IndexScanCursor::checkEnd() {
-        // Nothing to do in the normal case. "Scan" cursors always iterate over
-        // the whole index, so the entire keyspace is in bounds.
-        DEV {
-            verify(!_endKey.isEmpty());
-            const int cmp = _endKey.woCompare( _currKey, _ordering );
-            const int sign = cmp == 0 ? 0 : (cmp > 0 ? 1 : -1);
-            if ( (sign != 0 && sign != _direction) || (sign == 0 && !_endKeyInclusive) ) {
-                msgasserted(17202, "IndexScanCursor has a bad currKey/endKey combination");
-            }
-        }
-    }
-
-    shared_ptr<Cursor> BasicCursor::make( Collection *cl, int direction ) {
-        if ( cl != NULL ) {
+    shared_ptr<Cursor> BasicCursor::make(Collection *cl, int direction ) {
+        if (cl != NULL) {
             return shared_ptr<Cursor>(new BasicCursor(cl, direction));
         } else {
             return shared_ptr<Cursor>(new DummyCursor(direction));

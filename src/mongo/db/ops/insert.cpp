@@ -62,13 +62,21 @@ namespace mongo {
             try {
                 BSONObj objModified = obj;
                 BSONElementManipulator::lookForTimestamps(objModified);
-                if (cl->isCapped() && logop) {
-                    // special case capped colletions until all oplog writing
-                    // for inserts is handled in the collection class, not here.
-                    validateInsert(obj);
-                    CappedCollection *cappedCl = cl->as<CappedCollection>();
-                    cappedCl->insertObjectAndLogOps(objModified, flags);
-                    cappedCl->notifyOfWriteOp();
+                if (cl->isCapped()) {
+                    if (cc().txnStackSize() > 1) {
+                        // This is a nightmare to maintain transactionally correct.
+                        // Capped collections will be deprecated one day anyway.
+                        // They are an anathma.
+                        uasserted(17228, "Cannot insert into a capped collection in a multi-statement transaction.");
+                    }
+                    if (logop) {
+                        // special case capped colletions until all oplog writing
+                        // for inserts is handled in the collection class, not here.
+                        validateInsert(obj);
+                        CappedCollection *cappedCl = cl->as<CappedCollection>();
+                        cappedCl->insertObjectAndLogOps(objModified, flags);
+                        cappedCl->notifyOfWriteOp();
+                    }
                 }
                 else {
                     insertOneObject(cl, objModified, flags); // may add _id field
