@@ -1113,7 +1113,7 @@ namespace mongo {
         return b.obj();
     }
 
-    void renameNamespace(const StringData& from, const StringData& to) {
+    void renameCollection(const StringData& from, const StringData& to) {
         Lock::assertWriteLocked(from);
 
         Collection *from_cl = getCollection(from);

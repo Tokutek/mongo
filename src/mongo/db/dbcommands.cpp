@@ -865,7 +865,7 @@ namespace mongo {
                 StringData from = nsToDatabaseSubstring(source);
                 StringData to = nsToDatabaseSubstring(target);
                 if ( from == to ) {
-                    renameNamespace( source, target );
+                    renameCollection( source, target );
                     // make sure we drop counters etc
                     Top::global.collectionDropped( source );
                     return true;
