@@ -29,6 +29,7 @@
 
 #include "mongo/tools/tool.h"
 
+#include "mongo/base/error_codes.h"
 #include "mongo/base/initializer.h"
 #include "mongo/base/string_data.h"
 #include "mongo/client/connpool.h"
@@ -280,6 +281,9 @@ class OplogTool : public Tool {
     scoped_ptr<VanillaOplogPlayer> _player;
     scoped_ptr<ScopedDbConnection> _rconn;
     string _oplogns;
+    string _rpass;
+    string _rauthenticationDatabase;
+    string _rauthenticationMechanism;
     mutable Timer _reportingTimer;
 
 public:
@@ -316,8 +320,14 @@ public:
         add_options()
         ("ts" , po::value<string>() , "max OpTime already applied (secs:inc)" )
         ("from", po::value<string>() , "host to pull from" )
-        ("ruser", po::value<string>(), "user on source host if auth required (must be on admin db)")
-        ("rpass", po::value<string>(), "password on source host")
+        ("ruser", po::value<string>(), "username on source host if auth required" )
+        ("rpass", new PasswordValue( &_rpass ), "password on source host" )
+        ("rauthenticationDatabase",
+         po::value<string>(&_rauthenticationDatabase)->default_value("admin"),
+         "user source on source host (defaults to \"admin\")" )
+        ("rauthenticationMechanism",
+         po::value<string>(&_rauthenticationMechanism)->default_value("MONGODB-CR"),
+         "authentication mechanism on source host")
         ("oplogns", po::value<string>()->default_value( "local.oplog.rs" ) , "ns to pull from" )
         ("reportingPeriod", po::value<int>()->default_value(10) , "seconds between progress reports" )
         ;
@@ -383,11 +393,18 @@ public:
                 log() << "if using auth on source, must specify both --ruser and --rpass" << endl;
                 return -1;
             }
-            string authErr;
-            bool authOk = _rconn->conn().auth("admin", getParam("ruser"), getParam("rpass"), authErr);
-            if (!authOk) {
-                error() << "error authenticating to admin db on source: " << authErr << endl;
-                return -1;
+            try {
+                _rconn->conn().auth(BSON("user" << getParam("ruser") <<
+                                         "userSource" << _rauthenticationDatabase <<
+                                         "pwd" << _rpass <<
+                                         "mechanism" << _authenticationMechanism));
+            } catch (DBException &e) {
+                if (e.getCode() == ErrorCodes::AuthenticationFailed) {
+                    error() << "error authenticating to " << _rauthenticationDatabase << " on source: "
+                            << e.what() << endl;
+                    return -1;
+                }
+                throw;
             }
         }
 
