@@ -766,7 +766,7 @@ namespace mongo {
     // In the implementation, NaturalOrderCollection::_nextPK and the set of
     // uncommitted primary keys are protected together by _mutex. Trimming
     // work is done under the _deleteMutex.
-    class CappedCollection : public NaturalOrderCollection, TailableCollection {
+    class CappedCollection : public NaturalOrderCollection, public TailableCollection {
     public:
         CappedCollection(const StringData &ns, const BSONObj &options,
                          const bool mayIndexId = true);
