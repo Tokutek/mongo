@@ -46,21 +46,21 @@ namespace QueryOptimizerCursorTests {
     void dropCollection( const char *ns ) {
      	string errmsg;
         BSONObjBuilder result;
-        NamespaceDetails *d = nsdetails(ns);
+        Collection *d = getCollection(ns);
         if (d != NULL) {
             d->drop(errmsg, result);
         }
     }
 
     void ensureIndex(const char *ns, BSONObj keyPattern, bool unique, const char *name) {
-        NamespaceDetails *d = nsdetails(ns);
+        Collection *d = getCollection(ns);
         if( d == 0 )
             return;
 
         {
-            NamespaceDetails::IndexIterator i = d->ii();
-            while( i.more() ) {
-                if( i.next().keyPattern().woCompare(keyPattern) == 0 )
+            for (int i = 0; i < d->nIndexes(); i++) {
+                IndexDetails &ii = d->idx(i);
+                if( ii.keyPattern().woCompare(keyPattern) == 0 )
                     return;
             }
         }
@@ -282,7 +282,7 @@ namespace QueryOptimizerCursorTests {
         }
         BSONObj cachedIndexForQuery( const BSONObj &query, const BSONObj &order = BSONObj() ) {
             QueryPattern queryPattern = FieldRangeSet( ns(), query, true, true ).pattern( order );
-            return nsdetails(ns())->cachedQueryPlanForPattern( queryPattern ).indexKey();
+            return getCollection(ns())->cachedQueryPlanForPattern( queryPattern ).indexKey();
         }
     private:
         shared_ptr<Cursor> _c;
@@ -2177,12 +2177,12 @@ namespace QueryOptimizerCursorTests {
         void recordAIndex() const {
             Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
             Client::ReadContext ctx( ns() );
-            nsdetails(ns())->clearQueryCache();
+            getCollection(ns())->clearQueryCache();
             shared_ptr<QueryOptimizerCursor> c = getCursor( _aPreferableQuery, BSON( "a" << 1 ) );
             while( c->advance() );
             FieldRangeSet aPreferableFields( ns(), _aPreferableQuery, true, true );
             ASSERT_EQUALS( BSON( "a" << 1 ),
-                          nsdetails(ns())->cachedQueryPlanForPattern
+                          getCollection(ns())->cachedQueryPlanForPattern
                           ( aPreferableFields.pattern( BSON( "a" << 1 ) ) ).indexKey() );
             transaction.commit();
         }

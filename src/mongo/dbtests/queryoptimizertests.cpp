@@ -51,14 +51,14 @@ namespace QueryOptimizerTests {
     using boost::shared_ptr;
     
     void ensureIndex(const char *ns, BSONObj keyPattern, bool unique, const char *name) {
-        NamespaceDetails *d = nsdetails(ns);
+        Collection *d = getCollection(ns);
         if( d == 0 )
             return;
 
         {
-            NamespaceDetails::IndexIterator i = d->ii();
-            while( i.more() ) {
-                if( i.next().keyPattern().woCompare(keyPattern) == 0 )
+            for (int i = 0; i < d->nIndexes(); i++) {
+                IndexDetails &ii = d->idx(i);
+                if( ii.keyPattern().woCompare(keyPattern) == 0 )
                     return;
             }
         }
@@ -78,7 +78,7 @@ namespace QueryOptimizerTests {
     void dropCollection( const char *ns ) {
      	string errmsg;
         BSONObjBuilder result;
-        NamespaceDetails *d = nsdetails(ns);
+        Collection *d = getCollection(ns);
         if (d != NULL) {
             d->drop(errmsg, result);
         }
@@ -110,7 +110,7 @@ namespace QueryOptimizerTests {
             }
         protected:
             static const char *ns() { return "unittests.QueryPlanTests"; }
-            static NamespaceDetails *nsd() { return nsdetails( ns() ); }
+            static Collection *nsd() { return getCollection( ns() ); }
             IndexDetails *index( const BSONObj &key ) {
                 stringstream ss;
                 ss << indexNum_++;
@@ -123,7 +123,7 @@ namespace QueryOptimizerTests {
                 return nsd()->idxNo( *index(key) );
             }
             int existingIndexNo( const BSONObj &key ) const {
-                NamespaceDetails *d = nsd();
+                Collection *d = nsd();
                 for( int i = 0; i < d->nIndexes(); ++i ) {
                     if ( ( d->idx( i ).keyPattern() == key ) ||
                         ( d->idx( i ).isIdIndex() && IndexDetails::isIdIndexPattern( key ) ) ) {
@@ -885,7 +885,7 @@ namespace QueryOptimizerTests {
             virtual ~Base() {
                 if ( !nsd() )
                     return;
-                nsdetails(ns())->clearQueryCache();
+                getCollection(ns())->clearQueryCache();
             }
         protected:
             static void assembleRequest( const string &ns, BSONObj query, int nToReturn, int nToSkip, BSONObj *fieldsToReturn, int queryOptions, Message &toSend ) {
@@ -918,7 +918,7 @@ namespace QueryOptimizerTests {
                                               allowSpecial ) );
             }
             static const char *ns() { return "unittests.QueryPlanSetTests"; }
-            static NamespaceDetails *nsd() { return nsdetails( ns() ); }
+            static Collection *nsd() { return getCollection( ns() ); }
             DBDirectClient &client() { return _client; }
         private:
             Client::Transaction _transaction;
@@ -1089,7 +1089,7 @@ namespace QueryOptimizerTests {
                 BSONObj one = BSON( "a" << 1 );
                 insertObject( ns(), one );
                 BSONObj result;
-                NamespaceDetails *d = nsdetails( ns() );
+                Collection *d = getCollection( ns() );
                 ASSERT( d->findOne( BSON( "a" << 1 ), result ) );
                 ASSERT_THROWS( d->findOne( BSON( "a" << 1 ), result, true ), AssertionException );
                 ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
@@ -1128,7 +1128,7 @@ namespace QueryOptimizerTests {
                 insertObject( ns(), two );
                 insertObject( ns(), three );
                 deleteObjects( ns(), BSON( "_id" << GTE << 3 << "a" << GTE << 1 ), true );
-                for( boost::shared_ptr<Cursor> c( BasicCursor::make( nsdetails(ns()) ) ); c->ok(); c->advance() ) {
+                for( boost::shared_ptr<Cursor> c( BasicCursor::make( getCollection(ns()) ) ); c->ok(); c->advance() ) {
                     ASSERT( 3 != c->current().getIntField( "_id" ) );
                 }
             }
@@ -1145,7 +1145,7 @@ namespace QueryOptimizerTests {
                 insertObject( ns(), two );
                 insertObject( ns(), three );
                 deleteObjects( ns(), BSON( "a" << GTE << 2 ), true );
-                for( boost::shared_ptr<Cursor> c( BasicCursor::make( nsdetails(ns()) ) ); c->ok(); c->advance() ) {
+                for( boost::shared_ptr<Cursor> c( BasicCursor::make( getCollection(ns()) ) ); c->ok(); c->advance() ) {
                     ASSERT( 0 != c->current().getIntField( "_id" ) );
                 }
             }
@@ -1445,7 +1445,7 @@ namespace QueryOptimizerTests {
         }
     protected:
         static const char *ns() { return "unittests.QueryOptimizerTests"; }
-        static NamespaceDetails *nsd() { return nsdetails( ns() ); }
+        static Collection *nsd() { return getCollection( ns() ); }
         QueryPattern makePattern( const BSONObj &query, const BSONObj &order ) {
             FieldRangeSet frs( ns(), query, true, true );
             return QueryPattern( frs, order );
@@ -1605,8 +1605,8 @@ namespace QueryOptimizerTests {
 
             FieldRangeSet frs( "ns", BSON( "a" << 1 ), true, true );
             {
-                NamespaceDetails *d = nsdetails(ns());
-                NamespaceDetails::QueryCacheRWLock::Exclusive lk(d);
+                Collection *d = getCollection(ns());
+                Collection::QueryCacheRWLock::Exclusive lk(d);
                 d->registerCachedQueryPlanForPattern( frs.pattern( BSON( "b" << 1 ) ),
                                                       CachedQueryPlan( BSON( "a" << 1 ), 0,
                                                       CandidatePlanCharacter( true, true ) ) );

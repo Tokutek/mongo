@@ -951,7 +951,7 @@ namespace NamespaceTests {
         
     } // namespace IndexDetailsTests
 
-    namespace NamespaceDetailsTests {
+    namespace CollectionTests {
 
         class Base {
             const char *ns_;
@@ -959,7 +959,7 @@ namespace NamespaceTests {
             Lock::GlobalWrite lk;
             Client::Context _context;
         public:
-            Base( const char *ns = "unittests.NamespaceDetailsTests" ) : ns_( ns ) , _transaction(DB_SERIALIZABLE), _context( ns ) {}
+            Base( const char *ns = "unittests.CollectionTests" ) : ns_( ns ) , _transaction(DB_SERIALIZABLE), _context( ns ) {}
             virtual ~Base() {
                 if ( !nsd() )
                     return;
@@ -988,11 +988,11 @@ namespace NamespaceTests {
             const char *ns() const {
                 return ns_;
             }
-            NamespaceDetails *nsd() {
-                if (nsdetails(ns()) == NULL) {
+            Collection *nsd() {
+                if (getCollection(ns()) == NULL) {
                     create();
                 }
-                return nsdetails( ns() );
+                return getCollection( ns() );
             }
             static BSONObj bigObj(bool bGenID=false) {
                 BSONObjBuilder b;
@@ -1008,7 +1008,7 @@ namespace NamespaceTests {
         // after itself, /tmp/unittest needs to be cleared after running.
         //        class BigCollection : public Base {
         //        public:
-        //            BigCollection() : Base( "NamespaceDetailsTests_BigCollection" ) {}
+        //            BigCollection() : Base( "CollectionTests_BigCollection" ) {}
         //            void run() {
         //                
         //                ASSERT_EQUALS( 2, nExtents() );
@@ -1051,7 +1051,8 @@ namespace NamespaceTests {
         class SetIndexIsMultikey : public CachedPlanBase {
         public:
             void run() {
-                getAndMaybeCreateNS( ns(), false );
+                string err;
+                userCreateNS( ns(), BSONObj(), err, false );
                 ASSERT( nsd() != NULL );
                 DBDirectClient client;
                 client.ensureIndex( ns(), BSON( "a" << 1 ) );
@@ -1070,7 +1071,7 @@ namespace NamespaceTests {
         };
 
         /** clearQueryCache() clears the query plan cache. */
-        class ClearQueryCache : public NamespaceDetailsTests::CachedPlanBase {
+        class ClearQueryCache : public CollectionTests::CachedPlanBase {
         public:
             void run() {
                 // Register a query plan in the query plan cache.
@@ -1083,7 +1084,7 @@ namespace NamespaceTests {
             }
         };                                                                                         
         
-    } // namespace NamespaceDetailsTests
+    } // namespace CollectionTests
 
     class All : public Suite {
     public:
@@ -1129,8 +1130,8 @@ namespace NamespaceTests {
             add< IndexDetailsTests::Suitability >();
             add< IndexDetailsTests::NumericFieldSuitability >();
             add< IndexDetailsTests::IndexMissingField >();
-            add< NamespaceDetailsTests::SetIndexIsMultikey >();
-            add< NamespaceDetailsTests::ClearQueryCache >();
+            add< CollectionTests::SetIndexIsMultikey >();
+            add< CollectionTests::ClearQueryCache >();
         }
     } myall;
 } // namespace NamespaceTests

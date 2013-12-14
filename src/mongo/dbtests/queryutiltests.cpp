@@ -1627,14 +1627,14 @@ namespace QueryUtilTests {
             }
         protected:
             static const char *ns() { return "unittests.FieldRangeSetPairTests"; }
-            static NamespaceDetails *nsd() { return nsdetails( ns() ); }
+            static Collection *nsd() { return getCollection( ns() ); }
             IndexDetails *index( const BSONObj &key ) {
                 stringstream ss;
                 ss << indexNum_++;
                 string name = ss.str();
                 client_.resetIndexCache();
                 client_.ensureIndex( ns(), key, false, name.c_str() );
-                NamespaceDetails *d = nsd();
+                Collection *d = nsd();
                 verify(d != NULL);
                 for( int i = 0; i < d->nIndexes(); ++i ) {
                     if ( d->idx(i).keyPattern() == key /*indexName() == name*/ || ( d->idx(i).isIdIndex() && IndexDetails::isIdIndexPattern( key ) ) )

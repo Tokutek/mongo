@@ -152,7 +152,7 @@ namespace ReplSetTests {
             string errmsg;
             BSONObjBuilder result;
 
-            NamespaceDetails *d = nsdetails(ns());
+            Collection *d = getCollection(ns());
             if (d != NULL) {
                 d->drop(errmsg, result);
                 return;
@@ -191,7 +191,7 @@ namespace ReplSetTests {
 
         void dropCapped() {
             Client::Context c(_cappedNs);
-            NamespaceDetails *d = nsdetails(_cappedNs);
+            Collection *d = getCollection(_cappedNs);
             if (d != NULL) {
                 string errmsg;
                 BSONObjBuilder result;
@@ -282,7 +282,7 @@ namespace ReplSetTests {
 
             // check _id index created
             Client::Context ctx(cappedNs());
-            NamespaceDetails *nsd = nsdetails(cappedNs());
+            Collection *nsd = getCollection(cappedNs());
             verify(nsd->findIdIndex() > -1);
         }
     };
@@ -310,7 +310,7 @@ namespace ReplSetTests {
             // this changed in 2.1.2
             // we now have indexes on capped collections
             Client::Context ctx(cappedNs());
-            NamespaceDetails *nsd = nsdetails(cappedNs());
+            Collection *nsd = getCollection(cappedNs());
             verify(nsd->findIdIndex() >= 0);
         }
     };
