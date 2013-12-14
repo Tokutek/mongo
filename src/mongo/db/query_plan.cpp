@@ -315,10 +315,11 @@ doneCheckOrder:
 
         Collection *cl = getCollection(ns());
         if (cl != NULL) {
-            Collection::QueryCacheRWLock::Exclusive lk(cl);
+            QueryCache &qc = cl->getQueryCache();
+            QueryCache::Lock::Exclusive lk(qc);
             QueryPattern queryPattern = _frs.pattern( _order );
             CachedQueryPlan queryPlanToCache( indexKey(), nScanned, candidatePlans );
-            cl->registerCachedQueryPlanForPattern( queryPattern, queryPlanToCache );
+            qc.registerCachedQueryPlanForPattern( queryPattern, queryPlanToCache );
         }
     }
     

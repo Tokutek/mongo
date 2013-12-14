@@ -113,5 +113,33 @@ namespace mongo {
     _planCharacter( planCharacter ) {
     }
 
+    QueryCache::QueryCache() :
+        _qcWriteCount(0) {
+    }
+
+    CachedQueryPlan QueryCache::cachedQueryPlanForPattern( const QueryPattern &pattern ) {
+        map<QueryPattern, CachedQueryPlan>::const_iterator i = _qcCache.find(pattern);
+        return i != _qcCache.end() ? i->second : CachedQueryPlan();
+    }
+
+    void QueryCache::registerCachedQueryPlanForPattern( const QueryPattern &pattern,
+                                            const CachedQueryPlan &cachedQueryPlan ) {
+        _qcCache[ pattern ] = cachedQueryPlan;
+    }
+
+    void QueryCache::notifyOfWriteOp() {
+        if ( _qcCache.empty() ) {
+            return;
+        }
+        if ( ++_qcWriteCount >= 100 ) {
+            clearQueryCache();
+        }
+    }
+
+    void QueryCache::clearQueryCache() {
+        QueryCache::Lock::Exclusive lk(*this);
+        _qcCache.clear();
+        _qcWriteCount = 0;
+    }
     
 } // namespace mongo

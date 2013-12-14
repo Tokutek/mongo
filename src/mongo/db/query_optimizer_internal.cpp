@@ -1419,29 +1419,31 @@ namespace mongo {
     void QueryUtilIndexed::clearIndexesForPatterns( const FieldRangeSetPair &frsp, const BSONObj &order ) {
         Collection *cl = getCollection(frsp.ns());
         if (cl != NULL) {
-            Collection::QueryCacheRWLock::Exclusive lk(cl);
+            QueryCache &qc = cl->getQueryCache();
+            QueryCache::Lock::Exclusive lk(qc);
             CachedQueryPlan noCachedPlan;
-            cl->registerCachedQueryPlanForPattern( frsp._singleKey.pattern( order ), noCachedPlan );
-            cl->registerCachedQueryPlanForPattern( frsp._multiKey.pattern( order ), noCachedPlan );
+            qc.registerCachedQueryPlanForPattern( frsp._singleKey.pattern( order ), noCachedPlan );
+            qc.registerCachedQueryPlanForPattern( frsp._multiKey.pattern( order ), noCachedPlan );
         }
     }
     
     CachedQueryPlan QueryUtilIndexed::bestIndexForPatterns( const FieldRangeSetPair &frsp, const BSONObj &order ) {
         Collection *cl = getCollection(frsp.ns());
         if (cl != NULL) {
-            Collection::QueryCacheRWLock::Shared lk(cl);
+            QueryCache &qc = cl->getQueryCache();
+            QueryCache::Lock::Shared lk(qc);
             // TODO Maybe it would make sense to return the index with the lowest
             // nscanned if there are two possibilities.
             {
                 QueryPattern pattern = frsp._singleKey.pattern( order );
-                CachedQueryPlan cachedQueryPlan = cl->cachedQueryPlanForPattern( pattern );
+                CachedQueryPlan cachedQueryPlan = qc.cachedQueryPlanForPattern( pattern );
                 if ( !cachedQueryPlan.indexKey().isEmpty() ) {
                     return cachedQueryPlan;
                 }
             }
             {
                 QueryPattern pattern = frsp._multiKey.pattern( order );
-                CachedQueryPlan cachedQueryPlan = cl->cachedQueryPlanForPattern( pattern );
+                CachedQueryPlan cachedQueryPlan = qc.cachedQueryPlanForPattern( pattern );
                 if ( !cachedQueryPlan.indexKey().isEmpty() ) {
                     return cachedQueryPlan;
                 }

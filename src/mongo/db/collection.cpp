@@ -145,8 +145,7 @@ namespace mongo {
         _pk(pkIndexPattern.copy()),
         _indexBuildInProgress(false),
         _nIndexes(0),
-        _multiKeyIndexBits(0),
-        _qcWriteCount(0) {
+        _multiKeyIndexBits(0) {
     }
 
     // Construct an existing collection given its serialized from (generated via serialize()).
@@ -156,8 +155,7 @@ namespace mongo {
         _pk(serialized["pk"].Obj().copy()),
         _indexBuildInProgress(false),
         _nIndexes(serialized["indexes"].Array().size()),
-        _multiKeyIndexBits(static_cast<uint64_t>(serialized["multiKeyIndexBits"].Long())),
-        _qcWriteCount(0) {
+        _multiKeyIndexBits(static_cast<uint64_t>(serialized["multiKeyIndexBits"].Long())) {
     }
 
     Collection::~Collection() { }
@@ -240,35 +238,9 @@ namespace mongo {
 
     void Collection::resetTransient() {
         Lock::assertWriteLocked(_ns); 
-        clearQueryCache();
+        _queryCache.clearQueryCache();
         computeIndexKeys();
     }
-
-    void Collection::clearQueryCache() {
-        QueryCacheRWLock::Exclusive lk(this);
-        _qcCache.clear();
-        _qcWriteCount = 0;
-    }
-
-    void Collection::notifyOfWriteOp() {
-        if ( _qcCache.empty() ) {
-            return;
-        }
-        if ( ++_qcWriteCount >= 100 ) {
-            clearQueryCache();
-        }
-    }
-
-    CachedQueryPlan Collection::cachedQueryPlanForPattern( const QueryPattern &pattern ) {
-        map<QueryPattern, CachedQueryPlan>::const_iterator i = _qcCache.find(pattern);
-        return i != _qcCache.end() ? i->second : CachedQueryPlan();
-    }
-
-    void Collection::registerCachedQueryPlanForPattern( const QueryPattern &pattern,
-                                            const CachedQueryPlan &cachedQueryPlan ) {
-        _qcCache[ pattern ] = cachedQueryPlan;
-    }
-
 
     // ------------------------------------------------------------------------
 

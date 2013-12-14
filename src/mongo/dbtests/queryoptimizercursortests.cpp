@@ -282,7 +282,7 @@ namespace QueryOptimizerCursorTests {
         }
         BSONObj cachedIndexForQuery( const BSONObj &query, const BSONObj &order = BSONObj() ) {
             QueryPattern queryPattern = FieldRangeSet( ns(), query, true, true ).pattern( order );
-            return getCollection(ns())->cachedQueryPlanForPattern( queryPattern ).indexKey();
+            return getCollection(ns())->getQueryCache().cachedQueryPlanForPattern( queryPattern ).indexKey();
         }
     private:
         shared_ptr<Cursor> _c;
@@ -2177,12 +2177,12 @@ namespace QueryOptimizerCursorTests {
         void recordAIndex() const {
             Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
             Client::ReadContext ctx( ns() );
-            getCollection(ns())->clearQueryCache();
+            getCollection(ns())->getQueryCache().clearQueryCache();
             shared_ptr<QueryOptimizerCursor> c = getCursor( _aPreferableQuery, BSON( "a" << 1 ) );
             while( c->advance() );
             FieldRangeSet aPreferableFields( ns(), _aPreferableQuery, true, true );
             ASSERT_EQUALS( BSON( "a" << 1 ),
-                          getCollection(ns())->cachedQueryPlanForPattern
+                          getCollection(ns())->getQueryCache().cachedQueryPlanForPattern
                           ( aPreferableFields.pattern( BSON( "a" << 1 ) ) ).indexKey() );
             transaction.commit();
         }

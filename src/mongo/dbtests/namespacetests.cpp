@@ -1033,10 +1033,10 @@ namespace NamespaceTests {
         protected:
             void assertCachedIndexKey( const BSONObj &indexKey ) {
                 ASSERT_EQUALS( indexKey,
-                              nsd()->cachedQueryPlanForPattern( _pattern ).indexKey() );
+                              nsd()->getQueryCache().cachedQueryPlanForPattern( _pattern ).indexKey() );
             }
             void registerIndexKey( const BSONObj &indexKey ) {
-                nsd()->registerCachedQueryPlanForPattern
+                nsd()->getQueryCache().registerCachedQueryPlanForPattern
                         ( _pattern,
                          CachedQueryPlan( indexKey, 1, CandidatePlanCharacter( true, false ) ) );                
             }
@@ -1079,7 +1079,7 @@ namespace NamespaceTests {
                 assertCachedIndexKey( BSON( "a" << 1 ) );
                 
                 // The query plan is cleared.
-                nsd()->clearQueryCache();
+                nsd()->getQueryCache().clearQueryCache();
                 assertCachedIndexKey( BSONObj() );
             }
         };                                                                                         

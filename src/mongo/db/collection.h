@@ -105,29 +105,13 @@ namespace mongo {
         // Query caching - common to all collections.
         //
 
-        void clearQueryCache();
+        QueryCache &getQueryCache() {
+            return _queryCache;
+        }
 
-        void notifyOfWriteOp();
-
-        CachedQueryPlan cachedQueryPlanForPattern(const QueryPattern &pattern);
-
-        void registerCachedQueryPlanForPattern(const QueryPattern &pattern,
-                                               const CachedQueryPlan &cachedQueryPlan);
-
-        class QueryCacheRWLock : boost::noncopyable {
-        public:
-            QueryCacheRWLock() : _lk("queryCache") { }
-            struct Shared : boost::noncopyable {
-                Shared(Collection *cl) : _lk(cl->_qcRWLock._lk) { }
-                SimpleRWLock::Shared _lk;
-            };
-            struct Exclusive : boost::noncopyable {
-                Exclusive(Collection *cl) : _lk(cl->_qcRWLock._lk) { }
-                SimpleRWLock::Exclusive _lk;
-            };
-        private:
-            SimpleRWLock _lk;
-        } _qcRWLock;
+        void notifyOfWriteOp() {
+            _queryCache.notifyOfWriteOp();
+        }
 
         //
         // Simple collection metadata - common to all collections.
@@ -399,8 +383,7 @@ namespace mongo {
         void resetTransient();
 
         /* query cache (for query optimizer) */
-        int _qcWriteCount;
-        map<QueryPattern, CachedQueryPlan> _qcCache;
+        QueryCache _queryCache;
     };
 
     // Implementation of the collection interface using a simple 
