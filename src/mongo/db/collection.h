@@ -20,12 +20,22 @@
 
 #include "mongo/pch.h"
 
+#include "mongo/base/string_data.h"
 #include "mongo/db/jsobj.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/index.h"
+#include "mongo/db/index_set.h"
+#include "mongo/db/namespacestring.h"
+#include "mongo/db/querypattern.h"
+#include "mongo/db/storage/builder.h"
+#include "mongo/util/concurrency/rwlock.h"
+#include "mongo/util/concurrency/simplerwlock.h"
 
 namespace mongo {
 
+    class Collection;
     class CollectionMap;
+    class MultiKeyTracker;
+    class QueryPattern;
 
     // Gets a collection - opens it if necessary, but does not create.
     Collection *getCollection(const StringData& ns);

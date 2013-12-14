@@ -17,7 +17,7 @@
 #include "mongo/db/query_plan.h"
 
 #include "mongo/db/cmdline.h"
-#include "mongo/db/collection.h"
+#include "mongo/db/cursor.h"
 #include "mongo/db/collection.h"
 #include "mongo/db/parsed_query.h"
 #include "mongo/db/query_plan_summary.h"

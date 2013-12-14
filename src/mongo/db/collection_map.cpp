@@ -17,6 +17,7 @@
 
 #include "mongo/pch.h"
 
+#include "mongo/db/cursor.h"
 #include "mongo/db/collection.h"
 #include "mongo/db/collection_map.h"
 #include "mongo/db/json.h"

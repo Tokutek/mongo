@@ -28,6 +28,7 @@
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/relock.h"
 #include "mongo/db/txn_context.h"
+#include "mongo/db/querypattern.h"
 #include "mongo/db/query_optimizer.h"
 #include "mongo/db/query_plan_selection_policy.h"
 #include "mongo/db/ops/delete.h"

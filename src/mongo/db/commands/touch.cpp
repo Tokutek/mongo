@@ -29,10 +29,12 @@
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/commands.h"
+#include "mongo/db/cursor.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/index.h"
 #include "mongo/db/collection.h"
+#include "mongo/db/namespacestring.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/util/timer.h"
 

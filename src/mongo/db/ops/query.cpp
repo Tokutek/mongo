@@ -29,6 +29,7 @@
 #include "mongo/db/query_plan_summary.h"
 #include "mongo/db/query_optimizer.h"
 #include "mongo/db/query_optimizer_internal.h"
+#include "mongo/db/queryoptimizercursor.h"
 #include "mongo/db/replutil.h"
 #include "mongo/db/scanandorder.h"
 #include "mongo/s/d_logic.h"
