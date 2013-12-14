@@ -237,20 +237,14 @@ namespace mongo {
         toLog.append( "cmdLine", CmdLine::getParsedOpts() );
         toLog.append( "pid", getpid() );
 
-
         BSONObjBuilder buildinfo( toLog.subobjStart("buildinfo"));
         appendBuildInfo(buildinfo);
         buildinfo.doneFast();
 
-        BSONObj o = toLog.obj();
-
-        LOCK_REASON(lockReason, "startup: creating startup_log");
-        Lock::GlobalWrite lk(lockReason);
+        const BSONObj o = toLog.obj();
         Client::GodScope gs;
         DBDirectClient c;
-        const char* name = "local.startup_log";
-        c.createCollection( name, 10 * 1024 * 1024, true );
-        c.insert( name, o);
+        c.insert("local.startup_log", o);
     }
 
     void listen(int port) {
