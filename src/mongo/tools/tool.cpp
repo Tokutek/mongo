@@ -28,7 +28,7 @@
 #include "mongo/client/dbclient_rs.h"
 #include "mongo/client/sasl_client_authenticate.h"
 #include "mongo/db/json.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/txn_complete_hooks.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/platform/posix_fadvise.h"

@@ -17,7 +17,7 @@
 #include "mongo/pch.h"
 
 #include "mongo/unittest/unittest.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 
 #include "mongo/db/client.h"
 #include "mongo/db/instance.h"
@@ -46,7 +46,7 @@ namespace {
         StringData _db;
         StringData _coll;
         void setUp() {
-            _ns = "namespace_details_test.system.users";
+            _ns = "collection_tests.system.users";
             _db = mongo::nsToDatabaseSubstring(_ns);
             _coll = mongo::nsToCollectionSubstring(_coll);
             ASSERT(_c.dropDatabase(_db.toString(), NULL));
