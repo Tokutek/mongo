@@ -453,13 +453,13 @@ namespace mongo {
             _snapshotTaken = true;
             Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
 
-            NamespaceDetails *d = nsdetails(ns);
-            if (d == NULL) {
-                errmsg = "ns not found, should be impossible";
+            Collection *cl = getCollection(ns);
+            if (cl == NULL) {
+                errmsg = "collection not found, should be impossible";
                 return 0;
             }
 
-            const IndexDetails *idx = d->findIndexByPrefix(cmdobj["keyPattern"].Obj(), true);
+            const IndexDetails *idx = cl->findIndexByPrefix(cmdobj["keyPattern"].Obj(), true);
             if (idx == NULL) {
                 errmsg = mongoutils::str::stream() << "can't find index for " << cmdobj["keyPattern"].Obj() << " in _migrateStartCloneTransaction";
                 return 0;
@@ -468,7 +468,7 @@ namespace mongo {
             KeyPattern kp(idx->keyPattern());
             BSONObj min = KeyPattern::toKeyFormat(kp.extendRangeBound(cmdobj["min"].Obj(), false));
             BSONObj max = KeyPattern::toKeyFormat(kp.extendRangeBound(cmdobj["max"].Obj(), false));
-            ClientCursor::Holder ccPointer(new ClientCursor(0, IndexCursor::make(d, *idx, min, max, false, 1), ns, cmdobj.getOwned()));
+            ClientCursor::Holder ccPointer(new ClientCursor(0, IndexCursor::make(cl, *idx, min, max, false, 1), ns, cmdobj.getOwned()));
             CursorId cursorid = ccPointer->cursorid();
             cc().swapTransactionStack(ccPointer->transactions);
             ccPointer.release();
