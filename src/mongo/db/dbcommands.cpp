@@ -781,7 +781,7 @@ namespace mongo {
             static DBDirectClient db;
 
             const BSONElement e = cmdObj.firstElement();
-            const string ns = str::stream() << dbname << '.' << e.valuestrsafe();
+            const string ns = getSisterNS(dbname, e.valuestrsafe());
             Collection *cl = getCollection(ns);
             tlog() << "CMD: reIndex " << ns << endl;
 
@@ -790,22 +790,20 @@ namespace mongo {
                 return false;
             }
 
-            BSONObjBuilder b;
-            list<BSONObj> indexes;
+            BSONArrayBuilder b;
             for (auto_ptr<DBClientCursor> c = db.query(getSisterNS(dbname, "system.indexes"),
                                                        BSON("ns" << ns), 0, 0, 0, QueryOption_SlaveOk);
                  c->more(); ) {
                 const BSONObj o = c->next().getOwned();
-                b.append(BSONObjBuilder::numStr(indexes.size()), o);
-                indexes.push_back(o);
+                b.append(o);
             }
 
             // run optimize
             cl->optimizeAll();
 
-            result.append("nIndexes", (int) indexes.size());
-            result.append("nIndexesWas", (int) indexes.size());
-            result.appendArray("indexes", b.obj());
+            result.append("nIndexes", cl->nIndexes());
+            result.append("nIndexesWas", cl->nIndexes());
+            result.appendArray("indexes", b.arr());
             return true;
         }
     } cmdReIndex;
