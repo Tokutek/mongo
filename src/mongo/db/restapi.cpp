@@ -247,7 +247,6 @@ namespace mongo {
     } restHandler;
 
     bool RestAdminAccess::haveAdminUsers() const {
-        readlocktry rl(/*"admin.system.users", */10000);
         LOCK_REASON(lockReason, "restapi: getting admin auth credentials");
         readlocktry rl(10000, lockReason);
         uassert( 16173 , "couldn't get read lock to get admin auth credentials" , rl.got() );
