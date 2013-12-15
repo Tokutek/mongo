@@ -777,36 +777,35 @@ namespace mongo {
             actions.addAction(ActionType::reIndex);
             out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
         }
-        bool run(const string& dbname , BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool /*fromRepl*/) {
+        bool run(const string &dbname, BSONObj &cmdObj, int, string &errmsg, BSONObjBuilder &result, bool) {
             static DBDirectClient db;
 
-            BSONElement e = jsobj.firstElement();
-            string toDeleteNs = dbname + '.' + e.valuestr();
-            Collection *cl = getCollection(toDeleteNs);
-            tlog() << "CMD: reIndex " << toDeleteNs << endl;
+            const BSONElement e = cmdObj.firstElement();
+            const string ns = str::stream() << dbname << '.' << e.valuestrsafe();
+            Collection *cl = getCollection(ns);
+            tlog() << "CMD: reIndex " << ns << endl;
 
-            if ( ! cl ) {
+            if (cl == NULL) {
                 errmsg = "ns not found";
                 return false;
             }
 
-            list<BSONObj> all;
-            auto_ptr<DBClientCursor> i = db.query( getSisterNS(dbname, "system.indexes") , BSON( "ns" << toDeleteNs ) , 0 , 0 , 0 , QueryOption_SlaveOk );
             BSONObjBuilder b;
-            while ( i->more() ) {
-                BSONObj o = i->next().getOwned();
-                b.append( BSONObjBuilder::numStr( all.size() ) , o );
-                all.push_back( o );
+            list<BSONObj> indexes;
+            for (auto_ptr<DBClientCursor> c = db.query(getSisterNS(dbname, "system.indexes"),
+                                                       BSON("ns" << ns), 0, 0, 0, QueryOption_SlaveOk);
+                 c->more(); ) {
+                const BSONObj o = c->next().getOwned();
+                b.append(BSONObjBuilder::numStr(indexes.size()), o);
+                indexes.push_back(o);
             }
 
             // run optimize
             cl->optimizeAll();
 
-            result.append( "nIndexes" , (int)all.size() );
-            // Vanilla mongo does a drop followed by an index build, and the drop populates this field.
-            // It doesn't make much sense for us, but we report it anyway because a python test expected it.
-            result.append( "nIndexesWas" , (int)all.size() );
-            result.appendArray( "indexes" , b.obj() );
+            result.append("nIndexes", (int) indexes.size());
+            result.append("nIndexesWas", (int) indexes.size());
+            result.appendArray("indexes", b.obj());
             return true;
         }
     } cmdReIndex;
