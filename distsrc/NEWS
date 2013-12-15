@@ -3,7 +3,7 @@ tokumx news
 
 tokumx 1.3.3
 ------------
-Release date: TBD
+Release date: 2013-12-16
 
 General
 ~~~~~~~
@@ -18,8 +18,9 @@ New features and improvements
       greatly speeds up all range queries done for aggregations.  (#802)
 
     - The `mongo2toku` migration tool supports authentication with a
-      MongoDB replica set using new options `--ruser` and `--rpass`.
-      (#836)
+      MongoDB replica set using new options `--ruser`, `--rpass`,
+      `--rauthenticationDatabase`, and `--rauthenticationMechanism`.
+      (#836, #849)
 
     - The `mongo2toku` migration tool now prints OpTimes in human-readable
       form.  (#839)
