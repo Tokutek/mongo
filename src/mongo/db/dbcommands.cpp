@@ -767,12 +767,12 @@ namespace mongo {
             const BSONElement e = cmdObj["index"];
             if (!e.ok()) {
                 // optimize everything
-                cl->optimizeIndexes("*");
+                cl->rebuildIndexes("*");
             } else {
                 // optimize a single index
                 if (e.type() == String) {
                     // by name
-                    cl->optimizeIndexes(e.Stringdata());
+                    cl->rebuildIndexes(e.Stringdata());
                 } else if (e.type() == Object) {
                     // by key pattern
                     const BSONObj pattern = e.embeddedObject();
@@ -783,7 +783,7 @@ namespace mongo {
                     } else {
                         const IndexDetails &idx = cl->idx(idxNo);
                         const string name = idx.indexName();
-                        cl->optimizeIndexes(name);
+                        cl->rebuildIndexes(name);
                     }
                 } else {
                     errmsg = "invalid index name spec";

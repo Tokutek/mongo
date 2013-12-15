@@ -187,6 +187,11 @@ namespace mongo {
         /** delete this index. */
         void kill_idx();
 
+        // change attributes of the underlying storage::Dictionary
+        void changeAttributes(const BSONObj &info) {
+            return _db->changeAttributes(info);
+        }
+
         enum toku_compression_method getCompressionMethod() const;
         uint32_t getPageSize() const;
         uint32_t getReadPageSize() const;
