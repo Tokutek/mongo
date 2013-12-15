@@ -20,9 +20,66 @@
 #include "mongo/db/curop.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/kill_current_op.h"
+#include "mongo/db/queryutil.h"
 #include "mongo/db/collection.h"
 
 namespace mongo {
+
+    //
+    // The centralized factories for creating cursors over collections.
+    //
+
+    shared_ptr<Cursor> Cursor::make(Collection *cl, const int direction,
+                                    const bool countCursor) {
+        if (cl != NULL) {
+            if (countCursor) {
+                return shared_ptr<Cursor>(new IndexScanCountCursor(cl, cl->findSmallestOneToOneIndex()));
+            } else {
+                return shared_ptr<Cursor>(new BasicCursor(cl, direction));
+            }
+        } else {
+            return shared_ptr<Cursor>(new DummyCursor(direction));
+        }
+    }
+
+    shared_ptr<Cursor> Cursor::make(Collection *cl, const IndexDetails &idx,
+                                    const int direction,
+                                    const bool countCursor) {
+        if (countCursor) {
+            return shared_ptr<Cursor>(new IndexScanCountCursor(cl, idx));
+        } else {
+            return shared_ptr<Cursor>(new IndexScanCursor(cl, idx, direction));
+        }
+    }
+
+    shared_ptr<Cursor> Cursor::make(Collection *cl, const IndexDetails &idx,
+                                    const BSONObj &startKey, const BSONObj &endKey,
+                                    const bool endKeyInclusive,
+                                    const int direction, const int numWanted,
+                                    const bool countCursor) {
+        if (countCursor) {
+            return shared_ptr<Cursor>(new IndexCountCursor(cl, idx, startKey, endKey,
+                                                           endKeyInclusive));
+        } else {
+            return shared_ptr<Cursor>(new IndexCursor(cl, idx, startKey, endKey,
+                                                      endKeyInclusive, direction, numWanted));
+        }
+    }
+
+    shared_ptr<Cursor> Cursor::make(Collection *cl, const IndexDetails &idx,
+                                    const shared_ptr<FieldRangeVector> &bounds,
+                                    const int singleIntervalLimit,
+                                    const int direction, const int numWanted,
+                                    const bool countCursor) {
+        if (countCursor) {
+            return shared_ptr<Cursor>(new IndexCountCursor(cl, idx, bounds));
+        } else {
+            return shared_ptr<Cursor>(new IndexCursor(cl, idx, bounds,
+                                                      singleIntervalLimit, direction, numWanted));
+        }
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
 
     bool ScanCursor::reverseMinMaxBoundsOrder(const Ordering &ordering, const int direction) {
         // Only the first field's direction matters, because this function is only called
@@ -44,6 +101,8 @@ namespace mongo {
         return reverseMinMaxBoundsOrder(Ordering::make(keyPattern), direction) ? minKey : maxKey;
     }
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
     IndexScanCursor::IndexScanCursor( Collection *cl, const IndexDetails &idx,
                                       int direction, int numWanted ) :
         IndexCursor( cl, idx,
@@ -52,16 +111,113 @@ namespace mongo {
                      true, direction, numWanted ) {
     }
 
-    shared_ptr<Cursor> BasicCursor::make(Collection *cl, int direction ) {
-        if (cl != NULL) {
-            return shared_ptr<Cursor>(new BasicCursor(cl, direction));
-        } else {
-            return shared_ptr<Cursor>(new DummyCursor(direction));
-        }
-    }
+    ////////////////////////////////////////////////////////////////////////////////////////////////
 
     BasicCursor::BasicCursor( Collection *cl, int direction ) :
         IndexScanCursor( cl, cl->getPKIndex(), direction ) {
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
+    IndexCountCursor::IndexCountCursor( Collection *cl, const IndexDetails &idx,
+                                        const BSONObj &startKey, const BSONObj &endKey,
+                                        const bool endKeyInclusive ) :
+        IndexCursor(cl, idx, startKey, endKey, endKeyInclusive, 1, 0),
+        _bufferedRowCount(0),
+        _exhausted(false),
+        _endSKeyPrefix(_endKey, NULL) {
+        TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
+        checkAssumptionsAndInit();
+    }
+
+    IndexCountCursor::IndexCountCursor( Collection *cl, const IndexDetails &idx,
+                                        const shared_ptr< FieldRangeVector > &bounds ) :
+        // This will position the cursor correctly using bounds, which will do the right
+        // thing based on bounds->start/endKey() and bounds->start/endKeyInclusive()
+        IndexCursor(cl, idx, bounds, false, 1, 0),
+        _bufferedRowCount(0),
+        _exhausted(false),
+        _endSKeyPrefix(_endKey, NULL) {
+        TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
+        dassert(_startKey == bounds->startKey());
+        dassert(_endKey == bounds->endKey());
+        dassert(_endKeyInclusive == bounds->endKeyInclusive());
+        checkAssumptionsAndInit();
+    }
+
+    void IndexCountCursor::checkAssumptionsAndInit() {
+        verify(forward()); // only need to count forward
+        verify(_prelock); // should be no case where we decide not to prelock/prefetch
+        if ( ok() ) {
+            // ok() at this point means the IndexCursor constructor found
+            // a single matching row. We note that with a buffered row
+            // count of 1.
+            _bufferedRowCount = 1;
+        }
+    }
+
+    int IndexCountCursor::count_cursor_getf(const DBT *key, const DBT *val, void *extra) {
+        struct count_cursor_getf_extra *info = reinterpret_cast<struct count_cursor_getf_extra *>(extra);
+        try {
+            // Initializes a storage key that will ignore the appended primary key.
+            // This is useful because we only want to compare the secondary key prefix.
+            const storage::Key sKey(reinterpret_cast<char *>(key->data), false);
+            const int c = sKey.woCompare(info->endSKeyPrefix, info->ordering);
+            TOKULOG(5) << "count getf got " << sKey.key() << ", c = " << c << endl;
+            if (c > 0 || (c == 0 && !info->endKeyInclusive)) {
+                // out of bounds, count is finished.
+                dassert(!info->exhausted);
+                info->exhausted = true;
+                return 0;
+            }
+            info->bufferedRowCount++;
+            return TOKUDB_CURSOR_CONTINUE;
+        } catch (const std::exception &ex) {
+            info->saveException(ex);
+        }
+        return -1;
+    }
+
+    bool IndexCountCursor::countMoreRows() {
+        // no rows buffered for count, that's why we're counting more here.
+        verify(_bufferedRowCount == 0);
+        // should not have already tried + failed at counting more rows.
+        verify(!_exhausted);
+
+        DBC *cursor = _cursor.dbc();
+        struct count_cursor_getf_extra extra(_bufferedRowCount, _exhausted,
+                                             _endSKeyPrefix, _ordering, _endKeyInclusive);
+        const int r = cursor->c_getf_next(cursor, getf_flags(), count_cursor_getf, &extra);
+        if (r != 0 && r != DB_NOTFOUND) {
+            extra.throwException();
+            storage::handle_ydb_error(r);
+        }
+        return _bufferedRowCount > 0;
+    }
+
+    bool IndexCountCursor::advance() {
+        killCurrentOp.checkForInterrupt();
+        if ( ok() ) {
+            dassert(_bufferedRowCount > 0);
+            _ok = --_bufferedRowCount > 0;
+            if ( !ok() && !_exhausted ) {
+                _ok = countMoreRows();
+            }
+            if ( ok() ) {
+                ++_nscanned;
+            }
+        }
+        return ok();
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
+    IndexScanCountCursor::IndexScanCountCursor( Collection *cl, const IndexDetails &idx ) :
+        IndexCountCursor( cl, idx,
+                          ScanCursor::startKey(idx.keyPattern(), 1), 
+                          ScanCursor::endKey(idx.keyPattern(), 1),
+                          true ) {
+        verify(forward());
     }
 
 } // namespace mongo

@@ -57,7 +57,7 @@ namespace mongo {
         BSONObj newMax = KeyPattern::toKeyFormat(kp.extendRangeBound(max, maxInclusive));
 
         long long nDeleted = 0;
-        for (shared_ptr<Cursor> c(IndexCursor::make(cl, i, newMin, newMax, maxInclusive, 1));
+        for (shared_ptr<Cursor> c(Cursor::make(cl, i, newMin, newMax, maxInclusive, 1));
              c->ok(); c->advance()) {
             const BSONObj pk = c->currPK();
             const BSONObj obj = c->current();

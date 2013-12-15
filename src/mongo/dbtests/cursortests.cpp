@@ -74,8 +74,8 @@ namespace CursorTests {
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 Client::WriteContext tc(ns);
                 {
-                    shared_ptr<IndexCursor> _c( IndexCursor::make( getCollection( ns ), getCollection( ns )->idx(1), frv, 0, 1 ) );
-                    IndexCursor &c = *_c.get();
+                    shared_ptr<Cursor> _c( Cursor::make( getCollection( ns ), getCollection( ns )->idx(1), frv, 0, 1 ) );
+                    Cursor &c = *_c.get();
                     ASSERT_EQUALS( "IndexCursor a_1 multi", c.toString() );
                     double expected[] = { 1, 2, 4, 5, 6 };
                     for( int i = 0; i < 5; ++i ) {
@@ -106,8 +106,8 @@ namespace CursorTests {
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 Client::WriteContext tc(ns);
                 {
-                    shared_ptr<IndexCursor> _c( IndexCursor::make(getCollection( ns ), getCollection( ns )->idx(1), frv, 0, 1 ) );
-                    IndexCursor &c = *_c.get();
+                    shared_ptr<Cursor> _c( Cursor::make(getCollection( ns ), getCollection( ns )->idx(1), frv, 0, 1 ) );
+                    Cursor &c = *_c.get();
                     ASSERT_EQUALS( "IndexCursor a_1 multi", c.toString() );
                     double expected[] = { 0, 1, 2, 109 };
                     for( int i = 0; i < 4; ++i ) {
@@ -136,8 +136,8 @@ namespace CursorTests {
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 Client::WriteContext ctx( ns );
                 {
-                    shared_ptr<IndexCursor> _c( IndexCursor::make( getCollection( ns ), getCollection( ns )->idx(1), frv, 0, -1 ) );
-                    IndexCursor& c = *_c.get();
+                    shared_ptr<Cursor> _c( Cursor::make( getCollection( ns ), getCollection( ns )->idx(1), frv, 0, -1 ) );
+                    Cursor& c = *_c.get();
                     ASSERT_EQUALS( "IndexCursor a_1 reverse multi", c.toString() );
                     double expected[] = { 6, 5, 4, 2, 1 };
                     for( int i = 0; i < 5; ++i ) {
@@ -178,7 +178,7 @@ namespace CursorTests {
                     Collection *d = getCollection(ns());
                     int i = d->findIndexByKeyPattern(idx());
                     verify(i >= 0);
-                    shared_ptr<IndexCursor> c( IndexCursor::make( d, d->idx( i ), frv, 0, direction() ) );
+                    shared_ptr<Cursor> c( Cursor::make( d, d->idx( i ), frv, 0, direction() ) );
                     Matcher m( spec );
                     int count = 0;
                     while( c->ok() ) {
@@ -304,7 +304,7 @@ namespace CursorTests {
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 Client::WriteContext ctx( ns() );
                 {
-                    shared_ptr<IndexCursor> c( IndexCursor::make( getCollection( ns() ),
+                    shared_ptr<Cursor> c( Cursor::make( getCollection( ns() ),
                                                                   getCollection( ns() )->idx(1),
                                                                   frv,
                                                                   0, 1 ) );

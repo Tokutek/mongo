@@ -766,11 +766,11 @@ namespace mongo {
     }
 
     void CollectionBase::checkIndexUniqueness(const IndexDetails &idx) {
-        IndexScanCursor c(this, idx, 1);
-        BSONObj prevKey = c.currKey().getOwned();
-        c.advance();
-        for ( ; c.ok(); c.advance() ) {
-            BSONObj currKey = c.currKey(); 
+        shared_ptr<Cursor> c(Cursor::make(this, idx));
+        BSONObj prevKey = c->currKey().getOwned();
+        c->advance();
+        for ( ; c->ok(); c->advance() ) {
+            BSONObj currKey = c->currKey(); 
             if (currKey == prevKey) {
                 idx.uassertedDupKey(currKey);
             }
@@ -1528,7 +1528,7 @@ namespace mongo {
         Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
         {
             // The next PK, if it exists, is the last pk + 1
-            shared_ptr<Cursor> cursor = BasicCursor::make(this, -1);
+            shared_ptr<Cursor> cursor = Cursor::make(this, -1);
             if (cursor->ok()) {
                 const BSONObj key = cursor->currPK();
                 dassert(key.nFields() == 1);
@@ -1697,7 +1697,7 @@ namespace mongo {
         long long n = 0;
         long long size = 0;
         Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-        for (shared_ptr<Cursor> c( BasicCursor::make(this) ); c->ok(); n++, c->advance()) {
+        for (shared_ptr<Cursor> c( Cursor::make(this) ); c->ok(); n++, c->advance()) {
             size += c->current().objsize();
         }
         txn.commit();
@@ -1936,7 +1936,7 @@ namespace mongo {
                                        _lastDeletedPK.firstElement().Long() : 0;
             // TODO: Disable prelocking on this cursor, or somehow prevent waiting 
             //       on row locks we can't get immediately.
-            for (shared_ptr<Cursor> c(IndexCursor::make(this, getPKIndex(),
+            for (shared_ptr<Cursor> c(Cursor::make(this, getPKIndex(),
                                       BSON("" << startKey), maxKey, true, 1));
                  c->ok(); c->advance()) {
                 BSONObj oldestPK = c->currPK();
@@ -1964,7 +1964,7 @@ namespace mongo {
     // Remove everything from this capped collection
     void CappedCollection::empty() {
         SimpleMutex::scoped_lock lk(_deleteMutex);
-        for (shared_ptr<Cursor> c( BasicCursor::make(this) ); c->ok() ; c->advance()) {
+        for (shared_ptr<Cursor> c( Cursor::make(this) ); c->ok() ; c->advance()) {
             _deleteObject(c->currPK(), c->current(), 0);
         }
         _lastDeletedPK = BSONObj();

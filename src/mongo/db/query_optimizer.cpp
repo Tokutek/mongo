@@ -40,7 +40,7 @@ namespace mongo {
                                        singlePlanSummary );
             return generator.generate();
         } catch (storage::RetryableException::MvccDictionaryTooNew) {
-            return shared_ptr<Cursor>( new DummyCursor() );
+            return Cursor::make(NULL);
         }
     }
 

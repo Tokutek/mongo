@@ -251,24 +251,20 @@ doneCheckOrder:
 
         if ( _utility == Impossible ) {
             // Dummy table scan cursor returning no results.  Allowed in --notablescan mode.
-            return shared_ptr<Cursor>( new DummyCursor() );
+            return Cursor::make(NULL);
         }
 
-        if ( willScanTable() ) {
+        if (willScanTable()) {
             checkTableScanAllowed();
             const int direction = _order.getField("$natural").number() >= 0 ? 1 : -1;
             Collection *cl = getCollection( _frs.ns() );
-            return shared_ptr<Cursor>( BasicCursor::make( cl, direction ) );
+            return Cursor::make(cl, direction);
         }
 
-        if ( _startOrEndSpec ) {
+        if (_startOrEndSpec) {
             // we are sure to spec _endKeyInclusive
-            return shared_ptr<Cursor>( IndexCursor::make( _cl,
-                                                          *_index,
-                                                          _startKey,
-                                                          _endKey,
-                                                          _endKeyInclusive,
-                                                          _direction >= 0 ? 1 : -1 ) );
+            return Cursor::make(_cl, *_index, _startKey, _endKey, _endKeyInclusive,
+                                _direction >= 0 ? 1 : -1);
         }
 
         // A CountingIndexCursor is returned if explicitly requested AND _frv is exactly
@@ -276,23 +272,16 @@ doneCheckOrder:
         // cannot provide meaningful results for currPK/currKey/current(), we must not
         // use them for multikey indexes where manual deduplication is required.
         if (requestCountingCursor && _utility == Optimal && _frv->isSingleInterval() && !isMultiKey()) {
-            return shared_ptr<Cursor>( new IndexCountCursor( _cl, *_index, _frv ) );
+            return Cursor::make(_cl, *_index, _frv, 0, 1, 0, true);
         }
 
-        if ( _index->special() ) {
-            return shared_ptr<Cursor>( IndexCursor::make( _cl,
-                                                          *_index,
-                                                          _frv->startKey(),
-                                                          _frv->endKey(),
-                                                          true,
-                                                          _direction >= 0 ? 1 : -1 ) );
+        if (_index->special()) {
+            return Cursor::make(_cl, *_index, _frv->startKey(), _frv->endKey(), true,
+                                _direction >= 0 ? 1 : -1);
         }
 
-        return shared_ptr<Cursor>( IndexCursor::make( _cl,
-                                                      *_index,
-                                                      _frv,
-                                                      independentRangesSingleIntervalLimit(),
-                                                      _direction >= 0 ? 1 : -1 ) );
+        return Cursor::make(_cl, *_index, _frv, independentRangesSingleIntervalLimit(),
+                            _direction >= 0 ? 1 : -1);
     }
 
     BSONObj QueryPlan::indexKey() const {

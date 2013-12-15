@@ -103,7 +103,7 @@ namespace mongo {
             for (int i = 0; i < cl->nIndexes(); i++) {
                 IndexDetails &idx = cl->idx(i);
                 if ((cl->isPKIndex(idx) && touch_data) || (!cl->isPKIndex(idx) && touch_indexes)) {
-                    for (shared_ptr<Cursor> c(IndexCursor::make(cl, idx, minKey, maxKey, true, 1)); c->ok(); c->advance()) {
+                    for (shared_ptr<Cursor> c(Cursor::make(cl, idx, minKey, maxKey, true, 1)); c->ok(); c->advance()) {
                         c->current();
                     }
                 }

@@ -316,29 +316,19 @@ namespace mongo {
             return shared_ptr<Cursor>();
         }
         
+        Collection *cl = getCollection(_ns);
         const int numWanted = _parsedQuery ? _parsedQuery->getSkip() + _parsedQuery->getNumToReturn() : 0;
         if ( _planPolicy.permitOptimalNaturalPlan() && _query.isEmpty() && _order.isEmpty() ) {
             // Table-scan
-            Collection *cl = getCollection(_ns);
-            if ( cl != NULL && _planPolicy.requestCountingCursor() ) {
-                // All one-to-one indexes indexes have the same count.
-                //
-                // Utilize an IndexScanCountCursor over the smallest one
-                // of them for best performance.
-                return shared_ptr<Cursor>( new IndexScanCountCursor(cl, cl->findSmallestOneToOneIndex()) );
-            } else {
-                return shared_ptr<Cursor>( BasicCursor::make(cl) );
-            }
+            return Cursor::make(cl, 1, _planPolicy.requestCountingCursor());
         }
-        if ( isSimpleIdQuery( _query ) ) {
-            Collection *cl = getCollection( _ns );
-            if ( cl ) {
-                int idxNo = cl->findIdIndex();
-                if ( idxNo >= 0 ) {
-                    IndexDetails& i = cl->idx( idxNo );
-                    BSONObj key = i.getKeyFromQuery( _query );
-                    return shared_ptr<Cursor>( IndexCursor::make( cl, i, key, key, true, 1, numWanted ) );
-                }
+
+        if (cl != NULL && isSimpleIdQuery(_query)) {
+            const int idxNo = cl->findIdIndex();
+            if (idxNo >= 0) {
+                IndexDetails &idx = cl->idx(idxNo);
+                const BSONObj key = idx.getKeyFromQuery(_query);
+                return Cursor::make(cl, idx, key, key, true, 1, numWanted);
             }
         }
         

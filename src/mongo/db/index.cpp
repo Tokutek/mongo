@@ -130,10 +130,10 @@ namespace mongo {
             for (vector<FieldInterval>::const_iterator i = intervals.begin();
                  i != intervals.end(); ++i ){
                 if (!i->equality()){
-                    const shared_ptr<mongo::Cursor> exhaustiveCursor(
-                            new IndexScanCursor(cl, *this, 1));
-                    exhaustiveCursor->setMatcher(forceDocMatcher);
-                    return exhaustiveCursor;
+                    const shared_ptr<mongo::Cursor> cursor =
+                        mongo::Cursor::make(cl, *this, 1);
+                    cursor->setMatcher(forceDocMatcher);
+                    return cursor;
                 }
                 inArray.append(HashKeyGenerator::makeSingleKey(i->_lower._bound, _seed, _hashVersion));
             }
@@ -145,8 +145,9 @@ namespace mongo {
             FieldRangeSet newfrs("" , newQuery, true, true);
             shared_ptr<FieldRangeVector> newVector(
                     new FieldRangeVector(newfrs, _keyPattern, 1));
-            const shared_ptr<mongo::Cursor> cursor(
-                    IndexCursor::make(cl, *this, newVector, false, 1, numWanted));
+
+            const shared_ptr<mongo::Cursor> cursor =
+                mongo::Cursor::make(cl, *this, newVector, false, 1, numWanted);
             cursor->setMatcher(forceDocMatcher);
             return cursor;
         }

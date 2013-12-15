@@ -728,7 +728,7 @@ namespace mongo {
         LOCK_REASON(lockReason, "repl: getting last entry in oplog");
         Client::ReadContext lk(rsoplog, lockReason);
         Collection *cl = getCollection(rsoplog);
-        shared_ptr<Cursor> c(BasicCursor::make(cl, -1));
+        shared_ptr<Cursor> c(Cursor::make(cl, -1));
         return c->ok() ? c->current().copy() : BSONObj();
     }
 

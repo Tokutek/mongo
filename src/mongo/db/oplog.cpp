@@ -199,7 +199,7 @@ namespace mongo {
         Client::ReadContext ctx(rsoplog, lockReason);
         // TODO: Should this be using rsOplogDetails, verifying non-null?
         Collection *cl = getCollection(rsoplog);
-        shared_ptr<Cursor> c( BasicCursor::make(cl, -1) );
+        shared_ptr<Cursor> c( Cursor::make(cl, -1) );
         if (c->ok()) {
             *gtid = getGTIDFromOplogEntry(c->current());
             return true;
@@ -391,8 +391,8 @@ namespace mongo {
                 LOCK_REASON(lockReason, "repl: rolling back entry from oplog.refs");
                 Client::ReadContext ctx(rsOplogRefs, lockReason);
                 verify(rsOplogRefsDetails != NULL);
-                shared_ptr<IndexCursor> c(
-                    IndexCursor::make(
+                shared_ptr<Cursor> c(
+                    Cursor::make(
                         rsOplogRefsDetails,
                         rsOplogRefsDetails->getPKIndex(),
                         KeyPattern::toKeyFormat(BSON( "_id" << BSON("oid" << oid << "seq" << seq))), // right endpoint

@@ -125,7 +125,7 @@ namespace mongo {
                 max = KeyPattern::toKeyFormat( kp.extendRangeBound( max, false ) );
             }
 
-            shared_ptr<IndexCursor> c( IndexCursor::make( cl , *idx , min , max , false , 1 ) );
+            shared_ptr<Cursor> c( Cursor::make( cl , *idx , min , max , false , 1 ) );
             auto_ptr<ClientCursor> cc( new ClientCursor( QueryOption_NoCursorTimeout , c , ns ) );
             if ( ! cc->ok() ) {
                 // range is empty
@@ -269,7 +269,7 @@ namespace mongo {
 
         void slowFindSplitPoint(long long targetChunkSize) {
             long long skipped = 0;
-            for (shared_ptr<IndexCursor> c(IndexCursor::make(_cl, _idx, _chunkMin.key(), _chunkMax.key(), false, 1)); c->ok(); c->advance()) {
+            for (shared_ptr<Cursor> c(Cursor::make(_cl, _idx, _chunkMin.key(), _chunkMax.key(), false, 1)); c->ok(); c->advance()) {
                 const BSONObj &currKey = c->currKey();
                 const BSONObj &currPK = c->currPK();
                 long long docsize = currKey.objsize() + currPK.objsize() + c->current().objsize();
@@ -348,7 +348,7 @@ namespace mongo {
                 // If _chunkMin doesn't actually exist (could be {x: MinKey} for example) we need to
                 // get the actual first key in the chunk so that we make sure we don't try to split
                 // on the first key.
-                shared_ptr<IndexCursor> c(IndexCursor::make(_cl, _idx, _chunkMin.key(), _chunkMax.key(), false, 1, 1));
+                shared_ptr<Cursor> c(Cursor::make(_cl, _idx, _chunkMin.key(), _chunkMax.key(), false, 1, 1));
                 massert(16794, "didn't find anything actually in our chunk, but we thought we should split it", c->ok());
                 _lastSplitKey = _chunkPattern.prettyKey(c->currKey());
             }
@@ -522,7 +522,7 @@ namespace mongo {
                 long long numChunks = 0;
 
                 {
-                    shared_ptr<IndexCursor> c(IndexCursor::make( cl , *idx , min , max , false , 1 ));
+                    shared_ptr<Cursor> c(Cursor::make( cl , *idx , min , max , false , 1 ));
                     auto_ptr<ClientCursor> cc( new ClientCursor( QueryOption_NoCursorTimeout , c , ns ) );
                     if ( ! cc->ok() ) {
                         errmsg = "can't open a cursor for splitting (desired range is possibly empty)";
@@ -583,7 +583,7 @@ namespace mongo {
                         currCount = 0;
                         LOG(0) << "splitVector doing another cycle because of force, maxChunkSize now: " << maxChunkSize << endl;
 
-                        c = IndexCursor::make(cl, *idx, min, max, false, 1);
+                        c = Cursor::make(cl, *idx, min, max, false, 1);
                         cc.reset(new ClientCursor(QueryOption_NoCursorTimeout, c, ns));
                     }
 
@@ -967,11 +967,11 @@ namespace mongo {
                     BSONObj newmin = KeyPattern::toKeyFormat( kp.extendRangeBound( chunk.min, false) );
                     BSONObj newmax = KeyPattern::toKeyFormat( kp.extendRangeBound( chunk.max, false) );
 
-                    shared_ptr<Cursor> c( IndexCursor::make( cl , *idx ,
-                                                             newmin , /* lower */
-                                                             newmax , /* upper */
-                                                             false , /* upper noninclusive */
-                                                             1 ) ); /* direction */
+                    shared_ptr<Cursor> c( Cursor::make( cl , *idx ,
+                                                        newmin , /* lower */
+                                                        newmax , /* upper */
+                                                        false , /* upper noninclusive */
+                                                        1 ) ); /* direction */
 
                     // check if exactly one document found
                     if ( c->ok() ) {

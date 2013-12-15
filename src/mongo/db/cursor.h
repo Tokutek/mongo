@@ -40,16 +40,54 @@ namespace mongo {
      */
     class Cursor : boost::noncopyable {
     public:
-        virtual ~Cursor() {}
+
+        // Make an appropriate cursor:
+        //
+        // - cl: if null, a dummy cursor returning no results is returned.
+        // - direction: > 0 means forward, < 0 means reverse
+        // - numWanted, N: 0 means unlimited, > 0 means limited to N, < 0 means in batches of N
+        // - countCursor: if true, request a cursor optimized for counts.
+        //                cannot call currKey()/current() on any such cursor.
+
+        // table-scan
+        static shared_ptr<Cursor> make(Collection *cl,
+                                       const int direction = 1,
+                                       const bool countCursor = false);
+
+        // index-scan
+        static shared_ptr<Cursor> make(Collection *cl, const IndexDetails &idx,
+                                       const int direction = 1,
+                                       const bool countCursor = false);
+
+        // index range scan between start/end
+        static shared_ptr<Cursor> make(Collection *cl, const IndexDetails &idx,
+                                       const BSONObj &startKey, const BSONObj &endKey,
+                                       const bool endKeyInclusive,
+                                       const int direction, const int numWanted = 0,
+                                       const bool countCursor = false);
+
+        // index range scan by field bounds
+        static shared_ptr<Cursor> make(Collection *cl, const IndexDetails &idx,
+                                       const shared_ptr<FieldRangeVector> &bounds,
+                                       const int singleIntervalLimit,
+                                       const int direction, const int numWanted = 0,
+                                       const bool countCursor = false);
+        virtual ~Cursor() { }
+
         virtual bool ok() = 0;
+
         bool eof() { return !ok(); }
+
         /* current associated document for the cursor.
          * implementation may or may not perform another query to satisfy this call. */
         virtual BSONObj current() = 0;
+
         /* returns true if the cursor was able to advance, false otherwise */
         virtual bool advance() = 0;
+
         /* current key in the index. */
         virtual BSONObj currKey() const { return BSONObj(); }
+
         /* current associated primary key (_id key) for the document */
         virtual BSONObj currPK() const { return BSONObj(); }
 
@@ -88,6 +126,11 @@ namespace mongo {
         virtual bool modifiedKeys() const = 0;
 
         virtual BSONObj prettyIndexBounds() const { return BSONArray(); }
+
+        virtual BSONObj prettyKey(const BSONObj &key) const {
+            const BSONObj &idxKey = indexKeyPattern();
+            return idxKey.isEmpty() ? key : key.replaceFieldNames(idxKey).clientReadable();
+        }
 
         virtual long long nscanned() const = 0;
 
@@ -186,18 +229,6 @@ namespace mongo {
     class IndexCursor : public Cursor {
     public:
 
-        // Create a cursor over a specific start, end key range.
-        static shared_ptr<IndexCursor> make( Collection *cl, const IndexDetails &idx,
-                                             const BSONObj &startKey, const BSONObj &endKey,
-                                             bool endKeyInclusive, int direction,
-                                             int numWanted = 0);
-
-        // Create a cursor over a set of one or more field ranges.
-        static shared_ptr<IndexCursor> make( Collection *cl, const IndexDetails &idx,
-                                             const shared_ptr< FieldRangeVector > &bounds,
-                                             int singleIntervalLimit, int direction,
-                                             int numWanted = 0);
-
         virtual ~IndexCursor();
 
         bool ok() { return _ok; }
@@ -228,9 +259,6 @@ namespace mongo {
 
         string toString() const;
         BSONObj prettyIndexBounds() const;
-        BSONObj prettyKey( const BSONObj &key ) const {
-            return key.replaceFieldNames( indexKeyPattern() ).clientReadable();
-        }
 
         CoveredIndexMatcher *matcher() const { return _matcher.get(); }
         void setMatcher( shared_ptr< CoveredIndexMatcher > matcher ) { _matcher = matcher;  }
@@ -382,6 +410,9 @@ namespace mongo {
 
         // for interrupt checking
         struct cursor_interrupt_extra _interrupt_extra;
+
+        // For the Cursor::make() family of factories
+        friend class Cursor;
     };
 
     /**
@@ -401,9 +432,12 @@ namespace mongo {
      * Cursor for scanning an index.
      */
     class IndexScanCursor : public IndexCursor, ScanCursor {
-    public:
-        IndexScanCursor( Collection *cl, const IndexDetails &idx,
-                         int direction, int numWanted = 0);
+    protected:
+        IndexScanCursor(Collection *cl, const IndexDetails &idx,
+                        const int direction, const int numWanted = 0);
+
+        // For the Cursor::make() family of factories
+        friend class Cursor;
     };
 
     /**
@@ -413,13 +447,6 @@ namespace mongo {
      */
     class IndexCountCursor : public IndexCursor {
     public:
-        IndexCountCursor( Collection *cl, const IndexDetails &idx,
-                          const BSONObj &startKey, const BSONObj &endKey,
-                          const bool endKeyInclusive );
-
-        IndexCountCursor( Collection *cl, const IndexDetails &idx,
-                          const shared_ptr< FieldRangeVector > &bounds );
-
         virtual string toString() const {
             return "IndexCountCursor";
         }
@@ -462,6 +489,15 @@ namespace mongo {
 
         bool advance();
 
+    protected:
+        IndexCountCursor( Collection *cl, const IndexDetails &idx,
+                          const BSONObj &startKey, const BSONObj &endKey,
+                          const bool endKeyInclusive );
+
+        IndexCountCursor( Collection *cl, const IndexDetails &idx,
+                          const shared_ptr< FieldRangeVector > &bounds );
+
+
     private:
         bool countMoreRows();
         void checkAssumptionsAndInit();
@@ -473,6 +509,9 @@ namespace mongo {
         // We only want to compare by the secondary key prefix.
         // This will be constructed with a NULL primary-key argument.
         const storage::Key _endSKeyPrefix;
+
+        // For the Cursor::make() family of factories
+        friend class Cursor;
     };
 
     /**
@@ -480,8 +519,11 @@ namespace mongo {
      * See IndexScanCursor.
      */
     class IndexScanCountCursor : public IndexCountCursor, ScanCursor {
-    public:
+    private:
         IndexScanCountCursor( Collection *cl, const IndexDetails &idx );
+
+        // For the Cursor::make() family of factories
+        friend class Cursor;
     };
 
     /**
@@ -489,8 +531,6 @@ namespace mongo {
      */
     class BasicCursor : public IndexScanCursor {
     public:
-        static shared_ptr<Cursor> make(Collection *cl, int direction = 1);
-
         BSONObj currKey() const { return BSONObj(); }
         virtual BSONObj indexKeyPattern() const { return BSONObj(); }
         virtual string toString() const {
@@ -503,16 +543,18 @@ namespace mongo {
         virtual void explainDetails( BSONObjBuilder& b ) const { return; }
 
     private:
-        BasicCursor( Collection *cl, int direction );
+        BasicCursor(Collection *cl, int direction);
+
+        // For the Cursor::make() family of factories
+        friend class Cursor;
     };
 
     /**
-     * Dummy cursor returning no results.
-     * Can be used to represent a cursor over a non-existent collection.
+     * Dummy cursor returning no results. Used to represent a cursor over a
+     * non-existent collection.
      */
     class DummyCursor : public Cursor {
     public:
-        DummyCursor( int direction = 1 ) : _direction(direction) { }
         bool ok() { return false; }
         BSONObj current() { return BSONObj(); }
         bool advance() { return false; }
@@ -527,6 +569,11 @@ namespace mongo {
         virtual long long nscanned() const { return 0; }
 
     private:
+        DummyCursor(int direction = 1) : _direction(direction) { }
         const int _direction;
+
+        // For the Cursor::make() family of factories
+        friend class Cursor;
     };
+
 } // namespace mongo

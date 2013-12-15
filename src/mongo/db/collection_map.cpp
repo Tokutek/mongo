@@ -356,7 +356,7 @@ namespace mongo {
         vector<string> sysIndexesEntries;
         const string systemNamespacesNs = getSisterNS(_database, "system.namespaces");
         Collection *sysCl = getCollection(systemNamespacesNs);
-        for (shared_ptr<Cursor> c(BasicCursor::make(sysCl)); c->ok(); c->advance()) {
+        for (shared_ptr<Cursor> c(Cursor::make(sysCl)); c->ok(); c->advance()) {
             const BSONObj nsObj = c->current();
             const StringData ns = nsObj["name"].Stringdata();
             if (nsToDatabaseSubstring(ns) != _database) {

@@ -192,7 +192,7 @@ namespace mongo {
             IndexDetails::Builder builder(*_idx);
 
             const int indexNum = _cl->idxNo(*_idx);
-            for (shared_ptr<Cursor> cursor(BasicCursor::make(_cl));
+            for (shared_ptr<Cursor> cursor(Cursor::make(_cl));
                  cursor->ok(); cursor->advance()) {
                 BSONObj pk = cursor->currPK();
                 BSONObj obj = cursor->current();

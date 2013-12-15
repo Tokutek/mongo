@@ -1204,7 +1204,7 @@ namespace mongo {
             shared_ptr<Cursor> c;
             if ( min.isEmpty() && max.isEmpty() ) {
                 Collection *cl = getCollection(ns);
-                c = BasicCursor::make(cl);
+                c = Cursor::make(cl);
             }
             else if ( min.isEmpty() || max.isEmpty() ) {
                 errmsg = "only one of min or max specified";
@@ -1228,7 +1228,7 @@ namespace mongo {
                 min = KeyPattern::toKeyFormat( kp.extendRangeBound( min, false ) );
                 max = KeyPattern::toKeyFormat( kp.extendRangeBound( max, false ) );
 
-                c = IndexCursor::make( cl, *idx, min, max, false, 1 );
+                c = Cursor::make( cl, *idx, min, max, false, 1 );
             }
 
             long long maxSize = jsobj["maxSize"].numberLong();
@@ -1456,7 +1456,7 @@ namespace mongo {
                 md5_state_t st;
                 md5_init(&st);
 
-                for (shared_ptr<Cursor> cursor(BasicCursor::make(cl)); cursor->ok(); cursor->advance()) {
+                for (shared_ptr<Cursor> cursor(Cursor::make(cl)); cursor->ok(); cursor->advance()) {
                     BSONObj curObj = cursor->current();
                     md5_append( &st , (const md5_byte_t*)curObj.objdata() , curObj.objsize() );
                 }

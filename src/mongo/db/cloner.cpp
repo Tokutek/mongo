@@ -631,7 +631,7 @@ namespace mongo {
                 return false;
             }
             try {
-                shared_ptr<Cursor> c(BasicCursor::make(cl));
+                shared_ptr<Cursor> c(Cursor::make(cl));
             }
             catch (storage::RetryableException::MvccDictionaryTooNew &e) {
                 errmsg = mongoutils::str::stream() << "collection " << ns << " was dropped and re-created";
