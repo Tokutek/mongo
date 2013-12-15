@@ -29,8 +29,10 @@
 #include "mongo/util/concurrency/mutex.h"
 #include "mongo/util/concurrency/rwlock.h"
 
+// Unintuitively, both macros are necessary to convert __LINE__ to a string
 #define STRINGIFY_MACRO(x) #x
-#define LOCK_REASON(var, s) static const string var(s " (" __FILE__ ":" STRINGIFY_MACRO(__LINE__) ")")
+#define TO_STRING_MACRO(x) STRINGIFY_MACRO(x)
+#define LOCK_REASON(var, s) static const string var(s " (" __FILE__ ":" TO_STRING_MACRO(__LINE__) ")")
 
 namespace mongo {
 
