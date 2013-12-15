@@ -762,6 +762,36 @@ namespace mongo {
     } cmdDropIndexes;
 
     class CmdReIndex : public ModifyCommand {
+    private:
+        bool _reIndex(Collection *cl, const BSONObj &cmdObj, string &errmsg, BSONObjBuilder &result) {
+            const BSONElement e = cmdObj["index"];
+            if (!e.ok()) {
+                // optimize everything
+                cl->optimizeIndexes("*");
+            } else {
+                // optimize a single index
+                if (e.type() == String) {
+                    // by name
+                    cl->optimizeIndexes(e.Stringdata());
+                } else if (e.type() == Object) {
+                    // by key pattern
+                    const BSONObj pattern = e.embeddedObject();
+                    const int idxNo = cl->findIndexByKeyPattern(pattern);
+                    if (idxNo < 0) {
+                        errmsg = str::stream() << "can't find index with key:" << pattern;
+                        return false;
+                    } else {
+                        const IndexDetails &idx = cl->idx(idxNo);
+                        const string name = idx.indexName();
+                        cl->optimizeIndexes(name);
+                    }
+                } else {
+                    errmsg = "invalid index name spec";
+                    return false;
+                }
+            }
+            return true;
+        }
     public:
         CmdReIndex() : ModifyCommand("reIndex") { }
         virtual bool logTheOp() { return false; } // only reindexes on the one node
@@ -790,6 +820,13 @@ namespace mongo {
                 return false;
             }
 
+            // Perform the reindex work
+            const bool ok = _reIndex(cl, cmdObj, errmsg, result);
+            if (!ok) {
+                return false;
+            }
+
+            // Capture and return the state of indexes as a result of reindexing.
             BSONArrayBuilder b;
             for (auto_ptr<DBClientCursor> c = db.query(getSisterNS(dbname, "system.indexes"),
                                                        BSON("ns" << ns), 0, 0, 0, QueryOption_SlaveOk);
@@ -797,10 +834,6 @@ namespace mongo {
                 const BSONObj o = c->next().getOwned();
                 b.append(o);
             }
-
-            // run optimize
-            cl->optimizeAll();
-
             result.append("nIndexes", cl->nIndexes());
             result.append("nIndexesWas", cl->nIndexes());
             result.appendArray("indexes", b.arr());

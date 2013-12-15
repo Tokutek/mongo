@@ -261,9 +261,10 @@ namespace mongo {
                                       const bool logop, const bool fromMigrate,
                                       uint64_t flags = 0) = 0;
 
-        // send an optimize message into each index and run
-        // hot optimize over all of the keys.
-        virtual void optimizeAll() = 0;
+        // Optimize indexes. Details are implementation specific.
+        //
+        // @param name, name of the index to optimize. "*" means all indexes
+        virtual void optimizeIndexes(const StringData &name) = 0;
 
         virtual void drop(string &errmsg, BSONObjBuilder &result, const bool mayDropSystem = false) = 0;
 
@@ -517,7 +518,9 @@ namespace mongo {
 
         // send an optimize message into each index and run
         // hot optimize over all of the keys.
-        virtual void optimizeAll();
+        //
+        // @param name, name of the index to optimize. "*" means all indexes
+        virtual void optimizeIndexes(const StringData &name);
 
         virtual void drop(string &errmsg, BSONObjBuilder &result, const bool mayDropSystem = false);
         virtual bool dropIndexes(const StringData& name, string &errmsg,
@@ -624,6 +627,9 @@ namespace mongo {
     protected:
         CollectionBase(const StringData& ns, const BSONObj &pkIndexPattern, const BSONObj &options);
         explicit CollectionBase(const BSONObj &serialized);
+
+        // run optimize on a single index
+        void _optimizeIndex(IndexDetails &idx);
 
         // create a new index with the given info for this namespace.
         virtual void createIndex(const BSONObj &info);
@@ -910,7 +916,7 @@ namespace mongo {
 
         void empty();
 
-        void optimizeAll();
+        void optimizeIndexes(const StringData &name);
 
         bool dropIndexes(const StringData& name, string &errmsg,
                          BSONObjBuilder &result, bool mayDeleteIdIndex);

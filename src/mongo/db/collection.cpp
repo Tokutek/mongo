@@ -896,18 +896,36 @@ namespace mongo {
         collectionMap(_ns)->kill_ns(_ns);
     }
 
-    void CollectionBase::optimizeAll() {
-        for (int i = 0; i < _nIndexes; i++) {
-            IndexDetails &idx = *_indexes[i];
-            const bool ascending = Ordering::make(idx.keyPattern()).descending(0);
-            const bool isPK = isPKIndex(idx);
+    void CollectionBase::_optimizeIndex(IndexDetails &idx) {
+        LOG(1) << _ns << ": optimizing index " << idx.keyPattern() << endl;
+        const bool ascending = Ordering::make(idx.keyPattern()).descending(0);
+        const bool isPK = isPKIndex(idx);
 
-            storage::Key leftSKey(ascending ? minKey : maxKey,
-                                  isPK ? NULL : &minKey);
-            storage::Key rightSKey(ascending ? maxKey : minKey,
-                                   isPK ? NULL : &maxKey);
-            uint64_t loops_run;
-            idx.optimize(rightSKey, leftSKey, true, 0, &loops_run);
+        storage::Key leftSKey(ascending ? minKey : maxKey,
+                              isPK ? NULL : &minKey);
+        storage::Key rightSKey(ascending ? maxKey : minKey,
+                               isPK ? NULL : &maxKey);
+        uint64_t loops_run;
+        idx.optimize(leftSKey, rightSKey, true, 0, &loops_run);
+    }
+
+    void CollectionBase::optimizeIndexes(const StringData &name) {
+        if (name == "*") {
+            // "*" means everything
+            for (int i = 0; i < _nIndexes; i++) {
+                IndexDetails &idx = *_indexes[i];
+                _optimizeIndex(idx);
+            }
+        } else {
+            // optimize a single index.
+            // our caller should ensure that the index exists.
+            const int i = findIndexByName(name);
+            uassert(17231, str::stream() << "index not found: " << name,
+                           i >= 0);
+            uassert(17232, str::stream() << "cannot optimize a background index: " << name,
+                           i < _nIndexes); // i == _nIndexes is the hot index
+            IndexDetails &idx = *_indexes[i];
+            _optimizeIndex(idx);
         }
     }
 
@@ -2088,7 +2106,7 @@ namespace mongo {
         uasserted( 17218, "Cannot update a collection under-going bulk load." );
     }
 
-    void BulkLoadedCollection::optimizeAll() {
+    void BulkLoadedCollection::optimizeIndexes(const StringData &name) {
         uasserted( 16895, "Cannot optimize a collection under-going bulk load." );
     }
 
