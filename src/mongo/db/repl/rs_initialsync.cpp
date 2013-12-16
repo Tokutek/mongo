@@ -269,17 +269,12 @@ namespace mongo {
         LOCK_REASON(lockReason, "repl: filling gaps");
         Client::ReadContext ctx(rsoplog, lockReason);
         Client::Transaction catchupTransaction(0);
-        Collection *cl = getCollection(rsReplInfo);
         
         // now we should have replInfo on this machine,
         // let's query the minLiveGTID to figure out from where
         // we should copy the opLog
         BSONObj result;
-        const bool foundMinLive = cl != NULL &&
-            cl->findOne(
-                BSON( "_id" << "minLive" ),
-                result
-                );
+        const bool foundMinLive = Collection::findOne(rsReplInfo, BSON("_id" << "minLive"), result);
         verify(foundMinLive);
         GTID minLiveGTID;
         minLiveGTID = getGTIDFromBSON("GTID", result);
@@ -322,17 +317,12 @@ namespace mongo {
             LOCK_REASON(lockReason, "repl: initial sync applying missing ops");
             Client::ReadContext ctx(rsoplog, lockReason);
             Client::Transaction catchupTransaction(0);        
-            Collection *cl = getCollection(rsReplInfo);
 
             // now we should have replInfo on this machine,
             // let's query the minUnappliedGTID to figure out from where
             // we should copy the opLog
             BSONObj result;
-            const bool foundMinUnapplied = cl != NULL &&
-                cl->findOne(
-                    BSON( "_id" << "minUnapplied" ), 
-                    result
-                    );
+            const bool foundMinUnapplied = Collection::findOne(rsReplInfo, BSON("_id" << "minUnapplied"), result);
             verify(foundMinUnapplied);
             GTID minUnappliedGTID;
             minUnappliedGTID = getGTIDFromBSON("GTID", result);

@@ -47,14 +47,9 @@ namespace mongo {
             Client::ReadContext ctx(usersNamespace, lockReason);
             // we want all authentication stuff to happen on an alternate stack
             Client::AlternateTransactionStack altStack;
-
             Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-            Collection *cl = getCollection(usersNamespace);
-            if (cl == NULL) {
-                return false;
-            }
-            BSONObj tmpResult;
-            ok = cl->findOne(query, result != NULL ? *result : tmpResult);
+            BSONObj tmpresult;
+            ok = Collection::findOne(usersNamespace, query, result != NULL ? *result : tmpresult);
             if (ok) {
                 txn.commit();
             }

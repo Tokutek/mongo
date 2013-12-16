@@ -94,8 +94,7 @@ namespace QueryTests {
             BSONObj query = fromjson( "{$or:[{b:2},{c:3}]}" );
             BSONObj ret;
             // Check findOne() returning object.
-            Collection *d = getCollection( ns() );
-            ASSERT( d->findOne( query, ret, true ) );
+            ASSERT( Collection::findOne( ns(), query, ret, true ) );
             ASSERT_EQUALS( string( "b" ), ret.firstElement().fieldName() );
         }
     };
@@ -106,17 +105,16 @@ namespace QueryTests {
             insert( BSON( "b" << 2 << "_id" << 0 ) );
             BSONObj query = fromjson( "{b:2}" );
             BSONObj ret;
-            Collection *d = getCollection( ns() );
 
             // Check findOne() returning object, allowing unindexed scan.
-            ASSERT( d->findOne( query, ret, false ) );
+            ASSERT( Collection::findOne( ns(), query, ret, false ) );
             
             // Check findOne() returning object, requiring indexed scan without index.
-            ASSERT_THROWS( d->findOne( query, ret, true ), MsgAssertionException );
+            ASSERT_THROWS( Collection::findOne( ns(), query, ret, true ), MsgAssertionException );
 
             addIndex( BSON( "b" << 1 ) );
             // Check findOne() returning object, requiring indexed scan with index.
-            ASSERT( d->findOne( query, ret, false ) );
+            ASSERT( Collection::findOne( ns(), query, ret, false ) );
         }
     };
     

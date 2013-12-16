@@ -562,9 +562,8 @@ namespace mongo {
                         BSONObj temp = cursor->next();
                         BSONObj old;
 
-                        Collection *cl = getCollection(_config.outputOptions.finalNamespace);
-                        const bool found = cl != NULL && cl->findOne( temp["_id"].wrap() , old , true );
-                        if ( found ) {
+                        const bool found = Collection::findOne(_config.outputOptions.finalNamespace, temp["_id"].wrap(), old, true);
+                        if (found) {
                             // need to reduce
                             values.clear();
                             values.push_back( temp );

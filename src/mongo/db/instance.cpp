@@ -984,9 +984,8 @@ namespace mongo {
                 LOCK_REASON(lockReason, "repl: checking for non-empty oplog");
                 Client::ReadContext ctx(rsoplog, lockReason);
                 Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
-                Collection *cl = getCollection(rsoplog);
                 BSONObj o;
-                if (cl != NULL && cl->findOne(BSONObj(), o)) {
+                if (Collection::findOne(rsoplog, BSONObj(), o)) {
                     txn.commit();
                     return true;
                 }

@@ -210,16 +210,10 @@ namespace mongo {
     bool gtidExistsInOplog(GTID gtid) {
         LOCK_REASON(lockReason, "repl: querying for GTID in oplog");
         Client::ReadContext ctx(rsoplog, lockReason);
-        // TODO: Should this be using rsOplogDetails, verifying non-null?
-        Collection *cl = getCollection(rsoplog);
         BSONObjBuilder q;
         BSONObj result;
         addGTIDToBSON("_id", gtid, q);
-        const bool found = cl != NULL &&
-            cl->findOne(
-                q.done(),
-                result
-                );
+        const bool found = Collection::findOne(rsoplog, q.done(), result);
         return found;
     }
 
@@ -312,9 +306,8 @@ namespace mongo {
             {
                 LOCK_REASON(lockReason, "repl: finding oplog.refs entry to apply");
                 Client::ReadContext ctx(rsOplogRefs, lockReason);
-                // TODO: Should this be using rsOplogRefsDetails, verifying non-null?
-                Collection *cl = getCollection(rsOplogRefs);
-                if (cl == NULL || !cl->findOne(BSON("_id" << BSON("$gt" << BSON("oid" << oid << "seq" << seq))), entry, true)) {
+                const BSONObj query = BSON("_id" << BSON("$gt" << BSON("oid" << oid << "seq" << seq)));
+                if (!Collection::findOne(rsOplogRefs, query, entry, true)) {
                     break;
                 }
             }

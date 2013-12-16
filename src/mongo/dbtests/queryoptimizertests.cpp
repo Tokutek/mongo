@@ -1089,11 +1089,10 @@ namespace QueryOptimizerTests {
                 BSONObj one = BSON( "a" << 1 );
                 insertObject( ns(), one );
                 BSONObj result;
-                Collection *d = getCollection( ns() );
-                ASSERT( d->findOne( BSON( "a" << 1 ), result ) );
-                ASSERT_THROWS( d->findOne( BSON( "a" << 1 ), result, true ), AssertionException );
+                ASSERT( Collection::findOne( ns(), BSON( "a" << 1 ), result ) );
+                ASSERT_THROWS( Collection::findOne( ns(), BSON( "a" << 1 ), result, true ), AssertionException );
                 ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
-                ASSERT( d->findOne( BSON( "a" << 1 ), result, true ) );
+                ASSERT( Collection::findOne( ns(), BSON( "a" << 1 ), result, true ) );
             }
         };
 

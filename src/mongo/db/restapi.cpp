@@ -254,8 +254,7 @@ namespace mongo {
         Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
 
         BSONObj o;
-        Collection *cl = getCollection( "admin.system.users" );
-        bool ok = cl != NULL && cl->findOne(BSONObj(), o);
+        const bool ok = Collection::findOne("admin.system.users", BSONObj(), o);
         txn.commit();
         return ok;
     }
@@ -269,10 +268,9 @@ namespace mongo {
         Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
 
         BSONObj user;
-        Collection *cl = getCollection( "admin.system.users" );
-        if ( cl != NULL && cl->findOne( BSON( "user" << username ) , user ) ) {
+        if (Collection::findOne("admin.system.users", BSON("user" << username), user)) {
             txn.commit();
-            return user.copy();
+            return user.getOwned();
         }
         return BSONObj();
     }

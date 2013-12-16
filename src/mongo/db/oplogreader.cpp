@@ -54,10 +54,9 @@ namespace mongo {
                 StringData ns("local.system.users");
                 LOCK_REASON(lockReason, "repl: authenticating with local db");
                 Client::ReadContext ctx(ns, lockReason);
-                Collection *cl = getCollection(ns);
-                if( cl == NULL || !cl->findOne(userReplQuery, user) ||
-                                  // try the first user in local
-                                  !cl->findOne(BSONObj(), user) ) {
+                if (!Collection::findOne(ns, userReplQuery, user) ||
+                        // try the first user in local
+                        !Collection::findOne(ns, BSONObj(), user)) {
                     log() << "replauthenticate: no user in local.system.users to use for authentication\n";
                     return false;
                 }
@@ -78,13 +77,12 @@ namespace mongo {
     }
 
     void getMe(BSONObj& me) {
-        string myname = getHostName();
+        const string myname = getHostName();
         Client::Transaction transaction(0);            
-        Collection *cl = getCollection("local.me");
+
         // local.me is an identifier for a server for getLastError w:2+
-        if ( cl == NULL || !cl->findOne( BSONObj(), me ) ||
-                           !me.hasField("host") ||
-             me["host"].String() != myname ) {
+        if (!Collection::findOne("local.me", BSONObj(), me) ||
+                !me.hasField("host") || me["host"].String() != myname) {
         
             // cleaning out local.me requires write
             // lock. This is a rare operation, so it should

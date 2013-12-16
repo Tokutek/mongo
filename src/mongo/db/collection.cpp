@@ -242,6 +242,20 @@ namespace mongo {
         computeIndexKeys();
     }
 
+    bool Collection::findOne(const StringData &ns, const BSONObj &query,
+                             BSONObj &result, const bool requireIndex) {
+        for (shared_ptr<Cursor> c(getOptimizedCursor(ns, query, BSONObj(),
+                                      requireIndex ? QueryPlanSelectionPolicy::indexOnly() :
+                                                     QueryPlanSelectionPolicy::any()));
+             c->ok(); c->advance()) {
+            if (c->currentMatches() && !c->getsetdup(c->currPK())) {
+                result = c->current().getOwned();
+                return true;
+            }
+        }
+        return false;
+    }
+
     // ------------------------------------------------------------------------
 
     CollectionBase::CollectionBase(const StringData &ns, const BSONObj &pkIndexPattern, const BSONObj &options) :
@@ -423,19 +437,6 @@ namespace mongo {
             info->ex = &e;
         }
         return -1;
-    }
-
-    bool CollectionBase::findOne(const BSONObj &query, BSONObj &result, const bool requireIndex) const {
-        for (shared_ptr<Cursor> c( getOptimizedCursor(_ns, query, BSONObj(),
-                                       requireIndex ? QueryPlanSelectionPolicy::indexOnly() :
-                                                      QueryPlanSelectionPolicy::any() ) );
-             c->ok(); c->advance()) {
-            if ( c->currentMatches() && !c->getsetdup( c->currPK() ) ) {
-                result = c->current().copy();
-                return true;
-            }
-        }
-        return false;
     }
 
     bool CollectionBase::findByPK(const BSONObj &key, BSONObj &result) const {
@@ -1184,8 +1185,7 @@ namespace mongo {
         BSONObj newSpec;
         {
             BSONObj oldSpec;
-            Collection *cl = getCollection(sysNamespaces);
-            verify( cl != NULL && cl->findOne( BSON( "name" << from ), oldSpec ) );
+            verify(Collection::findOne(sysNamespaces, BSON("name" << from), oldSpec));
             BSONObjBuilder b;
             BSONObjIterator i( oldSpec.getObjectField( "options" ) );
             while ( i.more() ) {

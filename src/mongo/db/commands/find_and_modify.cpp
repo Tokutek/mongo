@@ -142,8 +142,7 @@ namespace mongo {
                                 bool upsert , bool returnNew , bool remove ,
                                 BSONObjBuilder& result , string& errmsg ) {
             BSONObj doc;
-            Collection *cl = getCollection(ns);
-            const bool found = cl != NULL && cl->findOne( queryOriginal , doc );
+            const bool found = Collection::findOne(ns, queryOriginal, doc);
 
             BSONObj queryModified = queryOriginal;
             if ( found && doc["_id"].type() && ! isSimpleIdQuery( queryOriginal ) ) {
@@ -228,8 +227,7 @@ namespace mongo {
                             // we do this so that if the update changes the fields, it still matches
                             queryModified = queryModified["_id"].wrap();
                         }
-                        cl = getCollection(ns);
-                        if ( cl == NULL || ! cl->findOne( queryModified , doc ) ) {
+                        if (!Collection::findOne(ns, queryModified, doc)) {
                             errmsg = str::stream() << "can't find object after modification  " 
                                                    << " ns: " << ns 
                                                    << " queryModified: " << queryModified 

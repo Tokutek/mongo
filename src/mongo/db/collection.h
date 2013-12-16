@@ -99,6 +99,10 @@ namespace mongo {
         static shared_ptr<Collection> make(const StringData &ns, const BSONObj &options);
         static shared_ptr<Collection> make(const BSONObj &serialized, const bool bulkLoad = false);
 
+        // Find the first object that matches the query. Force index if requireIndex is true.
+        static bool findOne(const StringData &ns, const BSONObj &query,
+                            BSONObj &result, const bool requireIndex = false);
+
         virtual ~Collection();
 
         //
@@ -214,9 +218,6 @@ namespace mongo {
         virtual bool isPKIndex(const IndexDetails &idx) const = 0;
 
         virtual IndexDetails &getPKIndex() const = 0;
-
-        // Find the first object that matches the query. Force index if requireIndex is true.
-        virtual bool findOne(const BSONObj &query, BSONObj &result, const bool requireIndex = false) const = 0;
 
         // Find by primary key (single element bson object, no field name).
         virtual bool findByPK(const BSONObj &pk, BSONObj &result) const = 0;
@@ -493,9 +494,6 @@ namespace mongo {
         }
 
         void fillCollectionStats(Stats &aggStats, BSONObjBuilder *result, int scale) const;
-
-        // Find the first object that matches the query. Force index if requireIndex is true.
-        bool findOne(const BSONObj &query, BSONObj &result, const bool requireIndex = false) const;
 
         // Find by primary key (single element bson object, no field name).
         bool findByPK(const BSONObj &pk, BSONObj &result) const;

@@ -596,8 +596,8 @@ namespace mongo {
                 LOCK_REASON(lockReason, "repl: looking for oplog entry to undo");
                 Client::ReadContext ctx(rsoplog, lockReason);
                 Client::Transaction transaction(DB_TXN_READ_ONLY | DB_READ_UNCOMMITTED);
-                Collection *cl = getCollection( rsoplog );
-                foundLocally = cl != NULL && cl->findOne( q.done(), oplogEntry);
+                foundLocally = Collection::findOne(rsoplog, q.done(), oplogEntry);
+                transaction.commit();
             }
             if (!foundLocally) {
                 errmsg = "GTID not found in oplog";
