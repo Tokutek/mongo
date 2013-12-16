@@ -278,6 +278,12 @@ DB.prototype.createCollection = function(name, opt) {
         cmd.capped = options.capped;
     if (options.size != undefined)
         cmd.size = options.size;
+    if (options.compression != undefined)
+        cmd.compression = options.compression;
+    if (options.pageSize != undefined)
+        cmd.pageSize = options.pageSize;
+    if (options.readPageSize != undefined)
+        cmd.readPageSize = options.readPageSize;
     var res = this._dbCommand(cmd);
     return res;
 }
@@ -445,7 +451,7 @@ DB.prototype.help = function() {
     print("\tdb.cloneDatabase(fromhost)");
     print("\tdb.commandHelp(name) returns the help for the command");
     print("\tdb.copyDatabase(fromdb, todb, fromhost)");
-    print("\tdb.createCollection(name, { size : ..., capped : ..., max : ... } )");
+    print("\tdb.createCollection(name, { size : ..., capped : ..., max : ..., compression : ..., pageSize : ..., readPageSize : ... } )");
     print("\tdb.currentOp() displays currently executing operations in the db");
     print("\tdb.dropDatabase()");
     print("\tdb.eval(func, args) run code server-side");
