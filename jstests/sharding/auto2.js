@@ -65,12 +65,12 @@ var missing = [];
 for ( i=0; i<j*100; i++ ){
     var x = coll.findOne( { num : i } );
     if ( ! x ){
-        missing.push( i );
         print( "can't find: " + i );
         sleep( 5000 );
         x = coll.findOne( { num : i } );
         if ( ! x ){
             print( "still can't find: " + i );
+            missing.push( i );
             
             for ( var zzz=0; zzz<s._connections.length; zzz++ ){
                 if ( s._connections[zzz].getDB( "test" ).foo.findOne( { num : i } ) ){
