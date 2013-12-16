@@ -303,7 +303,7 @@ namespace mongo {
 
     // Serialize the information necessary to re-open this collection later.
     BSONObj CollectionBase::serialize(const StringData& ns, const BSONObj &options, const BSONObj &pk,
-                                  unsigned long long multiKeyIndexBits, const BSONArray &indexes_array) {
+                                      unsigned long long multiKeyIndexBits, const BSONArray &indexes_array) {
         return BSON("ns" << ns <<
                     "options" << options <<
                     "pk" << pk <<
@@ -636,7 +636,7 @@ namespace mongo {
     }
 
     void CollectionBase::updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
-                                        const bool logop, const bool fromMigrate, uint64_t flags) {
+                                      const bool logop, const bool fromMigrate, uint64_t flags) {
         TOKULOG(4) << "CollectionBase::updateObject pk "
             << pk << ", old " << oldObj << ", new " << newObj << endl;
 
@@ -1796,8 +1796,8 @@ namespace mongo {
     }
 
     void CappedCollection::updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
-                      const bool logop, const bool fromMigrate,
-                      uint64_t flags) {
+                                        const bool logop, const bool fromMigrate,
+                                        uint64_t flags) {
         const BSONObj newObjWithId = inheritIdField(oldObj, newObj);
         long long diff = newObjWithId.objsize() - oldObj.objsize();
         uassert( 10003 , "failing update: objects in a capped ns cannot grow", diff <= 0 );
@@ -1809,8 +1809,8 @@ namespace mongo {
     }
 
     void CappedCollection::updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
-                          const bool logop, const bool fromMigrate,
-                          uint64_t flags) {
+                                            const bool logop, const bool fromMigrate,
+                                            uint64_t flags) {
         msgasserted(17217, "bug: cannot (fast) update a capped collection, "
                            " should have been enforced higher in the stack" );
     }
