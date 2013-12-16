@@ -95,7 +95,7 @@ namespace mongo {
                 readPageSize = BytesQuantity<int>(info["readPageSize"]);
             }
             if (info.hasField("pageSize")) {
-                pageSize = BytesQuantity<int>(info["readPageSize"]);
+                pageSize = BytesQuantity<int>(info["pageSize"]);
             }
             return BSON("compression" << compression << "readPageSize" << readPageSize << "pageSize" << pageSize);
         }
