@@ -188,8 +188,8 @@ namespace mongo {
         void kill_idx();
 
         // change attributes of the underlying storage::Dictionary
-        void changeAttributes(const BSONObj &info) {
-            return _db->changeAttributes(info);
+        void changeAttributes(const BSONObj &info, BSONObjBuilder &wasBuilder) {
+            return _db->changeAttributes(info, wasBuilder);
         }
 
         enum toku_compression_method getCompressionMethod() const;

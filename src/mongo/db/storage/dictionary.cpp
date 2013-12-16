@@ -21,6 +21,7 @@
 #include "mongo/db/descriptor.h"
 #include "mongo/db/storage/dictionary.h"
 #include "mongo/db/storage/env.h"
+#include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
 
@@ -110,7 +111,8 @@ namespace mongo {
             try {
                 open(descriptor, may_create, hot_index);
                 const BSONObj attr = fillDefaultAttributes(info);
-                changeAttributes(attr);
+                BSONObjBuilder unusedBuilder;
+                changeAttributes(attr, unusedBuilder);
             } catch (...) {
                 close();
                 throw;
@@ -158,48 +160,81 @@ namespace mongo {
         }
 
         // @param info describes the attributes to be changed
-        void Dictionary::changeAttributes(const BSONObj &info) {
-            int r = 0;
-            BSONElement e;
-            e = info["readPageSize"];
-            if (e.ok() && !e.isNull()) {
-                const int readPageSize = BytesQuantity<int>(e);
-                uassert(16743, "readPageSize must be a number > 0.", readPageSize > 0);
-                TOKULOG(1) << "db " << _dname << ", setting read page size " << readPageSize << endl;
-                r = _db->change_readpagesize(_db, readPageSize);
-                if (r != 0) {
-                    handle_ydb_error(r);
-                }
-            }
-            e = info["pageSize"];
-            if (e.ok() && !e.isNull()) {
-                const int pageSize = BytesQuantity<int>(e);
-                uassert(16445, "pageSize must be a number > 0.", pageSize > 0);
-                TOKULOG(1) << "db " << _dname << ", setting page size " << pageSize << endl;
-                r = _db->change_pagesize(_db, pageSize);
-                if (r != 0) {
-                    handle_ydb_error(r);
-                }
-            }
-            e = info["compression"];
-            if (e.ok() && !e.isNull()) {
-                TOKU_COMPRESSION_METHOD compression = TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD;
-                const string str = e.String();
-                if (str == "lzma") {
-                    compression = TOKU_LZMA_METHOD;
-                } else if (str == "quicklz") {
-                    compression = TOKU_QUICKLZ_METHOD;
-                } else if (str == "zlib") {
-                    compression = TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD;
-                } else if (str == "none") {
-                    compression = TOKU_NO_COMPRESSION;
+        void Dictionary::changeAttributes(const BSONObj &info, BSONObjBuilder &wasBuilder) {
+            for (BSONObjIterator it(info); it.more(); ++it) {
+                BSONElement e = *it;
+                StringData fn(e.fieldName());
+                if (fn == "readPageSize") {
+                    const int readPageSize = BytesQuantity<int>(e);
+                    uassert(16743, "readPageSize must be a number > 0.", readPageSize > 0);
+                    uint32_t oldReadPageSize;
+                    int r = _db->get_readpagesize(_db, &oldReadPageSize);
+                    if (r != 0) {
+                        handle_ydb_error(r);
+                    }
+                    r = _db->change_readpagesize(_db, readPageSize);
+                    if (r != 0) {
+                        handle_ydb_error(r);
+                    }
+                    wasBuilder.append("readPageSize", oldReadPageSize);
+                } else if (fn == "pageSize") {
+                    const int pageSize = BytesQuantity<int>(e);
+                    uassert(16445, "pageSize must be a number > 0.", pageSize > 0);
+                    uint32_t oldPageSize;
+                    int r = _db->get_pagesize(_db, &oldPageSize);
+                    if (r != 0) {
+                        handle_ydb_error(r);
+                    }
+                    r = _db->change_pagesize(_db, pageSize);
+                    if (r != 0) {
+                        handle_ydb_error(r);
+                    }
+                    wasBuilder.append("pageSize", oldPageSize);
+                } else if (fn == "compression") {
+                    TOKU_COMPRESSION_METHOD compression = TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD;
+                    const string str = e.String();
+                    if (str == "lzma") {
+                        compression = TOKU_LZMA_METHOD;
+                    } else if (str == "quicklz") {
+                        compression = TOKU_QUICKLZ_METHOD;
+                    } else if (str == "zlib") {
+                        compression = TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD;
+                    } else if (str == "none") {
+                        compression = TOKU_NO_COMPRESSION;
+                    } else {
+                        uassert(16442, "compression must be one of: lzma, quicklz, zlib, none.", false);
+                    }
+                    TOKU_COMPRESSION_METHOD oldCompression;
+                    int r = _db->get_compression_method(_db, &oldCompression);
+                    if (r != 0) {
+                        handle_ydb_error(r);
+                    }
+                    r = _db->change_compression_method(_db, compression);
+                    if (r != 0) {
+                        handle_ydb_error(r);
+                    }
+                    switch (oldCompression) {
+                        case TOKU_SMALL_COMPRESSION_METHOD:
+                        case TOKU_LZMA_METHOD:
+                            wasBuilder.append("compression", "lzma");
+                            break;
+                        case TOKU_DEFAULT_COMPRESSION_METHOD:
+                        case TOKU_FAST_COMPRESSION_METHOD:
+                        case TOKU_QUICKLZ_METHOD:
+                            wasBuilder.append("compression", "quicklz");
+                            break;
+                        case TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD:
+                        case TOKU_ZLIB_METHOD:
+                            wasBuilder.append("compression", "zlib");
+                            break;
+                        case TOKU_NO_COMPRESSION:
+                            wasBuilder.append("compression", "none");
+                            break;
+                        default:
+                            msgasserted(17233, mongoutils::str::stream() << "invalid compression method " << oldCompression);
+                    }
                 } else {
-                    uassert(16442, "compression must be one of: lzma, quicklz, zlib, none.", false);
-                }
-                TOKULOG(1) << "db " << _dname << ", setting compression method \"" << str << "\"" << endl;
-                r = _db->change_compression_method(_db, compression);
-                if (r != 0) {
-                    handle_ydb_error(r);
+                    uasserted(17234, mongoutils::str::stream() << "cannot set unknown attribute " << fn);
                 }
             }
         }

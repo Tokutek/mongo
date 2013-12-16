@@ -899,7 +899,7 @@ namespace mongo {
     // rebuild the given index, online.
     // - if there are options, change those options in the index and update the system catalog.
     // - otherwise, send an optimize message and run hot optimize.
-    void CollectionBase::_rebuildIndex(IndexDetails &idx, const BSONObj &options) {
+    void CollectionBase::_rebuildIndex(IndexDetails &idx, const BSONObj &options, BSONObjBuilder &wasBuilder) {
         if (options.isEmpty()) {
             LOG(1) << _ns << ": optimizing index " << idx.keyPattern() << endl;
             const bool ascending = Ordering::make(idx.keyPattern()).descending(0);
@@ -913,16 +913,23 @@ namespace mongo {
             idx.optimize(leftSKey, rightSKey, true, 0, &loops_run);
         } else {
             LOG(1) << _ns << ": altering index " << idx.keyPattern() << ", options " << options << endl;
-            idx.changeAttributes(options);
+            idx.changeAttributes(options, wasBuilder);
         }
     }
 
-    void CollectionBase::rebuildIndexes(const StringData &name, const BSONObj &options) {
+    void CollectionBase::rebuildIndexes(const StringData &name, const BSONObj &options, BSONObjBuilder &result) {
         if (name == "*") {
+            BSONArrayBuilder ab;
             // "*" means everything
             for (int i = 0; i < _nIndexes; i++) {
                 IndexDetails &idx = *_indexes[i];
-                _rebuildIndex(idx, options);
+                BSONObjBuilder wasBuilder(ab.subobjStart());
+                wasBuilder.append("name", idx.indexName());
+                _rebuildIndex(idx, options, wasBuilder);
+                wasBuilder.doneFast();
+            }
+            if (!options.isEmpty()) {
+                result.appendArray("was", ab.done());
             }
         } else {
             // optimize a single index.
@@ -933,7 +940,11 @@ namespace mongo {
             uassert(17232, str::stream() << "cannot rebuild a background index: " << name,
                            i < _nIndexes); // i == _nIndexes is the hot index
             IndexDetails &idx = *_indexes[i];
-            _rebuildIndex(idx, options);
+            BSONObjBuilder wasBuilder;
+            _rebuildIndex(idx, options, wasBuilder);
+            if (!options.isEmpty()) {
+                result.append("was", wasBuilder.done());
+            }
         }
     }
 
@@ -2114,7 +2125,7 @@ namespace mongo {
         uasserted( 17218, "Cannot update a collection under-going bulk load." );
     }
 
-    void BulkLoadedCollection::rebuildIndexes(const StringData &name, const BSONObj &options) {
+    void BulkLoadedCollection::rebuildIndexes(const StringData &name, const BSONObj &options, BSONObjBuilder &result) {
         uasserted( 16895, "Cannot optimize a collection under-going bulk load." );
     }
 

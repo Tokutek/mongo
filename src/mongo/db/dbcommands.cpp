@@ -765,14 +765,24 @@ namespace mongo {
     private:
         bool _reIndex(Collection *cl, const BSONObj &cmdObj, string &errmsg, BSONObjBuilder &result) {
             const BSONElement e = cmdObj["index"];
+            BSONObj options;
+            BSONElement optsElt = cmdObj["options"];
+            if (optsElt.ok()) {
+                if (optsElt.isABSONObj()) {
+                    options = optsElt.Obj();
+                } else {
+                    errmsg = "invalid options element";
+                    return false;
+                }
+            }
             if (!e.ok()) {
                 // optimize everything
-                cl->rebuildIndexes("*");
+                cl->rebuildIndexes("*", options, result);
             } else {
                 // optimize a single index
                 if (e.type() == String) {
                     // by name
-                    cl->rebuildIndexes(e.Stringdata());
+                    cl->rebuildIndexes(e.Stringdata(), options, result);
                 } else if (e.type() == Object) {
                     // by key pattern
                     const BSONObj pattern = e.embeddedObject();
@@ -783,7 +793,7 @@ namespace mongo {
                     } else {
                         const IndexDetails &idx = cl->idx(idxNo);
                         const string name = idx.indexName();
-                        cl->rebuildIndexes(name);
+                        cl->rebuildIndexes(name, options, result);
                     }
                 } else {
                     errmsg = "invalid index name spec";

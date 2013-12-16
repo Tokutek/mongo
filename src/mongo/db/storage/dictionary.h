@@ -36,7 +36,7 @@ namespace mongo {
             ~Dictionary();
 
             // @param change the parameters described by the info object
-            void changeAttributes(const BSONObj &info);
+            void changeAttributes(const BSONObj &info, BSONObjBuilder &wasBuilder);
 
             DB *db() const {
                 return _db;

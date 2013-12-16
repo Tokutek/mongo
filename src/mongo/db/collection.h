@@ -265,7 +265,7 @@ namespace mongo {
         //
         // @param name, name of the index to optimize. "*" means all indexes
         // @param options, options for the rebuild process. semantics are implementation specific.
-        virtual void rebuildIndexes(const StringData &name, const BSONObj &options = BSONObj()) = 0;
+        virtual void rebuildIndexes(const StringData &name, const BSONObj &options, BSONObjBuilder &result) = 0;
 
         virtual void drop(string &errmsg, BSONObjBuilder &result, const bool mayDropSystem = false) = 0;
 
@@ -520,7 +520,7 @@ namespace mongo {
         // @param name, name of the index to optimize. "*" means all indexes
         // @param options, if options are present, update all affected indexes to have the new options.
         //                 if no options are present, send an optimize message and run hot optimize.
-        virtual void rebuildIndexes(const StringData &name, const BSONObj &options = BSONObj());
+        virtual void rebuildIndexes(const StringData &name, const BSONObj &options, BSONObjBuilder &result);
 
         virtual void drop(string &errmsg, BSONObjBuilder &result, const bool mayDropSystem = false);
         virtual bool dropIndexes(const StringData& name, string &errmsg,
@@ -631,7 +631,7 @@ namespace mongo {
         // rebuild the given index, online.
         // - if there are options, change those options in the index and update the system catalog.
         // - otherwise, send an optimize message and run hot optimize.
-        void _rebuildIndex(IndexDetails &idx, const BSONObj &options);
+        void _rebuildIndex(IndexDetails &idx, const BSONObj &options, BSONObjBuilder &result);
 
         // create a new index with the given info for this namespace.
         virtual void createIndex(const BSONObj &info);
@@ -918,7 +918,7 @@ namespace mongo {
 
         void empty();
 
-        void rebuildIndexes(const StringData &name, const BSONObj &options = BSONObj());
+        void rebuildIndexes(const StringData &name, const BSONObj &options, BSONObjBuilder &result);
 
         bool dropIndexes(const StringData& name, string &errmsg,
                          BSONObjBuilder &result, bool mayDeleteIdIndex);
