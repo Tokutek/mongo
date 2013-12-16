@@ -1061,13 +1061,15 @@ namespace NamespaceTests {
                 registerIndexKey( BSON( "a" << 1 ) );
 
                 ASSERT( !nsd()->isMultikey( 1 ) );
-                
-                nsd()->setIndexIsMultikey( 1 );
+                bool dummy;
+                Collection* cl = nsd();
+                CollectionBase* cd = cl->as<CollectionBase>();
+                cd->setIndexIsMultikey( 1, &dummy );
                 ASSERT( nsd()->isMultikey( 1 ) );
                 assertCachedIndexKey( BSONObj() );
                 
                 registerIndexKey( BSON( "a" << 1 ) );
-                nsd()->setIndexIsMultikey( 1 );
+                cd->setIndexIsMultikey( 1, &dummy );
                 assertCachedIndexKey( BSON( "a" << 1 ) );
             }
         };

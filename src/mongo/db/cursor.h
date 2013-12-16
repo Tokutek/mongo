@@ -25,6 +25,7 @@
 #include "mongo/db/client.h"
 #include "mongo/db/index.h"
 #include "mongo/db/storage/key.h"
+#include "mongo/db/collection.h"
 
 namespace mongo {
 
@@ -50,6 +51,9 @@ namespace mongo {
         //                cannot call currKey()/current() on any such cursor.
 
         // table-scan
+        static shared_ptr<Cursor> make(CollectionData *cd,
+                                       const int direction);
+        
         static shared_ptr<Cursor> make(Collection *cl,
                                        const int direction = 1,
                                        const bool countCursor = false);
@@ -59,12 +63,20 @@ namespace mongo {
                                        const int direction = 1,
                                        const bool countCursor = false);
 
+        static shared_ptr<Cursor> make(CollectionData *cd, const IndexDetails &idx,
+                                        const int direction = 1);
+
         // index range scan between start/end
         static shared_ptr<Cursor> make(Collection *cl, const IndexDetails &idx,
                                        const BSONObj &startKey, const BSONObj &endKey,
                                        const bool endKeyInclusive,
                                        const int direction, const int numWanted = 0,
                                        const bool countCursor = false);
+
+        static shared_ptr<Cursor> make(CollectionData *cl, const IndexDetails &idx,
+                                       const BSONObj &startKey, const BSONObj &endKey,
+                                       const bool endKeyInclusive,
+                                       const int direction, const int numWanted = 0);
 
         // index range scan by field bounds
         static shared_ptr<Cursor> make(Collection *cl, const IndexDetails &idx,
@@ -292,11 +304,11 @@ namespace mongo {
         // - Ascending/forward, return false.
         static bool reverseMinMaxBoundsOrder(const Ordering &ordering, const int direction);
 
-        IndexCursor( Collection *cl, const IndexDetails &idx,
+        IndexCursor( CollectionData *cl, const IndexDetails &idx,
                      const BSONObj &startKey, const BSONObj &endKey,
                      bool endKeyInclusive, int direction, int numWanted = 0);
 
-        IndexCursor( Collection *cl, const IndexDetails &idx,
+        IndexCursor( CollectionData *cl, const IndexDetails &idx,
                      const shared_ptr< FieldRangeVector > &bounds,
                      int singleIntervalLimit, int direction, int numWanted = 0);
 
@@ -357,7 +369,7 @@ namespace mongo {
         void checkEnd();
 
     protected:
-        Collection *const _cl;
+        CollectionData* _cl;
         const IndexDetails &_idx;
         const Ordering _ordering;
 
@@ -433,7 +445,7 @@ namespace mongo {
      */
     class IndexScanCursor : public IndexCursor, ScanCursor {
     protected:
-        IndexScanCursor(Collection *cl, const IndexDetails &idx,
+        IndexScanCursor(CollectionData *cl, const IndexDetails &idx,
                         const int direction, const int numWanted = 0);
 
         // For the Cursor::make() family of factories
@@ -490,11 +502,11 @@ namespace mongo {
         bool advance();
 
     protected:
-        IndexCountCursor( Collection *cl, const IndexDetails &idx,
+        IndexCountCursor( CollectionData *cl, const IndexDetails &idx,
                           const BSONObj &startKey, const BSONObj &endKey,
                           const bool endKeyInclusive );
 
-        IndexCountCursor( Collection *cl, const IndexDetails &idx,
+        IndexCountCursor( CollectionData *cl, const IndexDetails &idx,
                           const shared_ptr< FieldRangeVector > &bounds );
 
 
@@ -520,7 +532,7 @@ namespace mongo {
      */
     class IndexScanCountCursor : public IndexCountCursor, ScanCursor {
     private:
-        IndexScanCountCursor( Collection *cl, const IndexDetails &idx );
+        IndexScanCountCursor( CollectionData *cl, const IndexDetails &idx );
 
         // For the Cursor::make() family of factories
         friend class Cursor;
@@ -543,7 +555,7 @@ namespace mongo {
         virtual void explainDetails( BSONObjBuilder& b ) const { return; }
 
     private:
-        BasicCursor(Collection *cl, int direction);
+        BasicCursor(CollectionData *cl, int direction);
 
         // For the Cursor::make() family of factories
         friend class Cursor;

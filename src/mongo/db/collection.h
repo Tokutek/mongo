@@ -81,6 +81,167 @@ namespace mongo {
 
     bool isSystemUsersCollection(const StringData &ns);
 
+    //
+    // Indexing
+    //
+    class CollectionIndexer : boost::noncopyable {
+    public:
+        virtual ~CollectionIndexer() { }
+    
+        // Prepare an index build. Must be write locked.
+        //
+        // Must ensure the given Collection will remain valid for
+        // the lifetime of the indexer.
+        virtual void prepare() = 0;
+    
+        // Perform the index build. May be read or write locked depending on implementation.
+        virtual void build() = 0;
+    
+        // Commit the index build. Must be write locked.
+        //
+        // If commit() succeeds (ie: does not throw), the destructor must be called in
+        // the same write lock section to prevent a race condition where another thread
+        // sets _indexBuildInProgress back to true.
+        virtual void commit() = 0;
+
+    };
+    
+    class CollectionData : boost::noncopyable {
+    protected:
+        // duplicated (for now)
+
+        // The namespace of this collection, database.collection
+        const string _ns;
+        // The primary index pattern.
+        const BSONObj _pk;
+
+    public:
+        virtual ~CollectionData() { }
+        virtual bool indexBuildInProgress() const = 0;
+        virtual int nIndexes() const = 0;
+
+        // Close the collection. For regular collections, closes the underlying IndexDetails
+        // (and their underlying dictionaries). For bulk loaded collections, closes the
+        // loader first and then closes dictionaries. The caller may wish to advise the 
+        // implementation that the close() is getting called due to an aborting transaction.
+        virtual void close(const bool aborting, bool* indexBitsChanged) = 0;
+
+        // Ensure that the given index exists, or build it if it doesn't.
+        // @param info is the index spec (ie: { ns: "test.foo", key: { a: 1 }, name: "a_1", clustering: true })
+        // @return whether or the the index was just built.
+        virtual bool ensureIndex(const BSONObj &info) = 0;
+
+        /* when a background index build is in progress, we don't count the index in nIndexes until
+           complete, yet need to still use it in _indexRecord() - thus we use this function for that.
+        */
+        virtual int nIndexesBeingBuilt() const = 0;
+
+        virtual IndexDetails& idx(int idxNo) const = 0;
+
+        /* hackish - find our index # in the indexes array */
+        virtual int idxNo(const IndexDetails& idx) const = 0;
+
+        // @return offset in indexes[]
+        virtual int findIndexByName(const StringData& name) const = 0;
+
+        // @return offset in indexes[]
+        virtual int findIndexByKeyPattern(const BSONObj& keyPattern) const = 0;
+
+        // -1 means not found
+        virtual int findIdIndex() const = 0;
+
+        virtual bool isPKIndex(const IndexDetails &idx) const = 0;
+
+        virtual IndexDetails &getPKIndex() const = 0;
+
+        // Find by primary key (single element bson object, no field name).
+        virtual bool findByPK(const BSONObj &pk, BSONObj &result) const = 0;
+
+        // Extracts and returns validates an owned BSONObj represetning
+        // the primary key portion of the given object. Validates each
+        // field, ensuring there are no undefined, regex, or array types.
+        virtual BSONObj getValidatedPKFromObject(const BSONObj &obj) const = 0;
+
+        // Extracts and returns an owned BSONObj representing
+        // the primary key portion of the given query, if each
+        // portion of the primary key exists in the query and
+        // is 'simple' (ie: equality, no $ operators)
+        virtual BSONObj getSimplePKFromQuery(const BSONObj &query, const BSONObj& pk) const = 0;
+
+        //
+        // Write interface
+        //
+        
+        // inserts an object into this namespace, taking care of secondary indexes if they exist
+        virtual void insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged) = 0;
+
+        // deletes an object from this namespace, taking care of secondary indexes if they exist
+        virtual void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags) = 0;
+
+        // update an object in the namespace by pk, replacing oldObj with newObj
+        //
+        // handles logging
+        virtual void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
+                                  const bool logop, const bool fromMigrate,
+                                  uint64_t flags, bool* indexBitChanged) = 0;
+
+        // @return true, if fastupdates are ok for this collection.
+        //         fastupdates are not ok for this collection if it's sharded
+        //         and the primary key does not contain the full shard key.
+        virtual bool fastupdatesOk() = 0;
+
+        // update an object in the namespace by pk, described by the updateObj's $ operators
+        //
+        // handles logging
+        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
+                                      const bool logop, const bool fromMigrate,
+                                      uint64_t flags) = 0;
+
+        // rebuild the given index, online.
+        // - if there are options, change those options in the index and update the system catalog.
+        // - otherwise, send an optimize message and run hot optimize.
+        virtual bool rebuildIndex(IndexDetails &idx, const BSONObj &options, BSONObjBuilder &result) = 0;
+
+        virtual void dropIndexDetails(IndexDetails& idx, int idxNum) = 0;
+
+        // return true if the namespace is currently under-going bulk load.
+        virtual bool bulkLoading() const = 0;
+
+        // optional to implement, return true if the namespace is capped
+        virtual bool isCapped() const = 0;
+
+        // optional to implement, populate the obj builder with collection specific stats
+        virtual void fillSpecificStats(BSONObjBuilder &result, int scale) const = 0;
+
+        virtual shared_ptr<CollectionIndexer> newIndexer(const BSONObj &info, const bool background) = 0;
+
+        virtual unsigned long long getMultiKeyIndexBits() const = 0;
+
+        virtual bool isMultiKey(int i) const = 0;
+
+        template <class T> T *as() {
+            T *subclass = dynamic_cast<T *>(this);
+            massert(17236, "bug: failed to dynamically cast Collection to desired subclass", subclass != NULL);
+            return subclass;
+        }
+        
+        // Key pattern for the primary key. For typical collections, this is { _id: 1 }.
+        const BSONObj &pkPattern() const {
+            return _pk;
+        }
+    protected:
+        CollectionData(const StringData& ns, const BSONObj &pkIndexPattern) :
+            _ns(ns.toString()),
+            _pk(pkIndexPattern.copy()) {
+        }
+
+        CollectionData(const BSONObj &serialized) :
+            _ns(serialized["ns"].String()),
+            _pk(serialized["pk"].Obj().copy()) {
+        }
+        
+    };
+
     // Represents a collection.
     class Collection : boost::noncopyable {
     public:
@@ -126,16 +287,8 @@ namespace mongo {
             return _pk;
         }
 
-        bool indexBuildInProgress() const {
-            return _indexBuildInProgress;
-        }
-
         const string &ns() const {
             return _ns;
-        }
-
-        int nIndexes() const {
-            return _nIndexes;
         }
 
         const IndexPathSet &indexKeys() const {
@@ -145,159 +298,40 @@ namespace mongo {
         // Multikey indexes are indexes where there exists a document with more than
         // one key in the index. Need to dedup queries over these indexes.
         bool isMultikey(int i) const {
-            const unsigned long long mask = 1ULL << i;
-            return (_multiKeyIndexBits & mask) != 0;
+            return _cd->isMultiKey(i);
         }
-
-        void setIndexIsMultikey(const int idxNum);
-
-        //
-        // The virtual colleciton interface - implementations differ among collection types.
-        //
-
-        // Serializes metadata to a BSONObj that can be stored on disk for later access.
-        // @return a BSON representation of this Collection's state
-        virtual BSONObj serialize(const bool includeHotIndex = false) const = 0;
-
-        // Close the collection. For regular collections, closes the underlying IndexDetails
-        // (and their underlying dictionaries). For bulk loaded collections, closes the
-        // loader first and then closes dictionaries. The caller may wish to advise the 
-        // implementation that the close() is getting called due to an aborting transaction.
-        virtual void close(const bool aborting = false) = 0;
 
         // 
         // Index access and layout
         //
 
-        virtual void computeIndexKeys() = 0;
+        void computeIndexKeys();
 
-        // Ensure that the given index exists, or build it if it doesn't.
-        // @param info is the index spec (ie: { ns: "test.foo", key: { a: 1 }, name: "a_1", clustering: true })
-        // @return whether or the the index was just built.
-        virtual bool ensureIndex(const BSONObj &info) = 0;
-
-        /* when a background index build is in progress, we don't count the index in nIndexes until
-           complete, yet need to still use it in _indexRecord() - thus we use this function for that.
-        */
-        virtual int nIndexesBeingBuilt() const = 0;
-
-        virtual IndexDetails& idx(int idxNo) const = 0;
-
-        /* hackish - find our index # in the indexes array */
-        virtual int idxNo(const IndexDetails& idx) const = 0;
 
         /**
          * Record that a new index exists in <dbname>.system.indexes.
          * Only used for the primary key index or an automatic _id index (capped collections),
          * the others go through the normal insert path.
          */
-        virtual void addDefaultIndexesToCatalog() = 0;
+        void addDefaultIndexesToCatalog();
 
-        // @return offset in indexes[]
-        virtual int findIndexByName(const StringData& name) const = 0;
+        static BSONObj serialize(const StringData& ns, const BSONObj &options,
+                                 const BSONObj &pk, unsigned long long multiKeyIndexBits,
+                                 const BSONArray &indexes_array);
 
-        // @return offset in indexes[]
-        virtual int findIndexByKeyPattern(const BSONObj& keyPattern) const = 0;
-
-        // @return the smallest (in terms of dataSize, which is key length + value length)
-        //         index in _indexes that is one-to-one with the primary key. specifically,
-        //         the returned index cannot be sparse or multikey.
-        virtual IndexDetails &findSmallestOneToOneIndex() const = 0;
-
-        /* Returns the index entry for the first index whose prefix contains
-         * 'keyPattern'. If 'requireSingleKey' is true, skip indices that contain
-         * array attributes. Otherwise, returns NULL.
-         */
-        virtual const IndexDetails* findIndexByPrefix(const BSONObj &keyPattern ,
-                                                      bool requireSingleKey) const = 0;
-
-
-        // -1 means not found
-        virtual int findIdIndex() const = 0;
-
-        virtual bool isPKIndex(const IndexDetails &idx) const = 0;
-
-        virtual IndexDetails &getPKIndex() const = 0;
-
-        // Find by primary key (single element bson object, no field name).
-        virtual bool findByPK(const BSONObj &pk, BSONObj &result) const = 0;
-
-        // Extracts and returns validates an owned BSONObj represetning
-        // the primary key portion of the given object. Validates each
-        // field, ensuring there are no undefined, regex, or array types.
-        virtual BSONObj getValidatedPKFromObject(const BSONObj &obj) const = 0;
+        // Serializes metadata to a BSONObj that can be stored on disk for later access.
+        // @return a BSON representation of this Collection's state
+        BSONObj serialize(const bool includeHotIndex = false) const;
 
         // Extracts and returns an owned BSONObj representing
         // the primary key portion of the given query, if each
         // portion of the primary key exists in the query and
         // is 'simple' (ie: equality, no $ operators)
-        virtual BSONObj getSimplePKFromQuery(const BSONObj &query) const = 0;
-
-        //
-        // Write interface
-        //
-        
-        // inserts an object into this namespace, taking care of secondary indexes if they exist
-        virtual void insertObject(BSONObj &obj, uint64_t flags = 0) = 0;
-
-        // deletes an object from this namespace, taking care of secondary indexes if they exist
-        virtual void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags = 0) = 0;
-
-        // update an object in the namespace by pk, replacing oldObj with newObj
-        //
-        // handles logging
-        virtual void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
-                                  const bool logop, const bool fromMigrate,
-                                  uint64_t flags = 0) = 0;
-
-        // @return true, if fastupdates are ok for this collection.
-        //         fastupdates are not ok for this collection if it's sharded
-        //         and the primary key does not contain the full shard key.
-        virtual bool fastupdatesOk() = 0;
-
-        // update an object in the namespace by pk, described by the updateObj's $ operators
-        //
-        // handles logging
-        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
-                                      const bool logop, const bool fromMigrate,
-                                      uint64_t flags = 0) = 0;
-
-        // Rebuild indexes. Details are implementation specific. This is typically an online operation.
-        //
-        // @param name, name of the index to optimize. "*" means all indexes
-        // @param options, options for the rebuild process. semantics are implementation specific.
-        virtual void rebuildIndexes(const StringData &name, const BSONObj &options, BSONObjBuilder &result) = 0;
-
-        virtual void drop(string &errmsg, BSONObjBuilder &result, const bool mayDropSystem = false) = 0;
-
-        virtual bool dropIndexes(const StringData& name, string &errmsg,
-                                 BSONObjBuilder &result, bool mayDeleteIdIndex) = 0;
-
-        //
-        // Subclass detection and type coersion.
-        //
-        // To keep the Collection interface lean, special functionality is
-        // accessed only through a specific child class interface. We know
-        // use these booleans to detect when a Collection implementation
-        // has special functionality, and we coerce it to a subtype with as().
-        //
-        
-        // return true if the namespace is currently under-going bulk load.
-        virtual bool bulkLoading() const {
-            return false;
+        BSONObj getSimplePKFromQuery(const BSONObj &query) const {
+            return getSimplePKFromQuery(query, _pk);
         }
 
-        // optional to implement, return true if the namespace is capped
-        virtual bool isCapped() const {
-            return false;
-        }
-
-        // Interpret this Collection as a subclass. Asserts if conversion fails.
-        template <class T> T *as() {
-            T *subclass = dynamic_cast<T *>(this);
-            massert(17230, "bug: failed to dynamically cast Collection to desired subclass", subclass != NULL);
-            return subclass;
-        }
+        void noteMultiKeyChanged();
 
         // 
         // Stats
@@ -332,41 +366,207 @@ namespace mongo {
             void appendInfo(BSONObjBuilder &b, int scale) const;
         };
 
-        virtual void fillCollectionStats(Stats &aggStats, BSONObjBuilder *result, int scale) const = 0;
+        void fillCollectionStats(Stats &aggStats, BSONObjBuilder *result, int scale) const;
+
+        void noteIndexBuilt();
 
         //
-        // Indexing
+        // The functions that call into _cd - implementations differ among collection types.
         //
-
-        class Indexer : boost::noncopyable {
-        public:
-            virtual ~Indexer() { }
-
-            // Prepare an index build. Must be write locked.
-            //
-            // Must ensure the given Collection will remain valid for
-            // the lifetime of the indexer.
-            virtual void prepare() = 0;
-
-            // Perform the index build. May be read or write locked depending on implementation.
-            virtual void build() = 0;
-
-            // Commit the index build. Must be write locked.
-            //
-            // If commit() succeeds (ie: does not throw), the destructor must be called in
-            // the same write lock section to prevent a race condition where another thread
-            // sets _indexBuildInProgress back to true.
-            virtual void commit() = 0;
+        bool indexBuildInProgress() const {
+            return _cd->indexBuildInProgress();
         };
+        int nIndexes() const {
+            return _cd->nIndexes();
+        }
 
-        virtual shared_ptr<Indexer> newIndexer(const BSONObj &info, const bool background) = 0;
+        // Close the collection. For regular collections, closes the underlying IndexDetails
+        // (and their underlying dictionaries). For bulk loaded collections, closes the
+        // loader first and then closes dictionaries. The caller may wish to advise the 
+        // implementation that the close() is getting called due to an aborting transaction.
+        void close(const bool aborting = false) {
+            bool indexBitsChanged = false;
+            _cd->close(aborting, &indexBitsChanged);
+            if (indexBitsChanged) {
+                noteMultiKeyChanged();
+            }
+        }
 
+        // Ensure that the given index exists, or build it if it doesn't.
+        // @param info is the index spec (ie: { ns: "test.foo", key: { a: 1 }, name: "a_1", clustering: true })
+        // @return whether or the the index was just built.
+        bool ensureIndex(const BSONObj &info) {
+            bool ret = _cd->ensureIndex(info);
+            if (ret) {
+                noteIndexBuilt();
+            }
+            return ret;
+        }
+
+        /* when a background index build is in progress, we don't count the index in nIndexes until
+           complete, yet need to still use it in _indexRecord() - thus we use this function for that.
+        */
+        int nIndexesBeingBuilt() const {
+            return _cd->nIndexesBeingBuilt();
+        }
+
+        IndexDetails& idx(int idxNo) const {
+            return _cd->idx(idxNo);
+        }
+
+        /* hackish - find our index # in the indexes array */
+        int idxNo(const IndexDetails& idx) const {
+            return _cd->idxNo(idx);
+        }
+
+        // @return offset in indexes[]
+        int findIndexByKeyPattern(const BSONObj& keyPattern) const {
+            return _cd->findIndexByKeyPattern(keyPattern);
+        }
+
+        // @return the smallest (in terms of dataSize, which is key length + value length)
+        //         index in _indexes that is one-to-one with the primary key. specifically,
+        //         the returned index cannot be sparse or multikey.
+        IndexDetails &findSmallestOneToOneIndex() const;
+
+        /* Returns the index entry for the first index whose prefix contains
+         * 'keyPattern'. If 'requireSingleKey' is true, skip indices that contain
+         * array attributes. Otherwise, returns NULL.
+         */
+        const IndexDetails* findIndexByPrefix(const BSONObj &keyPattern ,
+                                                      bool requireSingleKey) const;
+
+
+        // -1 means not found
+        int findIdIndex() const {
+            return _cd->findIdIndex();
+        }
+
+        bool isPKIndex(const IndexDetails &idx) const {
+            return _cd->isPKIndex(idx);
+        }
+
+        IndexDetails &getPKIndex() const {
+            return _cd->getPKIndex();
+        }
+
+        // Find by primary key (single element bson object, no field name).
+        bool findByPK(const BSONObj &pk, BSONObj &result) const {
+            return _cd->findByPK(pk, result);
+        }
+
+        // Extracts and returns validates an owned BSONObj represetning
+        // the primary key portion of the given object. Validates each
+        // field, ensuring there are no undefined, regex, or array types.
+        BSONObj getValidatedPKFromObject(const BSONObj &obj) const {
+            return _cd->getValidatedPKFromObject(obj);
+        }
+
+        // Extracts and returns an owned BSONObj representing
+        // the primary key portion of the given query, if each
+        // portion of the primary key exists in the query and
+        // is 'simple' (ie: equality, no $ operators)
+        BSONObj getSimplePKFromQuery(const BSONObj &query, const BSONObj& pk) const {
+            return _cd->getSimplePKFromQuery(query, pk);
+        }
+
+        //
+        // Write interface
+        //
+        
+        // inserts an object into this namespace, taking care of secondary indexes if they exist
+        void insertObject(BSONObj &obj, uint64_t flags = 0) {
+            // note, we MUST initialize this variable, as it may not be set in call below
+            bool indexBitChanged = false;
+            _cd->insertObject(obj, flags, &indexBitChanged);
+            if (indexBitChanged) {
+                noteMultiKeyChanged();
+            }
+        }
+
+        // deletes an object from this namespace, taking care of secondary indexes if they exist
+        void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags = 0) {
+            _cd->deleteObject(pk, obj, flags);
+        }
+
+        // update an object in the namespace by pk, replacing oldObj with newObj
+        //
+        // handles logging
+        void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
+                                  const bool logop, const bool fromMigrate,
+                                  uint64_t flags = 0) {
+            bool indexBitChanged = false;
+            _cd->updateObject(pk, oldObj, newObj, logop, fromMigrate, flags, &indexBitChanged);
+            if (indexBitChanged) {
+                noteMultiKeyChanged();
+            }
+        }
+
+        // @return true, if fastupdates are ok for this collection.
+        //         fastupdates are not ok for this collection if it's sharded
+        //         and the primary key does not contain the full shard key.
+        bool fastupdatesOk() {
+            return _cd->fastupdatesOk();
+        }
+
+        // update an object in the namespace by pk, described by the updateObj's $ operators
+        //
+        // handles logging
+        void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
+                                      const bool logop, const bool fromMigrate,
+                                      uint64_t flags = 0) {
+            _cd->updateObjectMods(pk, updateObj, logop, fromMigrate, flags);
+        }
+
+        // Rebuild indexes. Details are implementation specific. This is typically an online operation.
+        //
+        // @param name, name of the index to optimize. "*" means all indexes
+        // @param options, options for the rebuild process. semantics are implementation specific.
+        void rebuildIndexes(const StringData &name, const BSONObj &options, BSONObjBuilder &result);
+
+        void drop(string &errmsg, BSONObjBuilder &result, const bool mayDropSystem = false);
+
+        bool dropIndexes(const StringData& name, string &errmsg,
+                                 BSONObjBuilder &result, bool mayDeleteIdIndex);
+
+        void dropIndex(const int idxNum);
+        
+        // return true if the namespace is currently under-going bulk load.
+        bool bulkLoading() const {
+            return _cd->bulkLoading();
+        }
+
+        // optional to implement, return true if the namespace is capped
+        bool isCapped() const {
+            return _cd->isCapped();
+        }
+
+        // optional to implement, populate the obj builder with collection specific stats
+        void fillSpecificStats(BSONObjBuilder &result, int scale) const {
+            _cd->fillSpecificStats(result, scale);
+        }
+
+        shared_ptr<CollectionIndexer> newIndexer(const BSONObj &info, const bool background) {
+            return _cd->newIndexer(info, background);
+        }
+
+        //
+        // Subclass detection and type coersion.
+        //
+        // To keep the Collection interface lean, special functionality is
+        // accessed only through a specific child class interface. We know
+        // use these booleans to detect when a Collection implementation
+        // has special functionality, and we coerce it to a subtype with as().
+        //
+        // Interpret this Collection as a subclass. Asserts if conversion fails.
+        template <class T> T *as() {
+            T *subclass = dynamic_cast<T *>(this->_cd.get());
+            massert(17230, "bug: failed to dynamically cast Collection to desired subclass", subclass != NULL);
+            return subclass;
+        }
     protected:
-        Collection(const StringData &ns, const BSONObj &pkIndexPattern, const BSONObj &options);
-        Collection(const BSONObj &serialized);
-
-        // generate an index info BSON for this namespace, with the same options
-        BSONObj indexInfo(const BSONObj &keyPattern, bool unique, bool clustering) const;
+        Collection(const StringData &ns, const BSONObj &options);
+        Collection(const BSONObj &serialized, const bool bulkLoad);
 
         // The namespace of this collection, database.collection
         const string _ns;
@@ -376,37 +576,33 @@ namespace mongo {
         BSONObj _options;
 
         // The primary index pattern.
-        const BSONObj _pk;
+        // This is non-const because of how
+        // the value is filled in the constructor
+        // TODO: remove this and just reference copy in CollectionData
+        BSONObj _pk;
 
         // Every index has an IndexDetails that describes it.
-        bool _indexBuildInProgress;
-        int _nIndexes;
-        unsigned long long _multiKeyIndexBits;
         IndexPathSet _indexedPaths;
         void resetTransient();
 
         /* query cache (for query optimizer) */
         QueryCache _queryCache;
+
+        // fix later
+        shared_ptr<CollectionData> _cd;
     };
 
     // Implementation of the collection interface using a simple 
     // std::vector of IndexDetails, the first of which is the primary key.
-    class CollectionBase : public Collection {
+    class CollectionBase : public CollectionData {
     public:
         virtual ~CollectionBase() { }
-
-        static BSONObj serialize(const StringData& ns, const BSONObj &options,
-                                 const BSONObj &pk, unsigned long long multiKeyIndexBits,
-                                 const BSONArray &indexes_array);
-        BSONObj serialize(const bool includeHotIndex = false) const;
 
         // Close the collection. For regular collections, closes the underlying IndexDetails
         // (and their underlying dictionaries). For bulk loaded collections, closes the
         // loader first and then closes dictionaries. The caller may wish to advise the 
         // implementation that the close() is getting called due to an aborting transaction.
-        virtual void close(const bool aborting = false);
-
-        void computeIndexKeys();
+        virtual void close(const bool aborting, bool* indexBitsChanged);
 
         // Ensure that the given index exists, or build it if it doesn't.
         // @param info is the index spec (ie: { ns: "test.foo", key: { a: 1 }, name: "a_1", clustering: true })
@@ -426,7 +622,7 @@ namespace mongo {
         }
 
         IndexDetails& idx(int idxNo) const {
-            verify( idxNo < NIndexesMax );
+            verify( idxNo < Collection::NIndexesMax );
             verify( idxNo >= 0 && idxNo < (int) _indexes.size() );
             return *_indexes[idxNo];
         }
@@ -443,31 +639,11 @@ namespace mongo {
             return -1;
         }
 
-        /**
-         * Record that a new index exists in <dbname>.system.indexes.
-         * Only used for the primary key index or an automatic _id index (capped collections),
-         * the others go through the normal insert path.
-         */
-        void addDefaultIndexesToCatalog();
-
         // @return offset in indexes[]
         int findIndexByName(const StringData& name) const;
 
         // @return offset in indexes[]
         int findIndexByKeyPattern(const BSONObj& keyPattern) const;
-
-        // @return the smallest (in terms of dataSize, which is key length + value length)
-        //         index in _indexes that is one-to-one with the primary key. specifically,
-        //         the returned index cannot be sparse or multikey.
-        IndexDetails &findSmallestOneToOneIndex() const;
-
-        /* Returns the index entry for the first index whose prefix contains
-         * 'keyPattern'. If 'requireSingleKey' is true, skip indices that contain
-         * array attributes. Otherwise, returns NULL.
-         */
-        const IndexDetails* findIndexByPrefix( const BSONObj &keyPattern ,
-                                               bool requireSingleKey ) const;
-
 
         /* @return -1 = not found
            generally id is first index, so not that expensive an operation (assuming present).
@@ -494,7 +670,13 @@ namespace mongo {
             return idx;
         }
 
-        void fillCollectionStats(Stats &aggStats, BSONObjBuilder *result, int scale) const;
+        bool indexBuildInProgress() const {
+            return _indexBuildInProgress;
+        }
+
+        int nIndexes() const {
+            return _nIndexes;
+        }
 
         // Find by primary key (single element bson object, no field name).
         bool findByPK(const BSONObj &pk, BSONObj &result) const;
@@ -509,25 +691,6 @@ namespace mongo {
         // field, ensuring there are no undefined, regex, or array types.
         virtual BSONObj getValidatedPKFromObject(const BSONObj &obj) const;
 
-        // Extracts and returns an owned BSONObj representing
-        // the primary key portion of the given query, if each
-        // portion of the primary key exists in the query and
-        // is 'simple' (ie: equality, no $ operators)
-        virtual BSONObj getSimplePKFromQuery(const BSONObj &query) const;
-
-        // @param name, name of the index to optimize. "*" means all indexes
-        // @param options, if options are present, update all affected indexes to have the new options.
-        //                 if no options are present, send an optimize message and run hot optimize.
-        virtual void rebuildIndexes(const StringData &name, const BSONObj &options, BSONObjBuilder &result);
-
-        virtual void drop(string &errmsg, BSONObjBuilder &result, const bool mayDropSystem = false);
-        virtual bool dropIndexes(const StringData& name, string &errmsg,
-                                 BSONObjBuilder &result, bool mayDeleteIdIndex);
-        
-        // optional to implement, populate the obj builder with collection specific stats
-        virtual void fillSpecificStats(BSONObjBuilder &result, int scale) const {
-        }
-
         // return true if the namespace is currently under-going bulk load.
         virtual bool bulkLoading() const {
             return false;
@@ -538,8 +701,14 @@ namespace mongo {
             return false;
         }
 
+        // Extracts and returns an owned BSONObj representing
+        // the primary key portion of the given query, if each
+        // portion of the primary key exists in the query and
+        // is 'simple' (ie: equality, no $ operators)
+        virtual BSONObj getSimplePKFromQuery(const BSONObj &query, const BSONObj& pk) const;
+
         // inserts an object into this namespace, taking care of secondary indexes if they exist
-        virtual void insertObject(BSONObj &obj, uint64_t flags = 0) = 0;
+        virtual void insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged) = 0;
 
         // deletes an object from this namespace, taking care of secondary indexes if they exist
         virtual void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags = 0);
@@ -549,16 +718,18 @@ namespace mongo {
         // handles logging
         virtual void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
                                   const bool logop, const bool fromMigrate,
-                                  uint64_t flags = 0);
+                                  uint64_t flags, bool* indexBitChanged);
 
         // update an object in the namespace by pk, described by the updateObj's $ operators
         //
         // handles logging
         virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
                                       const bool logop, const bool fromMigrate,
-                                      uint64_t flags = 0);
+                                      uint64_t flags);
+        
+        void setIndexIsMultikey(const int idxNum, bool* indexBitChanged);
 
-        class IndexerBase : public Collection::Indexer {
+        class IndexerBase : public CollectionIndexer {
         public:
             // Prepare an index build. Must be write locked.
             //
@@ -620,22 +791,41 @@ namespace mongo {
             void build();
         };
 
-        shared_ptr<Indexer> newIndexer(const BSONObj &info, const bool background);
+        shared_ptr<CollectionIndexer> newIndexer(const BSONObj &info, const bool background);
 
-    protected:
-        CollectionBase(const StringData& ns, const BSONObj &pkIndexPattern, const BSONObj &options);
-        explicit CollectionBase(const BSONObj &serialized);
+        // optional to implement, populate the obj builder with collection specific stats
+        virtual void fillSpecificStats(BSONObjBuilder &result, int scale) const {
+        }
+
+        unsigned long long getMultiKeyIndexBits() const {
+            return _multiKeyIndexBits;
+        }
 
         // rebuild the given index, online.
         // - if there are options, change those options in the index and update the system catalog.
         // - otherwise, send an optimize message and run hot optimize.
-        bool _rebuildIndex(IndexDetails &idx, const BSONObj &options, BSONObjBuilder &result);
+        bool rebuildIndex(IndexDetails &idx, const BSONObj &options, BSONObjBuilder &result);
+
+        void dropIndexDetails(IndexDetails& idx, int idxNum);
+
+        bool isMultiKey(int i) const {
+            const unsigned long long mask = 1ULL << i;
+            return (_multiKeyIndexBits & mask) != 0;
+        }
+
+    protected:
+        CollectionBase(const StringData& ns, const BSONObj &pkIndexPattern, const BSONObj &options);
+        explicit CollectionBase(const BSONObj &serialized, bool* reserializeNeeded = NULL);
+
 
         // create a new index with the given info for this namespace.
+        // generate an index info BSON for this namespace, with the same options
+        BSONObj indexInfo(const BSONObj &keyPattern, bool unique, bool clustering, BSONObj options) const;
+
         virtual void createIndex(const BSONObj &info);
         void checkIndexUniqueness(const IndexDetails &idx);
 
-        void insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
+        void insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags, bool* indexBitChanged);
         void deleteFromIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
 
         // uassert on duplicate key
@@ -644,13 +834,16 @@ namespace mongo {
         typedef std::vector<shared_ptr<IndexDetails> > IndexVector;
         IndexVector _indexes;
 
+        bool _indexBuildInProgress;
+        int _nIndexes;
         // State of fastupdates for sharding:
         // -1 not sure if fastupdates are okay - need to check if pk is in shardkey.
         // 0 fastupdates are deinitely not okay - sharding is enabled and pk is not in shardkey
         // 1 fastupdates are definitely okay - either no sharding, or the pk is in shardkey
         AtomicWord<int> _fastupdatesOkState;
 
-        void dropIndex(const int idxNum);
+        unsigned long long _multiKeyIndexBits;
+
 
     private:
         struct findByPKCallbackExtra {
@@ -669,14 +862,14 @@ namespace mongo {
 
     public:
         IndexedCollection(const StringData &ns, const BSONObj &options);
-        IndexedCollection(const BSONObj &serialized);
+        IndexedCollection(const BSONObj &serialized, bool* reserializeNeeded = NULL);
 
         // inserts an object into this namespace, taking care of secondary indexes if they exist
-        void insertObject(BSONObj &obj, uint64_t flags);
+        void insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged);
 
         void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
                           const bool logop, const bool fromMigrate,
-                          uint64_t flags = 0);
+                          uint64_t flags, bool* indexBitChanged);
 
         // Overridden to optimize the case where we have an _id primary key.
         BSONObj getValidatedPKFromObject(const BSONObj &obj) const;
@@ -684,7 +877,7 @@ namespace mongo {
         // Overriden to optimize pk generation for an _id primary key.
         // We just need to look for the _id field and, if it exists
         // and is simple, return a wrapped object.
-        BSONObj getSimplePKFromQuery(const BSONObj &query) const;
+        BSONObj getSimplePKFromQuery(const BSONObj &query, const BSONObj& pk) const;
     };
 
     // Virtual interface implemented by collections whose cursors may "tail"
@@ -721,7 +914,7 @@ namespace mongo {
         NaturalOrderCollection(const BSONObj &serialized);
 
         // insert an object, using a fresh auto-increment primary key
-        void insertObject(BSONObj &obj, uint64_t flags);
+        void insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged);
 
     protected:
         AtomicWord<long long> _nextPK;
@@ -733,7 +926,7 @@ namespace mongo {
         SystemCatalogCollection(const BSONObj &serialized);
 
         // strip out the _id field before inserting into a system collection
-        void insertObject(BSONObj &obj, uint64_t flags);
+        void insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged);
 
     private:
         void createIndex(const BSONObj &info);
@@ -752,10 +945,10 @@ namespace mongo {
     // - db.system.indexes
     // - db.system.namespaces
     class SystemUsersCollection : public IndexedCollection {
-        static BSONObj extendedSystemUsersIndexInfo(const StringData &ns);
     public:
+        static BSONObj extendedSystemUsersIndexInfo(const StringData &ns);
         SystemUsersCollection(const StringData &ns, const BSONObj &options);
-        SystemUsersCollection(const BSONObj &serialized);
+        SystemUsersCollection(const BSONObj &serialized, bool* reserializeNeeded);
     };
 
     // Capped collections have natural order insert semantics but borrow (ie: copy)
@@ -786,22 +979,22 @@ namespace mongo {
         BSONObj minUnsafeKey();
 
         // Regular interface
-        void insertObject(BSONObj &obj, uint64_t flags);
+        void insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged);
 
         void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
 
         void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
                           const bool logop, const bool fromMigrate,
-                          uint64_t flags);
+                          uint64_t flags, bool* indexBitChanged);
 
         void updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
                               const bool logop, const bool fromMigrate,
                               uint64_t flags);
 
         // Hacked interface for handling oplogging and replaying ops from a secondary.
-        void insertObjectAndLogOps(const BSONObj &obj, uint64_t flags);
+        void insertObjectAndLogOps(const BSONObj &obj, uint64_t flags, bool* indexBitChanged);
 
-        void insertObjectWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
+        void insertObjectWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags, bool* indexBitChanged);
 
         void deleteObjectWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
 
@@ -820,7 +1013,7 @@ namespace mongo {
         void noteAbort(const BSONObj &minPK, long long nDelta, long long sizeDelta);
 
     protected:
-        void _insertObject(const BSONObj &obj, uint64_t flags);
+        void _insertObject(const BSONObj &obj, uint64_t flags, bool* indexBitChanged);
 
     private:
         // requires: _mutex is held
@@ -838,7 +1031,7 @@ namespace mongo {
 
         // Checks unique indexes and does the actual inserts.
         // Does not check if the collection became gorged.
-        void checkUniqueAndInsert(const BSONObj &pk, const BSONObj &obj, uint64_t flags, bool checkPk);
+        void checkUniqueAndInsert(const BSONObj &pk, const BSONObj &obj, uint64_t flags, bool checkPk, bool* indexBitChanged);
 
         bool isGorged(long long n, long long size) const;
 
@@ -868,21 +1061,15 @@ namespace mongo {
         ProfileCollection(const StringData &ns, const BSONObj &options);
         ProfileCollection(const BSONObj &serialized);
 
-        void insertObjectIntoCappedWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
-
-        void insertObjectIntoCappedAndLogOps(const BSONObj &obj, uint64_t flags);
-
-        void insertObject(BSONObj &obj, uint64_t flags);
-
-        void deleteObjectFromCappedWithPK(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
+        void insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged);
 
         void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
                           const bool logop, const bool fromMigrate,
-                          uint64_t flags = 0);
+                          uint64_t flags, bool* indexBitChanged);
 
         void updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
                           const bool logop, const bool fromMigrate,
-                          uint64_t flags = 0);
+                          uint64_t flags);
 
     private:
         void createIndex(const BSONObj &idx_info);
@@ -898,34 +1085,33 @@ namespace mongo {
 
         bool bulkLoading() const { return true; }
 
-        void close(const bool abortingLoad);
+        void close(const bool abortingLoad, bool* indexBitsChanged);
 
         void validateConnectionId(const ConnectionId &id);
 
-        void insertObject(BSONObj &obj, uint64_t flags = 0);
+        void insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged);
 
         void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags = 0);
 
         void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
                           const bool logop, const bool fromMigrate,
-                          uint64_t flags = 0);
+                          uint64_t flags, bool* indexBitChanged);
 
         void updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
                               const bool logop, const bool fromMigrate,
-                              uint64_t flags = 0);
+                              uint64_t flags);
 
         void empty();
 
-        void rebuildIndexes(const StringData &name, const BSONObj &options, BSONObjBuilder &result);
+        bool rebuildIndex(IndexDetails &idx, const BSONObj &options, BSONObjBuilder &wasBuilder);
 
-        bool dropIndexes(const StringData& name, string &errmsg,
-                         BSONObjBuilder &result, bool mayDeleteIdIndex);
+        void dropIndexDetails(IndexDetails& idx, int idxNum);
 
     private:
         // When closing a BulkLoadedCollection, we need to make sure the key trackers and
         // loaders are destructed before we call up to the parent destructor, because they
         // reference storage::Dictionaries that get destroyed in the parent destructor.
-        void _close();
+        void _close(bool aborting, bool* indexBitsChanged);
 
         void createIndex(const BSONObj &info);
 

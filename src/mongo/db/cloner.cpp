@@ -232,7 +232,12 @@ namespace mongo {
                             }
                             BSONObj row = rowBuilder.obj();
                             CappedCollection *cappedCl = cl->as<CappedCollection>();
-                            cappedCl->insertObjectWithPK(pk, row, Collection::NO_LOCKTREE);
+                            bool indexBitChanged = false;
+                            cappedCl->insertObjectWithPK(pk, row, Collection::NO_LOCKTREE, &indexBitChanged);
+                            // Hack copied from Collection::insertObject. TODO: find a better way to do this                        
+                            if (indexBitChanged) {
+                                cl->noteMultiKeyChanged();
+                            }
                         }
                         else {
                             insertObject(to_collection, js, 0, logForRepl);

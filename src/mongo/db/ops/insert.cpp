@@ -74,8 +74,13 @@ namespace mongo {
                         // for inserts is handled in the collection class, not here.
                         validateInsert(obj);
                         CappedCollection *cappedCl = cl->as<CappedCollection>();
-                        cappedCl->insertObjectAndLogOps(objModified, flags);
-                        cappedCl->notifyOfWriteOp();
+                        bool indexBitChanged = false; // need to initialize this
+                        cappedCl->insertObjectAndLogOps(objModified, flags, &indexBitChanged);
+                        // Hack copied from Collection::insertObject. TODO: find a better way to do this                        
+                        if (indexBitChanged) {
+                            cl->noteMultiKeyChanged();
+                        }
+                        cl->notifyOfWriteOp();
                     }
                 }
                 else {

@@ -29,13 +29,18 @@ namespace mongo {
     // The centralized factories for creating cursors over collections.
     //
 
+    shared_ptr<Cursor> Cursor::make(CollectionData *cd, const int direction) {
+        return shared_ptr<Cursor>(new BasicCursor(cd, direction));
+    }
+
     shared_ptr<Cursor> Cursor::make(Collection *cl, const int direction,
                                     const bool countCursor) {
         if (cl != NULL) {
+            CollectionData* cd = cl->as<CollectionData>();
             if (countCursor) {
-                return shared_ptr<Cursor>(new IndexScanCountCursor(cl, cl->findSmallestOneToOneIndex()));
+                return shared_ptr<Cursor>(new IndexScanCountCursor(cd, cl->findSmallestOneToOneIndex()));
             } else {
-                return shared_ptr<Cursor>(new BasicCursor(cl, direction));
+                return shared_ptr<Cursor>(new BasicCursor(cd, direction));
             }
         } else {
             return shared_ptr<Cursor>(new DummyCursor(direction));
@@ -45,11 +50,17 @@ namespace mongo {
     shared_ptr<Cursor> Cursor::make(Collection *cl, const IndexDetails &idx,
                                     const int direction,
                                     const bool countCursor) {
+        CollectionData* cd = cl->as<CollectionData>();
         if (countCursor) {
-            return shared_ptr<Cursor>(new IndexScanCountCursor(cl, idx));
+            return shared_ptr<Cursor>(new IndexScanCountCursor(cd, idx));
         } else {
-            return shared_ptr<Cursor>(new IndexScanCursor(cl, idx, direction));
+            return shared_ptr<Cursor>(new IndexScanCursor(cd, idx, direction));
         }
+    }
+
+    shared_ptr<Cursor> Cursor::make(CollectionData *cd, const IndexDetails &idx,
+                                    const int direction) {
+        return shared_ptr<Cursor>(new IndexScanCursor(cd, idx, direction));
     }
 
     shared_ptr<Cursor> Cursor::make(Collection *cl, const IndexDetails &idx,
@@ -57,13 +68,22 @@ namespace mongo {
                                     const bool endKeyInclusive,
                                     const int direction, const int numWanted,
                                     const bool countCursor) {
+        CollectionData* cd = cl->as<CollectionData>();
         if (countCursor) {
-            return shared_ptr<Cursor>(new IndexCountCursor(cl, idx, startKey, endKey,
+            return shared_ptr<Cursor>(new IndexCountCursor(cd, idx, startKey, endKey,
                                                            endKeyInclusive));
         } else {
-            return shared_ptr<Cursor>(new IndexCursor(cl, idx, startKey, endKey,
+            return shared_ptr<Cursor>(new IndexCursor(cd, idx, startKey, endKey,
                                                       endKeyInclusive, direction, numWanted));
         }
+    }
+
+    shared_ptr<Cursor> Cursor::make(CollectionData *cd, const IndexDetails &idx,
+                                    const BSONObj &startKey, const BSONObj &endKey,
+                                    const bool endKeyInclusive,
+                                    const int direction, const int numWanted) {
+        return shared_ptr<Cursor>(new IndexCursor(cd, idx, startKey, endKey,
+                                                  endKeyInclusive, direction, numWanted));
     }
 
     shared_ptr<Cursor> Cursor::make(Collection *cl, const IndexDetails &idx,
@@ -71,10 +91,11 @@ namespace mongo {
                                     const int singleIntervalLimit,
                                     const int direction, const int numWanted,
                                     const bool countCursor) {
+        CollectionData* cd = cl->as<CollectionData>();
         if (countCursor) {
-            return shared_ptr<Cursor>(new IndexCountCursor(cl, idx, bounds));
+            return shared_ptr<Cursor>(new IndexCountCursor(cd, idx, bounds));
         } else {
-            return shared_ptr<Cursor>(new IndexCursor(cl, idx, bounds,
+            return shared_ptr<Cursor>(new IndexCursor(cd, idx, bounds,
                                                       singleIntervalLimit, direction, numWanted));
         }
     }
@@ -103,7 +124,7 @@ namespace mongo {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
-    IndexScanCursor::IndexScanCursor( Collection *cl, const IndexDetails &idx,
+    IndexScanCursor::IndexScanCursor( CollectionData *cl, const IndexDetails &idx,
                                       int direction, int numWanted ) :
         IndexCursor( cl, idx,
                      ScanCursor::startKey(idx.keyPattern(), direction),
@@ -113,13 +134,13 @@ namespace mongo {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
-    BasicCursor::BasicCursor( Collection *cl, int direction ) :
+    BasicCursor::BasicCursor( CollectionData *cl, int direction ) :
         IndexScanCursor( cl, cl->getPKIndex(), direction ) {
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
-    IndexCountCursor::IndexCountCursor( Collection *cl, const IndexDetails &idx,
+    IndexCountCursor::IndexCountCursor( CollectionData *cl, const IndexDetails &idx,
                                         const BSONObj &startKey, const BSONObj &endKey,
                                         const bool endKeyInclusive ) :
         IndexCursor(cl, idx, startKey, endKey, endKeyInclusive, 1, 0),
@@ -130,7 +151,7 @@ namespace mongo {
         checkAssumptionsAndInit();
     }
 
-    IndexCountCursor::IndexCountCursor( Collection *cl, const IndexDetails &idx,
+    IndexCountCursor::IndexCountCursor( CollectionData *cl, const IndexDetails &idx,
                                         const shared_ptr< FieldRangeVector > &bounds ) :
         // This will position the cursor correctly using bounds, which will do the right
         // thing based on bounds->start/endKey() and bounds->start/endKeyInclusive()
@@ -212,7 +233,7 @@ namespace mongo {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
-    IndexScanCountCursor::IndexScanCountCursor( Collection *cl, const IndexDetails &idx ) :
+    IndexScanCountCursor::IndexScanCountCursor( CollectionData *cl, const IndexDetails &idx ) :
         IndexCountCursor( cl, idx,
                           ScanCursor::startKey(idx.keyPattern(), 1), 
                           ScanCursor::endKey(idx.keyPattern(), 1),

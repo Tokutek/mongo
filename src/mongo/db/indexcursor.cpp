@@ -152,7 +152,7 @@ namespace mongo {
 
     /* ---------------------------------------------------------------------- */
 
-    IndexCursor::IndexCursor( Collection *cl, const IndexDetails &idx,
+    IndexCursor::IndexCursor( CollectionData *cl, const IndexDetails &idx,
                               const BSONObj &startKey, const BSONObj &endKey,
                               bool endKeyInclusive, int direction, int numWanted ) :
         _cl(cl),
@@ -161,7 +161,7 @@ namespace mongo {
         _startKey(startKey),
         _endKey(endKey),
         _endKeyInclusive(endKeyInclusive),
-        _multiKey(_cl->isMultikey(_cl->idxNo(_idx))),
+        _multiKey(cl->isMultiKey(cl->idxNo(idx))),
         _direction(direction),
         _bounds(),
         _boundsMustMatch(true),
@@ -180,7 +180,7 @@ namespace mongo {
         initializeDBC();
     }
 
-    IndexCursor::IndexCursor( Collection *cl, const IndexDetails &idx,
+    IndexCursor::IndexCursor( CollectionData *cl, const IndexDetails &idx,
                               const shared_ptr< FieldRangeVector > &bounds,
                               int singleIntervalLimit, int direction, int numWanted ) :
         _cl(cl),
@@ -189,7 +189,7 @@ namespace mongo {
         _startKey(),
         _endKey(),
         _endKeyInclusive(true),
-        _multiKey(_cl->isMultikey(_cl->idxNo(_idx))),
+        _multiKey(cl->isMultiKey(cl->idxNo(idx))),
         _direction(direction),
         _bounds(bounds),
         _boundsMustMatch(true),

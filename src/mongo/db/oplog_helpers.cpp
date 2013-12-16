@@ -235,7 +235,7 @@ namespace mongo {
             // after the indexer.
             LOCK_REASON(lockReason, "repl: hot index build");
             scoped_ptr<Lock::DBWrite> lk(new Lock::DBWrite(ns, lockReason));
-            shared_ptr<Collection::Indexer> indexer;
+            shared_ptr<CollectionIndexer> indexer;
 
             {
                 Client::Context ctx(ns);
@@ -304,9 +304,14 @@ namespace mongo {
             verify(cl->isCapped());
             CappedCollection *cappedCl = cl->as<CappedCollection>();
             // overwrite set to true because we are running on a secondary
+            bool indexBitChanged = false;
             const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
-            cappedCl->insertObjectWithPK(pk, row, flags);
-            cappedCl->notifyOfWriteOp();
+            cappedCl->insertObjectWithPK(pk, row, flags, &indexBitChanged);
+            // Hack copied from Collection::insertObject. TODO: find a better way to do this                        
+            if (indexBitChanged) {
+                cl->noteMultiKeyChanged();
+            }
+            cl->notifyOfWriteOp();
         }
 
         static void runDeleteFromOplog(const char *ns, const BSONObj &op) {
@@ -333,7 +338,7 @@ namespace mongo {
             CappedCollection *cappedCl = cl->as<CappedCollection>();
             const uint64_t flags = Collection::NO_LOCKTREE;
             cappedCl->deleteObjectWithPK(pk, row, flags);
-            cappedCl->notifyOfWriteOp();
+            cl->notifyOfWriteOp();
         }
 
         static void runUpdateFromOplog(const char *ns, const BSONObj &op, bool isRollback) {
