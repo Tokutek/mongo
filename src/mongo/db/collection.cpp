@@ -2004,14 +2004,14 @@ namespace mongo {
     }
 
     void ProfileCollection::updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
-                      const bool logop, const bool fromMigrate,
-                      uint64_t flags) {
+                                         const bool logop, const bool fromMigrate,
+                                         uint64_t flags) {
         msgasserted( 16850, "bug: The profile collection should not be updated." );
     }
 
     void ProfileCollection::updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
-                      const bool logop, const bool fromMigrate,
-                      uint64_t flags) {
+                                             const bool logop, const bool fromMigrate,
+                                             uint64_t flags) {
         msgasserted( 17219, "bug: The profile collection should not be updated." );
     }
 
