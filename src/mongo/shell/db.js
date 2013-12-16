@@ -26,6 +26,61 @@ DB.prototype.getName = function(){
     return this._name;
 }
 
+DB.prototype.getParameter = function(){
+    var res;
+    if (arguments.length > 0) {
+        var all;
+        if (arguments.length == 1 && typeof arguments[0] == "object") {
+            if (arguments[0].length == undefined) {
+                all = [];
+                for (var x in arguments[0]) {
+                    all.push(x);
+                }
+            } else {
+                all = arguments[0];
+            }
+        } else {
+            all = arguments;
+        }
+        var cmd = {getParameter: 1};
+        for (var i = 0; i < all.length; ++i) {
+            cmd[all[i]] = 1;
+        }
+        res = this.runCommand(cmd);
+    } else {
+        res = this.runCommand({getParameter: '*'});
+    }
+    if (!res.ok) {
+        throw res.errmsg;
+    }
+    var retval = {};
+    for (var x in res) {
+        if (x != "ok") {
+            retval[x] = res[x];
+        }
+    }
+    return retval;
+}
+
+DB.prototype.setParameter = function(param, value){
+    if (arguments.length == 0) {
+        throw "nothing to set";
+    }
+    var cmd = {setParameter: 1};
+    if (typeof param == "object") {
+        if (value != undefined) {
+            throw "invalid arguments";
+        }
+        cmd = Object.extend(cmd, param);
+    } else {
+        if (value == undefined) {
+            throw "invalid arguments";
+        }
+        cmd[param] = value;
+    }
+    return this.runCommand(cmd);
+}
+
 DB.prototype.stats = function(scale){
     return this.runCommand( { dbstats : 1 , scale : scale } );
 }
@@ -464,6 +519,7 @@ DB.prototype.help = function() {
     print("\tdb.getMongo() get the server connection object");
     print("\tdb.getMongo().setSlaveOk() allow queries on a replication slave server");
     print("\tdb.getName()");
+    print("\tdb.getParameter([name[, name...]]) - get server parameters, get all by default");
     print("\tdb.getPrevError()");
     print("\tdb.getProfilingLevel() - deprecated");
     print("\tdb.getProfilingStatus() - returns if profiling is on and slow threshold");
@@ -484,6 +540,7 @@ DB.prototype.help = function() {
     print("\tdb.resetError()");
     print("\tdb.runCommand(cmdObj) run a database command.  if cmdObj is a string, turns it into { cmdObj : 1 }");
     print("\tdb.serverStatus()");
+    print("\tdb.setParameter([param, value|obj]) - set server parameter(s), can set multiple if an object is passed");
     print("\tdb.setProfilingLevel(level,<slowms>) 0=off 1=slow 2=all");
     print("\tdb.setVerboseShell(flag) display extra information in shell output");
     print("\tdb.shutdownServer()");
