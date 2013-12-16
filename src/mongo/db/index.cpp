@@ -289,6 +289,35 @@ namespace mongo {
         storage::db_remove(ns);
     }
 
+    bool IndexDetails::changeAttributes(const BSONObj &info, BSONObjBuilder &wasBuilder) {
+        if (!_db->changeAttributes(info, wasBuilder)) {
+            return false;
+        }
+
+        BSONObj was = wasBuilder.done();
+        // need to merge new values in
+        BSONObjBuilder infoBuilder;
+        for (BSONObjIterator it(_info); it.more(); ++it) {
+            BSONElement e = *it;
+            StringData fn(e.fieldName());
+            if (fn != "name" && was.hasField(fn)) {
+                dassert(info[fn].ok());
+                infoBuilder.append(info[fn]);
+            } else {
+                infoBuilder.append(_info[fn]);
+            }
+        }
+        for (BSONObjIterator it(was); it.more(); ++it) {
+            BSONElement e = *it;
+            StringData fn(e.fieldName());
+            if (!_info.hasField(fn)) {
+                infoBuilder.append(info[fn]);
+            }
+        }
+        _info = infoBuilder.obj();
+        return true;
+    }
+
     void IndexDetails::getKeysFromObject(const BSONObj &obj, BSONObjSet &keys) const {
         _descriptor->generateKeys(obj, keys);
     }

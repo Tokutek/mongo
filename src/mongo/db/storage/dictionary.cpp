@@ -159,37 +159,106 @@ namespace mongo {
             }
         }
 
+        class DBParameterSetter : public boost::noncopyable {
+          public:
+            virtual ~DBParameterSetter() {}
+            virtual bool finalize(BSONObjBuilder &wasBuilder) = 0;
+        };
+
+        template<typename T>
+        class DBParameterSetterImpl : public DBParameterSetter {
+            typedef int (*db_getter_fun)(DB *db, T *val);
+            typedef int (*db_setter_fun)(DB *db, T val);
+            DB *_db;
+            string _name;
+            T _value;
+            T _oldValue;
+            db_getter_fun _get;
+            db_setter_fun _set;
+            bool _didSet;
+            bool _shouldUnset;
+          public:
+            DBParameterSetterImpl(DB *db, const string &name, T value,
+                                  db_getter_fun get, db_setter_fun set)
+                    : _db(db), _name(name), _value(value), _get(get), _set(set),
+                      _didSet(false), _shouldUnset(true) {
+                int r = _get(_db, &_oldValue);
+                if (r != 0) {
+                    problem() << "error getting parameter " << _name << endl;
+                    handle_ydb_error(r);
+                }
+                if (_oldValue == _value) {
+                    return;
+                }
+                r = _set(_db, _value);
+                if (r != 0) {
+                    problem() << "error setting parameter " << _name << endl;
+                    handle_ydb_error(r);
+                }
+                _didSet = true;
+            }
+            ~DBParameterSetterImpl() {
+                if (_didSet && _shouldUnset) {
+                    int r = _set(_db, _oldValue);
+                    if (r != 0) {
+                        problem() << "error " << r
+                                  << " when trying to reset parameter " << _name
+                                  << endl;
+                    }
+                }
+            }
+            virtual bool finalize(BSONObjBuilder &wasBuilder) {
+                _shouldUnset = false;
+                wasBuilder.append(_name, _oldValue);
+                return _didSet;
+            }
+        };
+
+        static string compressionMethodToString(TOKU_COMPRESSION_METHOD c) {
+            switch (c) {
+                case TOKU_SMALL_COMPRESSION_METHOD:
+                case TOKU_LZMA_METHOD:
+                    return "lzma";
+                case TOKU_DEFAULT_COMPRESSION_METHOD:
+                case TOKU_FAST_COMPRESSION_METHOD:
+                case TOKU_QUICKLZ_METHOD:
+                    return "quicklz";
+                case TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD:
+                case TOKU_ZLIB_METHOD:
+                    return "zlib";
+                case TOKU_NO_COMPRESSION:
+                    return "none";
+                default:
+                    msgasserted(17233, mongoutils::str::stream() << "invalid compression method " << c);
+            }
+        }
+
+        template<>
+        bool DBParameterSetterImpl<TOKU_COMPRESSION_METHOD>::finalize(BSONObjBuilder &wasBuilder) {
+            _shouldUnset = false;
+            wasBuilder.append(_name, compressionMethodToString(_oldValue));
+            return _didSet;
+        }
+
         // @param info describes the attributes to be changed
-        void Dictionary::changeAttributes(const BSONObj &info, BSONObjBuilder &wasBuilder) {
+        bool Dictionary::changeAttributes(const BSONObj &info, BSONObjBuilder &wasBuilder) {
+            map<string, shared_ptr<DBParameterSetter> > setMap;
             for (BSONObjIterator it(info); it.more(); ++it) {
                 BSONElement e = *it;
-                StringData fn(e.fieldName());
+                string fn(e.fieldName());
+                if (setMap.find(fn) != setMap.end()) {
+                    uasserted(17235, mongoutils::str::stream() << "can't set " << fn << " twice");
+                }
                 if (fn == "readPageSize") {
-                    const int readPageSize = BytesQuantity<int>(e);
+                    const uint32_t readPageSize = BytesQuantity<uint32_t>(e);
                     uassert(16743, "readPageSize must be a number > 0.", readPageSize > 0);
-                    uint32_t oldReadPageSize;
-                    int r = _db->get_readpagesize(_db, &oldReadPageSize);
-                    if (r != 0) {
-                        handle_ydb_error(r);
-                    }
-                    r = _db->change_readpagesize(_db, readPageSize);
-                    if (r != 0) {
-                        handle_ydb_error(r);
-                    }
-                    wasBuilder.append("readPageSize", oldReadPageSize);
+                    setMap[fn] = boost::make_shared<DBParameterSetterImpl<uint32_t> >(
+                        _db, fn, readPageSize, _db->get_readpagesize, _db->change_readpagesize);
                 } else if (fn == "pageSize") {
-                    const int pageSize = BytesQuantity<int>(e);
+                    const uint32_t pageSize = BytesQuantity<uint32_t>(e);
                     uassert(16445, "pageSize must be a number > 0.", pageSize > 0);
-                    uint32_t oldPageSize;
-                    int r = _db->get_pagesize(_db, &oldPageSize);
-                    if (r != 0) {
-                        handle_ydb_error(r);
-                    }
-                    r = _db->change_pagesize(_db, pageSize);
-                    if (r != 0) {
-                        handle_ydb_error(r);
-                    }
-                    wasBuilder.append("pageSize", oldPageSize);
+                    setMap[fn] = boost::make_shared<DBParameterSetterImpl<uint32_t> >(
+                        _db, fn, pageSize, _db->get_pagesize, _db->change_pagesize);
                 } else if (fn == "compression") {
                     TOKU_COMPRESSION_METHOD compression = TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD;
                     const string str = e.String();
@@ -204,39 +273,20 @@ namespace mongo {
                     } else {
                         uassert(16442, "compression must be one of: lzma, quicklz, zlib, none.", false);
                     }
-                    TOKU_COMPRESSION_METHOD oldCompression;
-                    int r = _db->get_compression_method(_db, &oldCompression);
-                    if (r != 0) {
-                        handle_ydb_error(r);
-                    }
-                    r = _db->change_compression_method(_db, compression);
-                    if (r != 0) {
-                        handle_ydb_error(r);
-                    }
-                    switch (oldCompression) {
-                        case TOKU_SMALL_COMPRESSION_METHOD:
-                        case TOKU_LZMA_METHOD:
-                            wasBuilder.append("compression", "lzma");
-                            break;
-                        case TOKU_DEFAULT_COMPRESSION_METHOD:
-                        case TOKU_FAST_COMPRESSION_METHOD:
-                        case TOKU_QUICKLZ_METHOD:
-                            wasBuilder.append("compression", "quicklz");
-                            break;
-                        case TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD:
-                        case TOKU_ZLIB_METHOD:
-                            wasBuilder.append("compression", "zlib");
-                            break;
-                        case TOKU_NO_COMPRESSION:
-                            wasBuilder.append("compression", "none");
-                            break;
-                        default:
-                            msgasserted(17233, mongoutils::str::stream() << "invalid compression method " << oldCompression);
-                    }
+                    setMap[fn] = boost::make_shared<DBParameterSetterImpl<TOKU_COMPRESSION_METHOD> >(
+                        _db, fn, compression, _db->get_compression_method, _db->change_compression_method);
                 } else {
                     uasserted(17234, mongoutils::str::stream() << "cannot set unknown attribute " << fn);
                 }
             }
+            bool ret = false;
+            for (map<string, shared_ptr<DBParameterSetter> >::const_iterator it = setMap.begin();
+                 it != setMap.end(); ++it) {
+                if (it->second->finalize(wasBuilder)) {
+                    ret = true;
+                }
+            }
+            return ret;
         }
 
         int Dictionary::close() {

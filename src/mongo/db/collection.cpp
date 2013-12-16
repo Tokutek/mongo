@@ -899,7 +899,7 @@ namespace mongo {
     // rebuild the given index, online.
     // - if there are options, change those options in the index and update the system catalog.
     // - otherwise, send an optimize message and run hot optimize.
-    void CollectionBase::_rebuildIndex(IndexDetails &idx, const BSONObj &options, BSONObjBuilder &wasBuilder) {
+    bool CollectionBase::_rebuildIndex(IndexDetails &idx, const BSONObj &options, BSONObjBuilder &wasBuilder) {
         if (options.isEmpty()) {
             LOG(1) << _ns << ": optimizing index " << idx.keyPattern() << endl;
             const bool ascending = Ordering::make(idx.keyPattern()).descending(0);
@@ -911,13 +911,15 @@ namespace mongo {
                                    isPK ? NULL : &maxKey);
             uint64_t loops_run;
             idx.optimize(leftSKey, rightSKey, true, 0, &loops_run);
+            return false;
         } else {
             LOG(1) << _ns << ": altering index " << idx.keyPattern() << ", options " << options << endl;
-            idx.changeAttributes(options, wasBuilder);
+            return idx.changeAttributes(options, wasBuilder);
         }
     }
 
     void CollectionBase::rebuildIndexes(const StringData &name, const BSONObj &options, BSONObjBuilder &result) {
+        bool pkIndexChanged = false;
         if (name == "*") {
             BSONArrayBuilder ab;
             // "*" means everything
@@ -925,7 +927,13 @@ namespace mongo {
                 IndexDetails &idx = *_indexes[i];
                 BSONObjBuilder wasBuilder(ab.subobjStart());
                 wasBuilder.append("name", idx.indexName());
-                _rebuildIndex(idx, options, wasBuilder);
+                if (_rebuildIndex(idx, options, wasBuilder)) {
+                    if (isPKIndex(idx)) {
+                        pkIndexChanged = true;
+                    }
+                    removeFromIndexesCatalog(_ns, idx.indexName());
+                    addToIndexesCatalog(idx.info());
+                }
                 wasBuilder.doneFast();
             }
             if (!options.isEmpty()) {
@@ -941,10 +949,46 @@ namespace mongo {
                            i < _nIndexes); // i == _nIndexes is the hot index
             IndexDetails &idx = *_indexes[i];
             BSONObjBuilder wasBuilder;
-            _rebuildIndex(idx, options, wasBuilder);
+            if (_rebuildIndex(idx, options, wasBuilder)) {
+                if (isPKIndex(idx)) {
+                    pkIndexChanged = true;
+                }
+                removeFromIndexesCatalog(_ns, idx.indexName());
+                addToIndexesCatalog(idx.info());
+            }
             if (!options.isEmpty()) {
                 result.append("was", wasBuilder.done());
             }
+        }
+        if (pkIndexChanged) {
+            BSONObjBuilder optionsBuilder;
+            if (_options.isEmpty()) {
+                optionsBuilder.append("create", nsToCollectionSubstring(_ns));
+                for (BSONObjIterator it(options); it.more(); ++it) {
+                    optionsBuilder.append(*it);
+                }
+            } else {
+                optionsBuilder.append(_options["create"]);
+                for (BSONObjIterator it(_options); it.more(); ++it) {
+                    BSONElement e = *it;
+                    StringData fn(e.fieldName());
+                    if (options.hasField(fn)) {
+                        optionsBuilder.append(options[fn]);
+                    } else {
+                        optionsBuilder.append(_options[fn]);
+                    }
+                }
+                for (BSONObjIterator it(options); it.more(); ++it) {
+                    BSONElement e = *it;
+                    StringData fn(e.fieldName());
+                    if (!_options.hasField(fn)) {
+                        optionsBuilder.append(e);
+                    }
+                }
+            }
+            _options = optionsBuilder.obj();
+            removeFromNamespacesCatalog(_ns);
+            addToNamespacesCatalog(_ns, &_options);
         }
     }
 

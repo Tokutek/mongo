@@ -36,7 +36,9 @@ namespace mongo {
             ~Dictionary();
 
             // @param change the parameters described by the info object
-            void changeAttributes(const BSONObj &info, BSONObjBuilder &wasBuilder);
+            // @param wasBuilder used to describe the old state
+            // @return true if something was changed
+            bool changeAttributes(const BSONObj &info, BSONObjBuilder &wasBuilder);
 
             DB *db() const {
                 return _db;

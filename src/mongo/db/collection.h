@@ -372,7 +372,7 @@ namespace mongo {
 
         // The options used to create this namespace details. We serialize
         // this (among other things) to disk on close (see serialize())
-        const BSONObj _options;
+        BSONObj _options;
 
         // The primary index pattern.
         const BSONObj _pk;
@@ -631,7 +631,7 @@ namespace mongo {
         // rebuild the given index, online.
         // - if there are options, change those options in the index and update the system catalog.
         // - otherwise, send an optimize message and run hot optimize.
-        void _rebuildIndex(IndexDetails &idx, const BSONObj &options, BSONObjBuilder &result);
+        bool _rebuildIndex(IndexDetails &idx, const BSONObj &options, BSONObjBuilder &result);
 
         // create a new index with the given info for this namespace.
         virtual void createIndex(const BSONObj &info);
