@@ -291,16 +291,68 @@ namespace JsonTests {
             }
         };
 
+#ifdef _WIN32
+            char tzEnvString[] = "TZ=EST+5EDT";
+#else
+            char tzEnvString[] = "TZ=America/New_York";
+#endif
+
         class Date {
         public:
+            Date() {
+                char *_oldTimezonePtr = getenv("TZ");
+                _oldTimezone = std::string(_oldTimezonePtr ? _oldTimezonePtr : "");
+                if (-1 == putenv(tzEnvString)) {
+                    FAIL(errnoWithDescription());
+                }
+                tzset();
+            }
+            ~Date() {
+                if (!_oldTimezone.empty()) {
+#ifdef _WIN32
+                    errno_t ret = _putenv_s("TZ", _oldTimezone.c_str());
+                    if (0 != ret) {
+                        StringBuilder sb;
+                        sb << "Error setting TZ environment variable to:  " << _oldTimezone
+                           << ".  Error code:  " << ret;
+                        FAIL(sb.str());
+                    }
+#else
+                    if (-1 == setenv("TZ", _oldTimezone.c_str(), 1)) {
+                        FAIL(errnoWithDescription());
+                    }
+#endif
+                }
+                else {
+#ifdef _WIN32
+                    errno_t ret = _putenv_s("TZ", "");
+                    if (0 != ret) {
+                        StringBuilder sb;
+                        sb << "Error unsetting TZ environment variable.  Error code:  " << ret;
+                        FAIL(sb.str());
+                    }
+#else
+                    if (-1 == unsetenv("TZ")) {
+                        FAIL(errnoWithDescription());
+                    }
+#endif
+                }
+                tzset();
+            }
+
             void run() {
                 BSONObjBuilder b;
                 b.appendDate( "a", 0 );
                 BSONObj built = b.done();
-                ASSERT_EQUALS( "{ \"a\" : { \"$date\" : 0 } }", built.jsonString( Strict ) );
+                ASSERT_EQUALS( "{ \"a\" : { \"$date\" : \"1969-12-31T19:00:00.000-0500\" } }",
+                               built.jsonString( Strict ) );
                 ASSERT_EQUALS( "{ \"a\" : Date( 0 ) }", built.jsonString( TenGen ) );
                 ASSERT_EQUALS( "{ \"a\" : Date( 0 ) }", built.jsonString( JS ) );
             }
+
+        private:
+            std::string _oldTimezone;
+
         };
 
         class DateNegative {
@@ -309,7 +361,8 @@ namespace JsonTests {
                 BSONObjBuilder b;
                 b.appendDate( "a", -1 );
                 BSONObj built = b.done();
-                ASSERT_EQUALS( "{ \"a\" : { \"$date\" : -1 } }", built.jsonString( Strict ) );
+                ASSERT_EQUALS( "{ \"a\" : { \"$date\" : { \"$numberLong\" : \"-1\" } } }",
+                               built.jsonString( Strict ) );
                 ASSERT_EQUALS( "{ \"a\" : Date( -1 ) }", built.jsonString( TenGen ) );
                 ASSERT_EQUALS( "{ \"a\" : Date( -1 ) }", built.jsonString( JS ) );
             }
@@ -1650,14 +1703,17 @@ namespace JsonTests {
             add< FromJsonTests::BinDataTypeTooShort >();
             add< FromJsonTests::BinDataTypeTooLong >();
             add< FromJsonTests::BinDataTypeBadChars >();
-            add< FromJsonTests::Date >();
+            // TODO: The JSON parser doesn't yet support parsing our strict JSON format for dates.
+            // See SERVER-11814.
+            /*add< FromJsonTests::Date >();
+            add< FromJsonTests::DateNegZero >();
             add< FromJsonTests::DateNonzero >();
             add< FromJsonTests::DateStrictTooLong >();
             add< FromJsonTests::DateTooLong >();
             add< FromJsonTests::DateStrictMaxUnsigned >();
             add< FromJsonTests::DateMaxUnsigned >();
             add< FromJsonTests::DateStrictNegative >();
-            add< FromJsonTests::DateNegative >();
+            add< FromJsonTests::DateNegative >();*/
             add< FromJsonTests::Timestamp >();
             add< FromJsonTests::TimestampNoIncrement >();
             add< FromJsonTests::TimestampNegativeSeconds >();
@@ -1686,9 +1742,11 @@ namespace JsonTests {
             add< FromJsonTests::NumericTypes >();
             add< FromJsonTests::NumericLimits >();
             add< FromJsonTests::NegativeNumericTypes >();
-            add< FromJsonTests::EmbeddedDatesFormat1 >();
+            // TODO: The JSON parser doesn't yet support parsing our strict JSON format for dates.
+            // See SERVER-11814.
+            /*add< FromJsonTests::EmbeddedDatesFormat1 >();
             add< FromJsonTests::EmbeddedDatesFormat2 >();
-            add< FromJsonTests::EmbeddedDatesFormat3 >();
+            add< FromJsonTests::EmbeddedDatesFormat3 >();*/
             add< FromJsonTests::NullString >();
             add< FromJsonTests::NullFieldUnquoted >();
         }
