@@ -262,10 +262,11 @@ namespace mongo {
                                       const bool logop, const bool fromMigrate,
                                       uint64_t flags = 0) = 0;
 
-        // Optimize indexes. Details are implementation specific.
+        // Rebuild indexes. Details are implementation specific. This is typically an online operation.
         //
         // @param name, name of the index to optimize. "*" means all indexes
-        virtual void optimizeIndexes(const StringData &name) = 0;
+        // @param options, options for the rebuild process. semantics are implementation specific.
+        virtual void rebuildIndexes(const StringData &name, const BSONObj &options, BSONObjBuilder &result) = 0;
 
         virtual void drop(string &errmsg, BSONObjBuilder &result, const bool mayDropSystem = false) = 0;
 
@@ -372,7 +373,7 @@ namespace mongo {
 
         // The options used to create this namespace details. We serialize
         // this (among other things) to disk on close (see serialize())
-        const BSONObj _options;
+        BSONObj _options;
 
         // The primary index pattern.
         const BSONObj _pk;
@@ -514,11 +515,10 @@ namespace mongo {
         // is 'simple' (ie: equality, no $ operators)
         virtual BSONObj getSimplePKFromQuery(const BSONObj &query) const;
 
-        // send an optimize message into each index and run
-        // hot optimize over all of the keys.
-        //
         // @param name, name of the index to optimize. "*" means all indexes
-        virtual void optimizeIndexes(const StringData &name);
+        // @param options, if options are present, update all affected indexes to have the new options.
+        //                 if no options are present, send an optimize message and run hot optimize.
+        virtual void rebuildIndexes(const StringData &name, const BSONObj &options, BSONObjBuilder &result);
 
         virtual void drop(string &errmsg, BSONObjBuilder &result, const bool mayDropSystem = false);
         virtual bool dropIndexes(const StringData& name, string &errmsg,
@@ -626,8 +626,10 @@ namespace mongo {
         CollectionBase(const StringData& ns, const BSONObj &pkIndexPattern, const BSONObj &options);
         explicit CollectionBase(const BSONObj &serialized);
 
-        // run optimize on a single index
-        void _optimizeIndex(IndexDetails &idx);
+        // rebuild the given index, online.
+        // - if there are options, change those options in the index and update the system catalog.
+        // - otherwise, send an optimize message and run hot optimize.
+        bool _rebuildIndex(IndexDetails &idx, const BSONObj &options, BSONObjBuilder &result);
 
         // create a new index with the given info for this namespace.
         virtual void createIndex(const BSONObj &info);
@@ -914,7 +916,7 @@ namespace mongo {
 
         void empty();
 
-        void optimizeIndexes(const StringData &name);
+        void rebuildIndexes(const StringData &name, const BSONObj &options, BSONObjBuilder &result);
 
         bool dropIndexes(const StringData& name, string &errmsg,
                          BSONObjBuilder &result, bool mayDeleteIdIndex);

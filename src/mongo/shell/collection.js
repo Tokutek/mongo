@@ -40,7 +40,7 @@ DBCollection.prototype.help = function () {
     print("\tdb." + shortName + ".dropIndex(index) - e.g. db." + shortName + ".dropIndex( \"indexName\" ) or db." + shortName + ".dropIndex( { \"indexKey\" : 1 } )");
     print("\tdb." + shortName + ".dropIndexes()");
     print("\tdb." + shortName + ".ensureIndex(keypattern[,options]) - options is an object with these possible fields: name, unique, dropDups");
-    print("\tdb." + shortName + ".reIndex()");
+    print("\tdb." + shortName + ".reIndex([[name|keypattern][, options]]) - options is an object with these possible fields: compression, pageSize, readPageSize");
     print("\tdb." + shortName + ".find([query],[fields]) - query is an optional query filter. fields is optional set of fields to return.");
     print("\t                                              e.g. db." + shortName + ".find( {x:77} , {name:1, x:1} )");
     print("\tdb." + shortName + ".find(...).count()");
@@ -350,8 +350,11 @@ DBCollection.prototype.ensureIndex = function( keys , options ){
     // nothing returned on success
 }
 
-DBCollection.prototype.reIndex = function() {
-    return this._db.runCommand({ reIndex: this.getName() });
+DBCollection.prototype.reIndex = function(keys, options) {
+    var cmd = {reIndex: this.getName()};
+    cmd.index = keys || '*';
+    cmd.options = options || {};
+    return this._db.runCommand(cmd);
 }
 
 DBCollection.prototype.dropIndexes = function(){

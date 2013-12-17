@@ -187,6 +187,10 @@ namespace mongo {
         /** delete this index. */
         void kill_idx();
 
+        // change attributes of the underlying storage::Dictionary
+        // @return true if something was modified
+        bool changeAttributes(const BSONObj &info, BSONObjBuilder &wasBuilder);
+
         enum toku_compression_method getCompressionMethod() const;
         uint32_t getPageSize() const;
         uint32_t getReadPageSize() const;
@@ -314,7 +318,8 @@ namespace mongo {
 
         // Info about the index. Stored on disk in the database.ns dictionary
         // for this database as a BSON object.
-        const BSONObj _info;
+        // Can only be modified by changeAttributes
+        BSONObj _info;
 
         // Precomputed values from _info, for speed.
         const BSONObj _keyPattern;

@@ -897,25 +897,48 @@ namespace mongo {
         collectionMap(_ns)->kill_ns(_ns);
     }
 
-    void CollectionBase::_optimizeIndex(IndexDetails &idx) {
-        LOG(1) << _ns << ": optimizing index " << idx.keyPattern() << endl;
-        const bool ascending = Ordering::make(idx.keyPattern()).descending(0);
-        const bool isPK = isPKIndex(idx);
+    // rebuild the given index, online.
+    // - if there are options, change those options in the index and update the system catalog.
+    // - otherwise, send an optimize message and run hot optimize.
+    bool CollectionBase::_rebuildIndex(IndexDetails &idx, const BSONObj &options, BSONObjBuilder &wasBuilder) {
+        if (options.isEmpty()) {
+            LOG(1) << _ns << ": optimizing index " << idx.keyPattern() << endl;
+            const bool ascending = Ordering::make(idx.keyPattern()).descending(0);
+            const bool isPK = isPKIndex(idx);
 
-        storage::Key leftSKey(ascending ? minKey : maxKey,
-                              isPK ? NULL : &minKey);
-        storage::Key rightSKey(ascending ? maxKey : minKey,
-                               isPK ? NULL : &maxKey);
-        uint64_t loops_run;
-        idx.optimize(leftSKey, rightSKey, true, 0, &loops_run);
+            storage::Key leftSKey(ascending ? minKey : maxKey,
+                                  isPK ? NULL : &minKey);
+            storage::Key rightSKey(ascending ? maxKey : minKey,
+                                   isPK ? NULL : &maxKey);
+            uint64_t loops_run;
+            idx.optimize(leftSKey, rightSKey, true, 0, &loops_run);
+            return false;
+        } else {
+            LOG(1) << _ns << ": altering index " << idx.keyPattern() << ", options " << options << endl;
+            return idx.changeAttributes(options, wasBuilder);
+        }
     }
 
-    void CollectionBase::optimizeIndexes(const StringData &name) {
+    void CollectionBase::rebuildIndexes(const StringData &name, const BSONObj &options, BSONObjBuilder &result) {
+        bool pkIndexChanged = false;
         if (name == "*") {
+            BSONArrayBuilder ab;
             // "*" means everything
             for (int i = 0; i < _nIndexes; i++) {
                 IndexDetails &idx = *_indexes[i];
-                _optimizeIndex(idx);
+                BSONObjBuilder wasBuilder(ab.subobjStart());
+                wasBuilder.append("name", idx.indexName());
+                if (_rebuildIndex(idx, options, wasBuilder)) {
+                    if (isPKIndex(idx)) {
+                        pkIndexChanged = true;
+                    }
+                    removeFromIndexesCatalog(_ns, idx.indexName());
+                    addToIndexesCatalog(idx.info());
+                }
+                wasBuilder.doneFast();
+            }
+            if (!options.isEmpty()) {
+                result.appendArray("was", ab.done());
             }
         } else {
             // optimize a single index.
@@ -923,10 +946,50 @@ namespace mongo {
             const int i = findIndexByName(name);
             uassert(17231, str::stream() << "index not found: " << name,
                            i >= 0);
-            uassert(17232, str::stream() << "cannot optimize a background index: " << name,
+            uassert(17232, str::stream() << "cannot rebuild a background index: " << name,
                            i < _nIndexes); // i == _nIndexes is the hot index
             IndexDetails &idx = *_indexes[i];
-            _optimizeIndex(idx);
+            BSONObjBuilder wasBuilder;
+            if (_rebuildIndex(idx, options, wasBuilder)) {
+                if (isPKIndex(idx)) {
+                    pkIndexChanged = true;
+                }
+                removeFromIndexesCatalog(_ns, idx.indexName());
+                addToIndexesCatalog(idx.info());
+            }
+            if (!options.isEmpty()) {
+                result.append("was", wasBuilder.done());
+            }
+        }
+        if (pkIndexChanged) {
+            BSONObjBuilder optionsBuilder;
+            if (_options.isEmpty()) {
+                optionsBuilder.append("create", nsToCollectionSubstring(_ns));
+                for (BSONObjIterator it(options); it.more(); ++it) {
+                    optionsBuilder.append(*it);
+                }
+            } else {
+                optionsBuilder.append(_options["create"]);
+                for (BSONObjIterator it(_options); it.more(); ++it) {
+                    BSONElement e = *it;
+                    StringData fn(e.fieldName());
+                    if (options.hasField(fn)) {
+                        optionsBuilder.append(options[fn]);
+                    } else {
+                        optionsBuilder.append(_options[fn]);
+                    }
+                }
+                for (BSONObjIterator it(options); it.more(); ++it) {
+                    BSONElement e = *it;
+                    StringData fn(e.fieldName());
+                    if (!_options.hasField(fn)) {
+                        optionsBuilder.append(e);
+                    }
+                }
+            }
+            _options = optionsBuilder.obj();
+            removeFromNamespacesCatalog(_ns);
+            addToNamespacesCatalog(_ns, &_options);
         }
     }
 
@@ -2106,7 +2169,7 @@ namespace mongo {
         uasserted( 17218, "Cannot update a collection under-going bulk load." );
     }
 
-    void BulkLoadedCollection::optimizeIndexes(const StringData &name) {
+    void BulkLoadedCollection::rebuildIndexes(const StringData &name, const BSONObj &options, BSONObjBuilder &result) {
         uasserted( 16895, "Cannot optimize a collection under-going bulk load." );
     }
 

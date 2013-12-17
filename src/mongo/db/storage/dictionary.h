@@ -31,9 +31,14 @@ namespace mongo {
         class Dictionary : boost::noncopyable {
         public:
             Dictionary(const string &dname, const BSONObj &info,
-                       const mongo::Descriptor &descriptor, const bool may_create,
-                       const bool hot_index);
+                       const mongo::Descriptor &descriptor,
+                       const bool may_create, const bool hot_index);
             ~Dictionary();
+
+            // @param change the parameters described by the info object
+            // @param wasBuilder used to describe the old state
+            // @return true if something was changed
+            bool changeAttributes(const BSONObj &info, BSONObjBuilder &wasBuilder);
 
             DB *db() const {
                 return _db;
@@ -44,11 +49,10 @@ namespace mongo {
             class NeedsCreate : std::exception {};
 
         private:
-            void open(const BSONObj &info,
-                      const mongo::Descriptor &descriptor, const bool may_create,
-                      const bool hot_index);
+            void open(const mongo::Descriptor &descriptor,
+                      const bool may_create, const bool hot_index);
 
-            string _dname;
+            const string _dname;
             DB *_db;
         };
 
