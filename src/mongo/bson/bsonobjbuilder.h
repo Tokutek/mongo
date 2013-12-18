@@ -35,6 +35,7 @@
 #include "mongo/bson/bson_field.h"
 
 #if defined(_DEBUG) && defined(MONGO_EXPOSE_MACROS)
+#include "mongo/util/assert_util.h"
 #include "mongo/util/log.h"
 #endif
 
@@ -199,7 +200,7 @@ namespace mongo {
 
         BSONObjBuilder& append(const StringData& fieldName, unsigned long long n) {
             static const unsigned long long llMax = std::numeric_limits<long long>::max();
-#if _DEBUG
+#if defined(_DEBUG) && defined(MONGO_EXPOSE_MACROS)
             if (n > llMax) {
                 warning() << "appending unsigned long long int larger than max long long int to a BSONObj: " << n << std::endl;
             }
@@ -258,7 +259,7 @@ namespace mongo {
 
         BSONObjBuilder& appendNumber( const StringData& fieldName, unsigned long long ullNumber ) {
             static const unsigned long long llMax = std::numeric_limits<long long>::max();
-#if _DEBUG
+#if defined(_DEBUG) && defined(MONGO_EXPOSE_MACROS)
             if (ullNumber > llMax) {
                 warning() << "appending unsigned long long int larger than max long long int to a BSONObj: " << ullNumber << std::endl;
             }
