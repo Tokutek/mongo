@@ -26,6 +26,7 @@
 #include <utility>
 
 #include "mongo/client/dbclientinterface.h"
+#include "mongo/client/export_macros.h"
 #include "mongo/util/net/hostandport.h"
 
 namespace mongo {
@@ -43,7 +44,7 @@ namespace mongo {
      * one instance per process per replica set
      * TODO: we might be able to use a regular Node * to avoid _lock
      */
-    class ReplicaSetMonitor {
+    class MONGO_CLIENT_API ReplicaSetMonitor {
     public:
         typedef boost::function1<void,const ReplicaSetMonitor*> ConfigChangeHook;
 
@@ -260,7 +261,7 @@ namespace mongo {
         string getServerAddress() const;
 
         bool contains( const string& server ) const;
-        
+
         void appendInfo( BSONObjBuilder& b ) const;
 
         /**
@@ -419,7 +420,7 @@ namespace mongo {
        On a failover situation, expect at least one operation to return an error (throw
        an exception) before the failover is complete.  Operations are not retried.
     */
-    class DBClientReplicaSet : public DBClientBase {
+    class MONGO_CLIENT_API DBClientReplicaSet : public DBClientBase {
     public:
         using DBClientBase::query;
         using DBClientBase::update;
@@ -647,7 +648,7 @@ namespace mongo {
         // Last used connection in a slaveOk query (can be a primary)
         boost::shared_ptr<DBClientConnection> _lastSlaveOkConn;
         boost::shared_ptr<ReadPreferenceSetting> _lastReadPref;
-        
+
         double _so_timeout;
 
         // we need to store so that when we connect to a new node on failure
@@ -679,7 +680,7 @@ namespace mongo {
      * A simple object for representing the list of tags. The initial state will
      * have a valid current tag as long as the list is not empty.
      */
-    class TagSet {
+    class MONGO_CLIENT_API TagSet {
     public:
         /**
          * Creates an empty tag list that is initially exhausted.
@@ -751,7 +752,7 @@ namespace mongo {
         BSONArrayIteratorSorted _tagIterator;
     };
 
-    struct ReadPreferenceSetting {
+    struct MONGO_CLIENT_API ReadPreferenceSetting {
         /**
          * @parm pref the read preference mode.
          * @param tag the tag set. Note that this object will have the

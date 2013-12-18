@@ -18,8 +18,9 @@
 #pragma once
 
 #include "mongo/pch.h"
-#include "connpool.h"
-#include "syncclusterconnection.h"
+#include "mongo/client/connpool.h"
+#include "mongo/client/export_macros.h"
+#include "mongo/client/syncclusterconnection.h"
 
 #define LOCK_TIMEOUT (15 * 60 * 1000)
 #define LOCK_SKEW_FACTOR (30)
@@ -39,7 +40,7 @@ namespace mongo {
     /**
      * Exception class to encapsulate exceptions while managing distributed locks
      */
-    class LockException : public DBException {
+    class MONGO_CLIENT_API LockException : public DBException {
     public:
         LockException( const char * msg , int code ) : DBException( msg, code ) {}
         LockException( const string& msg, int code ) : DBException( msg, code ) {}
@@ -49,7 +50,7 @@ namespace mongo {
     /**
      * Indicates an error in retrieving time values from remote servers.
      */
-    class TimeNotFoundException : public LockException {
+    class MONGO_CLIENT_API TimeNotFoundException : public LockException {
     public:
         TimeNotFoundException( const char * msg , int code ) : LockException( msg, code ) {}
         TimeNotFoundException( const string& msg, int code ) : LockException( msg, code ) {}
@@ -71,31 +72,31 @@ namespace mongo {
      * take a lock, and (2) ensuring all config servers report similar times and have similar
      * time rates (the difference in times must start and stay small).
      */
-    class DistributedLock {
+    class MONGO_CLIENT_API DistributedLock {
     public:
 
         static LabeledLevel logLvl;
 
         struct PingData {
-            
-            PingData( const string& _id , Date_t _lastPing , Date_t _remote , OID _ts ) 
+
+            PingData( const string& _id , Date_t _lastPing , Date_t _remote , OID _ts )
                 : id(_id), lastPing(_lastPing), remote(_remote), ts(_ts){
             }
 
             PingData()
                 : id(""), lastPing(0), remote(0), ts(){
             }
-            
+
             string id;
             Date_t lastPing;
             Date_t remote;
             OID ts;
         };
-        
-        class LastPings {
-        public:
-            LastPings() : _mutex( "DistributedLock::LastPings" ) {}
-            ~LastPings(){}
+
+    	class LastPings {
+    	public:
+    	    LastPings() : _mutex( "DistributedLock::LastPings" ) {}
+    	    ~LastPings(){}
 
             PingData getLastPing( const ConnectionString& conn, const string& lockName );
             void setLastPing( const ConnectionString& conn, const string& lockName, const PingData& pd );
@@ -203,11 +204,11 @@ namespace mongo {
 
     // Helper functions for tests, allows us to turn the creation of a lock pinger on and off.
     // *NOT* thread-safe
-    bool isLockPingerEnabled();
-    void setLockPingerEnabled(bool enabled);
+    bool MONGO_CLIENT_API isLockPingerEnabled();
+    void MONGO_CLIENT_API setLockPingerEnabled(bool enabled);
 
 
-    class dist_lock_try {
+    class MONGO_CLIENT_API dist_lock_try {
     public:
 
         dist_lock_try() : _lock(NULL), _got(false) {}
@@ -285,7 +286,7 @@ namespace mongo {
      * the distributed lock are managed by this class, and the distributed lock is unlocked if
      * successfully acquired on object destruction.
      */
-    class ScopedDistributedLock {
+    class MONGO_CLIENT_API ScopedDistributedLock {
     public:
 
         ScopedDistributedLock(const ConnectionString& conn, const string& name);
