@@ -50,7 +50,7 @@ namespace mongo {
         if (val == ULLONG_MAX) {
             return Status(ErrorCodes::BadValue, strerror(errno));
         }
-        return set( atoi(str.c_str() ) );
+        return set( val );
     }
 
     template<>

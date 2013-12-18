@@ -197,6 +197,17 @@ namespace mongo {
             return *this;
         }
 
+        BSONObjBuilder& append(const StringData& fieldName, unsigned long long n) {
+            static const unsigned long long llMax = std::numeric_limits<long long>::max();
+#if _DEBUG
+            if (n > llMax) {
+                warning() << "appending unsigned long long int larger than max long long int to a BSONObj: " << n << std::endl;
+            }
+            dassert(n <= llMax);
+#endif
+            return append(fieldName, static_cast<long long>(n));
+        }
+
         /** appends a number.  if n < max(int)/2 then uses int, otherwise long long */
         BSONObjBuilder& appendIntOrLL( const StringData& fieldName , long long n ) {
             long long x = n;
@@ -243,6 +254,17 @@ namespace mongo {
             else
                 append( fieldName, llNumber );
             return *this;
+        }
+
+        BSONObjBuilder& appendNumber( const StringData& fieldName, unsigned long long ullNumber ) {
+            static const unsigned long long llMax = std::numeric_limits<long long>::max();
+#if _DEBUG
+            if (ullNumber > llMax) {
+                warning() << "appending unsigned long long int larger than max long long int to a BSONObj: " << ullNumber << std::endl;
+            }
+            dassert(ullNumber <= llMax);
+#endif
+            return appendNumber(fieldName, static_cast<long long>(ullNumber));
         }
 
         /** Append a double element */
