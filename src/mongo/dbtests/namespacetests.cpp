@@ -26,6 +26,8 @@
 
 namespace NamespaceTests {
 
+    using boost::shared_ptr;
+
     namespace IndexDetailsTests {
         class Base {
             Lock::GlobalWrite lk;

@@ -571,7 +571,7 @@ namespace DocumentSourceTests {
         };
 
         struct ValueCmp {
-            bool operator()(const Value& a, const Value& b) {
+            bool operator()(const Value& a, const Value& b) const {
                 return Value::compare( a, b ) < 0;
             }
         };

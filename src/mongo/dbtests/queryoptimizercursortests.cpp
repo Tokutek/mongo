@@ -42,6 +42,8 @@ namespace mongo {
 } // namespace mongo
 
 namespace QueryOptimizerCursorTests {
+
+    using boost::shared_ptr;
     
     void dropCollection( const char *ns ) {
      	string errmsg;
