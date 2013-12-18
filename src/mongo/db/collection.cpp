@@ -903,7 +903,7 @@ namespace mongo {
     bool CollectionBase::_rebuildIndex(IndexDetails &idx, const BSONObj &options, BSONObjBuilder &wasBuilder) {
         if (options.isEmpty()) {
             LOG(1) << _ns << ": optimizing index " << idx.keyPattern() << endl;
-            const bool ascending = Ordering::make(idx.keyPattern()).descending(0);
+            const bool ascending = !Ordering::make(idx.keyPattern()).descending(0);
             const bool isPK = isPKIndex(idx);
 
             storage::Key leftSKey(ascending ? minKey : maxKey,
