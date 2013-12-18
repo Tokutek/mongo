@@ -30,6 +30,8 @@
 
 namespace CursorTests {
 
+    using boost::shared_ptr;
+
     namespace IndexCursor {
 
         using mongo::IndexCursor;

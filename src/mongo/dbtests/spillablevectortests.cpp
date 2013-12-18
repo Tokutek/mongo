@@ -22,6 +22,8 @@
 
 namespace SpillableVectorTests {
 
+    using boost::shared_ptr;
+
     class Base : public stack<shared_ptr<SpillableVector> > {
       protected:
         void push_new(void (*callback)(BSONObj &), size_t maxSize) {
