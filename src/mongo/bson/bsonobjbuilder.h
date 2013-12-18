@@ -199,8 +199,8 @@ namespace mongo {
         }
 
         BSONObjBuilder& append(const StringData& fieldName, unsigned long long n) {
-            static const unsigned long long llMax = std::numeric_limits<long long>::max();
 #if defined(_DEBUG) && defined(MONGO_EXPOSE_MACROS)
+            static const unsigned long long llMax = std::numeric_limits<long long>::max();
             if (n > llMax) {
                 warning() << "appending unsigned long long int larger than max long long int to a BSONObj: " << n << std::endl;
             }
@@ -258,8 +258,8 @@ namespace mongo {
         }
 
         BSONObjBuilder& appendNumber( const StringData& fieldName, unsigned long long ullNumber ) {
-            static const unsigned long long llMax = std::numeric_limits<long long>::max();
 #if defined(_DEBUG) && defined(MONGO_EXPOSE_MACROS)
+            static const unsigned long long llMax = std::numeric_limits<long long>::max();
             if (ullNumber > llMax) {
                 warning() << "appending unsigned long long int larger than max long long int to a BSONObj: " << ullNumber << std::endl;
             }
