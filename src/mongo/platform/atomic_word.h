@@ -158,7 +158,9 @@ namespace mongo {
 
     template<typename T, size_t padSize>
     class Padded : public T {
+#ifdef __APPLE__
         __attribute__((unused))
+#endif
         char _pad[padSize - (sizeof(T) % padSize)];
     };
 
