@@ -1063,6 +1063,16 @@ dodouble:
         return true;
     }
 
+    template<> inline bool BSONElement::coerce<unsigned long long>( unsigned long long* out ) const {
+        if ( !isNumber() )
+            return false;
+        if ( numberLong() < 0) {
+            return false;
+        }
+        *out = static_cast<unsigned long long>(numberLong());
+        return true;
+    }
+
     template<typename T> inline bool BSONElement::coerce( BytesQuantity<T>* out ) const {
         T val;
         if (type() == mongo::String) {
