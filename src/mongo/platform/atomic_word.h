@@ -156,15 +156,16 @@ namespace mongo {
     _ATOMIC_WORD_DECLARE(AtomicInt64, long long);
 #undef _ATOMIC_WORD_DECLARE
 
-#pragma pack(8)
-    // Pad an atomic 8 byte word up to 64 bytes and ensure 8 byte alignment.
-    // If multiple of these are allocated together, they will each sit on
-    // their own cache line and not cause false-sharing amongst each other.
-    class AtomicWordOnCacheLine : public AtomicWord<long long> {
-        char _pad[64 - sizeof(AtomicWord<long long>)];
+    template<typename T, size_t padSize>
+    class Padded : public T {
+        __attribute__((unused))
+        char _pad[padSize - (sizeof(T) % padSize)];
     };
-    // Cache lines are 64 bytes and so should this type.
+
+    template<typename T>
+    class CacheLinePadded : public Padded<T, 64> {};
+
+    typedef CacheLinePadded<AtomicWord<long long> > AtomicWordOnCacheLine;
     BOOST_STATIC_ASSERT(sizeof(AtomicWordOnCacheLine) == 64);
-#pragma pack()
 
 }  // namespace mongo
