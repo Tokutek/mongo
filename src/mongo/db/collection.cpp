@@ -379,7 +379,7 @@ namespace mongo {
 
     BSONObj CollectionBase::getSimplePKFromQuery(const BSONObj &query) const {
         const int numPKFields = _pk.nFields();
-        BSONElement pkElements[numPKFields];
+        scoped_array<BSONElement> pkElements(new BSONElement[numPKFields]);
         int numPKElementsFound = 0;
         for (BSONObjIterator queryIterator(query); queryIterator.more(); ) {
             const BSONElement &q = queryIterator.next();
