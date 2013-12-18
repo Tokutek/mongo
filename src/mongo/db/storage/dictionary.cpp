@@ -16,7 +16,6 @@
 
 #include "mongo/pch.h"
 
-#include "mongo/db/jsobj.h"
 #include "mongo/base/units.h"
 #include "mongo/db/client.h"
 #include "mongo/db/descriptor.h"
