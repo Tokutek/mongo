@@ -885,7 +885,8 @@ def doConfigure(myenv):
     myenv.Append(LIBPATH=[tokulib])
     # This is a cheap way of always getting a static library.  We don't need PIC but there's
     # anly a static version of one with that name.
-    myenv.Append(LIBS=['jemalloc_pic'])
+    if not darwin:
+        myenv.Append(LIBS=['jemalloc_pic'])
 
     myenv.Append(RPATH=[Literal("'%s'" % p) for p in ['$$ORIGIN/../lib', '$$ORIGIN/../lib64']])
 
