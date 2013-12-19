@@ -28,6 +28,22 @@ for e in [env, testEnv]:
     e.Append(LIBPATH=[tokubackup_lib])
     e.Append(RPATH=[tokulib.get_abspath(), tokubackup_lib.get_abspath(), Dir('plugins')])
 
+def addBuildRpath(e, name):
+    if darwin:
+        e.AddPostAction(name, "install_name_tool -add_rpath '@executable_path/src/third_party/tokukv/lib' $TARGET")
+        e.AddPostAction(name, "install_name_tool -add_rpath '@executable_path/src/third_party/tokubackup/lib' $TARGET")
+
+def addInstallRpath(e, name, do_plugins):
+    if darwin:
+        e.AddPostAction(name, "install_name_tool -add_rpath '@executable_path/../lib64' $TARGET")
+        if do_plugins:
+            e.AddPostAction(name, "install_name_tool -add_rpath '@executable_path/../lib64/plugins' $TARGET")
+    else:
+        if do_plugins:
+            e.AddPostAction(name, "chrpath -r '$$ORIGIN/../lib64:$$ORIGIN/../lib:$$ORIGIN/../lib64/plugins' $TARGET")
+        else:
+            e.AddPostAction(name, "chrpath -r '$$ORIGIN/../lib64:$$ORIGIN/../lib' $TARGET")
+
 ltokufractaltree = os.getenv('LIBTOKUFRACTALTREE_NAME', 'tokufractaltree')
 ltokuportability = os.getenv('LIBTOKUPORTABILITY_NAME', 'tokuportability')
 tokulibs = [ltokufractaltree, ltokuportability, 'm', 'dl', 'z']
@@ -590,6 +606,7 @@ mongod = env.Install(
                                 "ntservice",
                                 "serveronly",
                                 ] + env['MODULE_LIBDEPS_MONGOD'] ) )
+addBuildRpath(env, mongod)
 Default( mongod )
 
 # tools
@@ -600,9 +617,10 @@ env.StaticLibrary("alltools", allToolFiles, LIBDEPS=["serveronly", "coreserver",
 normalTools = [ "dump", "restore", "export", "import", "stat", "top", "2toku"]
 env.Alias( "tools", [ "#/${PROGPREFIX}mongo" + x + "${PROGSUFFIX}" for x in normalTools ] )
 for x in normalTools:
-    env.Install( '#/', env.Program( "mongo" + x, [ "tools/" + x + ".cpp" ],
-                                    LIBS=env['LIBS'] + tokulibs,
-                                    LIBDEPS=["alltools"]) )
+    tool = env.Install( '#/', env.Program( "mongo" + x, [ "tools/" + x + ".cpp" ],
+                                           LIBS=env['LIBS'] + tokulibs,
+                                           LIBDEPS=["alltools"]) )
+    addBuildRpath(env, tool)
 
 env.StaticLibrary("docgenerator", "tools/docgenerator.cpp")
 
@@ -620,7 +638,8 @@ mongos = env.Program(
     "mongos", [ "s/server.cpp"] ,
     LIBS=env['LIBS'] + tokulibs, LIBDEPS=["mongoscore", "coreserver", "coredb", "mongocommon", "coreshard", "dbcmdline", "ntservice",
              "mongodandmongos", "s/upgrade"] + env['MODULE_LIBDEPS_MONGOS'])
-env.Install( '#/', mongos )
+mongosInstalled = env.Install( '#/', mongos )
+addBuildRpath(env, mongosInstalled)
 
 env.Library("clientandshell", ["client/clientAndShell.cpp"],
                               LIBDEPS=["mongocommon",
@@ -656,6 +675,7 @@ test = testEnv.Install(
                        "notmongodormongos",
                        "s/upgrade",
                        "mocklib"]))
+addBuildRpath(env, test)
 
 if len(testEnv.subst('$PROGSUFFIX')):
     testEnv.Alias( "test", "#/${PROGPREFIX}test${PROGSUFFIX}" )
@@ -674,8 +694,9 @@ if darwin or env["_HAVEPCAP"]:
 
     sniffEnv.Append(LIBS=tokulibs)
 
-    sniffEnv.Install( '#/', sniffEnv.Program( "mongosniff", "tools/sniffer.cpp",
-                                              LIBDEPS=["gridfs", "serveronly", "coreserver", "coredb", "notmongodormongos"]))
+    snifftool = sniffEnv.Install( '#/', sniffEnv.Program( "mongosniff", "tools/sniffer.cpp",
+                                                          LIBDEPS=["gridfs", "serveronly", "coreserver", "coredb", "notmongodormongos"]))
+    addBuildRpath(sniffEnv, snifftool)
 
 # --- shell ---
 
@@ -726,7 +747,7 @@ debuginfoBinaries = []
 if windows:
     distBinaries.extend(['mongod.pdb', 'mongos.pdb'])
 
-def installBinary( e, name, fix_rpath=True ):
+def installBinary( e, name, fix_rpath=True, fix_rpath_plugins=False ):
     global distBinaries
     global debuginfoBinaries
 
@@ -737,12 +758,7 @@ def installBinary( e, name, fix_rpath=True ):
 
     if fix_rpath:
         name = e.Command('install_rpath/%s' % name, name, Copy('$TARGET', '$SOURCE'))[0]
-        if darwin:
-            e.AddPostAction(name, "install_name_tool -add_rpath '@executable_path/../lib64' $TARGET")
-            e.AddPostAction(name, "install_name_tool -add_rpath '@executable_path/../lib' $TARGET")
-            e.AddPostAction(name, "install_name_tool -add_rpath '@executable_path/../lib64/plugins' $TARGET")
-        else:
-            e.AddPostAction(name, "chrpath -r '$$ORIGIN/../lib64:$$ORIGIN/../lib:$$ORIGIN/../lib64/plugins' $TARGET")
+        addInstallRpath(e, name, fix_rpath_plugins)
 
     if (solaris or linux) and (not has_option("nostrip")):
         basename = str(name).replace('install_rpath/', '')
@@ -774,8 +790,8 @@ if mongosniff_built:
     installBinary(env, "mongosniff")
     env.Alias("tools", '#/' + add_exe("mongosniff"))
 
-installBinary( env, "mongod" )
-installBinary( env, "mongos" )
+installBinary( env, "mongod", True, True )
+installBinary( env, "mongos", True, True )
 
 if shellEnv is not None:
     # mongo doesn't have any toku components, it doesn't need its rpath changed
@@ -794,12 +810,8 @@ env.Append(MODULE_BANNERS = [distsrc.File('README'),
                              toku_readme])
 scriptsdir = env.Dir('#scripts')
 env.Append(INSTALLED_SCRIPTS = [scriptsdir.File('tokumxstat.py')])
-if darwin:
-    solib_suffix = '.dylib'
-else:
-    solib_suffix = '.so'
-env.Append(TOKULIBS = [tokulib.File('lib%s%s' % (libname, solib_suffix)) for libname in [ltokufractaltree, ltokuportability]])
-env.Append(TOKULIBS=[tokubackup_lib.File('libHotBackup%s' % solib_suffix)])
+env.Append(TOKULIBS = [tokulib.File('%s%s%s' % (env.subst('$SHLIBPREFIX'), libname, env.subst('$SHLIBSUFFIX'))) for libname in [ltokufractaltree, ltokuportability]])
+env.Append(TOKULIBS=[tokubackup_lib.File('%sHotBackup%s' % (env.subst('$SHLIBPREFIX'), env.subst('$SHLIBSUFFIX')))])
 
 # If no module has introduced a file named LICENSE.txt, then inject the AGPL.
 if sum(itertools.imap(lambda x: x.name == "LICENSE.txt", env['MODULE_BANNERS'])) == 0:
