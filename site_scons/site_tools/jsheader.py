@@ -1,7 +1,5 @@
 import os
 
-from SCons.Builder import Builder
-
 def jsToH(target, source, env):
 
     outFile = str( target[0] )
@@ -44,10 +42,15 @@ def jsToH(target, source, env):
     finally:
         out.close()
 
-jshBuilder = Builder( action=jsToH )
+try:
+    from SCons.Builder import Builder
 
-def generate(env, **kw):
-    env.Append( BUILDERS=dict( JSHeader=jshBuilder ) )
+    jshBuilder = Builder( action=jsToH )
+
+    def generate(env, **kw):
+        env.Append( BUILDERS=dict( JSHeader=jshBuilder ) )
+except ImportError:
+    pass
 
 def exists(env):
     return True
