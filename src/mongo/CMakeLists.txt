@@ -74,7 +74,6 @@ set_source_files_properties(
   PROPERTIES GENERATED TRUE)
 add_library(mongocommon STATIC
   pch
-  "${CMAKE_CURRENT_BINARY_DIR}/buildinfo.cpp"
   "${CMAKE_CURRENT_BINARY_DIR}/shell/mongo.cpp"
   )
 add_dependencies(mongocommon generate_mongo_cpp generate_action_types)

@@ -36,7 +36,7 @@
 #include "mongo/dbtests/framework_options.h"
 #include "mongo/util/background.h"
 #include "mongo/util/concurrency/mutex.h"
-#include "mongo/util/version.h"
+#include "mongo/util/version_reporting.h"
 
 namespace moe = mongo::optionenvironment;
 

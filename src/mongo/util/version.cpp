@@ -16,25 +16,12 @@
  *    limitations under the License.
  */
 
+#include "mongo/platform/basic.h"
 
-#include <cstdlib>
-#include <iostream>
-#include <iomanip>
-#include <sstream>
-#include <string>
-#include <fstream>
+#include "mongo/util/version.h"
 
 #include "mongo/base/parse_number.h"
 #include "mongo/db/jsobj.h"
-#include "mongo/scripting/engine.h"
-#include "mongo/db/storage_options.h"
-#include "mongo/util/file.h"
-#include "mongo/util/net/ssl_manager.h" 
-#include "mongo/util/processinfo.h"
-#include "mongo/util/ramlog.h"
-#include "mongo/util/stringutils.h"
-#include "mongo/util/version.h"
-
 
 namespace mongo {
 
@@ -118,62 +105,4 @@ namespace mongo {
         return ss.str();
     }
 
-    void printGitVersion() { log() << "git version: " << gitVersion() << endl; }
-
-    const std::string openSSLVersion(const std::string &prefix, const std::string &suffix) {
-        return getSSLVersion(prefix, suffix);
-    }
-
-    void printOpenSSLVersion() {
-#ifdef MONGO_SSL
-        log() << openSSLVersion("OpenSSL version: ") << endl;
-#endif
-    }
-
-#if defined(_WIN32)
-    std::string targetMinOS() {
-        stringstream ss;
-#if (NTDDI_VERSION >= 0x06010000)
-        ss << "Windows 7/Windows Server 2008 R2";
-#elif (NTDDI_VERSION >= 0x05020200)
-        ss << "Windows Server 2003 SP2";
-#elif (NTDDI_VERSION >= 0x05010300)
-        ss << "Windows XP SP3";
-#else
-#error This targetted Windows version is not supported
-#endif // NTDDI_VERSION
-       return ss.str();
-    }
-
-    void printTargetMinOS() {
-        log() << "targetMinOS: " << targetMinOS();
-    }
-#endif // _WIN32
-
-    void printSysInfo() {
-        log() << "build info: " << sysInfo() << endl;
-    }
-
-    void printTokukvVersion() { log() << "TokuKV version: " << tokukvVersion() << endl; }
-
-    void appendBuildInfo(BSONObjBuilder& result) {
-        result << "version" << mongodbVersionString
-               << "tokumxVersion" << tokumxVersionString
-               << "gitVersion" << gitVersion()
-               << "tokukvVersion" << tokukvVersion()
-#if defined(_WIN32)
-               << "targetMinOS" << targetMinOS()
-#endif
-               << "OpenSSLVersion" << openSSLVersion()
-               << "sysInfo" << sysInfo()
-               << "loaderFlags" << loaderFlags()
-               << "compilerFlags" << compilerFlags()
-               << "versionArray" << versionArray
-               << "javascriptEngine" << compiledJSEngine()
-/*TODO: add this back once the module system is in place -- maybe once we do something like serverstatus with callbacks*/
-//               << "interpreterVersion" << globalScriptEngine->getInterpreterVersionString()
-               << "bits" << ( sizeof( int* ) == 4 ? 32 : 64 );
-        result.appendBool( "debug" , debug );
-        result.appendNumber("maxBsonObjectSize", BSONObjMaxUserSize);
-    }
-}
+}  // namespace mongo

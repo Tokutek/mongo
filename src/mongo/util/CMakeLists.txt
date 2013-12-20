@@ -46,6 +46,16 @@ target_link_libraries(background_job LINK_PUBLIC
   spin_lock
   )
 
+add_library(version STATIC
+  "${CMAKE_CURRENT_BINARY_DIR}/../buildinfo.cpp"
+  version
+  )
+add_dependencies(version generate_error_codes generate_action_types)
+target_link_libraries(version LINK_PUBLIC
+  bson
+  base
+  )
+
 add_library(mongocommon_util STATIC
   intrusive_counter
   trace
@@ -59,7 +69,7 @@ add_library(mongocommon_util STATIC
   histogram
   text_startuptest
   stack_introspect
-  version
+  version_reporting
   )
 add_dependencies(mongocommon_util generate_error_codes generate_action_types)
 target_link_libraries(mongocommon_util LINK_PUBLIC
@@ -76,6 +86,7 @@ target_link_libraries(mongocommon_util LINK_PUBLIC
   stringutils
   synchronization
   thread_name
+  version
   options_parser
   ${PCRE_LIBRARIES}
   murmurhash3

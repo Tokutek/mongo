@@ -23,40 +23,36 @@
 *    version of the file(s), but you are not obligated to do so. If you do not
 *    wish to do so, delete this exception statement from your version. If you
 *    delete this exception statement from all source files in the program,
-*    then also delete it here.
+*    then also delete it in the license file.
 */
 
-#ifndef UTIL_VERSION_HEADER
-#define UTIL_VERSION_HEADER
+#pragma once
 
 #include <string>
 
-#include "mongo/bson/bsonobj.h"
-
 namespace mongo {
-    struct BSONArray;
+    class BSONObjBuilder;
 
-    // mongo version
-    extern const char mongodbVersionString[];
-    extern const char tokumxVersionString[];
-    extern const BSONArray versionArray;
-    std::string fullVersionString();
-    std::string mongodVersion();
-
-    // Convert a version string into a numeric array
-    BSONArray toVersionArray(const char* version);
-
-    // Checks whether another version is the same major version as us
-    bool isSameMajorVersion(const char* version);
+    void appendBuildInfo(BSONObjBuilder& result);
 
     const char * gitVersion();
     const char * tokukvVersion();
     const char * compiledJSEngine();
     const char * loaderFlags();
     const char * compilerFlags();
+
+    void printGitVersion();
+
+    const std::string openSSLVersion(const std::string &prefix = "", const std::string &suffix = "");
+    void printOpenSSLVersion();
+
     std::string sysInfo();
-    const char * sysInfoCstr();
+    void printSysInfo();
+    void printTargetMinOS();
+
+    const char *tokukvVersion();
+    void printTokukvVersion();
+
+    void show_warnings();
 
 }  // namespace mongo
-
-#endif  // UTIL_VERSION_HEADER

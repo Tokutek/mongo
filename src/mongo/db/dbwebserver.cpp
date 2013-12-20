@@ -42,7 +42,7 @@
 #include "mongo/util/net/miniwebserver.h"
 #include "mongo/util/ramlog.h"
 #include "mongo/util/version.h"
-
+#include "mongo/util/version_reporting.h"
 
 
 namespace mongo {

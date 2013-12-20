@@ -45,8 +45,8 @@
 #include "mongo/util/lruishmap.h"
 #include "mongo/util/md5.hpp"
 #include "mongo/util/processinfo.h"
-#include "mongo/util/version.h"
 #include "mongo/util/ramlog.h"
+#include "mongo/util/version_reporting.h"
 
 namespace mongo {
 

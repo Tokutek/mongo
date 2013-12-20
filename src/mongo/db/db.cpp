@@ -82,6 +82,7 @@
 #include "mongo/util/startup_test.h"
 #include "mongo/util/text.h"
 #include "mongo/util/version.h"
+#include "mongo/util/version_reporting.h"
 
 #if !defined(_WIN32)
 # include <sys/file.h>

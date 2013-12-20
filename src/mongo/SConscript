@@ -212,8 +212,16 @@ env.StaticLibrary('lasterror', [
                            'foundation',
                   ])
 
+env.Library('version',
+            [
+                'buildinfo.cpp',
+                'util/version.cpp'
+            ],
+            LIBDEPS=[
+                'bson',
+                '$BUILD_DIR/mongo/base/base'
+            ])
 commonFiles = [ "pch.cpp",
-                "buildinfo.cpp",
                 "shell/mongo.cpp",
                 "util/intrusive_counter.cpp",
                 "util/trace.cpp",
@@ -226,7 +234,7 @@ commonFiles = [ "pch.cpp",
                 "util/histogram.cpp",
                 "util/text_startuptest.cpp",
                 "util/stack_introspect.cpp",
-                "util/version.cpp",
+                "util/version_reporting.cpp",
                 ]
 
 extraCommonLibdeps = []
@@ -289,6 +297,7 @@ env.StaticLibrary('mongocommon', commonFiles,
                            'stringutils',
                            'synchronization',
                            'util/concurrency/thread_name',
+                           'version',
                            '$BUILD_DIR/third_party/pcrecpp',
                            '$BUILD_DIR/third_party/murmurhash3/murmurhash3',
                            '$BUILD_DIR/third_party/shim_boost',
