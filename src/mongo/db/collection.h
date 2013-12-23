@@ -200,9 +200,11 @@ namespace mongo {
         // rebuild the given index, online.
         // - if there are options, change those options in the index and update the system catalog.
         // - otherwise, send an optimize message and run hot optimize.
-        virtual bool rebuildIndex(IndexDetails &idx, const BSONObj &options, BSONObjBuilder &result) = 0;
+        virtual bool rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &result) = 0;
 
-        virtual void dropIndexDetails(IndexDetails& idx, int idxNum) = 0;
+        virtual void dropIndexDetails(int idxNum) = 0;
+        
+        virtual void acquireTableLock() = 0;
 
         // return true if the namespace is currently under-going bulk load.
         virtual bool bulkLoading() const = 0;
@@ -401,6 +403,10 @@ namespace mongo {
                 noteIndexBuilt();
             }
             return ret;
+        }
+
+        void acquireTableLock() {
+            _cd->acquireTableLock();
         }
 
         /* when a background index build is in progress, we don't count the index in nIndexes until
@@ -664,10 +670,14 @@ namespace mongo {
             return isPK;
         }
 
-        IndexDetails &getPKIndex() const {
-            IndexDetails &idx = *_indexes[0];
+        IndexDetailsBase &getPKIndexBase() const {
+            IndexDetailsBase &idx = *_indexes[0];
             dassert(idx.keyPattern() == _pk);
             return idx;
+        }
+
+        IndexDetails &getPKIndex() const {
+            return getPKIndexBase();
         }
 
         bool indexBuildInProgress() const {
@@ -711,7 +721,7 @@ namespace mongo {
         virtual void insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged) = 0;
 
         // deletes an object from this namespace, taking care of secondary indexes if they exist
-        virtual void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags = 0);
+        virtual void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
 
         // update an object in the namespace by pk, replacing oldObj with newObj
         //
@@ -757,7 +767,7 @@ namespace mongo {
             virtual void _commit() { }
 
             CollectionBase *_cl;
-            shared_ptr<IndexDetails> _idx;
+            shared_ptr<IndexDetailsBase> _idx;
             const BSONObj &_info;
             const bool _isSecondaryIndex;
         };
@@ -804,9 +814,11 @@ namespace mongo {
         // rebuild the given index, online.
         // - if there are options, change those options in the index and update the system catalog.
         // - otherwise, send an optimize message and run hot optimize.
-        bool rebuildIndex(IndexDetails &idx, const BSONObj &options, BSONObjBuilder &result);
+        bool rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &result);
 
-        void dropIndexDetails(IndexDetails& idx, int idxNum);
+        virtual void dropIndexDetails(int idxNum);
+
+        void acquireTableLock();
 
         bool isMultiKey(int i) const {
             const unsigned long long mask = 1ULL << i;
@@ -823,7 +835,7 @@ namespace mongo {
         BSONObj indexInfo(const BSONObj &keyPattern, bool unique, bool clustering, BSONObj options) const;
 
         virtual void createIndex(const BSONObj &info);
-        void checkIndexUniqueness(const IndexDetails &idx);
+        void checkIndexUniqueness(const IndexDetailsBase &idx);
 
         void insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags, bool* indexBitChanged);
         void deleteFromIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
@@ -831,7 +843,7 @@ namespace mongo {
         // uassert on duplicate key
         void checkUniqueIndexes(const BSONObj &pk, const BSONObj &obj);
 
-        typedef std::vector<shared_ptr<IndexDetails> > IndexVector;
+        typedef std::vector<shared_ptr<IndexDetailsBase> > IndexVector;
         IndexVector _indexes;
 
         bool _indexBuildInProgress;
@@ -1091,7 +1103,7 @@ namespace mongo {
 
         void insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged);
 
-        void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags = 0);
+        void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
 
         void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
                           const bool logop, const bool fromMigrate,
@@ -1103,9 +1115,9 @@ namespace mongo {
 
         void empty();
 
-        bool rebuildIndex(IndexDetails &idx, const BSONObj &options, BSONObjBuilder &wasBuilder);
+        bool rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &wasBuilder);
 
-        void dropIndexDetails(IndexDetails& idx, int idxNum);
+        void dropIndexDetails(int idxNum);
 
     private:
         // When closing a BulkLoadedCollection, we need to make sure the key trackers and

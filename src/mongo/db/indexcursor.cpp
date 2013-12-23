@@ -168,14 +168,14 @@ namespace mongo {
         _nscanned(0),
         _nscannedObjects(0),
         _prelock(!cc().opSettings().getJustOne() && numWanted == 0),
-        _cursor(_idx, cursor_flags()),
         _tailable(false),
         _ok(false),
         _getf_iteration(0)
     {
         verify( _cl != NULL );
         TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
-        DBC* cursor = _cursor.dbc();
+        _cursor = idx.getCursor(cursor_flags());
+        DBC* cursor = _cursor->dbc();
         cursor->c_set_check_interrupt_callback(cursor, cursor_check_interrupt, &_interrupt_extra);
         initializeDBC();
     }
@@ -196,7 +196,6 @@ namespace mongo {
         _nscanned(0),
         _nscannedObjects(0),
         _prelock(!cc().opSettings().getJustOne() && numWanted == 0),
-        _cursor(_idx, cursor_flags()),
         _tailable(false),
         _ok(false),
         _getf_iteration(0)
@@ -208,7 +207,8 @@ namespace mongo {
         _endKey = _bounds->endKey();
         _endKeyInclusive = _bounds->endKeyInclusive();
         TOKULOG(3) << toString() << ": constructor: bounds " << prettyIndexBounds() << endl;
-        DBC* cursor = _cursor.dbc();
+        _cursor = idx.getCursor(cursor_flags());
+        DBC* cursor = _cursor->dbc();
         cursor->c_set_check_interrupt_callback(cursor, cursor_check_interrupt, &_interrupt_extra);
         initializeDBC();
 
@@ -319,7 +319,7 @@ namespace mongo {
         DBT start = sKey.dbt();
         DBT end = eKey.dbt();
 
-        DBC *cursor = _cursor.dbc();
+        DBC *cursor = _cursor->dbc();
         const int r = cursor->c_set_bounds( cursor, &start, &end, true, 0 );
         if ( r != 0 ) {
             storage::handle_ydb_error(r);
@@ -515,7 +515,7 @@ namespace mongo {
         int r;
         const int rows_to_fetch = getf_fetch_count();
         struct cursor_getf_extra extra(&_buffer, rows_to_fetch);
-        DBC *cursor = _cursor.dbc();
+        DBC *cursor = _cursor->dbc();
         if ( forward() ) {
             r = cursor->c_getf_set_range(cursor, getf_flags(), &key_dbt, cursor_getf, &extra);
         } else {
@@ -713,7 +713,7 @@ again:      while ( !allInclusive && ok() ) {
         int r;
         const int rows_to_fetch = getf_fetch_count();
         struct cursor_getf_extra extra(&_buffer, rows_to_fetch);
-        DBC *cursor = _cursor.dbc();
+        DBC *cursor = _cursor->dbc();
         if ( forward() ) {
             r = cursor->c_getf_next(cursor, getf_flags(), cursor_getf, &extra);
         } else {

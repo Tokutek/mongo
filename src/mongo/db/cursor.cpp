@@ -205,7 +205,7 @@ namespace mongo {
         // should not have already tried + failed at counting more rows.
         verify(!_exhausted);
 
-        DBC *cursor = _cursor.dbc();
+        DBC *cursor = _cursor->dbc();
         struct count_cursor_getf_extra extra(_bufferedRowCount, _exhausted,
                                              _endSKeyPrefix, _ordering, _endKeyInclusive);
         const int r = cursor->c_getf_next(cursor, getf_flags(), count_cursor_getf, &extra);

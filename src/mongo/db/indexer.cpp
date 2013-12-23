@@ -109,7 +109,7 @@ namespace mongo {
 
         // Store the index in the _indexes array so that others know an
         // index with this name / key pattern exists and is being built.
-        _idx = IndexDetails::make(_info);
+        _idx = IndexDetailsBase::make(_info);
         _cl->_indexes.push_back(_idx);
         _cl->_indexBuildInProgress = true;
 
@@ -142,7 +142,7 @@ namespace mongo {
             // will be set during index creation if multikeys are generated.
             // see storage::generate_keys()
             _multiKeyTracker.reset(new MultiKeyTracker(_idx->db()));
-            _indexer.reset(new storage::Indexer(_cl->getPKIndex().db(), _idx->db()));
+            _indexer.reset(new storage::Indexer(_cl->getPKIndexBase().db(), _idx->db()));
             _indexer->setPollMessagePrefix(str::stream() << "Hot index build progress: "
                                                          << _cl->_ns << ", key "
                                                          << _idx->keyPattern()
@@ -186,7 +186,7 @@ namespace mongo {
     void CollectionBase::ColdIndexer::build() {
         Lock::assertWriteLocked(_cl->_ns);
         if (_isSecondaryIndex) {
-            IndexDetails::Builder builder(*_idx);
+            IndexDetailsBase::Builder builder(*_idx);
 
             for (shared_ptr<Cursor> cursor(Cursor::make(_cl, 1));
                  cursor->ok(); cursor->advance()) {

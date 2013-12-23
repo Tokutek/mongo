@@ -401,7 +401,7 @@ namespace mongo {
         // - cc().opSettings().justOne() is true.
         const bool _prelock;
 
-        IndexDetails::Cursor _cursor;
+        shared_ptr<storage::Cursor> _cursor;
         // An exhausted cursor has no more rows and is done iterating,
         // unless it's tailable. If so, it may try to read more rows.
         bool _tailable;

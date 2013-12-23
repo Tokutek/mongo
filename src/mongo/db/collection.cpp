@@ -356,7 +356,7 @@ namespace mongo {
         // TODO: Find out why this code is in this constructor and not the SystemUsersCollection constructor
         for (std::vector<BSONElement>::iterator it = index_array.begin(); it != index_array.end(); it++) {
             const BSONObj &info = it->Obj();
-            shared_ptr<IndexDetails> idx(IndexDetails::make(info, false));
+            shared_ptr<IndexDetailsBase> idx(IndexDetailsBase::make(info, false));
             if (!idx && cc().upgradingSystemUsers() && isSystemUsersCollection(_ns) &&
                 oldSystemUsersKeyPattern == info["key"].Obj()) {
                 // This was already dropped, but because of #673 we held on to the info.
@@ -412,7 +412,7 @@ namespace mongo {
             verify(!_indexBuildInProgress);
         }
         for (int i = 0; i < nIndexesBeingBuilt(); i++) {
-            IndexDetails &idx = *_indexes[i];
+            IndexDetailsBase &idx = *_indexes[i];
             idx.close();
         }
     }
@@ -470,7 +470,7 @@ namespace mongo {
 
     BSONObj CollectionBase::getValidatedPKFromObject(const BSONObj &obj) const {
         BSONObjSet keys;
-        getPKIndex().getKeysFromObject(obj, keys);
+        getPKIndexBase().getKeysFromObject(obj, keys);
         const BSONObj pk = keys.begin()->getOwned();
         uassert(17205, str::stream() << "primary key " << pk << " cannot be multi-key",
                        keys.size() == 1); // this enforces no arrays in the primary key
@@ -503,7 +503,7 @@ namespace mongo {
 
         storage::Key sKey(key, NULL);
         DBT key_dbt = sKey.dbt();
-        DB *db = getPKIndex().db();
+        DB *db = getPKIndexBase().db();
 
         BSONObj obj;
         struct findByPKCallbackExtra extra(obj);
@@ -550,7 +550,7 @@ namespace mongo {
             const bool doUniqueChecks = !(flags & Collection::NO_UNIQUE_CHECKS) &&
                                         !(isPK && (flags & Collection::NO_PK_UNIQUE_CHECKS));
 
-            IndexDetails &idx = *_indexes[i];
+            IndexDetailsBase &idx = *_indexes[i];
             dbs[i] = idx.db();
 
             // Primary key uniqueness check will be done at the ydb layer.
@@ -604,7 +604,7 @@ namespace mongo {
         for (int i = 0; i < n; i++) {
             const DBT_ARRAY *array = &keyArrays[i];
             if (array->size > 0) {
-                IndexDetails &idx = *_indexes[i];
+                IndexDetailsBase &idx = *_indexes[i];
                 dassert(!isPKIndex(idx));
                 idx.noteInsert();
             }
@@ -627,7 +627,7 @@ namespace mongo {
         for (int i = 0; i < n; i++) {
             const bool isPK = i == 0;
             const bool prelocked = flags & Collection::NO_LOCKTREE;
-            IndexDetails &idx = *_indexes[i];
+            IndexDetailsBase &idx = *_indexes[i];
             dbs[i] = idx.db();
             del_flags[i] = DB_DELETE_ANY | (prelocked ? DB_PRELOCKED_WRITE : 0);
             DEV {
@@ -671,7 +671,7 @@ namespace mongo {
         for (int i = 0; i < n; i++) {
             const DBT_ARRAY *array = &keyArrays[i];
             if (array->size > 0) {
-                IndexDetails &idx = *_indexes[i];
+                IndexDetailsBase &idx = *_indexes[i];
                 dassert(!isPKIndex(idx));
                 idx.noteDelete();
             }
@@ -729,7 +729,7 @@ namespace mongo {
             const bool doUniqueChecks = !(flags & Collection::NO_UNIQUE_CHECKS) &&
                                         !(isPK && (flags & Collection::NO_PK_UNIQUE_CHECKS));
 
-            IndexDetails &idx = *_indexes[i];
+            IndexDetailsBase &idx = *_indexes[i];
             dbs[i] = idx.db();
             update_flags[i] = prelocked ? DB_PRELOCKED_WRITE : 0;
 
@@ -802,7 +802,7 @@ namespace mongo {
     void CollectionBase::updateObjectMods(const BSONObj &pk, const BSONObj &updateObj,
                                           const bool logop, const bool fromMigrate,
                                           uint64_t flags) {
-        IndexDetails &pkIdx = getPKIndex();
+        IndexDetailsBase &pkIdx = getPKIndexBase();
         pkIdx.updatePair(pk, NULL, updateObj, flags);
 
         if (logop) {
@@ -827,7 +827,7 @@ namespace mongo {
         _multiKeyIndexBits |= x;
     }
 
-    void CollectionBase::checkIndexUniqueness(const IndexDetails &idx) {
+    void CollectionBase::checkIndexUniqueness(const IndexDetailsBase &idx) {
         shared_ptr<Cursor> c(Cursor::make(this, idx));
         BSONObj prevKey = c->currKey().getOwned();
         c->advance();
@@ -854,7 +854,8 @@ namespace mongo {
         indexer->commit();
     }
 
-    void CollectionBase::dropIndexDetails(IndexDetails& idx, int idxNum) {
+    void CollectionBase::dropIndexDetails(int idxNum) {
+        IndexDetailsBase& idx = *_indexes[idxNum];
         idx.kill_idx();
         _indexes.erase(_indexes.begin() + idxNum);
         _nIndexes--;
@@ -862,6 +863,15 @@ namespace mongo {
         // Removes the nth bit, and shifts any bits higher than it down a slot.
         _multiKeyIndexBits = ((_multiKeyIndexBits & ((1ULL << idxNum) - 1)) |
                              ((_multiKeyIndexBits >> (idxNum + 1)) << idxNum));
+    }
+
+    void CollectionBase::acquireTableLock() {
+        // Acquire full table locks on each index so that only this
+        // transcation can write to them until the load/txn commits.
+        for (int i = 0; i < nIndexes(); i++) {
+            IndexDetailsBase &idx = *_indexes[i];
+            idx.acquireTableLock();
+        }
     }
 
     void Collection::dropIndex(const int idxNum) {
@@ -882,7 +892,7 @@ namespace mongo {
             removeFromIndexesCatalog(_ns, idx.indexName());
         }
 
-        _cd->dropIndexDetails(idx, idxNum);
+        _cd->dropIndexDetails(idxNum);
         
         resetTransient();
         // Updated whatever in memory structures are necessary, now update the collectionMap.
@@ -967,7 +977,8 @@ namespace mongo {
     // rebuild the given index, online.
     // - if there are options, change those options in the index and update the system catalog.
     // - otherwise, send an optimize message and run hot optimize.
-    bool CollectionBase::rebuildIndex(IndexDetails &idx, const BSONObj &options, BSONObjBuilder &wasBuilder) {
+    bool CollectionBase::rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &wasBuilder) {
+        IndexDetailsBase& idx = *_indexes[i];
         if (options.isEmpty()) {
             LOG(1) << _ns << ": optimizing index " << idx.keyPattern() << endl;
             const bool ascending = !Ordering::make(idx.keyPattern()).descending(0);
@@ -995,7 +1006,7 @@ namespace mongo {
                 IndexDetails &idx = _cd->idx(i);
                 BSONObjBuilder wasBuilder(ab.subobjStart());
                 wasBuilder.append("name", idx.indexName());
-                if (_cd->rebuildIndex(idx, options, wasBuilder)) {
+                if (_cd->rebuildIndex(i, options, wasBuilder)) {
                     if (isPKIndex(idx)) {
                         pkIndexChanged = true;
                     }
@@ -1017,7 +1028,7 @@ namespace mongo {
                            i < nIndexes()); // i == _nIndexes is the hot index
             IndexDetails &idx = _cd->idx(i);
             BSONObjBuilder wasBuilder;
-            if (_cd->rebuildIndex(idx, options, wasBuilder)) {
+            if (_cd->rebuildIndex(i, options, wasBuilder)) {
                 if (isPKIndex(idx)) {
                     pkIndexChanged = true;
                 }
@@ -1394,13 +1405,7 @@ namespace mongo {
                 addToIndexesCatalog(info);
             }
         }
-
-        // Acquire full table locks on each index so that only this
-        // transcation can write to them until the load/txn commits.
-        for (int i = 0; i < cl->nIndexes(); i++) {
-            IndexDetails &idx = cl->idx(i);
-            idx.acquireTableLock();
-        }
+        cl->acquireTableLock();
 
         // Now the ns exists. Close it and re-open it in "bulk load" mode.
         const bool closed = cm->close_ns(ns);
@@ -1662,7 +1667,7 @@ namespace mongo {
     // hot optimize on. no optimize message is sent.
     void OplogCollection::optimizePK(const BSONObj &leftPK, const BSONObj &rightPK,
                                      const int timeout, uint64_t *loops_run) {
-        IndexDetails &idx = getPKIndex();
+        IndexDetailsBase &idx = getPKIndexBase();
         const storage::Key leftSKey(leftPK, NULL);
         const storage::Key rightSKey(rightPK, NULL);
         idx.optimize(leftSKey, rightSKey, false, timeout, loops_run);
@@ -2020,7 +2025,7 @@ namespace mongo {
         // a unique check because we always generate a unique auto-increment pk.
         int start = checkPk ? 0 : 1;
         for (int i = start; i < nIndexes(); i++) {
-            IndexDetails &idx = *_indexes[i];
+            IndexDetailsBase &idx = *_indexes[i];
             if (idx.unique()) {
                 BSONObjSet keys;
                 idx.getKeysFromObject(obj, keys);
@@ -2160,7 +2165,7 @@ namespace mongo {
         _multiKeyTrackers.reset(new scoped_ptr<MultiKeyTracker>[n]);
 
         for (int i = 0; i < _nIndexes; i++) {
-            IndexDetails &idx = *_indexes[i];
+            IndexDetailsBase &idx = *_indexes[i];
             _dbs[i] = idx.db();
             _multiKeyTrackers[i].reset(new MultiKeyTracker(_dbs[i]));
         }
@@ -2190,7 +2195,7 @@ namespace mongo {
             }
             verify(!_indexBuildInProgress);
             for (int i = 0; i < _nIndexes; i++) {
-                IndexDetails &idx = *_indexes[i];
+                IndexDetailsBase &idx = *_indexes[i];
                 // The PK's uniqueness is verified on loader close, so we should not check it again.
                 if (!isPKIndex(idx) && idx.unique()) {
                     checkIndexUniqueness(idx);
@@ -2236,11 +2241,11 @@ namespace mongo {
         uasserted( 17218, "Cannot update a collection under-going bulk load." );
     }
 
-    bool BulkLoadedCollection::rebuildIndex(IndexDetails &idx, const BSONObj &options, BSONObjBuilder &wasBuilder) {
+    bool BulkLoadedCollection::rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &wasBuilder) {
         uasserted( 16895, "Cannot optimize a collection under-going bulk load." );
     }
 
-    void BulkLoadedCollection::dropIndexDetails(IndexDetails& idx, const int idxNum) {
+    void BulkLoadedCollection::dropIndexDetails(const int idxNum) {
         uasserted( 16894, "Cannot perform drop/dropIndexes on of a collection under-going bulk load." );
     }
 

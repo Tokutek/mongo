@@ -32,16 +32,16 @@ namespace NamespaceTests {
         class Base {
             Lock::GlobalWrite lk;
             Client::Context _context;
-            shared_ptr<IndexDetails> _idx;
+            shared_ptr<IndexDetailsBase> _idx;
         public:
-            IndexDetails &idx() { return *_idx; }
+            IndexDetailsBase &idx() { return *_idx; }
             Base() : _context(ns()), _idx() {
             }
             virtual ~Base() {
             }
         protected:
             void create() {
-                _idx.reset(new IndexDetails(info()));
+                _idx.reset(new IndexDetailsBase(info()));
             }
             virtual bool isSparse() const {
                 return false;
