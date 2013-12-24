@@ -24,6 +24,7 @@
 #include <iostream>
 
 #include "mongo/base/initializer.h"
+#include "mongo/bson/bson_validate.h"
 #include "mongo/client/dbclient_rs.h"
 #include "mongo/client/sasl_client_authenticate.h"
 #include "mongo/db/auth/authorization_manager.h"
@@ -308,21 +309,23 @@ namespace mongo {
             verify( amt == (size_t)( size - 4 ) );
 
             BSONObj o( buf );
-            if (bsonToolGlobalParams.objcheck && !o.valid()) {
-                toolError() << "INVALID OBJECT - going to try and print out " << std::endl;
-                toolError() << "size: " << size << std::endl;
-                BSONObjIterator i(o);
-                while ( i.more() ) {
-                    BSONElement e = i.next();
+            if (bsonToolGlobalParams.objcheck) {
+                const Status status = validateBSON(buf, size);
+                if (!status.isOK()) {
+                    toolError() << "INVALID OBJECT - going to try and print out " << std::endl;
+                    toolError() << "size: " << size << std::endl;
+                    toolError() << "error: " << status.reason() << std::endl;
+
+                    StringBuilder sb;
                     try {
-                        e.validate();
+                        o.toString(sb); // using StringBuilder version to get as much as possible
+                    } catch (...) {
+                        toolError() << "object up to error: " << sb.str() << endl;
+                        throw;
                     }
-                    catch ( ... ) {
-                        toolError() << "\t\t NEXT ONE IS INVALID" << std::endl;
-                    }
-                    toolError() << "\t name : " << e.fieldName() << " " << typeName(e.type())
-                                << std::endl;
-                    toolError() << "\t " << e << std::endl;
+                    toolError() << "complete object: " << sb.str() << endl;
+
+                    // NOTE: continuing with object even though we know it is invalid.
                 }
             }
 
