@@ -364,7 +364,7 @@ add_library(mongoclient STATIC
   "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.cpp"
   "${CMAKE_CURRENT_BINARY_DIR}/buildinfo.cpp"
   ${client_sources})
-add_dependencies(mongoclient generate_error_codes generate_action_types)
+add_dependencies(mongoclient generate_error_codes generate_action_types install_tdb_h)
 target_link_libraries(mongoclient LINK_PRIVATE
   ${Boost_LIBRARIES}
   )
