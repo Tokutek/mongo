@@ -120,43 +120,11 @@ namespace mongo {
         return ss.str();
     }
 
-#ifndef _SCONS
-    // only works in scons
-    const char * gitVersion() { return "not-scons"; }
-    const char * compiledJSEngine() { return ""; }
-    const char * loaderFlags() { return ""; }
-    const char * compilerFlags() { return ""; }
-#endif
-
     void printGitVersion() { log() << "git version: " << gitVersion() << endl; }
-
-#ifndef _SCONS
-#if defined(_WIN32)
-    string sysInfo() {
-        stringstream ss;
-        ss << "not-scons win";
-        ss << " mscver:" << _MSC_FULL_VER << " built:" << __DATE__;
-        ss << " boostver:" << BOOST_VERSION;
-#if( !defined(_MT) )
-#error _MT is not defined
-#endif
-        ss << (sizeof(char *) == 8) ? " 64bit" : " 32bit";
-        return ss.str();
-    }
-#else
-    string sysInfo() { return ""; }
-
-#endif
-#endif
 
     void printSysInfo() {
         log() << "build info: " << sysInfo() << endl;
     }
-
-#ifndef _SCONS
-    // only works in scons
-    const char *tokukvVersion() { return "not-scons"; }
-#endif
 
     void printTokukvVersion() { log() << "TokuKV version: " << tokukvVersion() << endl; }
 

@@ -1,0 +1,13 @@
+#include <string>
+#include <boost/version.hpp>
+
+#include "mongo/util/version.h"
+
+namespace mongo {
+  const char *gitVersion() { return "${TOKUMX_GIT_VERSION}"; }
+  const char *tokukvVersion() { return "${TOKUKV_GIT_VERSION}"; }
+  const char *compiledJSEngine() { return "${TOKUMX_JS_ENGINE}"; }
+  const char *loaderFlags() { return "${TOKUMX_LOADER_FLAGS}"; }
+  const char *compilerFlags() { return "${TOKUMX_COMPILER_FLAGS}"; }
+  std::string sysInfo() { return "${TOKUMX_SYS_INFO} BOOST_LIB_VERSION=" BOOST_LIB_VERSION; }
+}  // namespace mongo
