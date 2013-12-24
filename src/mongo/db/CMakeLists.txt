@@ -212,7 +212,7 @@ add_library(mongodandmongos STATIC
   server_extra_log_context
   ../util/net/message_server_port
   )
-add_dependencies(mongodandmongos generate_error_codes generate_action_types)
+add_dependencies(mongodandmongos generate_error_codes generate_action_types install_tdb_h)
 
 add_library(coreserver STATIC
   client_basic
