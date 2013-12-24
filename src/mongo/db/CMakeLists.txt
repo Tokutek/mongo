@@ -97,7 +97,7 @@ add_library(coredb STATIC
   storage/key
   ../s/shardconnection
   )
-add_dependencies(coredb generate_error_codes generate_action_types)
+add_dependencies(coredb generate_error_codes generate_action_types install_tdb_h)
 target_link_libraries(coredb LINK_PRIVATE
   serverauth
   db_common
@@ -197,7 +197,7 @@ add_library(serveronly STATIC
   ../s/d_chunk_manager
   module
   )
-add_dependencies(serveronly generate_error_codes generate_action_types)
+add_dependencies(serveronly generate_error_codes generate_action_types install_tdb_h)
 target_link_libraries(serveronly LINK_PRIVATE
   coreshard
   authmongod
