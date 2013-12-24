@@ -136,6 +136,7 @@ namespace mongo {
             );
 
         bool copyCollection(
+            const string& dbname,
             const string& ns , 
             const BSONObj& query , 
             string& errmsg , 
@@ -351,6 +352,7 @@ namespace mongo {
     }
 
     bool Cloner::copyCollection(
+        const string& dbname,
         const string& ns, 
         const BSONObj& query,
         string& errmsg,
@@ -362,15 +364,30 @@ namespace mongo {
             string temp = getSisterNS(cc().database()->name(), "system.namespaces");
             BSONObj config = conn->findOne( temp , BSON( "name" << ns ) );
             if ( config["options"].isABSONObj() ) {
+                BSONObj options = config["options"].Obj();
                 if ( !userCreateNS(
                         ns.c_str(), 
-                        config["options"].Obj(), 
+                        options, 
                         errmsg, 
                         true // logForRepl
                         ) 
-                    ) 
+                    )
                 {
                     return false;
+                }
+                
+                if (options["partitioned"].trueValue()) {
+                    BSONObj res;
+                    StringData collectionName = nsToCollectionSubstring(ns);
+                    bool ok = conn->runCommand(dbname, BSON("getPartitionInfo" << collectionName), res);
+                    if (!ok) {
+                        errmsg = res["errmsg"].String();
+                        LOG(0) << errmsg << endl;
+                    }
+                    Collection* cl = getCollection(ns);
+                    massert(0, "Could not get collection we just created", cl);
+                    PartitionedCollection* pc = cl->as<PartitionedCollection>();
+                    pc->addClonedPartitionInfo(res["partitions"].Array());
                 }
             }
         }
@@ -520,6 +537,20 @@ namespace mongo {
                 string err;
                 const char *toname = to_name.c_str();
                 userCreateNS(toname, options, err, opts.logForRepl);
+            }
+            if (options["partitioned"].trueValue()) {
+                BSONObj res;
+                StringData collectionName = nsToCollectionSubstring(from_name);
+                bool ok = conn->runCommand(opts.fromDB, BSON("getPartitionInfo" << collectionName), res);
+                if (!ok) {
+                    errmsg = res["errmsg"].String();
+                    LOG(0) << errmsg << endl;
+                    return false;
+                }
+                Collection* cl = getCollection(to_name);
+                massert(0, "Could not get collection we just created", cl);
+                PartitionedCollection* pc = cl->as<PartitionedCollection>();
+                pc->addClonedPartitionInfo(res["partitions"].Array());
             }
             LOG(1) << "\t\t cloning " << from_name << " -> " << to_name << endl;
             Query q;
@@ -884,6 +915,7 @@ namespace mongo {
             
             Cloner c(conn);
             bool retval = c.copyCollection(
+                dbname,
                 collection,
                 query,
                 errmsg,

@@ -161,6 +161,9 @@ namespace mongo {
         _ns(ns.toString()),
         _options(options.copy()) {
 
+        massert(10356, str::stream() << "invalid ns: " << ns,
+                       NamespaceString::validCollectionName(ns));
+
         // TODO: do some stuff to create _cd
         if (isOplogCollection(ns)) {
             _cd.reset(new OplogCollection(ns, options));
@@ -174,6 +177,9 @@ namespace mongo {
             // We enforce the restriction because it's easier to implement. See SERVER-6937.
             uassert( 16852, "System profile must be a capped collection.", options["capped"].trueValue() );
             _cd.reset(new ProfileCollection(ns, options));
+        } else if (options["partitioned"].trueValue()) {
+            uassert(0, "Partitioned Collection cannot be capped", !options["capped"].trueValue());
+            _cd.reset(new PartitionedCollection(ns, options));
         } else if (options["capped"].trueValue()) {
             _cd.reset(new CappedCollection(ns, options));
         } else if (options["natural"].trueValue()) {
@@ -236,6 +242,9 @@ namespace mongo {
         } else if (isProfileCollection(ns)) {
             massert( 16870, "bug: Should not bulk load the profile collection", !bulkLoad );
             _cd.reset(new ProfileCollection(serialized));
+        } else if (serialized["options"]["partitioned"].trueValue()) {
+            massert( 17247, "bug: Should not bulk load partitioned collections", !bulkLoad );
+            _cd.reset(new PartitionedCollection(serialized));
         } else if (serialized["options"]["capped"].trueValue()) {
             massert( 16871, "bug: Should not bulk load capped collections", !bulkLoad );
             _cd.reset(new CappedCollection(serialized));
@@ -333,10 +342,6 @@ namespace mongo {
         _multiKeyIndexBits(0) {
 
         TOKULOG(1) << "Creating collection " << ns << endl;
-
-        massert(10356, str::stream() << "invalid ns: " << ns,
-                       NamespaceString::validCollectionName(ns));
-
 
         // Create the primary key index, generating the info from the pk pattern and options.
         BSONObj info = indexInfo(pkIndexPattern, true, true, options);
@@ -828,7 +833,7 @@ namespace mongo {
     }
 
     void CollectionBase::checkIndexUniqueness(const IndexDetailsBase &idx) {
-        shared_ptr<Cursor> c(Cursor::make(this, idx));
+        shared_ptr<Cursor> c(Cursor::make(this, idx, 1, false));
         BSONObj prevKey = c->currKey().getOwned();
         c->advance();
         for ( ; c->ok(); c->advance() ) {
@@ -871,6 +876,57 @@ namespace mongo {
         for (int i = 0; i < nIndexes(); i++) {
             IndexDetailsBase &idx = *_indexes[i];
             idx.acquireTableLock();
+        }
+    }
+
+    shared_ptr<Cursor> CollectionBase::makeCursor(const int direction, const bool countCursor) {
+        if (countCursor) {
+            return shared_ptr<Cursor>(new IndexScanCountCursor(this, findSmallestOneToOneIndex()));
+        } else {
+            return shared_ptr<Cursor>(new BasicCursor(this, direction));
+        }
+    }
+    
+    // index-scan
+    shared_ptr<Cursor> CollectionBase::makeCursor(const IndexDetails &idx,
+                                    const int direction, 
+                                    const bool countCursor)
+    {
+        if (countCursor) {
+            return shared_ptr<Cursor>(new IndexScanCountCursor(this, idx));
+        } else {
+            return shared_ptr<Cursor>(new IndexScanCursor(this, idx, direction));
+        }
+    }
+    
+    // index range scan between start/end
+    shared_ptr<Cursor> CollectionBase::makeCursor(const IndexDetails &idx,
+                                   const BSONObj &startKey, const BSONObj &endKey,
+                                   const bool endKeyInclusive,
+                                   const int direction, const int numWanted,
+                                   const bool countCursor)
+    {
+        if (countCursor) {
+            return shared_ptr<Cursor>(new IndexCountCursor(this, idx, startKey, endKey,
+                                                           endKeyInclusive));
+        } else {
+            return shared_ptr<Cursor>(new IndexCursor(this, idx, startKey, endKey,
+                                                      endKeyInclusive, direction, numWanted));
+        }
+    }
+    
+    // index range scan by field bounds
+    shared_ptr<Cursor> CollectionBase::makeCursor(const IndexDetails &idx,
+                                   const shared_ptr<FieldRangeVector> &bounds,
+                                   const int singleIntervalLimit,
+                                   const int direction, const int numWanted,
+                                   const bool countCursor)
+    {
+        if (countCursor) {
+            return shared_ptr<Cursor>(new IndexCountCursor(this, idx, bounds));
+        } else {
+            return shared_ptr<Cursor>(new IndexCursor(this, idx, bounds,
+                                                      singleIntervalLimit, direction, numWanted));
         }
     }
 
@@ -1455,7 +1511,7 @@ namespace mongo {
         return -1;
     }
 
-    IndexDetails &Collection::findSmallestOneToOneIndex() const {
+    IndexDetails &CollectionBase::findSmallestOneToOneIndex() const {
         // Default to choosing the primary key index (always at _indexes[0]);
         int chosenIndex = 0;
 
@@ -1466,7 +1522,7 @@ namespace mongo {
         for (int i = 1; i < nIndexes(); i++) {
             const IndexDetails &index = idx(i);
             IndexDetails::Stats st = index.getStats();
-            if (!index.sparse() && !isMultikey(i) && st.dataSize < smallestIndexSize) {
+            if (!index.sparse() && !isMultiKey(i) && st.dataSize < smallestIndexSize) {
                 smallestIndexSize = st.dataSize;
                 chosenIndex = i;
             }
@@ -1686,7 +1742,7 @@ namespace mongo {
         Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
         {
             // The next PK, if it exists, is the last pk + 1
-            shared_ptr<Cursor> cursor = Cursor::make(this, -1);
+            shared_ptr<Cursor> cursor = Cursor::make(this, -1, false);
             if (cursor->ok()) {
                 const BSONObj key = cursor->currPK();
                 dassert(key.nFields() == 1);
@@ -1845,7 +1901,7 @@ namespace mongo {
         long long n = 0;
         long long size = 0;
         Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-        for (shared_ptr<Cursor> c( Cursor::make(this, 1) ); c->ok(); n++, c->advance()) {
+        for (shared_ptr<Cursor> c( Cursor::make(this, 1, false) ); c->ok(); n++, c->advance()) {
             size += c->current().objsize();
         }
         txn.commit();
@@ -2085,7 +2141,7 @@ namespace mongo {
             // TODO: Disable prelocking on this cursor, or somehow prevent waiting 
             //       on row locks we can't get immediately.
             for (shared_ptr<Cursor> c(Cursor::make(this, getPKIndex(), // pk always has multiKey false
-                                      BSON("" << startKey), maxKey, true, 1));
+                                      BSON("" << startKey), maxKey, true, 1, 0, false));
                  c->ok(); c->advance()) {
                 BSONObj oldestPK = c->currPK();
                 BSONObj oldestObj = c->current();
@@ -2112,7 +2168,7 @@ namespace mongo {
     // Remove everything from this capped collection
     void CappedCollection::empty() {
         SimpleMutex::scoped_lock lk(_deleteMutex);
-        for (shared_ptr<Cursor> c( Cursor::make(this, 1) ); c->ok() ; c->advance()) {
+        for (shared_ptr<Cursor> c( Cursor::make(this, 1, false) ); c->ok() ; c->advance()) {
             _deleteObject(c->currPK(), c->current(), 0);
         }
         _lastDeletedPK = BSONObj();
@@ -2260,6 +2316,530 @@ namespace mongo {
 
     void BulkLoadedCollection::createIndex(const BSONObj &info) {
         uasserted( 16867, "Cannot create an index on a collection under-going bulk load." );
+    }
+
+    //
+    // methods for PartitionedCollections
+    //
+    
+    static BSONObj makePartitionedSerialized(BSONObj serialized, string newNS) {
+        BSONArrayBuilder newIndexesArray;
+        vector<BSONElement> indexes = serialized["indexes"].Array();
+        for (vector<BSONElement>::const_iterator it = indexes.begin(); it != indexes.end(); it++) {
+            newIndexesArray.append(replaceNSField(it->Obj(), newNS));
+        }
+        return Collection::serialize(newNS, serialized["options"].Obj(), serialized["pk"].Obj(),
+                                                          serialized["multiKeyIndexBits"].Long(),
+                                                          newIndexesArray.arr());
+    }
+
+    // constructor that creates a PartitionedCollection
+    PartitionedCollection::PartitionedCollection(const StringData &ns, const BSONObj &options) :
+        CollectionData(ns, BSON("_id" << 1)), // the pk MUST be _id:1, we verify below
+        _options(options.copy()),
+        _ordering(Ordering::make(BSONObj())), // dummy for now, we create it properly below
+        _numPartitions(0)
+    {
+        // verify that there is no defined primary key
+        uassert(17245, str::stream() << "Partitioned Collection cannot have a defined primary key: " << ns, !options["primaryKey"].ok());
+
+        // create the meta collection
+        _metaCollection.reset(new IndexedCollection(getMetaCollectionName(ns), options));
+
+        // add the first partition
+        appendNewPartition();
+
+        // some sanity checks
+        verify(_numPartitions == 1);
+        verify(_partitions[0]->nIndexes() == 1);
+
+        // create the index details
+        createIndexDetails();
+        
+        sanityCheck();    
+    }
+
+    PartitionedCollection::PartitionedCollection(const BSONObj &serialized) :
+        CollectionData(serialized),
+        _options(serialized["options"].Obj().copy()),
+        _ordering(Ordering::make(BSONObj())), // dummy for now, we create it properly below
+        _numPartitions(0)
+    {
+        // verify that there is no defined primary key
+        uassert(17246, str::stream() << "Partitioned Collection cannot have a defined primary key: " << _ns, !_options["primaryKey"].ok());
+        // open the metadata collection
+        BSONObj metaSerialized = makePartitionedSerialized(serialized, getMetaCollectionName(_ns));
+        _metaCollection.reset(new IndexedCollection(metaSerialized));
+        // now we need to query _metaCollection to get partition information
+        for (shared_ptr<Cursor> c( Cursor::make(_metaCollection.get(), 1, false) ); c->ok() ; c->advance()) {
+            BSONObj curr = c->current();
+            TOKULOG(1) << "found" << curr.str() << " in meta collection" << endl;
+            // All ids that are numbers in the metadata collection correspond to numbers
+            // otherwise, they may be something else (anything else, as who knows what
+            // the future holds). So, if we see an id that is not a number, we continue
+            if (!curr["_id"].isNumber()) {
+                TOKULOG(1) << "continuing on " << curr.str() << endl;
+                continue;
+            }
+            // make the collection
+            uint64_t currID = curr["_id"].numberLong();
+            BSONObj currCollSerialized = makePartitionedSerialized(
+                serialized,
+                getPartitionName(currID)
+                );
+            shared_ptr<IndexedCollection> currColl;
+            currColl.reset(new IndexedCollection(currCollSerialized));
+            _partitions.push_back(currColl);
+            // extract the pivot
+            _partitionPivots.push_back(curr["max"].Obj().copy());
+            _partitionIDs.push_back(currID);
+            
+            _numPartitions++;
+        }
+        // create the index details
+        createIndexDetails();
+        
+        sanityCheck();    
+    }
+
+    shared_ptr<Cursor> PartitionedCollection::makeCursor(
+        const int direction, 
+        const bool countCursor
+        )
+    {
+        shared_ptr<Cursor> ret(new PartitionedCursor(this, direction, countCursor));
+        return ret;
+    }
+    
+    // index range scan between start/end
+    shared_ptr<Cursor> PartitionedCollection::makeCursor(const IndexDetails &idx,
+                                   const BSONObj &startKey, const BSONObj &endKey,
+                                   const bool endKeyInclusive,
+                                   const int direction, const int numWanted,
+                                   const bool countCursor)
+    {
+        // as of now, no secondary indexes
+        verify(idxNo(idx) == 0);
+        shared_ptr<Cursor> ret(
+            new PartitionedCursor(
+                this,
+                startKey,
+                endKey,
+                endKeyInclusive,
+                direction,
+                numWanted,
+                countCursor
+                )
+            );
+        return ret;
+    }
+    
+    // index range scan by field bounds
+    shared_ptr<Cursor> PartitionedCollection::makeCursor(const IndexDetails &idx,
+                                   const shared_ptr<FieldRangeVector> &bounds,
+                                   const int singleIntervalLimit,
+                                   const int direction, const int numWanted,
+                                   const bool countCursor)
+    {
+        // as of now, no secondary indexes
+        verify(idxNo(idx) == 0);
+        shared_ptr<Cursor> ret(
+            new PartitionedCursor (
+                this,
+                bounds,
+                singleIntervalLimit,
+                direction,
+                numWanted,
+                countCursor
+                )
+            );
+        return ret;
+    }
+
+    void PartitionedCollection::sanityCheck() {
+        verify(_numPartitions == _partitions.size());
+        verify(_numPartitions == _partitionPivots.size());
+        verify(_numPartitions == _partitionIDs.size());
+        // verify that the last pivot is maxKey
+        verify( _partitionPivots[_numPartitions - 1][""].type() == MaxKey );
+        // verify that pivots are increasing in order
+        for (uint64_t i = 1; i < _numPartitions; i++) {
+            BSONObj bigger = _partitionPivots[i];
+            BSONObj smaller = _partitionPivots[i-1];
+            verify(bigger.woCompare(smaller, _ordering) > 0);
+        }
+
+        uint64_t currIdx = 0;
+        for (shared_ptr<Cursor> c( Cursor::make(_metaCollection.get(), 1, false) ); c->ok() ; c->advance()) {
+            BSONObj curr = c->current();
+            // All ids that are numbers in the metadata collection correspond to numbers
+            // otherwise, they may be something else (anything else, as who knows what
+            // the future holds). So, if we see an id that is not a number, we continue
+            if (!curr["_id"].isNumber()) {
+                continue;
+            }
+            // make the collection
+            uint64_t currID = curr["_id"].numberLong();
+            verify(currID == _partitionIDs[currIdx]);
+            verify(_partitionPivots[currIdx].woCompare(curr["max"].Obj(), _ordering) == 0);
+            currIdx++;
+        }
+    }
+
+    // called by constructors during initialization. Must be done
+    // after meta collection and partitions instantiated
+    void PartitionedCollection::createIndexDetails() {
+        shared_ptr<PartitionedIndexDetails> details;
+        BSONObj info = _partitions[0]->idx(0).info();
+        details.reset(
+            new PartitionedIndexDetails(
+                replaceNSField(info, _ns),
+                this,
+                0
+                )
+            );
+        _indexDetails.push_back(details);
+        // initialize _ordering
+        _ordering = Ordering::make(details->keyPattern());
+    }
+
+    // helper function for add partition
+    void PartitionedCollection::capLastPartition() {
+        BSONObj currPK;
+        // in the last partition, look up the max value,
+        // make a reverse cursor on the last partition
+        shared_ptr<Cursor> c( Cursor::make(_partitions[_numPartitions-1].get(), -1, false));
+        // if there is nothing in the partition, then we cannot cap it
+        // so throw an error. This may happen if a user tries to create
+        // a partition on top of an empty one. We disallow this because
+        // having multiple partitions with the same max key can
+        // lead to bugs.
+        uassert(17248, "can only cap a partition with no pivot if it is non-empty", c->ok());        
+        currPK = c->currPK();
+        // make the max PK new pivot
+        overwritePivot(_numPartitions-1, currPK);
+    }
+
+    // case where user manually passes is what they want the capped value
+    // to be
+    void PartitionedCollection::manuallyCapLastPartition(BSONObj newPivot) {
+        // first, make sure pivot we want to add must be greater
+        // than its last pivot
+        if (_numPartitions > 1) {
+            uassert(
+                17249, 
+                str::stream() <<"new pivot must be greater than last pivot, newPivot: " << newPivot.str() << 
+                " lastPivot: " <<_partitionPivots[_numPartitions-2].str(), 
+                newPivot.woCompare(_partitionPivots[_numPartitions-2], _ordering) > 0
+                );
+        }
+        // in the last partition, look up the max value,
+        // make a reverse cursor on the last partition
+        shared_ptr<Cursor> c( Cursor::make(_partitions[_numPartitions-1].get(), -1, false));
+        if (c->ok()) {
+            BSONObj currPK = c->currPK();
+            // make sure that the pivot we want to add
+            // is greater than the maximum value we see
+            // in the partition (hence a valid pivot)
+            uassert(
+                17250, 
+                str::stream() << "new pivot must be greater than max element in collection, newPivot: " <<
+                newPivot.str() << " max element: " << currPK.str(), 
+                newPivot.woCompare(currPK, _ordering) > 0);
+        }
+        overwritePivot(_numPartitions-1, newPivot);
+    }
+
+    // for pivot associated with ith partition (note, not the id),
+    // replace the pivot with newPivot, both in _metaCollection
+    // and in _partitionPivots
+    void PartitionedCollection::overwritePivot(uint64_t i, BSONObj newPivot) {
+        uint64_t id = _partitionIDs[i];
+        BSONObj result;
+        bool idExists = _metaCollection->findByPK(BSON("" << id), result);
+        uassert(17251, str::stream() << "could not find partition " << id << " of ns " << _ns, idExists);
+
+        // now we need to replace the max entry with newPivot
+        BSONObjBuilder b;
+        BSONObjIterator ii( result );
+        while ( ii.more() ) {
+            BSONElement e = ii.next();
+            if ( strcmp( e.fieldName(), "max" ) != 0 ) {
+                b.append( e );
+            } else {
+                b.append("max", newPivot);
+            }
+        }
+        bool indexBitChanged = false;
+        BSONObj pk = _metaCollection->getValidatedPKFromObject(result);
+        _metaCollection->updateObject(pk, result, b.done(),
+                                            false, false,
+                                            0, &indexBitChanged);
+        verify(!indexBitChanged);
+
+        // at this point, _metaCollection should be updated, now update
+        // in memory stuff
+        _partitionPivots[i] = newPivot.copy();
+    }
+
+    void PartitionedCollection::appendPartition(BSONObj partitionInfo) {
+        uint64_t id = partitionInfo["_id"].numberLong();
+        bool indexBitChanged = false;
+        _metaCollection->insertObject(partitionInfo, 0, &indexBitChanged);
+        verify(!indexBitChanged); // for sanity
+
+        // add new collection to vector of partitions
+        shared_ptr<IndexedCollection> newPartition;
+        newPartition.reset(new IndexedCollection(getPartitionName(id), _options));
+        _partitions.push_back(newPartition);
+
+        // add data to internal vectors
+        _partitionPivots.push_back(partitionInfo["max"].Obj().copy());
+        _partitionIDs.push_back(id);
+        _numPartitions++;
+
+        // some sanity checks
+        verify(_partitions.size() == _numPartitions);
+        verify(_partitions[_numPartitions-1].get() == newPartition.get());    
+    }
+    
+    void PartitionedCollection::appendNewPartition() {
+        Lock::assertWriteLocked(_ns);
+        uint64_t id = (_numPartitions == 0) ? 0 : _partitionIDs[_numPartitions-1] + 1;
+
+        // make entry for metadata collection
+        // the pivot
+        BSONObjBuilder c(64);
+        c.appendMaxKey("");
+        // doc to be inserted into meta collection
+        BSONObjBuilder b(64);
+        b.append("_id", (long long)id);
+        b.append("max", c.done());
+        b.appendDate("createTime", curTimeMillis64());
+
+        // write to metadata collection
+        appendPartition(b.obj());
+
+        sanityCheck();
+    }
+
+    // create partitions from the cloner
+    void PartitionedCollection::addClonedPartitionInfo(vector<BSONElement> partitionInfo) {
+        uassert(0, "Called addClonedPartitionInfo with more than one current partition", (_numPartitions == 1));
+        // Note that the caller of this function needs to be REALLY careful
+        // we don't do a lot of sanity checks that we theoretically could do,
+        // such as "the collection has one partition and is empty"
+        // we assume this is being called right after userCreateNS and within the cloner
+
+        // just a simple sanity check
+        uassert(0, "sanity check if id of first partition failed", (_partitionIDs[0] == 0));
+        
+        // first drop the existing partition.
+        dropPartitionInternal(_partitionIDs[0]);
+        // now add the rest of the partitions        
+        for (vector<BSONElement>::const_iterator it = partitionInfo.begin(); it != partitionInfo.end(); it++) {
+            appendPartition(it->Obj());
+        }
+        sanityCheck();
+    }
+
+    void PartitionedCollection::addPartition() {
+        Lock::assertWriteLocked(_ns);
+        sanityCheck();
+        // ensure only one thread can modify partitions at a time
+        
+        CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
+        rollback.noteNs(_ns);
+
+        // if we have multiple multi-statement transactions adding partitions
+        // concurrently, things can get hairy (like closing during an abort).
+        // So, to keep this simple, only allowing one transaction the ability
+        // to drop or add a collection at a time
+        _metaCollection->acquireTableLock();
+        // kill all cursors first, this may be unnecessary, determine later
+        ClientCursor::invalidate(_ns);
+        capLastPartition();
+        appendNewPartition();
+        sanityCheck();
+    }
+
+    void PartitionedCollection::manuallyAddPartition(BSONObj newPivot) {
+        Lock::assertWriteLocked(_ns);
+        sanityCheck();
+
+        CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
+        rollback.noteNs(_ns);
+
+        // ensure only one thread can modify partitions at a time
+        // if we have multiple multi-statement transactions adding partitions
+        // concurrently, things can get hairy (like closing during an abort).
+        // So, to keep this simple, only allowing one transaction the ability
+        // to drop or add a collection at a time
+        _metaCollection->acquireTableLock();
+        // kill all cursors first, this may be unnecessary, determine later
+        ClientCursor::invalidate(_ns);
+        manuallyCapLastPartition(getValidatedPKFromObject(newPivot));
+        appendNewPartition();
+        sanityCheck();
+    }
+
+    void PartitionedCollection::getPartitionInfo(uint64_t* numPartitions, BSONArray &partitionArray) {
+        *numPartitions = _numPartitions;
+        BSONArrayBuilder b;
+        // for sanity checking
+        uint64_t numPartitionsFoundInMeta = 0;
+        for (shared_ptr<Cursor> c( Cursor::make(_metaCollection.get(), 1, false) ); c->ok() ; c->advance()) {
+            BSONObj curr = c->current();
+            // All ids that are numbers in the metadata collection correspond to numbers
+            // otherwise, they may be something else (anything else, as who knows what
+            // the future holds). So, if we see an id that is not a number, we continue
+            if (!curr["_id"].isNumber()) {
+                continue;
+            }
+            b.append(curr);
+            numPartitionsFoundInMeta++;
+        }
+        partitionArray = b.arr();
+        verify(numPartitionsFoundInMeta == _numPartitions);
+    }
+
+    uint64_t PartitionedCollection::findInMemoryPartition(uint64_t id) {
+        // now find the index of the in-memory vectors associated with this
+        // item
+        uint64_t high = _numPartitions - 1;
+        uint64_t low = 0;
+        while (low < high) {
+            uint64_t mid = (high + low) / 2;
+            uint64_t currID = _partitionIDs[mid];
+            if (currID == id) {
+                return mid;
+            }
+            else if (currID < id) {
+                low = mid+1;
+            }
+            else {
+                high = mid;
+            }
+        }
+        return low;
+    }
+
+    void PartitionedCollection::dropPartitionInternal(uint64_t id) {
+        Lock::assertWriteLocked(_ns);
+        CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
+        rollback.noteNs(_ns);
+
+        // ensure only one thread can modify partitions at a time
+        // if we have multiple multi-statement transactions adding partitions
+        // concurrently, things can get hairy (like closing during an abort).
+        // So, to keep this simple, only allowing one transaction the ability
+        // to drop or add a collection at a time
+        _metaCollection->acquireTableLock();
+
+        // kill all cursors first
+        ClientCursor::invalidate(_ns);
+
+        BSONObjBuilder b(64);
+        b.append("", id);
+        BSONObj pk = b.done();
+        BSONObj result;
+        bool idExists = _metaCollection->findByPK(b.done(), result);
+        uassert(17253, str::stream() << "could not find partition " << id << " of ns " << _ns, idExists);
+
+        // first delete entry from _metaCollection
+        _metaCollection->deleteObject(pk, result, 0);
+        uint64_t index = findInMemoryPartition(id);
+        // something very wrong if this is false, but sanity check
+        // done at top should ensure this never happens
+        verify(_partitionIDs[index] == id);
+
+        // now that we have index, clean up in-memory data structures
+        _partitionPivots.erase(_partitionPivots.begin() + index);
+        _partitionIDs.erase(_partitionIDs.begin() + index);
+        // ugly way to "drop" a collection. Perhaps we need
+        // a CollectionData method for this.
+        for (int i = 0; i < nIndexes(); i++) {
+            _partitions[index]->dropIndexDetails(i);
+        }
+        _partitions.erase(_partitions.begin() + index);
+        
+        // special case for dropping last partition, we have to fix up
+        // the last pivot
+        // note that _numPartitions may be 1 if called by addClonedPartitionInfo
+        // in that case, we don't want to do this
+        if ((index == _numPartitions - 1) && _numPartitions > 1) {
+            BSONObjBuilder c(64);
+            c.appendMaxKey("");
+            overwritePivot(_numPartitions - 2, c.done());
+        }
+
+        _numPartitions--;
+    }
+
+    // this is called by the user
+    void PartitionedCollection::dropPartition(uint64_t id) {
+        sanityCheck();        
+        uassert(17252, "cannot drop partition if only one exists", _numPartitions > 1);
+        dropPartitionInternal(id);
+        sanityCheck();
+    }
+    
+    int PartitionedCollection::partitionWithPK(const BSONObj& pk) const {
+        // if there is one partition, then the answer is easy
+        if (_numPartitions == 1) {
+            return 0;
+        }
+        // first check the last partition, as we expect many inserts and
+        //queries to go there
+        if (pk.woCompare(_partitionPivots[_numPartitions-2], _ordering) > 0) {
+            return _numPartitions - 1;
+        }
+        // It is not in the last partition, now we must do a binary search
+        uint64_t high = _numPartitions - 2;
+        uint64_t low = 0;
+        while (low < high) {
+            uint64_t mid = (high + low) / 2;
+            int cmp = pk.woCompare(_partitionPivots[mid], _ordering);
+            if (cmp == 0) {
+                // we are right at a boundary, we know the result
+                // return it
+                return mid;
+            }
+            else if (cmp < 0 ) {
+                // too high
+                high = mid;
+            }
+            else {
+                // too low
+                low = mid+1;
+            }
+        }
+        verify (low == high);
+        return low;
+    }
+
+    string PartitionedCollection::getMetaCollectionName(const StringData &ns) {
+        mongo::StackStringBuilder ss;
+        ss << ns << "$$meta";
+        return ss.str();
+    }
+
+    string PartitionedCollection::getPartitionName(uint64_t partitionID) {
+        mongo::StackStringBuilder ss;
+        ss << _ns << "$$p" << partitionID;
+        return ss.str();
+    }
+    
+    void PartitionedCollection::updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
+                              const bool logop, const bool fromMigrate,
+                              uint64_t flags, bool* indexBitChanged)
+    {
+        int whichPartition = partitionWithPK(pk);
+        // note we are passing false for logop
+        _partitions[whichPartition]->updateObject(pk, oldObj, newObj, false, fromMigrate, flags, indexBitChanged);
+        if (logop) {
+            OpLogHelpers::logUpdate(_ns.c_str(), pk, oldObj, newObj, fromMigrate);
+        }
     }
 
 } // namespace mongo

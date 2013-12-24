@@ -52,33 +52,42 @@ namespace mongo {
 
         // table-scan
         static shared_ptr<Cursor> make(CollectionData *cd,
-                                       const int direction);
+                                       const int direction,
+                                       const bool countCursor);
         
         static shared_ptr<Cursor> make(Collection *cl,
                                        const int direction = 1,
                                        const bool countCursor = false);
 
         // index-scan
+        static shared_ptr<Cursor> make(CollectionData *cd, const IndexDetails &idx,
+                                        const int direction, 
+                                        const bool countCursor);
+
         static shared_ptr<Cursor> make(Collection *cl, const IndexDetails &idx,
                                        const int direction = 1,
                                        const bool countCursor = false);
 
-        static shared_ptr<Cursor> make(CollectionData *cd, const IndexDetails &idx,
-                                        const int direction = 1);
-
         // index range scan between start/end
+        static shared_ptr<Cursor> make(CollectionData *cd, const IndexDetails &idx,
+                                       const BSONObj &startKey, const BSONObj &endKey,
+                                       const bool endKeyInclusive,
+                                       const int direction, const int numWanted,
+                                       const bool countCursor);
+
         static shared_ptr<Cursor> make(Collection *cl, const IndexDetails &idx,
                                        const BSONObj &startKey, const BSONObj &endKey,
                                        const bool endKeyInclusive,
                                        const int direction, const int numWanted = 0,
                                        const bool countCursor = false);
 
-        static shared_ptr<Cursor> make(CollectionData *cl, const IndexDetails &idx,
-                                       const BSONObj &startKey, const BSONObj &endKey,
-                                       const bool endKeyInclusive,
-                                       const int direction, const int numWanted = 0);
-
         // index range scan by field bounds
+        static shared_ptr<Cursor> make(CollectionData *cd, const IndexDetails &idx,
+                                        const shared_ptr<FieldRangeVector> &bounds,
+                                        const int singleIntervalLimit,
+                                        const int direction, const int numWanted,
+                                        const bool countCursor);
+        
         static shared_ptr<Cursor> make(Collection *cl, const IndexDetails &idx,
                                        const shared_ptr<FieldRangeVector> &bounds,
                                        const int singleIntervalLimit,
@@ -424,7 +433,7 @@ namespace mongo {
         struct cursor_interrupt_extra _interrupt_extra;
 
         // For the Cursor::make() family of factories
-        friend class Cursor;
+        friend class CollectionBase;
     };
 
     /**
@@ -449,7 +458,7 @@ namespace mongo {
                         const int direction, const int numWanted = 0);
 
         // For the Cursor::make() family of factories
-        friend class Cursor;
+        friend class CollectionBase;
     };
 
     /**
@@ -523,7 +532,7 @@ namespace mongo {
         const storage::Key _endSKeyPrefix;
 
         // For the Cursor::make() family of factories
-        friend class Cursor;
+        friend class CollectionBase;
     };
 
     /**
@@ -535,7 +544,7 @@ namespace mongo {
         IndexScanCountCursor( CollectionData *cl, const IndexDetails &idx );
 
         // For the Cursor::make() family of factories
-        friend class Cursor;
+        friend class CollectionBase;
     };
 
     /**
@@ -558,7 +567,7 @@ namespace mongo {
         BasicCursor(CollectionData *cl, int direction);
 
         // For the Cursor::make() family of factories
-        friend class Cursor;
+        friend class CollectionBase;
     };
 
     /**
@@ -586,6 +595,139 @@ namespace mongo {
 
         // For the Cursor::make() family of factories
         friend class Cursor;
+    };
+
+    // class for cursor over Partitioned Collection
+    // This cursor assumes to be running over 
+    // the primary key, which is the _id index, and
+    // is also the key which we are partitioning over
+    class PartitionedCursor : public Cursor {
+    public:
+
+        virtual bool ok() {
+            return _currentCursor->ok();
+        }
+
+        virtual BSONObj current() {
+            return _currentCursor->current();
+        }
+
+        virtual bool advance();
+
+        virtual BSONObj currKey() const {
+            return _currentCursor->currKey();
+        }
+
+        virtual BSONObj currPK() const {
+            return _currentCursor->currPK();
+        }
+
+        virtual BSONObj indexKeyPattern() const {
+            return _currentCursor->indexKeyPattern();
+        }
+
+        virtual string toString() const { return "PartitionedCursor"; }
+
+        virtual bool getsetdup(const BSONObj &pk) {
+            // Partitioned Collections cannot have multikey indexes
+            // as of now
+            verify(!isMultiKey());
+            return false;
+        }
+
+        virtual bool isMultiKey() const {
+            // TODO: make sure constructors verify this
+            return false;
+        }
+
+        virtual bool modifiedKeys() const {
+            verify(!isMultiKey());
+            return false;
+        }
+
+        virtual BSONObj prettyIndexBounds() const {
+            return _currentCursor->prettyIndexBounds();
+        }
+
+        virtual long long nscanned() const {
+            return _prevNScanned + _currentCursor->nscanned();
+        }
+
+        virtual CoveredIndexMatcher *matcher() const {
+            return _currentCursor->matcher();
+        }
+
+        virtual bool currentMatches( MatchDetails *details = 0 ) {
+            return _currentCursor->currentMatches(details);
+        }
+
+        virtual void setMatcher( shared_ptr< CoveredIndexMatcher > matcher ) {
+            _matcher = matcher;
+            _currentCursor->setMatcher(matcher);
+        }
+
+        const Projection::KeyOnly *keyFieldsOnly() const { return _keyFieldsOnly.get(); }
+        void setKeyFieldsOnly( const shared_ptr<Projection::KeyOnly> &keyFieldsOnly ) {
+            _keyFieldsOnly = keyFieldsOnly;
+            // unsure if this is necessary
+            _currentCursor->setKeyFieldsOnly(keyFieldsOnly);
+        }
+
+    private:
+        // used for table scans
+        // all of these assume to be running over the primary key
+        PartitionedCursor(PartitionedCollection* pc, const int direction, const bool countCursor);
+        PartitionedCursor(PartitionedCollection* pc, const BSONObj &startKey, const BSONObj &endKey,
+                          const bool endKeyInclusive,
+                          const int direction, const int numWanted,
+                          const bool countCursor);        
+        PartitionedCursor(PartitionedCollection* pc, const shared_ptr<FieldRangeVector> &bounds,
+                          const int singleIntervalLimit,
+                          const int direction, const int numWanted,
+                          const bool countCursor);
+
+        void makeSubCursor(uint64_t partitionIndex);
+        void initializeSubCursor();
+
+        PartitionedCollection* _pc; // collection we are running cursor over
+        // cursor currently being used to retrieve documents
+        shared_ptr<Cursor> _currentCursor;
+        // number of documents scanned
+        // by previous cursors
+        long long _prevNScanned;        
+        shared_ptr< CoveredIndexMatcher > _matcher;
+        shared_ptr<Projection::KeyOnly> _keyFieldsOnly;
+        // these make up the range of partitions we need to query
+        // the bounds are inclusive
+        uint64_t _startPartition;
+        uint64_t _endPartition;
+        uint64_t _currPartition; // current partition that we are iterating cursor over
+
+        // these variables are so we can
+        // create _currentCursor as we transition from one
+        // partition to the next
+        enum CursorType {
+            PC_TABLE_SCAN,
+            PC_RANGE_SCAN,
+            PC_BOUNDS_SCAN
+        } _cursorType;
+
+        // variables that all cursors use
+        const int _direction;
+        // variables for range scan and bounds scan
+        const int _numWanted;
+        const bool _countCursor;
+
+        // variables wanted for range scan
+        const BSONObj _startKey;
+        const BSONObj _endKey;
+        const bool _endKeyInclusive;
+
+        // variables wanted for bounds scan
+        const shared_ptr<FieldRangeVector> _bounds;
+        const int _singleIntervalLimit;
+
+        friend class PartitionedCollection;
     };
 
 } // namespace mongo

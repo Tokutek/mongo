@@ -40,6 +40,7 @@ namespace mongo {
     class Collection;
     class FieldRangeSet;
     class IndexDetailsBase;
+    class PartitionedCollection;
 
     // Represents an index of a collection.
     class IndexDetails : boost::noncopyable {
@@ -429,6 +430,33 @@ namespace mongo {
     private:
         DB *_db;
         bool _multiKey;
+    };
+
+    // IndexDetails class for PartitionedCollections
+    class PartitionedIndexDetails : public IndexDetails {
+    public:
+        PartitionedIndexDetails(const BSONObj &info, PartitionedCollection* pc, int idxNum) : 
+            IndexDetails(info),
+            _pc(pc),
+            _idxNum(idxNum)
+        {
+        }
+        // TODO: implement these
+        virtual enum toku_compression_method getCompressionMethod() const;
+        virtual uint32_t getPageSize() const;
+        virtual uint32_t getReadPageSize() const;
+        virtual void getStat64(DB_BTREE_STAT64* stats) const;
+
+        // find a way to remove this eventually and have callers get
+        // access to IndexDetailsBase directly somehow
+        // This is a workaround to get going for now
+        virtual shared_ptr<storage::Cursor> getCursor(const int flags) const;
+    private:
+        // This cannot be a shared_ptr, as this is a circular reference
+        // _pic has a reference to this as well.
+        PartitionedCollection* _pc;
+        int _idxNum;
+
     };
 
 } // namespace mongo

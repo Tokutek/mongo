@@ -1615,6 +1615,114 @@ namespace mongo {
         return Status::OK();
     }
 
+    class CmdGetPartitionInfo : public QueryCommand {
+    public:
+        CmdGetPartitionInfo() : QueryCommand("getPartitionInfo") { }
+        virtual bool logTheOp() { return false; }
+        // TODO: maybe slaveOk should be true?
+        virtual bool slaveOk() const { return true; }
+        virtual void help( stringstream& help ) const {
+            help << "get partition information, returns BSON with number of partitions and array\n" <<
+                "of partition info.\n" <<
+                "Example: {getPartitionInfo:\"foo\"}";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::find);
+            out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
+        }
+        bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& anObjBuilder, bool /*fromRepl*/) {
+            string coll = cmdObj[ "getPartitionInfo" ].valuestrsafe();
+            uassert( 0, "getPartitionInfo must specify a collection", !coll.empty() );
+            string ns = dbname + "." + coll;
+            Collection *cl = getCollection( ns );
+            uassert( 0, "getPartitionInfo no such collection", cl );
+            uassert( 0, "collection must be partitioned", cl->isPartitioned() );
+            PartitionedCollection *pc = cl->as<PartitionedCollection>();
+            uint64_t numPartitions = 0;
+            BSONArray arr;
+            pc->getPartitionInfo(&numPartitions, arr);
+            anObjBuilder.append("numPartitions", (long long)numPartitions);
+            anObjBuilder.append("partitions", arr);
+            return true;
+        }
+    } cmdGetPartitionInfo;
+
+    class CmdDropPartition : public FileopsCommand {
+    public:
+        CmdDropPartition() : FileopsCommand("dropPartition") { }
+        virtual bool logTheOp() { return false; }
+        // TODO: maybe slaveOk should be true?
+        virtual bool slaveOk() const { return true; }
+        virtual void help( stringstream& help ) const {
+            help << "drop partition with id retrieved from getPartitionInfo command\n" <<
+                "Example: {dropPartition: foo, id: 5}";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::dropPartition);
+            out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
+        }
+        bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& anObjBuilder, bool /*fromRepl*/) {
+            string coll = cmdObj[ "dropPartition" ].valuestrsafe();
+            uassert( 0, "dropPartition must specify a collection", !coll.empty() );
+            string ns = dbname + "." + coll;
+            Collection *cl = getCollection( ns );
+            uassert( 0, "dropPartition no such collection", cl );
+            uassert( 0, "collection must be partitioned", cl->isPartitioned() );
+
+            BSONElement e = cmdObj["id"];
+            uassert(0, "invalid id", e.ok() && e.isNumber());
+            
+            PartitionedCollection *pc = cl->as<PartitionedCollection>();
+            pc->dropPartition(e.numberLong());
+            return true;
+        }
+    } cmdDropPartition;
+
+    class CmdAddPartition : public FileopsCommand {
+    public:
+        CmdAddPartition() : FileopsCommand("addPartition") { }
+        virtual bool logTheOp() { return false; }
+        // TODO: maybe slaveOk should be true?
+        virtual bool slaveOk() const { return true; }
+        virtual void help( stringstream& help ) const {
+            help << "add partition to a partitioned collection,\n" <<
+                "optionally provide pivot for last current partition\n." <<
+                "Example: {addPartition : \"foo\"} or {addPartition: \"foo\", newPivot: {_id: 1000}}";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::addPartition);
+            out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
+        }
+        bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& anObjBuilder, bool /*fromRepl*/) {
+            string coll = cmdObj[ "addPartition" ].valuestrsafe();
+            uassert( 0, "addPartition must specify a collection", !coll.empty() );
+            string ns = dbname + "." + coll;
+            Collection *cl = getCollection( ns );
+            uassert( 0, "addPartition no such collection", cl );
+            uassert( 0, "collection must be partitioned", cl->isPartitioned() );
+
+            BSONElement e = cmdObj["newPivot"];            
+            PartitionedCollection *pc = cl->as<PartitionedCollection>();
+            if (e.ok()) {
+                e.embeddedObjectUserCheck();
+                pc->manuallyAddPartition(e.embeddedObject());
+            }
+            else {
+                pc->addPartition();
+            }
+            return true;
+        }
+    } cmdAddPartition;
+
     bool _execCommand(Command *c,
                       const string& dbname,
                       BSONObj& cmdObj,

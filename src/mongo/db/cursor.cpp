@@ -29,38 +29,39 @@ namespace mongo {
     // The centralized factories for creating cursors over collections.
     //
 
-    shared_ptr<Cursor> Cursor::make(CollectionData *cd, const int direction) {
-        return shared_ptr<Cursor>(new BasicCursor(cd, direction));
+    shared_ptr<Cursor> Cursor::make(CollectionData *cd, const int direction, const bool countCursor) {
+        return cd->makeCursor(direction, countCursor);
     }
 
     shared_ptr<Cursor> Cursor::make(Collection *cl, const int direction,
                                     const bool countCursor) {
         if (cl != NULL) {
             CollectionData* cd = cl->as<CollectionData>();
-            if (countCursor) {
-                return shared_ptr<Cursor>(new IndexScanCountCursor(cd, cl->findSmallestOneToOneIndex()));
-            } else {
-                return shared_ptr<Cursor>(new BasicCursor(cd, direction));
-            }
+            return Cursor::make(cd, direction, countCursor);
         } else {
             return shared_ptr<Cursor>(new DummyCursor(direction));
         }
+    }
+
+    shared_ptr<Cursor> Cursor::make(CollectionData *cd, const IndexDetails &idx,
+                                    const int direction,
+                                    const bool countCursor) {
+        return cd->makeCursor(idx, direction, countCursor);
     }
 
     shared_ptr<Cursor> Cursor::make(Collection *cl, const IndexDetails &idx,
                                     const int direction,
                                     const bool countCursor) {
         CollectionData* cd = cl->as<CollectionData>();
-        if (countCursor) {
-            return shared_ptr<Cursor>(new IndexScanCountCursor(cd, idx));
-        } else {
-            return shared_ptr<Cursor>(new IndexScanCursor(cd, idx, direction));
-        }
+        return Cursor::make(cd, idx, direction, countCursor);
     }
 
     shared_ptr<Cursor> Cursor::make(CollectionData *cd, const IndexDetails &idx,
-                                    const int direction) {
-        return shared_ptr<Cursor>(new IndexScanCursor(cd, idx, direction));
+                                    const BSONObj &startKey, const BSONObj &endKey,
+                                    const bool endKeyInclusive,
+                                    const int direction, const int numWanted,
+                                    const bool countCursor) {
+        return cd->makeCursor(idx, startKey, endKey, endKeyInclusive, direction, numWanted, countCursor);
     }
 
     shared_ptr<Cursor> Cursor::make(Collection *cl, const IndexDetails &idx,
@@ -69,21 +70,16 @@ namespace mongo {
                                     const int direction, const int numWanted,
                                     const bool countCursor) {
         CollectionData* cd = cl->as<CollectionData>();
-        if (countCursor) {
-            return shared_ptr<Cursor>(new IndexCountCursor(cd, idx, startKey, endKey,
-                                                           endKeyInclusive));
-        } else {
-            return shared_ptr<Cursor>(new IndexCursor(cd, idx, startKey, endKey,
-                                                      endKeyInclusive, direction, numWanted));
-        }
+        return Cursor::make(cd, idx, startKey, endKey, endKeyInclusive, 
+                            direction, numWanted, countCursor);
     }
 
     shared_ptr<Cursor> Cursor::make(CollectionData *cd, const IndexDetails &idx,
-                                    const BSONObj &startKey, const BSONObj &endKey,
-                                    const bool endKeyInclusive,
-                                    const int direction, const int numWanted) {
-        return shared_ptr<Cursor>(new IndexCursor(cd, idx, startKey, endKey,
-                                                  endKeyInclusive, direction, numWanted));
+                                    const shared_ptr<FieldRangeVector> &bounds,
+                                    const int singleIntervalLimit,
+                                    const int direction, const int numWanted,
+                                    const bool countCursor) {
+        return cd->makeCursor(idx, bounds, singleIntervalLimit, direction, numWanted, countCursor);
     }
 
     shared_ptr<Cursor> Cursor::make(Collection *cl, const IndexDetails &idx,
@@ -92,12 +88,7 @@ namespace mongo {
                                     const int direction, const int numWanted,
                                     const bool countCursor) {
         CollectionData* cd = cl->as<CollectionData>();
-        if (countCursor) {
-            return shared_ptr<Cursor>(new IndexCountCursor(cd, idx, bounds));
-        } else {
-            return shared_ptr<Cursor>(new IndexCursor(cd, idx, bounds,
-                                                      singleIntervalLimit, direction, numWanted));
-        }
+        return Cursor::make(cd, idx, bounds, singleIntervalLimit, direction, numWanted, countCursor);
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -241,4 +232,170 @@ namespace mongo {
         verify(forward());
     }
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Partitioned Cursors (over the _id index)
+    PartitionedCursor::PartitionedCursor(PartitionedCollection* pc, const int direction, const bool countCursor):
+        _pc(pc),
+        _prevNScanned(0),
+        _currPartition(0),
+        _cursorType(PC_TABLE_SCAN),
+        _direction(direction),
+        _numWanted(0), // dummy assignment, not needed
+        _countCursor(countCursor),
+        _endKeyInclusive(false), // dummy assignment, not needed
+        _singleIntervalLimit(0) // dummy assignment, not needed
+    {
+        // full table scan
+        _startPartition = direction > 0 ? 0 : pc->numPartitions() - 1;
+        _endPartition = direction > 0 ? pc->numPartitions() - 1 : 0;
+        initializeSubCursor();
+    }
+
+    PartitionedCursor::PartitionedCursor(PartitionedCollection* pc,
+                      const BSONObj &startKey, const BSONObj &endKey,
+                      const bool endKeyInclusive,
+                      const int direction, const int numWanted,
+                      const bool countCursor) :
+        _pc(pc),
+        _prevNScanned(0),
+        _currPartition(0),
+        _cursorType(PC_RANGE_SCAN),
+        _direction(direction),
+        _numWanted(numWanted),
+        _countCursor(countCursor),
+        _startKey(startKey),
+        _endKey(endKey),
+        _endKeyInclusive(endKeyInclusive),
+        _singleIntervalLimit(0) // dummy assignment, not needed
+    {
+        _startPartition = pc->partitionWithPK(startKey);
+        _endPartition = pc->partitionWithPK(endKey);
+        // sanity check
+        if (direction > 0) {
+            verify(_endPartition >= _startPartition);
+        }
+        else {
+            verify(_startPartition >= _endPartition);
+        }
+        initializeSubCursor();
+    }
+
+    PartitionedCursor::PartitionedCursor(PartitionedCollection* pc,
+                      const shared_ptr<FieldRangeVector> &bounds,
+                      const int singleIntervalLimit,
+                      const int direction, const int numWanted,
+                      const bool countCursor) :
+        _pc(pc),
+        _prevNScanned(0),
+        _currPartition(0),
+        _cursorType(PC_BOUNDS_SCAN),
+        _direction(direction),
+        _numWanted(numWanted),
+        _countCursor(countCursor),
+        _endKeyInclusive(false), // dummy assignment, not needed
+        _bounds(bounds),
+        _singleIntervalLimit(singleIntervalLimit)
+    {
+        _startPartition = pc->partitionWithPK(bounds->startKey());
+        _endPartition = pc->partitionWithPK(bounds->endKey());
+        // sanity check
+        if (direction > 0) {
+            verify(_endPartition >= _startPartition);
+        }
+        else {
+            verify(_startPartition >= _endPartition);
+        }
+        initializeSubCursor();
+        
+    }
+
+    void PartitionedCursor::initializeSubCursor() {
+        _currPartition = _startPartition;
+        makeSubCursor(_currPartition);
+        while (!_currentCursor->ok() && _currPartition != _endPartition) {
+            if (_direction > 0) {
+                _currPartition++;
+            }
+            else {
+                _currPartition--;
+            }
+            shared_ptr<Cursor> oldCursor = _currentCursor;
+            makeSubCursor(_currPartition);
+            if (oldCursor) {
+                if (_matcher) {
+                    _currentCursor->setMatcher(_matcher);
+                }
+                _prevNScanned += oldCursor->nscanned();
+                _currentCursor->setKeyFieldsOnly(_keyFieldsOnly);
+            }
+        }
+    }
+
+    bool PartitionedCursor::advance(){
+        bool ret = _currentCursor->advance();
+        while (!_currentCursor->ok() && _currPartition != _endPartition) {
+            dassert(!ret);
+            // current cursor is no longer ok,
+            // need to move on to next one
+            if (_direction > 0) {
+                _currPartition++;
+            }
+            else {
+                _currPartition--;
+            }
+            shared_ptr<Cursor> oldCursor = _currentCursor;
+            makeSubCursor(_currPartition);
+            if (_matcher) {
+                _currentCursor->setMatcher(_matcher);
+            }
+            _prevNScanned += oldCursor->nscanned();
+            _currentCursor->setKeyFieldsOnly(_keyFieldsOnly);
+            ret = _currentCursor->ok();
+        }
+        return ret;
+    }
+
+    void PartitionedCursor::makeSubCursor(uint64_t partitionIndex) {
+        shared_ptr<IndexedCollection> currColl = _pc->getPartition(partitionIndex);
+        if (_cursorType == PC_TABLE_SCAN) {
+            _currentCursor = Cursor::make(
+                currColl.get(),
+                _direction,
+                _countCursor
+                );
+        }
+        else if (_cursorType == PC_RANGE_SCAN) {
+            // an optimization for a future day may be
+            // if we know that the entire partition falls between startKey
+            // and endKey, then we can use  a table scan cursor
+            _currentCursor = Cursor::make(
+                currColl.get(),
+                currColl->idx(0),
+                _startKey,
+                _endKey,
+                _endKeyInclusive,
+                _direction,
+                _numWanted,
+                _countCursor
+                );
+        }
+        else if (_cursorType == PC_BOUNDS_SCAN) {
+            // I am not sure this case is currently possible
+            // because the index is just a simple _id index
+            // Look at coverage tools to see if this is dead
+            // code
+            _currentCursor = Cursor::make(
+                currColl.get(),
+                currColl->idx(0),
+                _bounds,
+                _singleIntervalLimit,
+                _direction,
+                _numWanted,
+                _countCursor
+                );
+        }
+        else {
+            verify(false);
+        }
+    }
 } // namespace mongo

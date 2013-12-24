@@ -29,6 +29,7 @@
 #include "mongo/db/storage/builder.h"
 #include "mongo/util/concurrency/rwlock.h"
 #include "mongo/util/concurrency/simplerwlock.h"
+#include "mongo/db/queryutil.h"
 
 namespace mongo {
 
@@ -212,6 +213,8 @@ namespace mongo {
         // optional to implement, return true if the namespace is capped
         virtual bool isCapped() const = 0;
 
+        virtual bool isPartitioned() const = 0;
+
         // optional to implement, populate the obj builder with collection specific stats
         virtual void fillSpecificStats(BSONObjBuilder &result, int scale) const = 0;
 
@@ -220,6 +223,29 @@ namespace mongo {
         virtual unsigned long long getMultiKeyIndexBits() const = 0;
 
         virtual bool isMultiKey(int i) const = 0;
+
+        // functions that create cursors
+        // table scan
+        virtual shared_ptr<Cursor> makeCursor(const int direction, const bool countCursor) = 0;
+
+        // index-scan
+        virtual shared_ptr<Cursor> makeCursor(const IndexDetails &idx,
+                                        const int direction, 
+                                        const bool countCursor) = 0;
+
+        // index range scan between start/end
+        virtual shared_ptr<Cursor> makeCursor(const IndexDetails &idx,
+                                       const BSONObj &startKey, const BSONObj &endKey,
+                                       const bool endKeyInclusive,
+                                       const int direction, const int numWanted,
+                                       const bool countCursor) = 0;
+
+        // index range scan by field bounds
+        virtual shared_ptr<Cursor> makeCursor(const IndexDetails &idx,
+                                       const shared_ptr<FieldRangeVector> &bounds,
+                                       const int singleIntervalLimit,
+                                       const int direction, const int numWanted,
+                                       const bool countCursor) = 0;
 
         template <class T> T *as() {
             T *subclass = dynamic_cast<T *>(this);
@@ -231,6 +257,7 @@ namespace mongo {
         const BSONObj &pkPattern() const {
             return _pk;
         }
+
     protected:
         CollectionData(const StringData& ns, const BSONObj &pkIndexPattern) :
             _ns(ns.toString()),
@@ -430,11 +457,6 @@ namespace mongo {
             return _cd->findIndexByKeyPattern(keyPattern);
         }
 
-        // @return the smallest (in terms of dataSize, which is key length + value length)
-        //         index in _indexes that is one-to-one with the primary key. specifically,
-        //         the returned index cannot be sparse or multikey.
-        IndexDetails &findSmallestOneToOneIndex() const;
-
         /* Returns the index entry for the first index whose prefix contains
          * 'keyPattern'. If 'requireSingleKey' is true, skip indices that contain
          * array attributes. Otherwise, returns NULL.
@@ -545,6 +567,11 @@ namespace mongo {
         // optional to implement, return true if the namespace is capped
         bool isCapped() const {
             return _cd->isCapped();
+        }
+
+        // optional to implement, return true if the namespace is capped
+        bool isPartitioned() const {
+            return _cd->isPartitioned();
         }
 
         // optional to implement, populate the obj builder with collection specific stats
@@ -711,6 +738,10 @@ namespace mongo {
             return false;
         }
 
+        virtual bool isPartitioned() const {
+            return false;
+        }
+
         // Extracts and returns an owned BSONObj representing
         // the primary key portion of the given query, if each
         // portion of the primary key exists in the query and
@@ -825,6 +856,28 @@ namespace mongo {
             return (_multiKeyIndexBits & mask) != 0;
         }
 
+        // table scan
+        virtual shared_ptr<Cursor> makeCursor(const int direction, const bool countCursor);
+
+        // index-scan
+        virtual shared_ptr<Cursor> makeCursor(const IndexDetails &idx,
+                                        const int direction, 
+                                        const bool countCursor);
+
+        // index range scan between start/end
+        virtual shared_ptr<Cursor> makeCursor(const IndexDetails &idx,
+                                       const BSONObj &startKey, const BSONObj &endKey,
+                                       const bool endKeyInclusive,
+                                       const int direction, const int numWanted,
+                                       const bool countCursor);
+
+        // index range scan by field bounds
+        virtual shared_ptr<Cursor> makeCursor(const IndexDetails &idx,
+                                       const shared_ptr<FieldRangeVector> &bounds,
+                                       const int singleIntervalLimit,
+                                       const int direction, const int numWanted,
+                                       const bool countCursor);
+
     protected:
         CollectionBase(const StringData& ns, const BSONObj &pkIndexPattern, const BSONObj &options);
         explicit CollectionBase(const BSONObj &serialized, bool* reserializeNeeded = NULL);
@@ -864,6 +917,11 @@ namespace mongo {
             findByPKCallbackExtra(BSONObj &o) : obj(o), ex(NULL) { }
         };
         static int findByPKCallback(const DBT *key, const DBT *value, void *extra);
+
+        // @return the smallest (in terms of dataSize, which is key length + value length)
+        //         index in _indexes that is one-to-one with the primary key. specifically,
+        //         the returned index cannot be sparse or multikey.
+        IndexDetails &findSmallestOneToOneIndex() const;
     };
 
     class IndexedCollection : public CollectionBase {
@@ -1134,6 +1192,316 @@ namespace mongo {
         scoped_array<DB *> _dbs;
         scoped_array< scoped_ptr<MultiKeyTracker> > _multiKeyTrackers;
         scoped_ptr<storage::Loader> _loader;
+    };
+
+    class PartitionedCollection : public CollectionData {
+    public:
+        //
+        // The CollectionData interface
+        // See CollectionData to understand what functions are
+        // supposed to do
+        //
+        
+        // partitioned collections cannot build hot indexes
+        virtual bool indexBuildInProgress() const {
+            return false;
+        }
+        virtual int nIndexes() const {
+            return _partitions[0]->nIndexes();
+        }
+
+        virtual void close(const bool aborting, bool* indexBitsChanged) {
+            for (IndexCollVector::const_iterator it = _partitions.begin(); 
+                 it != _partitions.end(); 
+                 ++it) 
+            {
+                IndexedCollection *currColl = it->get();
+                currColl->close(aborting, indexBitsChanged);
+            }
+            _metaCollection->close(aborting, indexBitsChanged);
+        }
+
+        virtual bool ensureIndex(const BSONObj &info) {
+            // Contract is for ensureIndex to
+            // check if index already exists. Therefore, this
+            // snippet is copied from CollectionBase
+            const BSONObj keyPattern = info["key"].Obj();
+            const int i = findIndexByKeyPattern(keyPattern);
+            if (i >= 0) {
+                return false;
+            }
+            // now that we know it does not exist and we are ACTUALLY
+            // adding an index, uassert
+            uasserted(17238, "cannot add an index to a partitioned collection");
+        }
+
+        virtual int nIndexesBeingBuilt() const {
+            return nIndexes();
+        }
+
+        virtual IndexDetails& idx(int idxNo) const {
+            // for now, verify that it is 0, while partitioned collections
+            // don't support secondary indexes
+            verify( idxNo == 0 );
+            return *_indexDetails[idxNo];
+        }
+
+        virtual int idxNo(const IndexDetails& idx) const {
+            for (PartitionedIndexVector::const_iterator it = _indexDetails.begin(); 
+                 it != _indexDetails.end();
+                 ++it)
+            {
+                const IndexDetails *index = it->get();
+                if (index == &idx) {
+                    return it - _indexDetails.begin();
+                }
+            }
+            msgasserted(17244, "E12000 idxNo fails");
+            return -1;
+        }
+
+        virtual int findIndexByName(const StringData& name) const {
+            return _partitions[0]->findIndexByName(name);
+        }
+
+        virtual int findIndexByKeyPattern(const BSONObj& keyPattern) const {
+            return _partitions[0]->findIndexByKeyPattern(keyPattern);
+        }
+
+        virtual int findIdIndex() const {
+            return _partitions[0]->findIdIndex();
+        }
+
+        virtual bool isPKIndex(const IndexDetails &idx) const {
+            const bool isPK = &idx == &getPKIndex();
+            dassert(isPK == (idx.keyPattern() == _pk));
+            return isPK;
+        }
+        virtual IndexDetails &getPKIndex() const {
+            IndexDetails &idx = *_indexDetails[0];
+            dassert(idx.keyPattern() == _pk);
+            return idx;
+        }
+
+        virtual bool findByPK(const BSONObj &pk, BSONObj &result) const {
+            int whichPartition = partitionWithPK(pk);
+            return _partitions[whichPartition]->findByPK(pk, result);
+        }
+
+        virtual BSONObj getValidatedPKFromObject(const BSONObj &obj) const {
+            // it does not matter which partition we answer this from
+            // it should all be the same
+            return _partitions[0]->getValidatedPKFromObject(obj);
+        }
+
+        virtual BSONObj getSimplePKFromQuery(const BSONObj &query, const BSONObj& pk) const {
+            // it does not matter which partition we answer this from
+            // it should all be the same
+            return _partitions[0]->getSimplePKFromQuery(query, pk);
+        }
+        
+        virtual void insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged) {
+            int whichPartition = partitionWithRow(obj);
+            _partitions[whichPartition]->insertObject(obj, flags, indexBitChanged);
+        }
+
+        virtual void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
+            int whichPartition = partitionWithPK(pk);
+            _partitions[whichPartition]->deleteObject(pk, obj, flags);
+        }
+
+        virtual void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
+                                  const bool logop, const bool fromMigrate,
+                                  uint64_t flags, bool* indexBitChanged);
+
+        virtual bool fastupdatesOk() {
+            return false;
+        }
+
+        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
+                                      const bool logop, const bool fromMigrate,
+                                      uint64_t flags) {
+            uasserted(17239, "cannot do a fast update on a partitioned collection");
+        }
+
+        virtual bool rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &result) {
+            uasserted(17240, "cannot do rebuildIndex on a partitioned collection");
+            // have a uassert above until we figure out the TODO below
+            for (IndexCollVector::const_iterator it = _partitions.begin(); 
+                 it != _partitions.end(); 
+                 ++it)
+            {
+                IndexedCollection *currColl = it->get();
+                // TODO: we may not want to keep
+                // passing in result for every partition here.
+                // Investigate this later
+                currColl->rebuildIndex(i, options, result);
+            }
+        }
+
+        virtual void dropIndexDetails(int idxNum) {
+            // get rid of the index details
+            _indexDetails.erase(_indexDetails.begin() + idxNum);
+            for (IndexCollVector::const_iterator it = _partitions.begin(); 
+                 it != _partitions.end(); 
+                 ++it) 
+            {
+                IndexedCollection *currColl = it->get();
+                currColl->dropIndexDetails(idxNum);
+            }
+            // not sure I like this, but if we are dropping the primary key,
+            // then we are dropping the collection, which means we need
+            // to take care of the metaCollection as well. May want to later
+            // change CollectionData API to explicitly handle this
+            if (idxNum == 0) {
+                verify(_metaCollection->nIndexes() == 1);
+                _metaCollection->dropIndexDetails(0);
+            }
+        }
+        
+        virtual void acquireTableLock() {
+            uasserted(17241, "Cannot get a table lock on a partitioned collection");
+        }
+
+        virtual bool bulkLoading() const {
+            return false;
+        }
+
+        virtual bool isCapped() const {
+            return false;
+        }
+
+        virtual bool isPartitioned() const {
+            return true;
+        }
+
+        virtual void fillSpecificStats(BSONObjBuilder &result, int scale) const {
+            // empty for now
+        }
+
+        virtual shared_ptr<CollectionIndexer> newIndexer(const BSONObj &info, const bool background) {
+            uasserted(17242, "Cannot create a hot index on a partitioned collection");
+        }
+
+        virtual unsigned long long getMultiKeyIndexBits() const {
+            // no secondary indexes, so no multi keys
+            return 0;
+        }
+
+        // for now, no multikey indexes on partitioned collections
+        virtual bool isMultiKey(int i) const {
+            return false;
+        }
+
+        
+        // table scan
+        virtual shared_ptr<Cursor> makeCursor(const int direction, const bool countCursor);
+
+        // index-scan
+        virtual shared_ptr<Cursor> makeCursor(const IndexDetails &idx,
+                                        const int direction, 
+                                        const bool countCursor) {
+            // as of now, no secondary indexes, so this should
+            // just be a table scan
+            verify(idxNo(idx) == 0);
+            return makeCursor(direction, countCursor);
+        }
+
+        // index range scan between start/end
+        virtual shared_ptr<Cursor> makeCursor(const IndexDetails &idx,
+                                       const BSONObj &startKey, const BSONObj &endKey,
+                                       const bool endKeyInclusive,
+                                       const int direction, const int numWanted,
+                                       const bool countCursor);
+
+        // index range scan by field bounds
+        virtual shared_ptr<Cursor> makeCursor(const IndexDetails &idx,
+                                       const shared_ptr<FieldRangeVector> &bounds,
+                                       const int singleIntervalLimit,
+                                       const int direction, const int numWanted,
+                                       const bool countCursor);
+
+        // functions for adding/dropping partitions
+        void dropPartition(uint64_t id);
+        void addPartition();
+        void manuallyAddPartition(BSONObj newPivot);
+        void getPartitionInfo(uint64_t* numPartitions, BSONArray &partitionArray);
+        void addClonedPartitionInfo(vector<BSONElement> partitionInfo);
+
+        // helper functions
+        uint64_t numPartitions() {
+            return _numPartitions;
+        }
+
+        // return the partition at offset index, note this is NOT the partition ID
+        shared_ptr<IndexedCollection> getPartition(uint64_t index) {
+            massert(17254, "invalid index for partition", (index >= 0 && index < _numPartitions));
+            return _partitions[index];
+        }
+        // states which partition the row or PK belongs to
+        int partitionWithPK(const BSONObj& pk) const;
+
+        // make constructors
+        PartitionedCollection(const StringData &ns, const BSONObj &options);
+        PartitionedCollection(const BSONObj &serialized);
+    private:
+        void createIndexDetails();
+        void sanityCheck();
+        string getMetaCollectionName(const StringData &ns);
+        int partitionWithRow(const BSONObj& row) const {
+            return partitionWithPK(getValidatedPKFromObject(row));
+        }
+
+        // function used internally to drop a partition
+        void dropPartitionInternal(uint64_t id);
+        // returns name of the IndexedCollection for an associated partition
+        string getPartitionName(uint64_t partitionID);
+        // helper function, adds a partition as specified by partitionInfo
+        // used by appendNewPartition and createPartitionsFromClone
+        void appendPartition(BSONObj partitionInfo);
+        // adds a partition, does NOT cap previous partition
+        // So, from a user's perspective, this function only does a 
+        // subset of what is needed to add a partition to the system
+        void appendNewPartition();
+        // for pivot associated with ith partition (note, not the id),
+        // replace the pivot with newPivot, both in _metaCollection
+        // and in _partitionPivots
+        void overwritePivot(uint64_t i, BSONObj newPivot);
+        // these next two functions cap the last partition with a pivot
+        // that is something other than MaxKey
+        void capLastPartition();
+        void manuallyCapLastPartition(BSONObj newPivot);
+        // finds the index into our vectors that has stuff (collection, pivot, etc...)
+        // according to this id
+        uint64_t findInMemoryPartition(uint64_t id);
+
+        // options to be used when creating new partitions
+        BSONObj _options;
+
+        typedef std::vector<shared_ptr<IndexedCollection> > IndexCollVector;
+        // the partitions
+        IndexCollVector _partitions;
+        // Collection storing metadata about the PartitionedCollection
+        shared_ptr<IndexedCollection> _metaCollection;
+
+        typedef std::vector<shared_ptr<PartitionedIndexDetails> > PartitionedIndexVector;
+        PartitionedIndexVector _indexDetails; // one per index, which at this time means only one total
+
+        // vector storing the ids of the partitions
+        // This information is also stored in _metaCollection, but is cached
+        // here for convenience.
+        std::vector<uint64_t> _partitionIDs;
+
+        // The value of the ith element is the 
+        // maximum possible key that may be stored in the ith
+        // partition (with INFINITY being the implicit limit on the last
+        // partition. So, if the (i-1)th value is 100 and the ith value is 200,
+        // then partition i stores values x such that 100 < x <= 200
+        std::vector<BSONObj> _partitionPivots;
+        Ordering _ordering; // used for comparisons
+        // number of partitions we currently have
+        // length of _partitions should equal this number
+        uint64_t _numPartitions;
     };
 
 } // namespace mongo

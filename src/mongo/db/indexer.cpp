@@ -188,7 +188,7 @@ namespace mongo {
         if (_isSecondaryIndex) {
             IndexDetailsBase::Builder builder(*_idx);
 
-            for (shared_ptr<Cursor> cursor(Cursor::make(_cl, 1));
+            for (shared_ptr<Cursor> cursor(Cursor::make(_cl, 1, false));
                  cursor->ok(); cursor->advance()) {
                 BSONObj pk = cursor->currPK();
                 BSONObj obj = cursor->current();

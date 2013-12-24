@@ -615,4 +615,49 @@ namespace mongo {
         }
     }
 
+    
+    enum toku_compression_method PartitionedIndexDetails::getCompressionMethod() const {
+        return _pc->getPartition(0)->idx(_idxNum).getCompressionMethod();
+    }
+
+    uint32_t PartitionedIndexDetails::getPageSize() const {
+        return _pc->getPartition(0)->idx(_idxNum).getPageSize();
+    }
+
+    uint32_t PartitionedIndexDetails::getReadPageSize() const {
+        return _pc->getPartition(0)->idx(_idxNum).getReadPageSize();
+    }
+
+    void PartitionedIndexDetails::getStat64(DB_BTREE_STAT64* stats) const {
+        DB_BTREE_STAT64 ret;
+        memset(&ret, 0, sizeof(ret));
+        // TODO: figure out what the proper way to set max is
+        ret.bt_verify_time_sec = (uint64_t)-1;
+        for (uint64_t i = 0; i < _pc->numPartitions(); i++) {
+            DB_BTREE_STAT64 curr;
+            _pc->getPartition(i)->idx(_idxNum).getStat64(&curr);
+            ret.bt_nkeys += curr.bt_nkeys;
+            ret.bt_ndata += curr.bt_ndata;
+            ret.bt_dsize += curr.bt_dsize;
+            ret.bt_fsize += curr.bt_fsize;
+            if (curr.bt_create_time_sec > ret.bt_create_time_sec) {
+                ret.bt_create_time_sec = curr.bt_create_time_sec;
+            }
+            if (curr.bt_modify_time_sec > ret.bt_modify_time_sec) {
+                ret.bt_modify_time_sec = curr.bt_modify_time_sec;
+            }
+            if (curr.bt_verify_time_sec < ret.bt_verify_time_sec) {
+                ret.bt_verify_time_sec = curr.bt_verify_time_sec;
+            }
+        }
+        *stats = ret;
+    }
+    
+    // find a way to remove this eventually and have callers get
+    // access to IndexDetailsBase directly somehow
+    // This is a workaround to get going for now
+    shared_ptr<storage::Cursor> PartitionedIndexDetails::getCursor(const int flags) const {
+        uasserted(17243, "should not call getCursor on a PartitionedIndexDetails");
+    }
+
 } // namespace mongo

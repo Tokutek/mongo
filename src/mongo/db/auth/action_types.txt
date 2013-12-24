@@ -4,7 +4,8 @@
 # Please note that the order of the elements is not guaranteed to be the same across versions.
 # This means that the integer value assigned to each ActionType and used internally in ActionSet
 # also may change between versions.
-["addShard",
+["addPartition",
+"addShard",
 "backupStart",
 "backupStatus",
 "backupThrottle",
@@ -32,6 +33,7 @@
 "dropCollection",
 "dropDatabase",
 "dropIndexes",
+"dropPartition",
 "emptycapped",
 "enableSharding",
 "ensureIndex",
@@ -41,6 +43,7 @@
 "getCmdLineOpts",
 "getLog",
 "getParameter",
+"getPartitionInfo",
 "getShardMap",
 "getShardVersion",
 "handshake",
