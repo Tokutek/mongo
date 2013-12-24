@@ -145,6 +145,7 @@ add_library(serveronly STATIC
   matcher_covered
   dbeval
   restapi
+  dbhelpers
   instance
   client
   client_load
