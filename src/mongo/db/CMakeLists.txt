@@ -54,6 +54,7 @@ add_library(coredb STATIC
   keypattern
   keygenerator
   matcher
+  spillable_vector
   txn_context
   gtid
   pipeline/accumulator
@@ -139,8 +140,8 @@ add_library(serveronly STATIC
   indexcursor
   cloner
   indexer
-  namespace_details
-  namespace_index
+  collection
+  collection_map
   txn_complete_hooks
   matcher_covered
   dbeval
