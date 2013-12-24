@@ -139,7 +139,7 @@ add_executable(mongod
   db/db
   db/commands/touch
   )
-add_dependencies(mongod generate_error_codes generate_action_types)
+add_dependencies(mongod generate_error_codes generate_action_types install_tdb_h)
 
 target_link_libraries(mongod
   ${TokuBackup_LIBRARIES}
@@ -167,7 +167,7 @@ foreach (tool
     bridge
     )
   add_executable(mongo${tool} tools/${tool})
-  add_dependencies(mongo${tool} generate_error_codes generate_action_types)
+  add_dependencies(mongo${tool} generate_error_codes generate_action_types install_tdb_h)
   target_link_whole_libraries(mongo${tool}
     alltools
     base
