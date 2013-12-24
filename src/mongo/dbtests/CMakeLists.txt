@@ -21,7 +21,7 @@ target_link_libraries(mocklib LINK_PRIVATE
 file(GLOB testfiles *.cpp)
 list(REMOVE_ITEM testfiles framework.cpp)
 add_executable(smokeTest ${testfiles})
-add_dependencies(smokeTest generate_error_codes generate_action_types)
+add_dependencies(smokeTest generate_error_codes generate_action_types install_tdb_h)
 target_link_whole_libraries(smokeTest
   mongocommon
   serveronly
