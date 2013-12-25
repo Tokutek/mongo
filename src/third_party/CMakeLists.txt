@@ -28,7 +28,7 @@ else ()
   message(SEND_ERROR "no js engine chosen (please set JS_ENGINE=v8)")
 endif ()
 
-set(HOT_BACKUP_LIBNAME HotBackup)
+set(HOT_BACKUP_LIBNAME HotBackup CACHE STRING "TokuBackup library name" FORCE)
 add_subdirectory(backup)
 set(TokuBackup_FOUND TRUE CACHE BOOL "TokuBackup found" FORCE)
 set(TokuBackup_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/backup" CACHE STRING "TokuBackup include dirs" FORCE)
