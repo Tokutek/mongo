@@ -108,6 +108,7 @@ target_link_libraries(coredb LINK_PRIVATE
   plugins
   server_parameters
   foundation
+  ${TokuKV_LIBRARIES}
   )
 
 add_library(serveronly STATIC
@@ -205,6 +206,7 @@ target_link_libraries(serveronly LINK_PRIVATE
   db_common
   defaultversion
   index_set
+  ${TokuKV_LIBRARIES}
   )
 
 add_library(mongodandmongos STATIC
