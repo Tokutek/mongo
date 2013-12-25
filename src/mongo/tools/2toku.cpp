@@ -62,7 +62,7 @@ class VanillaOplogPlayer : boost::noncopyable {
 
     void pushInsert(const StringData &ns, const BSONObj &o) {
         uassert(16863, "cannot append an earlier optime", _thisTime > _insertMaxTime);
-        // semes like enough room for headers/metadata
+        // seems like enough room for headers/metadata
         static const size_t MAX_SIZE = BSONObjMaxUserSize - (4<<10);
         if (ns != _insertNs || _insertSize + o.objsize() > MAX_SIZE) {
             flushInserts();
@@ -285,7 +285,15 @@ class OplogTool : public Tool {
     string _rpass;
     string _rauthenticationDatabase;
     string _rauthenticationMechanism;
+    int _reportingPeriod;
     mutable Timer _reportingTimer;
+
+    class CantFindTimestamp {
+        OpTime _firstTime;
+      public:
+        CantFindTimestamp(OpTime ft) : _firstTime(ft) {}
+        OpTime firstTime() const { return _firstTime; }
+    };
 
 public:
     void logPosition() const {
@@ -330,7 +338,7 @@ public:
          po::value<string>(&_rauthenticationMechanism)->default_value("MONGODB-CR"),
          "authentication mechanism on source host")
         ("oplogns", po::value<string>()->default_value( "local.oplog.rs" ) , "ns to pull from" )
-        ("reportingPeriod", po::value<int>()->default_value(10) , "seconds between progress reports" )
+        ("reportingPeriod", po::value<int>(&_reportingPeriod)->default_value(10) , "seconds between progress reports" )
         ;
     }
 
@@ -444,70 +452,32 @@ public:
             _player.reset(new VanillaOplogPlayer(conn(), _host, maxOpTimeSynced, running, _logAtExit));
         }
 
-        const int reportingPeriod = getParam("reportingPeriod", 10);
-
         try {
             while (running) {
-                const int tailingQueryOptions = QueryOption_SlaveOk | QueryOption_CursorTailable | QueryOption_OplogReplay | QueryOption_AwaitData;
+                const int tailingQueryOptions = QueryOption_CursorTailable | QueryOption_OplogReplay | QueryOption_AwaitData;
 
-
-                BSONObj res;
-                auto_ptr<DBClientCursor> cursor(_rconn->conn().query(
-                    _oplogns, QUERY("ts" << GTE << _player->maxOpTimeSynced()),
-                    0, 0, &res, tailingQueryOptions));
-
-                if (!cursor->more()) {
-                    log() << "oplog query returned no results, sleeping 10 seconds..." << endl;
-                    sleepsecs(10);
-                    log() << "retrying" << endl;
-                    continue;
+                bool shouldContinue = false;
+                try {
+                    try {
+                        shouldContinue = attemptQuery(tailingQueryOptions | QueryOption_SlaveOk);
+                    } catch (CantFindTimestamp &e) {
+                        log() << "Couldn't find OpTime " << _player->maxOpTimeSyncedStr()
+                              << " with slaveOk = true (couldn't find anything before " << fmtOpTime(e.firstTime())
+                              << "), retrying with slaveOk = false..." << endl;
+                        shouldContinue = attemptQuery(tailingQueryOptions);
+                    }
+                } catch (CantFindTimestamp &e) {
+                    warning() << "Tried to start at OpTime " << _player->maxOpTimeSyncedStr()
+                              << ", but didn't find anything before " << fmtOpTime(e.firstTime()) << "!" << endl;
+                    warning() << "This may mean your oplog has been truncated past the point you are trying to resume from." << endl;
+                    warning() << "Either retry with a different value of --ts, or restart your migration procedure." << endl;
+                    shouldContinue = false;
                 }
 
-                BSONObj firstObj = cursor->next();
-                {
-                    BSONElement tsElt = firstObj["ts"];
-                    if (!tsElt.ok()) {
-                        log() << "oplog format error: " << firstObj << " missing 'ts' field." << endl;
-                        logPosition();
-                        cursor.reset();
-                        _rconn->done();
-                        _rconn.reset();
-                        return -1;
-                    }
-                    OpTime firstTime(tsElt.date());
-                    if (firstTime != _player->maxOpTimeSynced()) {
-                        warning() << "Tried to start at OpTime " << _player->maxOpTimeSyncedStr()
-                                  << ", but didn't find anything before " << fmtOpTime(firstTime) << "!" << endl;
-                        warning() << "This may mean your oplog has been truncated past the point you are trying to resume from." << endl;
-                        warning() << "Either retry with a different value of --ts, or restart your migration procedure." << endl;
-                        cursor.reset();
-                        _rconn->done();
-                        _rconn.reset();
-                        return -1;
-                    }
-                }
-
-                report();
-
-                while (running && cursor->more()) {
-                    while (running && cursor->moreInCurrentBatch()) {
-                        BSONObj obj = cursor->next();
-                        LOG(2) << obj << endl;
-
-                        bool ok = _player->processObj(obj);
-                        if (!ok) {
-                            logPosition();
-                            cursor.reset();
-                            _rconn->done();
-                            _rconn.reset();
-                            return -1;
-                        }
-                    }
-                    _player->flushInserts();
-
-                    if (_reportingTimer.seconds() >= reportingPeriod) {
-                        report();
-                    }
+                if (!shouldContinue) {
+                    _rconn->done();
+                    _rconn.reset();
+                    return -1;
                 }
             }
         }
@@ -538,6 +508,56 @@ public:
             _rconn.reset();
             return -1;
         }
+    }
+
+    bool attemptQuery(int queryOptions) {
+        BSONObj res;
+        auto_ptr<DBClientCursor> cursor(_rconn->conn().query(
+            _oplogns, QUERY("ts" << GTE << _player->maxOpTimeSynced()),
+            0, 0, &res, queryOptions));
+
+        if (!cursor->more()) {
+            log() << "oplog query returned no results, sleeping 10 seconds..." << endl;
+            sleepsecs(10);
+            log() << "retrying" << endl;
+            return true;
+        }
+
+        BSONObj firstObj = cursor->next();
+        {
+            BSONElement tsElt = firstObj["ts"];
+            if (!tsElt.ok()) {
+                log() << "oplog format error: " << firstObj << " missing 'ts' field." << endl;
+                logPosition();
+                return false;
+            }
+            OpTime firstTime(tsElt.date());
+            if (firstTime != _player->maxOpTimeSynced()) {
+                throw CantFindTimestamp(firstTime);
+            }
+        }
+
+        report();
+
+        while (running && cursor->more()) {
+            while (running && cursor->moreInCurrentBatch()) {
+                BSONObj obj = cursor->next();
+                LOG(2) << obj << endl;
+
+                bool ok = _player->processObj(obj);
+                if (!ok) {
+                    logPosition();
+                    return false;
+                }
+            }
+            _player->flushInserts();
+
+            if (_reportingTimer.seconds() >= _reportingPeriod) {
+                report();
+            }
+        }
+
+        return true;
     }
 };
 
