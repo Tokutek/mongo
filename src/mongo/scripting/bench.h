@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <math.h>
 #include <string>
 
 #include <boost/shared_ptr.hpp>
@@ -140,8 +141,19 @@ namespace mongo {
          * Count one instance of the event, which took "timeMicros" microseconds.
          */
         void countOne(unsigned long long timeMicros) {
-            ++_numEvents;
+            unsigned long long n1 = _numEvents++;
             _totalTimeMicros += timeMicros;
+
+            const unsigned long long &n = _numEvents;
+            double x = timeMicros;
+            double delta = x - _M1;
+            double delta_n = delta / n;
+            double delta_n2 = delta_n * delta_n;
+            double term1 = delta * delta_n * n1;
+            _M1 += delta_n;
+            _M4 += term1 * delta_n2 * (n * n - 3 * n + 3) + 6 * delta_n2 * _M2 - 4 * delta_n * _M3;
+            _M3 += term1 * delta_n * (n - 2) - 3 * delta_n * _M2;
+            _M2 += term1;
         }
 
         /**
@@ -154,9 +166,26 @@ namespace mongo {
          */
         unsigned long long getNumEvents() const { return _numEvents; }
 
+        double getVariance() const {
+            return _M2 / (_numEvents - 1.0);
+        }
+
+        double getStandardDeviation() const {
+            return sqrt(getVariance());
+        }
+
+        double getSkewness() const {
+            return sqrt(double(_numEvents)) * _M3/ pow(_M2, 1.5);
+        }
+
+        double getKurtosis() const {
+            return double(_numEvents) * _M4 / (_M2 * _M2) - 3.0;
+        }
+
     private:
         unsigned long long _numEvents;
         unsigned long long _totalTimeMicros;
+        double _M1, _M2, _M3, _M4;
     };
 
     /**

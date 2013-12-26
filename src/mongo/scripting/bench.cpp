@@ -66,11 +66,28 @@ namespace mongo {
     void BenchRunEventCounter::reset() {
         _numEvents = 0;
         _totalTimeMicros = 0;
+        _M1 = _M2 = _M3 = _M4 = 0.0;
     }
 
     void BenchRunEventCounter::updateFrom(const BenchRunEventCounter &other) {
+        unsigned long long oldN = _numEvents;
         _numEvents += other._numEvents;
         _totalTimeMicros += other._totalTimeMicros;
+        double delta = other._M1 - _M1;
+        double delta2 = delta * delta;
+        double delta3 = delta * delta2;
+        double delta4 = delta2 * delta2;
+        double oldM2 = _M2;
+        double oldM3 = _M3;
+
+        unsigned long long n2 = _numEvents * _numEvents;
+
+        _M1 = (oldN * _M1 + other._numEvents * other._M1) / _numEvents;
+        _M2 = _M2 + other._M2 + delta2 * oldN * other._numEvents / _numEvents;
+        _M3 = _M3 + other._M3 + delta3 * oldN * other._numEvents * (oldN - other._numEvents) / n2;
+        _M3 += 3.0 * delta * (oldN * other._M2 - other._numEvents * oldM2) / _numEvents;
+        _M4 = _M4 + other._M4 + delta4 * oldN * other._numEvents * (oldN * oldN - oldN * other._numEvents + other._numEvents * other._numEvents) / (n2 * _numEvents);
+        _M4 += 6.0 * delta2 * (oldN * oldN * other._M2 + other._numEvents * other._numEvents * oldM2) / n2 + 4.0 * delta * (oldN * other._M3 - other._numEvents * oldM3) / _numEvents;
     }
 
     BenchRunStats::BenchRunStats() {
@@ -754,15 +771,19 @@ namespace mongo {
         }
     }
 
-     static void appendAverageMicrosIfAvailable(
+     static void appendStatisticsIfAvailable(
              BSONObjBuilder &buf, const std::string &name, const BenchRunEventCounter &counter) {
 
-         if (counter.getNumEvents() > 0)
-             buf.append(name,
+         if (counter.getNumEvents() > 0) {
+             buf.append(name + "AverageMicros",
                         static_cast<double>(counter.getTotalTimeMicros()) / counter.getNumEvents());
+             buf.append(name + "StandardDeviationMicros", counter.getStandardDeviation());
+             buf.append(name + "Skewness", counter.getSkewness());
+             buf.append(name + "Kurtosis", counter.getKurtosis());
+         }
      }
 
-     BSONObj BenchRunner::finish( BenchRunner* runner ) {
+    BSONObj BenchRunner::finish( BenchRunner* runner ) {
 
          runner->stop();
 
@@ -783,11 +804,11 @@ namespace mongo {
          buf.append( "note" , "values per second" );
          buf.append( "errCount", (long long) stats.errCount );
          buf.append( "trapped", "error: not implemented" );
-         appendAverageMicrosIfAvailable(buf, "findOneLatencyAverageMicros", stats.findOneCounter);
-         appendAverageMicrosIfAvailable(buf, "insertLatencyAverageMicros", stats.insertCounter);
-         appendAverageMicrosIfAvailable(buf, "deleteLatencyAverageMicros", stats.deleteCounter);
-         appendAverageMicrosIfAvailable(buf, "updateLatencyAverageMicros", stats.updateCounter);
-         appendAverageMicrosIfAvailable(buf, "queryLatencyAverageMicros", stats.queryCounter);
+         appendStatisticsIfAvailable(buf, "findOneLatency", stats.findOneCounter);
+         appendStatisticsIfAvailable(buf, "insertLatency", stats.insertCounter);
+         appendStatisticsIfAvailable(buf, "deleteLatency", stats.deleteCounter);
+         appendStatisticsIfAvailable(buf, "updateLatency", stats.updateCounter);
+         appendStatisticsIfAvailable(buf, "queryLatency", stats.queryCounter);
 
          {
              BSONObjIterator i( after );
