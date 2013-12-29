@@ -97,5 +97,5 @@ target_link_libraries(mongos_options LINK_PUBLIC
   mongocommon
   coreserver
   coredb
-  options_parser
+  options_parser_init
   )

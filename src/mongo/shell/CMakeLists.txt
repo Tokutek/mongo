@@ -73,5 +73,5 @@ add_library(shell_options STATIC
   )
 add_dependencies(shell_options generate_error_codes generate_action_types)
 target_link_libraries(shell_options LINK_PUBLIC
-  options_parser
+  options_parser_init
   )

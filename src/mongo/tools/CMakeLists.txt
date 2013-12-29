@@ -18,7 +18,7 @@ add_library(tool_options STATIC
 add_dependencies(tool_options generate_error_codes generate_action_types)
 target_link_libraries(tool_options LINK_PUBLIC
   server_options
-  options_parser
+  options_parser_init
   serveronly
   coreserver
   coredb

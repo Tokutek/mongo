@@ -46,7 +46,7 @@ target_link_libraries(server_options LINK_PUBLIC
   network  # temporary crutch that should go away once the networking library has separate options
   server_options_core
   server_parameters
-  options_parser
+  options_parser_init
   cmdline_utils
   )
 
@@ -60,7 +60,7 @@ target_link_libraries(mongod_options LINK_PUBLIC
   serveronly
   coreserver
   coredb
-  options_parser
+  options_parser_init
   )
 
 add_library(db_common STATIC

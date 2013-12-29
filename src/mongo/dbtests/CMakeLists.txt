@@ -3,7 +3,7 @@ add_library(framework_options STATIC
   )
 add_dependencies(framework_options generate_error_codes generate_action_types)
 target_link_libraries(framework_options LINK_PUBLIC
-  options_parser
+  options_parser_init
   )
 
 add_library(testframework STATIC
@@ -13,7 +13,6 @@ add_library(testframework STATIC
 add_dependencies(testframework generate_error_codes generate_action_types)
 target_link_libraries(testframework LINK_PUBLIC
   unittest
-  options_parser
   framework_options
   )
 

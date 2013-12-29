@@ -761,7 +761,6 @@ foreach (tool
   add_dependencies(${tool}_options generate_error_codes generate_action_types)
   target_link_libraries(${tool}_options LINK_PUBLIC
     tool_options
-    options_parser
     )
 endforeach ()
 foreach (tool
@@ -870,7 +869,6 @@ add_executable(mongo
   )
 add_dependencies(mongo generate_error_codes generate_action_types)
 link_recursive_deps(mongo
-  options_parser
   shell_options
   shell_core
   ${PCRE_LIBRARIES}
