@@ -226,6 +226,8 @@ namespace mongo {
                 case TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD:
                 case TOKU_ZLIB_METHOD:
                     return "zlib";
+                case TOKU_LZ4_METHOD:
+                    return "lz4";
                 case TOKU_NO_COMPRESSION:
                     return "none";
                 default:
