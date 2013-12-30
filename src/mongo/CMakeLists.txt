@@ -144,6 +144,11 @@ add_dependencies(mongod generate_error_codes generate_action_types install_tdb_h
 target_link_libraries(mongod
   ${TokuBackup_LIBRARIES}
   )
+if (NOT APPLE)
+  target_link_whole_libraries(mongod
+    jemalloc
+    )
+endif ()
 target_link_whole_libraries(mongod
   coredb
   coreserver
@@ -168,6 +173,11 @@ foreach (tool
     )
   add_executable(mongo${tool} tools/${tool})
   add_dependencies(mongo${tool} generate_error_codes generate_action_types install_tdb_h)
+  if (NOT APPLE)
+    target_link_whole_libraries(mongo${tool})
+      jemalloc
+      )
+  endif ()
   target_link_whole_libraries(mongo${tool}
     alltools
     base
@@ -197,6 +207,11 @@ foreach (tool
     bsondump
     )
   add_dependencies(${tool} generate_error_codes generate_action_types)
+  if (NOT APPLE)
+    target_link_whole_libraries(${tool}
+      jemalloc
+      )
+  endif ()
   target_link_whole_libraries(${tool}
     alltools
     base
@@ -213,6 +228,11 @@ add_executable(mongos
   s/server
   )
 add_dependencies(mongos generate_error_codes generate_action_types)
+if (NOT APPLE)
+  target_link_whole_libraries(mongos
+    jemalloc
+    )
+endif ()
 target_link_whole_libraries(mongos
   mongoscore
   coreserver
@@ -233,6 +253,11 @@ if (APPLE OR PCAP_FOUND)
   set_target_properties(mongosniff PROPERTIES
     COMPILE_DEFINITIONS MONGO_EXPOSE_MACROS
     )
+  if (NOT APPLE)
+    target_link_whole_libraries(mongosniff
+      jemalloc
+      )
+  endif ()
   target_link_whole_libraries(mongosniff
     gridfs
     serveronly
