@@ -229,7 +229,7 @@ namespace mongo {
                 case TOKU_LZ4_METHOD:
                     return "lz4";
                 case TOKU_SNAPPY_METHOD:
-                    return "snappy"
+                    return "snappy";
                 case TOKU_NO_COMPRESSION:
                     return "none";
                 default:
