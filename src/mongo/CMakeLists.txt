@@ -174,7 +174,7 @@ foreach (tool
   add_executable(mongo${tool} tools/${tool})
   add_dependencies(mongo${tool} generate_error_codes generate_action_types install_tdb_h)
   if (NOT APPLE)
-    target_link_whole_libraries(mongo${tool})
+    target_link_whole_libraries(mongo${tool}
       jemalloc
       )
   endif ()
