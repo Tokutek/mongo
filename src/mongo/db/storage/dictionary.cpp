@@ -228,6 +228,8 @@ namespace mongo {
                     return "zlib";
                 case TOKU_LZ4_METHOD:
                     return "lz4";
+                case TOKU_SNAPPY_METHOD:
+                    return "snappy"
                 case TOKU_NO_COMPRESSION:
                     return "none";
                 default:
@@ -268,6 +270,8 @@ namespace mongo {
                         compression = TOKU_LZMA_METHOD;
                     } else if (str == "lz4") {
                         compression = TOKU_LZ4_METHOD;
+                    } else if (str == "snappy") {
+                        compression = TOKU_SNAPPY_METHOD;
                     } else if (str == "quicklz") {
                         compression = TOKU_QUICKLZ_METHOD;
                     } else if (str == "zlib") {
@@ -275,7 +279,7 @@ namespace mongo {
                     } else if (str == "none") {
                         compression = TOKU_NO_COMPRESSION;
                     } else {
-                        uassert(16442, "compression must be one of: lzma, lz4, quicklz, zlib, none.", false);
+                        uassert(16442, "compression must be one of: lzma, lz4, snappy, quicklz, zlib, none.", false);
                     }
                     setMap[fn] = boost::make_shared<DBParameterSetterImpl<TOKU_COMPRESSION_METHOD> >(
                         _db, fn, compression, _db->get_compression_method, _db->change_compression_method);
