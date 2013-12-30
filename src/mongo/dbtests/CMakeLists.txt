@@ -22,6 +22,11 @@ file(GLOB testfiles *.cpp)
 list(REMOVE_ITEM testfiles framework.cpp)
 add_executable(smokeTest ${testfiles})
 add_dependencies(smokeTest generate_error_codes generate_action_types install_tdb_h)
+if (NOT APPLE)
+  target_link_whole_libraries(smokeTest
+    jemalloc
+    )
+endif ()
 target_link_whole_libraries(smokeTest
   mongocommon
   serveronly
