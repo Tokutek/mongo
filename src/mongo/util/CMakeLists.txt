@@ -68,6 +68,7 @@ add_library(mongocommon_util STATIC
   concurrency/rwlockimpl
   histogram
   text_startuptest
+  signal_win32
   stack_introspect
   version_reporting
   )
