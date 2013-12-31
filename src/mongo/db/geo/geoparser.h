@@ -18,7 +18,7 @@
 
 #include "mongo/db/jsobj.h"
 #include <vector>
-#include "third_party/s2/s2.h"
+#include "mongo/db/geo/s2.h"
 #include "mongo/db/geo/shapes.h"
 
 class S2Cap;

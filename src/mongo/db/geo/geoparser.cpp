@@ -18,8 +18,8 @@
 #include <vector>
 #include "mongo/db/jsobj.h"
 #include "mongo/db/geo/geoparser.h"
+#include "mongo/db/geo/s2.h"
 #include "mongo/util/mongoutils/str.h"
-#include "third_party/s2/s2.h"
 #include "third_party/s2/s2cap.h"
 #include "third_party/s2/s2cell.h"
 #include "third_party/s2/s2latlng.h"

@@ -12,6 +12,14 @@ set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS
   DEBUG_MODE=false
   )
 
+# Clang warns about struct/class tag mismatch, but as long as this is
+# not a problem on Windows, these mismatches can be ignored
+# http://stackoverflow.com/questions/4866425/mixing-class-and-struct. W
+# warning so it doesn't become an error.
+if (CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-mismatched-tags")
+endif ()
+
 add_library(s2 STATIC
   s1angle
   s2

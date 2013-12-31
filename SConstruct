@@ -57,6 +57,7 @@ def findSettingsSetup():
 
 
 # --- options ----
+use_clang = False
 
 options = {}
 
@@ -1147,6 +1148,7 @@ Export("usesm usev8")
 Export("darwin windows solaris linux freebsd nix")
 Export('module_sconscripts')
 Export("debugBuild")
+Export("use_clang")
 
 env.SConscript('src/SConscript', variant_dir='$BUILD_DIR', duplicate=False)
 env.SConscript('src/SConscript.client', variant_dir='$BUILD_DIR/client_build', duplicate=False)

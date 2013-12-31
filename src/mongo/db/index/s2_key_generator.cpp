@@ -21,7 +21,7 @@
 
 #include "mongo/pch.h"
 #include "mongo/db/index/s2_key_generator.h"
-#include "third_party/s2/s2.h"
+#include "mongo/db/geo/s2.h"
 #include "third_party/s2/s2cell.h"
 #include "third_party/s2/s2polygon.h"
 #include "third_party/s2/s2polyline.h"

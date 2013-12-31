@@ -26,9 +26,9 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/unittest/unittest.h"
 #include "mongo/util/assert_util.h"
+#include "mongo/db/geo/s2.h"
 #include "mongo/db/geo/shapes.h"
 
-#include "third_party/s2/s2.h"
 #include "third_party/s2/s2polygon.h"
 #include "third_party/s2/s2polyline.h"
 
