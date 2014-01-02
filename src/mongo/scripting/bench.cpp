@@ -66,6 +66,8 @@ namespace mongo {
     void BenchRunEventCounter::reset() {
         _numEvents = 0;
         _totalTimeMicros = 0;
+        SummaryEstimators<unsigned long long, 99> blankSummary;
+        _summary = blankSummary;
     }
 
     void BenchRunEventCounter::updateFrom(const BenchRunEventCounter &other) {
@@ -736,11 +738,17 @@ namespace mongo {
          return _activeRuns[ oid ];
      }
 
-    void BenchRunner::populateStats( BenchRunStats *stats ) {
+    void BenchRunner::populateStats( TotalBenchRunStats *stats ) {
         _brState.assertFinished();
         stats->reset();
-        for ( size_t i = 0; i < _workers.size(); ++i )
+        for ( size_t i = 0; i < _workers.size(); ++i ) {
             stats->updateFrom( _workers[i]->stats() );
+            stats->findOneCounters.push_back(_workers[i]->stats().findOneCounter.summary());
+            stats->updateCounters.push_back(_workers[i]->stats().updateCounter.summary());
+            stats->insertCounters.push_back(_workers[i]->stats().insertCounter.summary());
+            stats->deleteCounters.push_back(_workers[i]->stats().deleteCounter.summary());
+            stats->queryCounters.push_back(_workers[i]->stats().queryCounter.summary());
+        }
         BSONObj before = this->before["opcounters"].Obj();
         BSONObj after = this->after["opcounters"].Obj();
         {
@@ -762,11 +770,19 @@ namespace mongo {
                         static_cast<double>(counter.getTotalTimeMicros()) / counter.getNumEvents());
      }
 
+     static void appendSummaries(BSONObjBuilder &buf, const std::string &name, const vector<SummaryEstimators<unsigned long long, 99> > &counters) {
+         BSONArrayBuilder ab(buf.subarrayStart(name));
+         for (vector<SummaryEstimators<unsigned long long, 99> >::const_iterator it = counters.begin(); it != counters.end(); ++it) {
+             ab.append(it->statisticSummaryToBSONObj());
+         }
+         ab.doneFast();
+     }
+
      BSONObj BenchRunner::finish( BenchRunner* runner ) {
 
          runner->stop();
 
-         BenchRunStats stats;
+         TotalBenchRunStats stats;
          runner->populateStats(&stats);
 
          // vector<BSONOBj> errors = runner->config.errors;
@@ -788,6 +804,11 @@ namespace mongo {
          appendAverageMicrosIfAvailable(buf, "deleteLatencyAverageMicros", stats.deleteCounter);
          appendAverageMicrosIfAvailable(buf, "updateLatencyAverageMicros", stats.updateCounter);
          appendAverageMicrosIfAvailable(buf, "queryLatencyAverageMicros", stats.queryCounter);
+         appendSummaries(buf, "findOneLatencyStatistics", stats.findOneCounters);
+         appendSummaries(buf, "insertLatencyStatistics", stats.insertCounters);
+         appendSummaries(buf, "deleteLatencyStatistics", stats.deleteCounters);
+         appendSummaries(buf, "updateLatencyStatistics", stats.updateCounters);
+         appendSummaries(buf, "queryLatencyStatistics", stats.queryCounters);
 
          {
              BSONObjIterator i( after );

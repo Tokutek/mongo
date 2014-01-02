@@ -26,6 +26,7 @@
 #include "mongo/bson/util/atomic_int.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/util/descriptive_stats.h"
 #include "mongo/util/timer.h"
 
 namespace mongo {
@@ -142,6 +143,7 @@ namespace mongo {
         void countOne(unsigned long long timeMicros) {
             ++_numEvents;
             _totalTimeMicros += timeMicros;
+            _summary << timeMicros;
         }
 
         /**
@@ -154,9 +156,15 @@ namespace mongo {
          */
         unsigned long long getNumEvents() const { return _numEvents; }
 
+        /**
+         * Get the summary object directly.
+         */
+        const SummaryEstimators<unsigned long long, 99> &summary() const { return _summary; }
+
     private:
         unsigned long long _numEvents;
         unsigned long long _totalTimeMicros;
+        SummaryEstimators<unsigned long long, 99> _summary;
     };
 
     /**
@@ -229,6 +237,30 @@ namespace mongo {
 
         std::map<std::string, long long> opcounters;
         std::vector<BSONObj> trappedErrors;
+    };
+
+    /**
+     * Statistics object representing the result of a full bench run with multiple workers.
+     */
+    class TotalBenchRunStats : public BenchRunStats {
+      public:
+        TotalBenchRunStats() {}
+        ~TotalBenchRunStats() {}
+
+        void reset() {
+            this->BenchRunStats::reset();
+            findOneCounters.clear();
+            updateCounters.clear();
+            insertCounters.clear();
+            deleteCounters.clear();
+            queryCounters.clear();
+        }
+
+        vector<SummaryEstimators<unsigned long long, 99> > findOneCounters;
+        vector<SummaryEstimators<unsigned long long, 99> > updateCounters;
+        vector<SummaryEstimators<unsigned long long, 99> > insertCounters;
+        vector<SummaryEstimators<unsigned long long, 99> > deleteCounters;
+        vector<SummaryEstimators<unsigned long long, 99> > queryCounters;
     };
 
     /**
@@ -389,7 +421,7 @@ namespace mongo {
          *
          * Illegal to call until after stop() returns.
          */
-        void populateStats(BenchRunStats *stats);
+        void populateStats(TotalBenchRunStats *stats);
 
         OID oid() const { return _oid; }
 
