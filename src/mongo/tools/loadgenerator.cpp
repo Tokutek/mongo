@@ -298,7 +298,7 @@ void runTest() {
         runner.start();
         sleepmillis((long long) (1000 * globalLoadGenOption.durationSeconds));
         runner.stop();
-        BenchRunStats stats;
+        TotalBenchRunStats stats;
         runner.populateStats(&stats);
 
         // collate all the stats (and save it in a local allstats map
