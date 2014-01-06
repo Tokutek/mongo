@@ -44,16 +44,7 @@
 
 namespace mongo {
 
-    // cached copies of these...so don't rename them, drop them, etc.!!!
-    static Collection *rsOplogDetails = NULL;
-    static Collection *rsOplogRefsDetails = NULL;
-    static Collection *replInfoDetails = NULL;
-    
     void deleteOplogFiles() {
-        rsOplogDetails = NULL;
-        rsOplogRefsDetails = NULL;
-        replInfoDetails = NULL;
-        
         Client::Context ctx(rsoplog, dbpath);
         // TODO: code review this for possible error cases
         // although, I don't think we care about error cases,
@@ -76,32 +67,9 @@ namespace mongo {
         }
     }
 
-    bool oplogFilesOpen() {
-        return (rsOplogDetails != NULL && rsOplogRefsDetails != NULL && replInfoDetails != NULL);
-    }
-
-    void openOplogFiles() {
-        const char *logns = rsoplog;
-        if (rsOplogDetails == NULL) {
-            Client::Context ctx(logns , dbpath);
-            rsOplogDetails = getCollection(logns);
-            massert(13347, "local.oplog.rs missing. did you drop it? if so restart server", rsOplogDetails);
-        }
-        if (rsOplogRefsDetails == NULL) {
-            Client::Context ctx(rsOplogRefs , dbpath);
-            rsOplogRefsDetails = getCollection(rsOplogRefs);
-            massert(16814, "local.oplog.refs missing. did you drop it? if so restart server", rsOplogRefsDetails);
-        }
-        if (replInfoDetails == NULL) {
-            Client::Context ctx(rsReplInfo , dbpath);
-            replInfoDetails = getCollection(rsReplInfo);
-            massert(16747, "local.replInfo missing. did you drop it? if so restart server", replInfoDetails);
-        }
-    }
-    
     static void _logTransactionOps(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) {
         LOCK_REASON(lockReason, "repl: logging to oplog");
-        Lock::DBRead lk1("local", lockReason);
+        Client::ReadContext ctx(rsoplog, lockReason);
 
         BSONObjBuilder b;
         addGTIDToBSON("_id", gtid, b);
@@ -118,6 +86,8 @@ namespace mongo {
 
     // assumes it is locked on entry
     void logToReplInfo(GTID minLiveGTID, GTID minUnappliedGTID) {
+        Client::Context ctx(rsOplogRefs , dbpath);
+        Collection* replInfoDetails = getCollection(rsReplInfo);
         BufBuilder bufbuilder(256);
         BSONObjBuilder b(bufbuilder);
         b.append("_id", "minLive");
@@ -140,7 +110,7 @@ namespace mongo {
 
     void logTransactionOpsRef(GTID gtid, uint64_t timestamp, uint64_t hash, OID& oid) {
         LOCK_REASON(lockReason, "repl: logging to oplog");
-        Lock::DBRead lk1("local", lockReason);
+        Client::ReadContext ctx(rsoplog, lockReason);
         BSONObjBuilder b;
         addGTIDToBSON("_id", gtid, b);
         b.appendDate("ts", timestamp);
@@ -153,7 +123,7 @@ namespace mongo {
 
     void logOpsToOplogRef(BSONObj o) {
         LOCK_REASON(lockReason, "repl: logging to oplog.refs");
-        Lock::DBRead lk("local", lockReason);
+        Client::ReadContext ctx(rsOplogRefs, lockReason);
         writeEntryToOplogRefs(o);
     }
 
@@ -197,7 +167,6 @@ namespace mongo {
     bool getLastGTIDinOplog(GTID* gtid) {
         LOCK_REASON(lockReason, "repl: looking up last GTID in oplog");
         Client::ReadContext ctx(rsoplog, lockReason);
-        // TODO: Should this be using rsOplogDetails, verifying non-null?
         Collection *cl = getCollection(rsoplog);
         shared_ptr<Cursor> c( Cursor::make(cl, -1) );
         if (c->ok()) {
@@ -218,6 +187,7 @@ namespace mongo {
     }
 
     static void _writeEntryToOplog(BSONObj entry) {
+        Collection* rsOplogDetails = getCollection(rsoplog);
         verify(rsOplogDetails);
 
         const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
@@ -235,6 +205,7 @@ namespace mongo {
     }
 
     void writeEntryToOplogRefs(BSONObj o) {
+        Collection* rsOplogRefsDetails = getCollection(rsOplogRefs);
         verify(rsOplogRefsDetails);
 
         TimerHolder insertTimer(&oplogInsertStats);
@@ -344,7 +315,7 @@ namespace mongo {
             BSONElementManipulator(entry["a"]).setBool(true);
             {
                 LOCK_REASON(lockReason, "repl: setting oplog entry's applied bit");
-                Lock::DBRead lk1("local", lockReason);
+                Client::ReadContext ctx(rsoplog, lockReason);
                 writeEntryToOplog(entry, false);
             }
             // If this code fails, it is impossible to recover from
@@ -383,6 +354,7 @@ namespace mongo {
             {
                 LOCK_REASON(lockReason, "repl: rolling back entry from oplog.refs");
                 Client::ReadContext ctx(rsOplogRefs, lockReason);
+                Collection* rsOplogRefsDetails = getCollection(rsOplogRefs);
                 verify(rsOplogRefsDetails != NULL);
                 shared_ptr<Cursor> c(
                     Cursor::make(
@@ -428,7 +400,7 @@ namespace mongo {
         }
         {
             LOCK_REASON(lockReason, "repl: purging entry from oplog");
-            Lock::DBRead lk1("local", lockReason);
+            Client::ReadContext ctx(rsoplog, lockReason);
             if (purgeEntry) {
                 purgeEntryFromOplog(entry);
             }
@@ -443,6 +415,7 @@ namespace mongo {
     }
     
     void purgeEntryFromOplog(BSONObj entry) {
+        Collection* rsOplogDetails = getCollection(rsoplog);
         verify(rsOplogDetails);
         if (entry.hasElement("ref")) {
             OID oid = entry["ref"].OID();
@@ -480,7 +453,8 @@ namespace mongo {
         BSONObjBuilder q;
         addGTIDToBSON("", gtid, q);
 
-        // TODO: rsOplogDetails should be stored as OplogCollection, not Collection
+        Collection* rsOplogDetails = getCollection(rsoplog);
+        verify(rsOplogDetails);
         OplogCollection *cl = rsOplogDetails->as<OplogCollection>();
         cl->optimizePK(minKey, q.done(), timeout, loops_run);
     }

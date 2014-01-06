@@ -556,7 +556,6 @@ namespace mongo {
                 LOCK_REASON(lockReason, "repl: stepping up as primary");
                 Lock::GlobalWrite lk(lockReason);
                 theReplSet->gtidManager->catchUnappliedToLive();
-                openOplogFiles();
                 changeState(MemberState::RS_PRIMARY);
             }
             else {

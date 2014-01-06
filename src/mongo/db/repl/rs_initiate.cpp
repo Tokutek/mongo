@@ -270,7 +270,6 @@ namespace mongo {
                 {
                     Client::Transaction transaction(DB_SERIALIZABLE);
                     createOplog();
-                    openOplogFiles();
                     GTID minLiveGTID;
                     GTID minUnappliedGTID;
                     logToReplInfo(minLiveGTID, minUnappliedGTID);

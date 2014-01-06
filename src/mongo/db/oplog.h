@@ -40,8 +40,6 @@ namespace mongo {
     void logTransactionOpsRef(GTID gtid, uint64_t timestamp, uint64_t hash, OID& oid);
     void logOpsToOplogRef(BSONObj o);
     void deleteOplogFiles();
-    bool oplogFilesOpen();
-    void openOplogFiles();
     
     GTID getGTIDFromOplogEntry(BSONObj o);
     bool getLastGTIDinOplog(GTID* gtid);

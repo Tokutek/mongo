@@ -604,19 +604,6 @@ namespace mongo {
                 return false;
             }
             try {
-                // This assumes the user is running this command
-                // after startup. We are not doing anything here to protect
-                // against possible races with starting up the machine
-                //
-                // Also, these pointers will remain set
-                // we are not protecting against the case where
-                // the user drops and recreates any oplog related
-                // files.
-                if (!oplogFilesOpen()) {
-                    LOCK_REASON(lockReason, "repl: opening oplog for replUndoOplogEntry");
-                    Lock::DBRead lk("local", lockReason);
-                    openOplogFiles();
-                }
                 bool purgeEntry = true;
                 if (cmdObj.hasElement("keepEntry")) {
                     purgeEntry = false;
@@ -668,9 +655,6 @@ namespace mongo {
 
             LOCK_REASON(lockReason, "repl: logging info");
             Lock::DBRead lk("local", lockReason);
-            if (!oplogFilesOpen()) {
-                openOplogFiles();
-            }
             Client::Transaction transaction(DB_SERIALIZABLE);
             logToReplInfo(minLiveGTID, minUnappliedGTID);
             transaction.commit();

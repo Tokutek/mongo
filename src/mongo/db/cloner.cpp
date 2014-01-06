@@ -140,7 +140,8 @@ namespace mongo {
             const string& ns , 
             const BSONObj& query , 
             string& errmsg , 
-            bool copyIndexes
+            bool copyIndexes,
+            bool logForRepl
             );
         
         void copyCollectionData(
@@ -356,7 +357,8 @@ namespace mongo {
         const string& ns, 
         const BSONObj& query,
         string& errmsg,
-        bool copyIndexes
+        bool copyIndexes,
+        bool logForRepl
         ) 
     {
         {
@@ -391,7 +393,7 @@ namespace mongo {
                 }
             }
         }
-        copyCollectionData(ns, query, copyIndexes, true);
+        copyCollectionData(ns, query, copyIndexes, logForRepl);
         return true;
     }
 
@@ -707,8 +709,9 @@ namespace mongo {
             );
     }
 
-    void cloneCollectionData(
+    void cloneCollection(
         shared_ptr<DBClientBase> conn,
+        const string& dbname,
         const string& ns, 
         const BSONObj& query,
         bool copyIndexes,
@@ -716,9 +719,12 @@ namespace mongo {
         ) 
     {
         Cloner c(conn);
-        c.copyCollectionData(
+        string errmsg;
+        c.copyCollection(
+            dbname,
             ns,
             query,
+            errmsg,
             copyIndexes,
             logForRepl
             );
@@ -919,7 +925,8 @@ namespace mongo {
                 collection,
                 query,
                 errmsg,
-                copyIndexes
+                copyIndexes,
+                true
                 );
 
             if (retval) {
