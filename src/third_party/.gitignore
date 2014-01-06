@@ -1,3 +1,5 @@
 tokudb/
 tokukv/
 tokubackup/
+ft-index
+backup

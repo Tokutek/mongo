@@ -71,3 +71,34 @@ target_link_libraries(allclient LINK_PRIVATE
   )
 
 add_subdirectory(examples)
+
+if (BUILD_TESTING)
+  foreach (test
+      dbclient_rs_test
+      scoped_db_conn_test
+      )
+    add_executable(${test} ${test})
+    add_dependencies(${test} generate_error_codes generate_action_types)
+    target_link_libraries(${test}
+      unittest_main
+      foundation
+      )
+    target_link_whole_libraries(${test}
+      coredb
+      coreserver
+      coreshard
+      dbcmdline
+      mongocommon
+      mongodandmongos
+      mongoscore
+      base
+      )
+    target_link_libraries(${test}
+      ${TokuKV_LIBRARIES}
+      )
+    add_test(mongo/client/${test} ${test})
+  endforeach ()
+  target_link_libraries(dbclient_rs_test
+    mocklib
+    )
+endif ()

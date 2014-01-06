@@ -41,10 +41,6 @@ if (BUILD_TESTING)
       )
     add_test(mongo/bson/${test} ${test})
   endforeach ()
-
-  # TODO: index_set_test
-  # TODO: descriptive_stats_test
-  # TODO: sock_test
 endif ()
 
 install(FILES bsondemo/bsondemo.cpp
