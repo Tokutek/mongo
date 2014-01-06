@@ -302,6 +302,14 @@ install_executables(tokumx_server
   mongod
   )
 
+if (BUILD_TESTING)
+  add_test(mongo/shell/test_shell
+    "${PYTHON2}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/../../buildscripts/test_shell.py"
+      "$<TARGET_FILE:mongo>"
+    )
+endif ()
+
 set(client_sources
   base/configuration_variable_manager.cpp
   base/global_initializer.cpp
