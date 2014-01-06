@@ -463,6 +463,12 @@ namespace mongo {
                     conn->done();
                     return false;
                 }
+                if ( res["options"].type() == Object &&
+                     res["options"].embeddedObject()["partitioned"].trueValue() ) {
+                    errmsg = "can't shard partitioned collection";
+                    conn->done();
+                    return false;
+                }
 
                 // The proposed shard key must be validated against the set of existing indexes.
                 // In particular, we must ensure the following constraints
