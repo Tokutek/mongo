@@ -162,6 +162,10 @@ namespace mongo {
             throw RetryWithWriteLock();
         }
 
+        // Must copy ns before we delete the collection, otherwise ns will be pointing to freed
+        // memory.
+        BSONObj nsobj = BSON("ns" << ns);
+
         CollectionStringMap::const_iterator it = _collections.find(ns);
         if (it != _collections.end()) {
             // Might not be in the _collections map if the ns exists but is closed.
@@ -174,7 +178,6 @@ namespace mongo {
             cl->close();
         }
 
-        BSONObj nsobj = BSON("ns" << ns);
         storage::Key sKey(nsobj, NULL);
         DBT ndbt = sKey.dbt();
         DB *db = _metadb->db();

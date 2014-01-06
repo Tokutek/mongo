@@ -34,7 +34,8 @@ foreach (bin ${normal_bins} ${abnormal_bins})
   target_link_libraries(${bin}
     mongoclient
     )
-  if (BUILD_TESTING)
+  # rsExample seems to be dead, at least not maintained upstream
+  if (BUILD_TESTING AND NOT ${bin} STREQUAL rsExample)
     add_test(mongo/client/${bin} ${bin})
   endif ()
 endforeach ()
