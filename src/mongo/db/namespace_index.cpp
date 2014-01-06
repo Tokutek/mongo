@@ -162,6 +162,10 @@ namespace mongo {
             throw RetryWithWriteLock();
         }
 
+        // Must copy ns before we delete the collection, otherwise ns will be pointing to freed
+        // memory.
+        BSONObj nsobj = BSON("ns" << ns);
+
         NamespaceDetailsMap::const_iterator it = _namespaces.find(ns);
         if (it != _namespaces.end()) {
             // Might not be in the _namespaces map if the ns exists but is closed.
@@ -174,7 +178,6 @@ namespace mongo {
             d->close();
         }
 
-        BSONObj nsobj = BSON("ns" << ns);
         storage::Key sKey(nsobj, NULL);
         DBT ndbt = sKey.dbt();
         DB *db = _nsdb->db();
