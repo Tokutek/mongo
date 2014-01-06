@@ -112,16 +112,18 @@ target_link_libraries(fail_point LINK_PRIVATE
   bson
   )
 
-# TODO: ntservice, ntservice_test
+# WONTFIX: ntservice, ntservice_test
 
 if (BUILD_TESTING)
   foreach (test_source
-      text_test
-      stringutils_test
       concurrency/partitioned_counter_test
+      descriptive_stats_test
+      fail_point_test
       processinfo_test
-      string_map_test
       safe_num_test
+      string_map_test
+      stringutils_test
+      text_test
       )
     string(REGEX REPLACE "^.*/" "" test ${test_source})
     add_executable(${test} ${test_source})
@@ -135,10 +137,25 @@ if (BUILD_TESTING)
     add_test(mongo/util/${test} ${test})
   endforeach ()
 
-  target_link_libraries(stringutils_test stringutils)
+  target_link_libraries(descriptive_stats_test bson)
+  target_link_libraries(fail_point_test fail_point)
   target_link_libraries(processinfo_test processinfo)
-  target_link_libraries(string_map_test bson)
   target_link_libraries(safe_num_test bson)
+  target_link_libraries(string_map_test bson)
+  target_link_libraries(stringutils_test stringutils)
+
+  # no crutch
+  add_executable(sock_test net/sock_test)
+  add_dependencies(sock_test generate_error_codes generate_action_types)
+  target_link_libraries(sock_test
+    unittest_main
+    foundation
+    )
+  target_link_whole_libraries(sock_test
+    mongocommon
+    base
+    )
+  add_test(mongo/util/sock_test sock_test)
 
   add_executable(md5_test md5_test md5main)
   add_dependencies(md5_test generate_error_codes generate_action_types)
