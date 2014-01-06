@@ -34,7 +34,7 @@ foreach (bin ${normal_bins} ${abnormal_bins})
   target_link_libraries(${bin}
     mongoclient
     )
-  if (BUILD_TESTING)
+  if (BUILD_TESTING AND NOT ${bin} MATCHES Example)
     add_test(mongo/client/${bin} ${bin})
   endif ()
 endforeach ()

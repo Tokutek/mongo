@@ -10,7 +10,6 @@ add_library(server_parameters STATIC
   )
 add_dependencies(server_parameters generate_error_codes generate_action_types)
 target_link_libraries(server_parameters foundation bson)
-# TODO: server_parameters_test
 
 add_library(index_set STATIC
   index_set
@@ -234,6 +233,8 @@ if (BUILD_TESTING)
   foreach (test
       cmdline_test
       field_ref_test
+      index_set_test
+      server_parameters_test
       )
     add_executable(${test} ${test})
     add_dependencies(${test} generate_error_codes generate_action_types)
@@ -248,4 +249,6 @@ if (BUILD_TESTING)
 
   target_link_libraries(cmdline_test dbcmdline)
   target_link_libraries(field_ref_test db_common)
+  target_link_libraries(index_set_test bson index_set)
+  target_link_libraries(server_parameters_test server_parameters)
 endif ()

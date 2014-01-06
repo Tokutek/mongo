@@ -118,9 +118,12 @@ if (BUILD_TESTING)
 
   # no crutch
   foreach (test
+      balancer_policy_tests
       chunk_diff_test
       collection_manager_test
       metadata_loader_test
+      shard_conn_test
+      shard_test
       )
     add_executable(${test} ${test})
     add_dependencies(${test} generate_error_codes generate_action_types)
@@ -135,6 +138,24 @@ if (BUILD_TESTING)
       )
     add_test(mongo/s/${test} ${test})
   endforeach ()
+  foreach (test
+      balancer_policy_tests
+      shard_conn_test
+      shard_test
+      )
+    target_link_whole_libraries(${test}
+      mongoscore
+      coreshard
+      coreserver
+      coredb
+      dbcmdline
+      mongodandmongos
+      )
+    target_link_libraries(${test}
+      ${TokuKV_LIBRARIES}
+      )
+  endforeach ()
   target_link_libraries(collection_manager_test mocklib)
   target_link_libraries(metadata_loader_test mocklib)
+  target_link_libraries(shard_conn_test mocklib)
 endif ()
