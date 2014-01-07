@@ -972,10 +972,6 @@ namespace mongo {
 
         // @return the minimum key that is not safe to read for any tailable cursor
         BSONObj minUnsafeKey();
-
-        // For cleaning up after oplog trimming.
-        void optimizePK(const BSONObj &leftPK, const BSONObj &rightPK,
-                        const int timeout, uint64_t *loops_run);
     };
 
     class NaturalOrderCollection : public CollectionBase {

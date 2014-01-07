@@ -1719,16 +1719,6 @@ namespace mongo {
         }
     }
 
-    // @param left/rightPK [ left, right ] primary key range to run
-    // hot optimize on. no optimize message is sent.
-    void OplogCollection::optimizePK(const BSONObj &leftPK, const BSONObj &rightPK,
-                                     const int timeout, uint64_t *loops_run) {
-        IndexDetailsBase &idx = getPKIndexBase();
-        const storage::Key leftSKey(leftPK, NULL);
-        const storage::Key rightSKey(rightPK, NULL);
-        idx.optimize(leftSKey, rightSKey, false, timeout, loops_run);
-    }
-
     // ------------------------------------------------------------------------
 
     NaturalOrderCollection::NaturalOrderCollection(const StringData &ns, const BSONObj &options) :

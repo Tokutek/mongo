@@ -54,10 +54,6 @@ namespace mongo {
     // @return the age, in milliseconds, when an oplog entry expires.
     uint64_t expireOplogMilliseconds();
 
-    // hot optimize oplog up to gtid, used by purge thread to vacuum stale entries
-    // @param timeout: how many seconds to run before backing off. 0 means no timeout.
-    void hotOptimizeOplogTo(GTID gtid, const int timeout, uint64_t *loops_run);
-    
     /** puts obj in the oplog as a comment (a no-op).  Just for diags.
         convention is
           { msg : "text", ... }

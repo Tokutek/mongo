@@ -469,11 +469,9 @@ namespace mongo {
 
     ReplSetImpl::ReplSetImpl() :
         _replInfoUpdateRunning(false),
-        _replOplogPurgeRunning(false),
         _lastPurgedTS(0),
         _replKeepOplogAliveRunning(false),
         _keepOplogPeriodMillis(600*1000), // 10 minutes
-        _replOplogOptimizeRunning(false),
         _replBackgroundShouldRun(true),
         elect(this),
         _forceSyncTarget(0),
@@ -1087,182 +1085,8 @@ namespace mongo {
     }
 
     void ReplSetImpl::changeExpireOplog(uint64_t expireOplogDays, uint64_t expireOplogHours) {
-        {
-            boost::unique_lock<boost::mutex> lock(_purgeMutex);
-            cmdLine.expireOplogDays = expireOplogDays;
-            cmdLine.expireOplogHours = expireOplogHours;
-        }
-        _purgeCond.notify_all();
-    }
-
-    void ReplSetImpl::purgeOplogThread() {
-        _replOplogPurgeRunning = true;
-        Client::initThread("purgeOplog");
-        replLocalAuth();
-        while (_replBackgroundShouldRun) {
-            // need to grab _purgeMutex here to protect against races
-            // of expireOplogMilliseconds() changing
-            uint64_t expireMillis = 0;
-            {
-                boost::unique_lock<boost::mutex> lock(_purgeMutex);
-                expireMillis = expireOplogMilliseconds();
-            }
-
-            if (expireMillis) {
-                // Allow an additional slack period of one hour.
-                const uint64_t ageAllowed = expireMillis + (3600*1000);
-                const uint64_t minTime = curTimeMillis64() - ageAllowed;
-                uint64_t millisToWait = 0;
-                // delete some entries from the oplog. We use a cursor
-                // to get up to 1000 entries and delete them, all with a single
-                // transaction.
-                try {
-                    LOCK_REASON(lockReason, "repl: purging oplog");
-                    Client::ReadContext ctx(rsoplog, lockReason);
-                    Client::Transaction transaction(DB_READ_UNCOMMITTED);
-                    Collection *cl = getCollection(rsoplog);
-                    vector<BSONObj> docs;
-                    // We set the default wait time to 2 seconds.
-                    // If we find nothing in the oplog, we will wait 2 seconds
-                    millisToWait = 2000;
-                    if (cl != NULL) {
-                        BSONObjBuilder query;
-                        BSONObjBuilder q(query.subobjStart("_id"));
-                        addGTIDToBSON("$gte", _lastPurgedGTID, q);
-                        q.doneFast();
-                        shared_ptr<Cursor> c(
-                            getOptimizedCursor(
-                                rsoplog,
-                                query.done(),
-                                BSONObj(),
-                                QueryPlanSelectionPolicy::indexOnly()
-                                )
-                            );
-                        // add entries to docs from a cursor
-                        while (c->ok()) {
-                            BSONObj curr = c->current();
-                            uint64_t ts = curr["ts"]._numberLong();
-                            if (ts > minTime) {
-                                // we only set millisToWait, which has us sleep,
-                                // if we are not deleting anything in this loop.
-                                // If we are deleting even just one entry,
-                                // we do not sleep.
-                                if (docs.empty()) {
-                                    // set the time to way to be 1 second longer
-                                    // than when the next entry expires, so that
-                                    // when we wake up, we can hopefully
-                                    // delete a bunch of entries in bulk
-                                    boost::unique_lock<boost::mutex> lock(_purgeMutex);
-                                    _lastPurgedGTID = getGTIDFromBSON("_id", curr);
-                                    _lastPurgedTS = ts;
-                                    millisToWait = ts - minTime + 1000;
-                                }
-                                break;
-                            }
-                            docs.push_back(curr.copy());
-                            if (curr.hasElement("ref") || docs.size() > 1000) {
-                                break;
-                            }
-                            c->advance();
-                        }
-                    }
-
-                    if (!docs.empty()) {
-                        // we are deleting something, so let's not sleep
-                        millisToWait = 0;
-                        for (vector<BSONObj>::const_iterator it = docs.begin(); it != docs.end(); ++it) {
-                            // delete the row
-                            purgeEntryFromOplog(*it);                            
-                        }
-                        {
-                            boost::unique_lock<boost::mutex> lock(_purgeMutex);
-                            _lastPurgedGTID = getGTIDFromBSON("_id", docs.back());
-                            _lastPurgedTS = docs.back()["ts"]._numberLong();
-                        }
-                    }
-                    transaction.commit(DB_TXN_NOSYNC);
-                }
-                catch (...) {
-                    log() << "exception cought in purgeOplog thread: " << rsLog;
-                    millisToWait = 2000;
-                }
-                // do a timed_wait, if necessary
-                // at this point, we have use a transaction to delete
-                // up to 1000 entries from the oplog. If we deleted anything, we
-                // will NOT sleep. If we deleted nothing, we will sleep for
-                // some amount, as determined by the code above
-                if (millisToWait > 0) {
-                    boost::unique_lock<boost::mutex> lock(_purgeMutex);
-                    // It is possible that while we were doing our deleting,
-                    // that expireOplogHours or expireOplogDays has changed.
-                    // This is rare, but still possible. In that case, the amount
-                    // of time we are planning to sleep may be in accurate.
-                    // Therefore, if we see a change, we simply
-                    // don't sleep and continue with another iteration
-                    if (expireMillis == expireOplogMilliseconds()) {
-                        _purgeCond.timed_wait(
-                            lock,
-                            boost::posix_time::milliseconds(millisToWait)
-                            );
-                    }
-                }
-            }
-            else {
-                boost::unique_lock<boost::mutex> lock(_purgeMutex);
-                _purgeCond.wait(lock);
-            }
-        }        
-        cc().shutdown();
-        _replOplogPurgeRunning = false;
-    }
-    
-    // By default the optimize oplog thread performs its work in 4 second quanta.
-    // This bounds the amount of time the DBRead lock is held doing optimize work.
-    static int optimizeOplogQuantum = 4;
-    ExportedServerParameter<int> OptimizeOplogQuantum(
-            ServerParameterSet::getGlobal(), "optimizeOplogQuantum", &optimizeOplogQuantum, true, true);
-
-    void ReplSetImpl::optimizeOplogThread() {
-        _replOplogOptimizeRunning = true;
-        Client::initThread("optimizeOplog");
-        replLocalAuth();
-        while (_replBackgroundShouldRun) {
-            try {
-                GTID gtid;
-                {
-                    boost::unique_lock<boost::mutex> lock(_purgeMutex);
-                    gtid = _lastPurgedGTID;
-                }
-                // quantum < 0 : run optimize for as long as it takes
-                // quantum > 0 : run optimize for this many seconds before backing off
-                // quantum == 0 : do not run optimize at all
-                if (!gtid.isInitial() && optimizeOplogQuantum != 0) {
-                    uint64_t loops_run = 0;
-                    // timeout of 0 means no timeout. this is slightly different than the
-                    // semantics of optimzeOplogQuantum, which is supposed to be more expressive.
-                    const int timeout = optimizeOplogQuantum < 0 ? 0 : optimizeOplogQuantum;
-                    hotOptimizeOplogTo(gtid, timeout, &loops_run);
-                    LOG(2) << "hotOptimizeOplog completed running " << loops_run << " loops." << rsLog;
-                } else if (optimizeOplogQuantum == 0) {
-                    // Sleep for a second to avoid spinning.
-                    // If the quantum becomes non-zero in future, we'll do real work.
-                    sleepmillis(1000);
-                }
-                {
-                    boost::unique_lock<boost::mutex> lock(_purgeMutex);
-                    _purgeCond.timed_wait(
-                        lock, 
-                        boost::posix_time::milliseconds(5000)
-                        );                
-                }
-            } catch (const DBException &ex) {
-                warning() << "optimizeOplogThread caught exception: " << ex.what()
-                          << ", continuing in 5 seconds..." << endl;
-                sleep(5);
-            }
-        }
-        cc().shutdown();
-        _replOplogOptimizeRunning = false;
+        cmdLine.expireOplogDays = expireOplogDays;
+        cmdLine.expireOplogHours = expireOplogHours;
     }
 
     void ReplSetImpl::forceUpdateReplInfo() {
@@ -1333,14 +1157,6 @@ namespace mongo {
         while (_replInfoUpdateRunning) {
             sleepsecs(1);
             log() << "still waiting for updateReplInfo thread to end..." << endl;
-        }
-        {
-            boost::unique_lock<boost::mutex> lock(_purgeMutex);
-            _purgeCond.notify_all();
-        }
-        while (_replOplogPurgeRunning) {
-            sleepsecs(1);
-            log() << "still waiting for oplog purge thread to end..." << endl;
         }
         {
             boost::unique_lock<boost::mutex> lock(_keepOplogAliveMutex);

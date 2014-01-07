@@ -444,18 +444,4 @@ namespace mongo {
         const uint64_t millisPerHour = 3600 * 1000;
         return hours * millisPerHour;
     }
-
-    void hotOptimizeOplogTo(GTID gtid, const int timeout, uint64_t *loops_run) {
-        LOCK_REASON(lockReason, "repl: optimizing oplog");
-        Client::ReadContext ctx(rsoplog, lockReason);
-
-        // do a hot optimize up until gtid;
-        BSONObjBuilder q;
-        addGTIDToBSON("", gtid, q);
-
-        Collection* rsOplogDetails = getCollection(rsoplog);
-        verify(rsOplogDetails);
-        OplogCollection *cl = rsOplogDetails->as<OplogCollection>();
-        cl->optimizePK(minKey, q.done(), timeout, loops_run);
-    }
 }
