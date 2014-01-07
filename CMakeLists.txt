@@ -175,18 +175,21 @@ if (CMAKE_SIZEOF_VOID_P EQUAL 8)
 else ()
   set(INSTALL_LIBDIR lib CACHE STRING "where we should install libs")
 endif ()
-if (APPLE)
-  set(CMAKE_INSTALL_RPATH
-    "@loader_path/../${INSTALL_LIBDIR}"
-    "@loader_path/../${INSTALL_LIBDIR}/plugins"
-    )
-elseif (UNIX)
-  set(CMAKE_INSTALL_RPATH
-    "\$ORIGIN/../${INSTALL_LIBDIR}/"
-    "\$\$ORIGIN/../${INSTALL_LIBDIR}/"
-    "\$ORIGIN/../${INSTALL_LIBDIR}/plugins/"
-    "\$\$ORIGIN/../${INSTALL_LIBDIR}/plugins/"
-    )
+option(TOKUMX_SET_RPATH "modify RPATH for self-contained package" TRUE)
+if (TOKUMX_SET_RPATH)
+  if (APPLE)
+    set(CMAKE_INSTALL_RPATH
+      "@loader_path/../${INSTALL_LIBDIR}"
+      "@loader_path/../${INSTALL_LIBDIR}/plugins"
+      )
+  elseif (UNIX)
+    set(CMAKE_INSTALL_RPATH
+      "\$ORIGIN/../${INSTALL_LIBDIR}/"
+      "\$\$ORIGIN/../${INSTALL_LIBDIR}/"
+      "\$ORIGIN/../${INSTALL_LIBDIR}/plugins/"
+      "\$\$ORIGIN/../${INSTALL_LIBDIR}/plugins/"
+      )
+  endif ()
 endif ()
 
 add_subdirectory(src/third_party)

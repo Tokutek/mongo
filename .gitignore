@@ -165,3 +165,6 @@ src/third_party/v8/src/experimental-libraries.cc
 src/third_party/v8/src/libraries.cc
 buildinfo.cpp
 /.settings/
+
+dbg/
+opt/
