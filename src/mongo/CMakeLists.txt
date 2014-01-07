@@ -27,7 +27,7 @@ set_source_files_properties(
   "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.cpp"
   PROPERTIES GENERATED TRUE)
 
-if (NOT (TOKUMX_GIT_VERSION AND TOKUKV_GIT_VERSION)
+if (NOT (TOKUMX_GIT_VERSION AND TOKUKV_GIT_VERSION))
   find_program(GIT git)
   if (GIT MATCHES NOTFOUND)
     set(SEND_ERROR "git not found")
