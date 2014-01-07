@@ -62,6 +62,7 @@ target_link_libraries(mongocommon_util LINK_PRIVATE
   ${PCRE_LIBRARIES}
   murmurhash3
   ${Boost_LIBRARIES}
+  ${CMAKE_THREAD_LIBS_INIT}
   )
 
 add_library(stringutils STATIC
