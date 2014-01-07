@@ -134,6 +134,7 @@ if (BUILD_TESTING)
       foundation
       unittest_crutch
       base
+      ${TOKUMX_SSL_LIBRARIES}
       )
     add_test(mongo/util/${test} ${test})
   endforeach ()
@@ -155,6 +156,7 @@ if (BUILD_TESTING)
   target_link_whole_libraries(sock_test
     mongocommon
     base
+    ${TOKUMX_SSL_LIBRARIES}
     )
   add_test(mongo/util/sock_test sock_test)
 
@@ -166,6 +168,7 @@ if (BUILD_TESTING)
     foundation
     unittest_crutch
     base
+    ${TOKUMX_SSL_LIBRARIES}
     )
   add_test(mongo/util/md5_test md5_test)
 endif ()

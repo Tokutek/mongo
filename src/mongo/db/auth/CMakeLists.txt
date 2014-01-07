@@ -83,6 +83,7 @@ if (BUILD_TESTING)
       foundation
       unittest_crutch
       base
+      ${TOKUMX_SSL_LIBRARIES}
       )
     add_test(mongo/db/auth/${test} ${test})
   endforeach ()
