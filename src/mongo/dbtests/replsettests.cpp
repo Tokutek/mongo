@@ -241,7 +241,7 @@ namespace ReplSetTests {
 
             BSONObj op = updateFail();
 
-            Sync s("");
+            //Sync s("");
             // TODO: decide if this ought to be restored one day
             //verify(!s.shouldRetry(op));
         }

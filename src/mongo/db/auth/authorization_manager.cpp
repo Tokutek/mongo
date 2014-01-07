@@ -206,9 +206,11 @@ namespace {
         clusterAdminRoleWriteActions.addAction(ActionType::movePrimary);
         clusterAdminRoleWriteActions.addAction(ActionType::removeShard);
         clusterAdminRoleWriteActions.addAction(ActionType::repairDatabase);
+        clusterAdminRoleWriteActions.addAction(ActionType::replAddPartition);
         clusterAdminRoleWriteActions.addAction(ActionType::replSetExpireOplog);
         clusterAdminRoleWriteActions.addAction(ActionType::replSetInitiate);
         clusterAdminRoleWriteActions.addAction(ActionType::replSetReconfig);
+        clusterAdminRoleWriteActions.addAction(ActionType::replTrimOplog);
         clusterAdminRoleWriteActions.addAction(ActionType::replUndoOplogEntry);
         clusterAdminRoleWriteActions.addAction(ActionType::resync);
         clusterAdminRoleWriteActions.addAction(ActionType::shardCollection);

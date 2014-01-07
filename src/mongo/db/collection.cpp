@@ -37,6 +37,7 @@
 #include "mongo/db/storage/key.h"
 #include "mongo/platform/atomic_word.h"
 #include "mongo/scripting/engine.h"
+#include "mongo/db/storage/assert_ids.h"
 
 namespace mongo {
 
@@ -167,9 +168,7 @@ namespace mongo {
         // TODO: do some stuff to create _cd
         if (isOplogCollection(ns)) {
             if (options["partitioned"].trueValue()) {
-                PartitionedOplogCollection* poc = new PartitionedOplogCollection(ns, options);
-                poc->initialize(ns, options);
-                _cd.reset(poc);
+                _cd = PartitionedOplogCollection::make(ns, options);
             }
             else {
                 _cd.reset(new OldOplogCollection(ns, options));
@@ -186,9 +185,7 @@ namespace mongo {
             _cd.reset(new ProfileCollection(ns, options));
         } else if (options["partitioned"].trueValue()) {
             uassert(0, "Partitioned Collection cannot be capped", !options["capped"].trueValue());
-            PartitionedCollection* pc = new PartitionedCollection(ns, options);
-            pc->initialize(ns, options);
-            _cd.reset(pc);
+            _cd = PartitionedCollection::make(ns, options);
         } else if (options["capped"].trueValue()) {
             _cd.reset(new CappedCollection(ns, options));
         } else if (options["natural"].trueValue()) {
@@ -225,9 +222,7 @@ namespace mongo {
                 uassert( 0, "Should not bulk load the oplog", !bulkLoad );
             }
             if (serialized["options"]["partitioned"].trueValue()) {
-                PartitionedOplogCollection* poc = new PartitionedOplogCollection(serialized);
-                poc->initialize(serialized);
-                _cd.reset(poc);
+                _cd = PartitionedOplogCollection::make(serialized);
             }
             else {
                 _cd.reset(new OldOplogCollection(serialized));
@@ -258,9 +253,7 @@ namespace mongo {
             _cd.reset(new ProfileCollection(serialized));
         } else if (serialized["options"]["partitioned"].trueValue()) {
             massert( 17247, "bug: Should not bulk load partitioned collections", !bulkLoad );
-            PartitionedCollection* pc = new PartitionedCollection(serialized);
-            pc->initialize(serialized);
-            _cd.reset(pc);
+            _cd = PartitionedCollection::make(serialized);
         } else if (serialized["options"]["capped"].trueValue()) {
             massert( 16871, "bug: Should not bulk load capped collections", !bulkLoad );
             _cd.reset(new CappedCollection(serialized));
@@ -1756,6 +1749,22 @@ namespace mongo {
     }
 
     // ------------------------------------------------------------------------
+    shared_ptr<PartitionedOplogCollection> PartitionedOplogCollection::make(
+        const StringData &ns, 
+        const BSONObj &options
+        )
+    {
+        shared_ptr<PartitionedOplogCollection> ret;
+        ret.reset(new PartitionedOplogCollection(ns, options));
+        ret->initialize(ns, options);
+        return ret;
+    }
+    shared_ptr<PartitionedOplogCollection> PartitionedOplogCollection::make(const BSONObj &serialized) {
+        shared_ptr<PartitionedOplogCollection> ret;
+        ret.reset(new PartitionedOplogCollection(serialized));
+        ret->initialize(serialized);
+        return ret;
+    }
 
     PartitionedOplogCollection::PartitionedOplogCollection(const StringData &ns, const BSONObj &options) :
         PartitionedCollection(ns, options) {
@@ -2423,6 +2432,17 @@ namespace mongo {
         sanityCheck();    
     }
 
+    shared_ptr<PartitionedCollection> PartitionedCollection::make(
+        const StringData &ns,
+        const BSONObj &options
+        )
+    {
+        shared_ptr<PartitionedCollection> ret;
+        ret.reset(new PartitionedCollection(ns, options));
+        ret->initialize(ns, options);
+        return ret;
+    }
+
     PartitionedCollection::PartitionedCollection(const BSONObj &serialized) :
         CollectionData(serialized),
         _options(serialized["options"].Obj().copy()),
@@ -2468,6 +2488,13 @@ namespace mongo {
         
         sanityCheck();    
     }
+
+    shared_ptr<PartitionedCollection> PartitionedCollection::make(const BSONObj &serialized) {
+        shared_ptr<PartitionedCollection> ret;
+        ret.reset(new PartitionedCollection(serialized));
+        ret->initialize(serialized);
+        return ret;
+     }
 
     shared_ptr<CollectionData> PartitionedCollection::makeNewPartition(
         const StringData &ns,
@@ -2595,14 +2622,19 @@ namespace mongo {
         BSONObj currPK;
         // in the last partition, look up the max value,
         // make a reverse cursor on the last partition
-        shared_ptr<Cursor> c( Cursor::make(_partitions[_numPartitions-1].get(), -1, false));
-        // if there is nothing in the partition, then we cannot cap it
-        // so throw an error. This may happen if a user tries to create
-        // a partition on top of an empty one. We disallow this because
-        // having multiple partitions with the same max key can
-        // lead to bugs.
-        uassert(17248, "can only cap a partition with no pivot if it is non-empty", c->ok());        
-        currPK = c->currPK();
+        {
+            Client::AlternateTransactionStack altStack;
+            Client::Transaction txn(DB_READ_UNCOMMITTED);
+            shared_ptr<Cursor> c( Cursor::make(_partitions[_numPartitions-1].get(), -1, false));
+            // if there is nothing in the partition, then we cannot cap it
+            // so throw an error. This may happen if a user tries to create
+            // a partition on top of an empty one. We disallow this because
+            // having multiple partitions with the same max key can
+            // lead to bugs.
+            uassert(storage::ASSERT_IDS::CapPartitionFailed, "can only cap a partition with no pivot if it is non-empty", c->ok());        
+            currPK = c->currPK().copy();
+            txn.commit();
+        }
         // make the max PK new pivot
         overwritePivot(_numPartitions-1, currPK);
     }
@@ -2622,17 +2654,22 @@ namespace mongo {
         }
         // in the last partition, look up the max value,
         // make a reverse cursor on the last partition
-        shared_ptr<Cursor> c( Cursor::make(_partitions[_numPartitions-1].get(), -1, false));
-        if (c->ok()) {
-            BSONObj currPK = c->currPK();
-            // make sure that the pivot we want to add
-            // is greater than the maximum value we see
-            // in the partition (hence a valid pivot)
-            uassert(
-                17250, 
-                str::stream() << "new pivot must be greater than max element in collection, newPivot: " <<
-                newPivot.str() << " max element: " << currPK.str(), 
-                newPivot.woCompare(currPK, _ordering) > 0);
+        {
+            Client::AlternateTransactionStack altStack;
+            Client::Transaction txn(DB_READ_UNCOMMITTED);
+            shared_ptr<Cursor> c( Cursor::make(_partitions[_numPartitions-1].get(), -1, false));
+            if (c->ok()) {
+                BSONObj currPK = c->currPK();
+                // make sure that the pivot we want to add
+                // is greater than the maximum value we see
+                // in the partition (hence a valid pivot)
+                uassert(
+                    17250, 
+                    str::stream() << "new pivot must be greater than max element in collection, newPivot: " <<
+                    newPivot.str() << " max element: " << currPK.str(), 
+                    newPivot.woCompare(currPK, _ordering) > 0);
+            }
+            txn.commit();
         }
         overwritePivot(_numPartitions-1, newPivot);
     }
@@ -2730,6 +2767,43 @@ namespace mongo {
         sanityCheck();
     }
 
+    BSONObj PartitionedCollection::getPartitionMetadata(uint64_t index) {
+        massert(0, str::stream() << "invalid index passed into getPartitionMetadata: " << index, index < _numPartitions);
+        
+        BSONObjBuilder b(64);
+        b.append("", _partitionIDs[index]);
+        BSONObj pk = b.done();
+        BSONObj result;
+        bool idExists = _metaCollection->findByPK(b.done(), result);
+        uassert(0, str::stream() << "could not find partition " << _partitionIDs[index] << " of ns " << _ns, idExists);
+        return result.copy();
+    }
+
+    void PartitionedCollection::updatePartitionMetadata(uint64_t index, BSONObj newMetadata) {
+        massert(0, "bad index to updatePartitionMetadata", index < _numPartitions);
+
+        BSONObjBuilder b(64);
+        b.append("", _partitionIDs[index]);
+        BSONObj pk = b.done();
+        BSONObj oldMetadata;
+        bool idExists = _metaCollection->findByPK(b.done(), oldMetadata);
+        massert(0, str::stream() << "could not find partition " << _partitionIDs[index] << " of ns " << _ns, idExists);
+
+        // first do some sanity checks
+        // verify that id, createTime, and max are the same
+        dassert(newMetadata["_id"] == oldMetadata["_id"]);
+        massert(0, str::stream() << "bad _id to updatePartitionMetadata" << newMetadata["_id"] << " " << oldMetadata["_id"], newMetadata["_id"] == oldMetadata["_id"]);
+        massert(0, "bad createTime to updatePartitionMetadata", newMetadata["createTime"] == oldMetadata["createTime"]);
+        massert(0, "bad pivot", newMetadata["max"] == oldMetadata["max"]);
+
+        // now do the update
+        bool indexBitChanged = false;
+        _metaCollection->updateObject(pk, oldMetadata, newMetadata,
+                                            false, false,
+                                            0, &indexBitChanged);
+        verify(!indexBitChanged);
+    }
+
     void PartitionedCollection::addPartition() {
         Lock::assertWriteLocked(_ns);
         sanityCheck();
@@ -2771,7 +2845,6 @@ namespace mongo {
     }
 
     void PartitionedCollection::getPartitionInfo(uint64_t* numPartitions, BSONArray &partitionArray) {
-        *numPartitions = _numPartitions;
         BSONArrayBuilder b;
         // for sanity checking
         uint64_t numPartitionsFoundInMeta = 0;
@@ -2786,8 +2859,12 @@ namespace mongo {
             b.append(curr);
             numPartitionsFoundInMeta++;
         }
+        // note that we cannot just return _numPartitions for this
+        // command, because this is done in the context of a transaction
+        // It is possible that the transaction is reading a snapshot
+        // that no longer reflects _numPartitions
+        *numPartitions = numPartitionsFoundInMeta;
         partitionArray = b.arr();
-        verify(numPartitionsFoundInMeta == _numPartitions);
     }
 
     uint64_t PartitionedCollection::findInMemoryPartition(uint64_t id) {

@@ -1410,6 +1410,8 @@ namespace mongo {
         void manuallyAddPartition(BSONObj newPivot);
         void getPartitionInfo(uint64_t* numPartitions, BSONArray &partitionArray);
         void addClonedPartitionInfo(vector<BSONElement> partitionInfo);
+        BSONObj getPartitionMetadata(uint64_t index);
+        void updatePartitionMetadata(uint64_t index, BSONObj newMetadata);
 
         // helper functions
         uint64_t numPartitions() {
@@ -1424,13 +1426,15 @@ namespace mongo {
         // states which partition the row or PK belongs to
         int partitionWithPK(const BSONObj& pk) const;
 
+        static shared_ptr<PartitionedCollection> make(const StringData &ns, const BSONObj &options);
+        static shared_ptr<PartitionedCollection> make(const BSONObj &serialized);
+    protected:
+        // make constructors
         // called in appendNewPartition. This is the method (that can be overridden),
         // that creates a new partition
         virtual shared_ptr<CollectionData> makeNewPartition(const StringData &ns, const BSONObj &options);
         // called in constructor
         virtual shared_ptr<CollectionData> openExistingPartition(const BSONObj &serialized);
-
-        // make constructors
         PartitionedCollection(const StringData &ns, const BSONObj &options);
         PartitionedCollection(const BSONObj &serialized);
         void initialize(const StringData &ns, const BSONObj &options);
@@ -1528,6 +1532,9 @@ namespace mongo {
     // The real oplog, OldOplogCollection is just temporary
     class PartitionedOplogCollection : public PartitionedCollection {
     public:
+        static shared_ptr<PartitionedOplogCollection> make(const StringData &ns, const BSONObj &options);
+        static shared_ptr<PartitionedOplogCollection> make(const BSONObj &serialized);
+    protected:
         PartitionedOplogCollection(const StringData &ns, const BSONObj &options);
         // Important: BulkLoadedCollection relies on this constructor
         // doing nothing more than calling the parent IndexedCollection

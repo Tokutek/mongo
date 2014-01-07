@@ -54,18 +54,7 @@ namespace mongo {
     // @return the age, in milliseconds, when an oplog entry expires.
     uint64_t expireOplogMilliseconds();
 
-    /** puts obj in the oplog as a comment (a no-op).  Just for diags.
-        convention is
-          { msg : "text", ... }
-    */
-
-    class QueryPlan;
-    
-    class Sync {
-    protected:
-        string hn;
-    public:
-        Sync(const string& hostname) : hn(hostname) {}
-        virtual ~Sync() {}
-    };
+    void addOplogPartitions();
+    void trimOplogWithTS(uint64_t tsMillis);
+    void trimOplogwithGTID(GTID gtid);
 }
