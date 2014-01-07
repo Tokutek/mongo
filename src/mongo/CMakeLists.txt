@@ -406,6 +406,7 @@ add_library(mongoclient STATIC
 add_dependencies(mongoclient generate_error_codes generate_action_types install_tdb_h)
 target_link_libraries(mongoclient LINK_PRIVATE
   ${Boost_LIBRARIES}
+  ${CMAKE_THREAD_LIBS_INIT}
   )
 if (USE_SASL_CLIENT)
   target_link_libraries(mongoclient LINK_PRIVATE
