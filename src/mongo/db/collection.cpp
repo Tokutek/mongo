@@ -166,7 +166,14 @@ namespace mongo {
 
         // TODO: do some stuff to create _cd
         if (isOplogCollection(ns)) {
-            _cd.reset(new OplogCollection(ns, options));
+            if (options["partitioned"].trueValue()) {
+                PartitionedOplogCollection* poc = new PartitionedOplogCollection(ns, options);
+                poc->initialize(ns, options);
+                _cd.reset(poc);
+            }
+            else {
+                _cd.reset(new OldOplogCollection(ns, options));
+            }
         } else if (isSystemCatalog(ns)) {
             _cd.reset(new SystemCatalogCollection(ns, options));
         } else if (isSystemUsersCollection(ns)) {
@@ -179,7 +186,9 @@ namespace mongo {
             _cd.reset(new ProfileCollection(ns, options));
         } else if (options["partitioned"].trueValue()) {
             uassert(0, "Partitioned Collection cannot be capped", !options["capped"].trueValue());
-            _cd.reset(new PartitionedCollection(ns, options));
+            PartitionedCollection* pc = new PartitionedCollection(ns, options);
+            pc->initialize(ns, options);
+            _cd.reset(pc);
         } else if (options["capped"].trueValue()) {
             _cd.reset(new CappedCollection(ns, options));
         } else if (options["natural"].trueValue()) {
@@ -213,10 +222,15 @@ namespace mongo {
         if (isOplogCollection(ns)) {
             // We may bulk load the oplog since it's an IndexedCollection
             if (bulkLoad) {
-                _cd.reset(new BulkLoadedCollection(serialized));
+                uassert( 0, "Should not bulk load the oplog", !bulkLoad );
+            }
+            if (serialized["options"]["partitioned"].trueValue()) {
+                PartitionedOplogCollection* poc = new PartitionedOplogCollection(serialized);
+                poc->initialize(serialized);
+                _cd.reset(poc);
             }
             else {
-                _cd.reset(new OplogCollection(serialized));
+                _cd.reset(new OldOplogCollection(serialized));
             }                              
         } else if (isSystemCatalog(ns)) {
             massert( 16869, "bug: Should not bulk load a system catalog collection", !bulkLoad );
@@ -244,7 +258,9 @@ namespace mongo {
             _cd.reset(new ProfileCollection(serialized));
         } else if (serialized["options"]["partitioned"].trueValue()) {
             massert( 17247, "bug: Should not bulk load partitioned collections", !bulkLoad );
-            _cd.reset(new PartitionedCollection(serialized));
+            PartitionedCollection* pc = new PartitionedCollection(serialized);
+            pc->initialize(serialized);
+            _cd.reset(pc);
         } else if (serialized["options"]["capped"].trueValue()) {
             massert( 16871, "bug: Should not bulk load capped collections", !bulkLoad );
             _cd.reset(new CappedCollection(serialized));
@@ -1695,19 +1711,7 @@ namespace mongo {
         }
     }
 
-    // ------------------------------------------------------------------------
-
-    OplogCollection::OplogCollection(const StringData &ns, const BSONObj &options) :
-        IndexedCollection(ns, options) {
-        uassert(17206, "must not define a primary key for the oplog",
-                       !options["primaryKey"].ok());
-    } 
-
-    OplogCollection::OplogCollection(const BSONObj &serialized) :
-        IndexedCollection(serialized) {
-    }
-
-    BSONObj OplogCollection::minUnsafeKey() {
+    static BSONObj getOplogMinUnsafeKey() {
         if (theReplSet && theReplSet->gtidManager) {
             BSONObjBuilder b;
             GTID minUncommitted = theReplSet->gtidManager->getMinLiveGTID();
@@ -1718,6 +1722,71 @@ namespace mongo {
             return minKey;
         }
     }
+
+    // ------------------------------------------------------------------------
+
+    OldOplogCollection::OldOplogCollection(const StringData &ns, const BSONObj &options) :
+        IndexedCollection(ns, options) {
+        uassert(17206, "must not define a primary key for the oplog",
+                       !options["primaryKey"].ok());
+    } 
+
+    OldOplogCollection::OldOplogCollection(const BSONObj &serialized) :
+        IndexedCollection(serialized) {
+    }
+
+    BSONObj OldOplogCollection::minUnsafeKey() {
+        return getOplogMinUnsafeKey();
+    }
+
+    // ------------------------------------------------------------------------
+
+    OplogPartition::OplogPartition(const StringData &ns, const BSONObj &options) :
+        IndexedCollection(ns, options) {
+        uassert(0, "must not define a primary key for the oplog",
+                       !options["primaryKey"].ok());
+    } 
+
+    OplogPartition::OplogPartition(const BSONObj &serialized) :
+        IndexedCollection(serialized) {
+    }
+
+    BSONObj OplogPartition::minUnsafeKey() {
+        return getOplogMinUnsafeKey();
+    }
+
+    // ------------------------------------------------------------------------
+
+    PartitionedOplogCollection::PartitionedOplogCollection(const StringData &ns, const BSONObj &options) :
+        PartitionedCollection(ns, options) {
+        uassert(0, "must not define a primary key for the oplog",
+                       !options["primaryKey"].ok());
+    } 
+
+    PartitionedOplogCollection::PartitionedOplogCollection(const BSONObj &serialized) :
+        PartitionedCollection(serialized) {
+    }
+
+    shared_ptr<CollectionData> PartitionedOplogCollection::makeNewPartition(
+        const StringData &ns,
+        const BSONObj &options
+        )
+    {
+        shared_ptr<OplogPartition> ret;
+        ret.reset(new OplogPartition(ns, options));
+        return ret;
+    }
+
+    // called in constructor
+    shared_ptr<CollectionData> PartitionedOplogCollection::openExistingPartition(
+        const BSONObj &serialized
+        )
+    {
+        shared_ptr<OplogPartition> ret;
+        ret.reset(new OplogPartition(serialized));
+        return ret;
+    }
+
 
     // ------------------------------------------------------------------------
 
@@ -2330,6 +2399,11 @@ namespace mongo {
         _ordering(Ordering::make(BSONObj())), // dummy for now, we create it properly below
         _numPartitions(0)
     {
+        // MUST CALL initialize directly after this.
+        // We can't call initialize here because it depends on virtual functions
+    }
+
+    void PartitionedCollection::initialize(const StringData &ns, const BSONObj &options) {
         // verify that there is no defined primary key
         uassert(17245, str::stream() << "Partitioned Collection cannot have a defined primary key: " << ns, !options["primaryKey"].ok());
 
@@ -2355,6 +2429,11 @@ namespace mongo {
         _ordering(Ordering::make(BSONObj())), // dummy for now, we create it properly below
         _numPartitions(0)
     {
+        // MUST CALL initialize directly after this.
+        // We can't call initialize here because it depends on virtual functions
+    }
+
+    void PartitionedCollection::initialize(const BSONObj &serialized) {
         // verify that there is no defined primary key
         uassert(17246, str::stream() << "Partitioned Collection cannot have a defined primary key: " << _ns, !_options["primaryKey"].ok());
         // open the metadata collection
@@ -2377,9 +2456,7 @@ namespace mongo {
                 serialized,
                 getPartitionName(currID)
                 );
-            shared_ptr<IndexedCollection> currColl;
-            currColl.reset(new IndexedCollection(currCollSerialized));
-            _partitions.push_back(currColl);
+            _partitions.push_back(openExistingPartition(currCollSerialized));
             // extract the pivot
             _partitionPivots.push_back(curr["max"].Obj().copy());
             _partitionIDs.push_back(currID);
@@ -2390,6 +2467,26 @@ namespace mongo {
         createIndexDetails();
         
         sanityCheck();    
+    }
+
+    shared_ptr<CollectionData> PartitionedCollection::makeNewPartition(
+        const StringData &ns,
+        const BSONObj &options
+        )
+    {
+        shared_ptr<IndexedCollection> ret;
+        ret.reset(new IndexedCollection(ns, options));
+        return ret;
+    }
+
+    // called in constructor
+    shared_ptr<CollectionData> PartitionedCollection::openExistingPartition(
+        const BSONObj &serialized
+        )
+    {
+        shared_ptr<IndexedCollection> ret;
+        ret.reset(new IndexedCollection(serialized));
+        return ret;
     }
 
     shared_ptr<Cursor> PartitionedCollection::makeCursor(
@@ -2579,8 +2676,8 @@ namespace mongo {
         verify(!indexBitChanged); // for sanity
 
         // add new collection to vector of partitions
-        shared_ptr<IndexedCollection> newPartition;
-        newPartition.reset(new IndexedCollection(getPartitionName(id), _options));
+        shared_ptr<CollectionData> newPartition;
+        newPartition = makeNewPartition(getPartitionName(id), _options);
         _partitions.push_back(newPartition);
 
         // add data to internal vectors

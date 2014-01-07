@@ -243,7 +243,8 @@ namespace mongo {
         _numWanted(0), // dummy assignment, not needed
         _countCursor(countCursor),
         _endKeyInclusive(false), // dummy assignment, not needed
-        _singleIntervalLimit(0) // dummy assignment, not needed
+        _singleIntervalLimit(0), // dummy assignment, not needed
+        _tailable(false)
     {
         // full table scan
         _startPartition = direction > 0 ? 0 : pc->numPartitions() - 1;
@@ -266,7 +267,8 @@ namespace mongo {
         _startKey(startKey),
         _endKey(endKey),
         _endKeyInclusive(endKeyInclusive),
-        _singleIntervalLimit(0) // dummy assignment, not needed
+        _singleIntervalLimit(0), // dummy assignment, not needed
+        _tailable(false)
     {
         _startPartition = pc->partitionWithPK(startKey);
         _endPartition = pc->partitionWithPK(endKey);
@@ -294,7 +296,8 @@ namespace mongo {
         _countCursor(countCursor),
         _endKeyInclusive(false), // dummy assignment, not needed
         _bounds(bounds),
-        _singleIntervalLimit(singleIntervalLimit)
+        _singleIntervalLimit(singleIntervalLimit),
+        _tailable(false)
     {
         _startPartition = pc->partitionWithPK(bounds->startKey());
         _endPartition = pc->partitionWithPK(bounds->endKey());
@@ -328,6 +331,8 @@ namespace mongo {
                 _prevNScanned += oldCursor->nscanned();
                 _currentCursor->setKeyFieldsOnly(_keyFieldsOnly);
             }
+            // because we are called from a constructor,
+            // we don't need to check to see if we are tailable
         }
     }
 
@@ -350,13 +355,21 @@ namespace mongo {
             }
             _prevNScanned += oldCursor->nscanned();
             _currentCursor->setKeyFieldsOnly(_keyFieldsOnly);
+            // if we are iterating over the last partition and we are tailable,
+            // we set tailable on the current cursor. addPartition and dropPartition
+            // invalidate cursors, so we don't need to worry about
+            // partitions being added or dropped in the lifetime of
+            // a cursor
+            if (_tailable && (_currPartition == _endPartition)) {
+                _currentCursor->setTailable();
+            }
             ret = _currentCursor->ok();
         }
         return ret;
     }
 
     void PartitionedCursor::makeSubCursor(uint64_t partitionIndex) {
-        shared_ptr<IndexedCollection> currColl = _pc->getPartition(partitionIndex);
+        shared_ptr<CollectionData> currColl = _pc->getPartition(partitionIndex);
         if (_cursorType == PC_TABLE_SCAN) {
             _currentCursor = Cursor::make(
                 currColl.get(),
@@ -396,6 +409,14 @@ namespace mongo {
         }
         else {
             verify(false);
+        }
+    }
+
+    
+    void PartitionedCursor::setTailable() {
+        _tailable = true;
+        if (_currPartition == _endPartition) {
+            _currentCursor->setTailable();
         }
     }
 } // namespace mongo

@@ -672,6 +672,8 @@ namespace mongo {
             // unsure if this is necessary
             _currentCursor->setKeyFieldsOnly(keyFieldsOnly);
         }
+        bool tailable() const { return _tailable; }
+        void setTailable();
 
     private:
         // used for table scans
@@ -726,6 +728,8 @@ namespace mongo {
         // variables wanted for bounds scan
         const shared_ptr<FieldRangeVector> _bounds;
         const int _singleIntervalLimit;
+
+        bool _tailable;
 
         friend class PartitionedCollection;
     };

@@ -961,19 +961,6 @@ namespace mongo {
         virtual ~TailableCollection() { }
     };
 
-    class OplogCollection : public IndexedCollection, public TailableCollection {
-    public:
-        OplogCollection(const StringData &ns, const BSONObj &options);
-        // Important: BulkLoadedCollection relies on this constructor
-        // doing nothing more than calling the parent IndexedCollection
-        // constructor. If this constructor ever does more, we need to
-        // modify BulkLoadedCollection to match behavior for the oplog.
-        OplogCollection(const BSONObj &serialized);
-
-        // @return the minimum key that is not safe to read for any tailable cursor
-        BSONObj minUnsafeKey();
-    };
-
     class NaturalOrderCollection : public CollectionBase {
     public:
         NaturalOrderCollection(const StringData &ns, const BSONObj &options);
@@ -1211,7 +1198,7 @@ namespace mongo {
                  it != _partitions.end(); 
                  ++it) 
             {
-                IndexedCollection *currColl = it->get();
+                CollectionData *currColl = it->get();
                 currColl->close(aborting, indexBitsChanged);
             }
             _metaCollection->close(aborting, indexBitsChanged);
@@ -1327,7 +1314,7 @@ namespace mongo {
                  it != _partitions.end(); 
                  ++it)
             {
-                IndexedCollection *currColl = it->get();
+                CollectionData *currColl = it->get();
                 // TODO: we may not want to keep
                 // passing in result for every partition here.
                 // Investigate this later
@@ -1342,7 +1329,7 @@ namespace mongo {
                  it != _partitions.end(); 
                  ++it) 
             {
-                IndexedCollection *currColl = it->get();
+                CollectionData *currColl = it->get();
                 currColl->dropIndexDetails(idxNum);
             }
             // not sure I like this, but if we are dropping the primary key,
@@ -1430,16 +1417,24 @@ namespace mongo {
         }
 
         // return the partition at offset index, note this is NOT the partition ID
-        shared_ptr<IndexedCollection> getPartition(uint64_t index) {
+        shared_ptr<CollectionData> getPartition(uint64_t index) {
             massert(17254, "invalid index for partition", (index >= 0 && index < _numPartitions));
             return _partitions[index];
         }
         // states which partition the row or PK belongs to
         int partitionWithPK(const BSONObj& pk) const;
 
+        // called in appendNewPartition. This is the method (that can be overridden),
+        // that creates a new partition
+        virtual shared_ptr<CollectionData> makeNewPartition(const StringData &ns, const BSONObj &options);
+        // called in constructor
+        virtual shared_ptr<CollectionData> openExistingPartition(const BSONObj &serialized);
+
         // make constructors
         PartitionedCollection(const StringData &ns, const BSONObj &options);
         PartitionedCollection(const BSONObj &serialized);
+        void initialize(const StringData &ns, const BSONObj &options);
+        void initialize(const BSONObj &serialized);
     private:
         void createIndexDetails();
         void sanityCheck();
@@ -1474,7 +1469,7 @@ namespace mongo {
         // options to be used when creating new partitions
         BSONObj _options;
 
-        typedef std::vector<shared_ptr<IndexedCollection> > IndexCollVector;
+        typedef std::vector<shared_ptr<CollectionData> > IndexCollVector;
         // the partitions
         IndexCollVector _partitions;
         // Collection storing metadata about the PartitionedCollection
@@ -1499,5 +1494,52 @@ namespace mongo {
         // length of _partitions should equal this number
         uint64_t _numPartitions;
     };
+
+    // for legacy oplogs that were not partitioned. So we can open them just long enough
+    // to convert them to partitioned
+    class OldOplogCollection : public IndexedCollection, public TailableCollection {
+    public:
+        OldOplogCollection(const StringData &ns, const BSONObj &options);
+        // Important: BulkLoadedCollection relies on this constructor
+        // doing nothing more than calling the parent IndexedCollection
+        // constructor. If this constructor ever does more, we need to
+        // modify BulkLoadedCollection to match behavior for the oplog.
+        OldOplogCollection(const BSONObj &serialized);
+
+        // @return the minimum key that is not safe to read for any tailable cursor
+        BSONObj minUnsafeKey();
+    };
+
+    // what the individual partitions of the oplog are
+    // the reason we create this class is so we can also be tailable
+    class OplogPartition : public IndexedCollection, public TailableCollection {
+    public:
+        OplogPartition(const StringData &ns, const BSONObj &options);
+        // Important: BulkLoadedCollection relies on this constructor
+        // doing nothing more than calling the parent IndexedCollection
+        // constructor. If this constructor ever does more, we need to
+        // modify BulkLoadedCollection to match behavior for the oplog.
+        OplogPartition(const BSONObj &serialized);
+    
+        // @return the minimum key that is not safe to read for any tailable cursor
+        BSONObj minUnsafeKey();
+    };
+
+    // The real oplog, OldOplogCollection is just temporary
+    class PartitionedOplogCollection : public PartitionedCollection {
+    public:
+        PartitionedOplogCollection(const StringData &ns, const BSONObj &options);
+        // Important: BulkLoadedCollection relies on this constructor
+        // doing nothing more than calling the parent IndexedCollection
+        // constructor. If this constructor ever does more, we need to
+        // modify BulkLoadedCollection to match behavior for the oplog.
+        PartitionedOplogCollection(const BSONObj &serialized);
+        // called in appendNewPartition. This is the method (that can be overridden),
+        // that creates a new partition
+        virtual shared_ptr<CollectionData> makeNewPartition(const StringData &ns, const BSONObj &options);
+        // called in constructor
+        virtual shared_ptr<CollectionData> openExistingPartition(const BSONObj &serialized);
+    };
+
 
 } // namespace mongo

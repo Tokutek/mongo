@@ -147,7 +147,7 @@ namespace mongo {
 
         /* create an oplog collection, if it doesn't yet exist. */
         BSONObjBuilder b;
-
+        b.append("partitioned", 1);
         // create the namespace
         string err;
         BSONObj o = b.done();
@@ -156,7 +156,7 @@ namespace mongo {
         verify(ret);
         ret = userCreateNS(rsOplogRefs, o, err, false);
         verify(ret);
-        ret = userCreateNS(replInfoNS, o, err, false);
+        ret = userCreateNS(replInfoNS, BSONObj(), err, false);
         verify(ret);
     }
 
