@@ -244,6 +244,7 @@ if (BUILD_TESTING)
       foundation
       unittest_crutch
       base
+      ${TOKUMX_SSL_LIBRARIES}
       )
     add_test(mongo/db/${test} ${test})
   endforeach ()

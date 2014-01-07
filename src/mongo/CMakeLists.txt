@@ -164,6 +164,7 @@ target_link_whole_libraries(mongod
   )
 target_link_libraries(mongod
   ${TokuKV_LIBRARIES}
+  ${TOKUMX_SSL_LIBRARIES}
   )
 
 foreach (tool
@@ -190,6 +191,7 @@ foreach (tool
     )
   target_link_libraries(mongo${tool}
     ${TokuKV_LIBRARIES}
+    ${TOKUMX_SSL_LIBRARIES}
     )
 endforeach ()
 install_executables(tokumx_tools
@@ -224,6 +226,7 @@ foreach (tool
     )
   target_link_libraries(${tool}
     ${TokuKV_LIBRARIES}
+    ${TOKUMX_SSL_LIBRARIES}
     )
 endforeach ()
 install_executables(tokumx_tools bsondump)
@@ -251,6 +254,7 @@ target_link_whole_libraries(mongos
   )
 target_link_libraries(mongos
   ${TokuKV_LIBRARIES}
+  ${TOKUMX_SSL_LIBRARIES}
   )
 
 if (APPLE OR PCAP_FOUND)
@@ -275,6 +279,7 @@ if (APPLE OR PCAP_FOUND)
   target_link_libraries(mongosniff
     ${PCAP_LIBRARIES}
     ${TokuKV_LIBRARIES}
+    ${TOKUMX_SSL_LIBRARIES}
     )
 endif ()
 
@@ -301,6 +306,7 @@ target_link_whole_libraries(mongo
   )
 target_link_libraries(mongo
   ${PCRE_LIBRARIES}
+  ${TOKUMX_SSL_LIBRARIES}
   )
 install_executables(tokumx_server
   mongo
@@ -406,6 +412,7 @@ add_library(mongoclient STATIC
 add_dependencies(mongoclient generate_error_codes generate_action_types install_tdb_h)
 target_link_libraries(mongoclient LINK_PRIVATE
   ${Boost_LIBRARIES}
+  ${CMAKE_THREAD_LIBS_INIT}
   )
 if (USE_SASL_CLIENT)
   target_link_libraries(mongoclient LINK_PRIVATE
