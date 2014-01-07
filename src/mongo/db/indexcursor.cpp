@@ -27,7 +27,7 @@
 namespace mongo {
 
     RowBuffer::RowBuffer() :
-        _size(_BUF_SIZE_PREFERRED),
+        _size(1024),
         _current_offset(0),
         _end_offset(0),
         _buf(new char[_size]) {
@@ -76,11 +76,13 @@ namespace mongo {
 
         // if we need more than we have, realloc.
         if (size_needed > _size) {
-            char *buf = new char[size_needed];
+            // grow our size aggressively, and at least to size_needed bytes
+            size_t new_size = std::max(size_needed, 4 * _size);
+            char *buf = new char[new_size];
             memcpy(buf, _buf, _size);
             delete []_buf;
             _buf = buf;
-            _size = size_needed;
+            _size = new_size;
         }
 
         // Determine what to put in the header byte.
