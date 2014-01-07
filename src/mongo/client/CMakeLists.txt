@@ -95,6 +95,7 @@ if (BUILD_TESTING)
       )
     target_link_libraries(${test}
       ${TokuKV_LIBRARIES}
+      ${TOKUMX_SSL_LIBRARIES}
       )
     add_test(mongo/client/${test} ${test})
   endforeach ()

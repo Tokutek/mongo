@@ -34,7 +34,12 @@ if (BUILD_TESTING)
       )
     add_executable(${test} ${test})
     add_dependencies(${test} generate_error_codes generate_action_types)
-    target_link_libraries(${test} unittest_main foundation unittest_crutch)
+    target_link_libraries(${test}
+      unittest_main
+      foundation
+      unittest_crutch
+      ${TOKUMX_SSL_LIBRARIES}
+      )
     add_test(mongo/scripting/${test} ${test})
   endforeach ()
   
