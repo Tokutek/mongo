@@ -41,6 +41,11 @@ if (USE_SASL_CLIENT)
     )
 endif ()
 
+add_library(client_parallel STATIC
+  parallel
+  )
+add_dependencies(client_parallel generate_error_codes generate_action_types)
+
 add_library(notmongodormongos STATIC
   connection_factory
   )
