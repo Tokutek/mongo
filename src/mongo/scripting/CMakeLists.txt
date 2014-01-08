@@ -20,6 +20,7 @@ if (JS_ENGINE STREQUAL v8)
     bson_template_evaluator
     ${V8_LIBRARIES}
     mongocommon
+    stringutils
     )
 elseif (JS_ENGINE STREQUAL sm)
   message(SEND_ERROR "spidermonkey not supported with cmake")
@@ -34,7 +35,12 @@ if (BUILD_TESTING)
       )
     add_executable(${test} ${test})
     add_dependencies(${test} generate_error_codes generate_action_types)
-    target_link_libraries(${test} unittest_main foundation unittest_crutch)
+    target_link_libraries(${test}
+      unittest_main
+      foundation
+      unittest_crutch
+      ${TOKUMX_SSL_LIBRARIES}
+      )
     add_test(mongo/scripting/${test} ${test})
   endforeach ()
   

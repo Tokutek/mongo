@@ -33,6 +33,7 @@ foreach (bin ${normal_bins} ${abnormal_bins})
   add_dependencies(${bin} generate_error_codes generate_action_types)
   target_link_libraries(${bin}
     mongoclient
+    ${TOKUMX_SSL_LIBRARIES}
     )
   # rsExample seems to be dead, at least not maintained upstream
   if (BUILD_TESTING AND NOT ${bin} STREQUAL rsExample)
@@ -44,6 +45,7 @@ add_executable(bsondemo ../../bson/bsondemo/bsondemo)
 add_dependencies(bsondemo generate_error_codes generate_action_types)
 target_link_libraries(bsondemo
   mongoclient
+  ${TOKUMX_SSL_LIBRARIES}
   )
 
 foreach (base ${normal_bins} ${abnormal_srcs})

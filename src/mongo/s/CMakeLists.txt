@@ -83,6 +83,7 @@ add_library(mongoscore STATIC
 add_dependencies(mongoscore generate_error_codes generate_action_types)
 target_link_libraries(mongoscore LINK_PRIVATE
   authmongos
+  client_parallel
   )
 
 if (BUILD_TESTING)
@@ -110,6 +111,7 @@ if (BUILD_TESTING)
       foundation
       unittest_crutch
       base
+      ${TOKUMX_SSL_LIBRARIES}
       )
     add_test(mongo/s/${test} ${test})
   endforeach ()
@@ -135,6 +137,7 @@ if (BUILD_TESTING)
     target_link_whole_libraries(${test}
       mongocommon
       base
+      ${TOKUMX_SSL_LIBRARIES}
       )
     add_test(mongo/s/${test} ${test})
   endforeach ()
