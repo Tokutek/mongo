@@ -20,6 +20,7 @@ if (JS_ENGINE STREQUAL v8)
     bson_template_evaluator
     ${V8_LIBRARIES}
     mongocommon
+    stringutils
     )
 elseif (JS_ENGINE STREQUAL sm)
   message(SEND_ERROR "spidermonkey not supported with cmake")

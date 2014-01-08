@@ -32,7 +32,6 @@ target_link_libraries(db_common LINK_PRIVATE
   )
 
 add_library(coredb STATIC
-  ../client/parallel
   client_transaction
   opsettings
   commands.cpp
@@ -200,6 +199,9 @@ add_library(serveronly STATIC
   )
 add_dependencies(serveronly generate_error_codes generate_action_types install_tdb_h)
 target_link_libraries(serveronly LINK_PRIVATE
+  client_parallel
+  coredb
+  mongodandmongos
   coreshard
   authmongod
   db_common

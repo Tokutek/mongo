@@ -302,6 +302,7 @@ target_link_whole_libraries(mongo
   mongocommon
   mongocommon_client
   scripting
+  notmongodormongos
   base
   )
 target_link_libraries(mongo
