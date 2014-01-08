@@ -83,6 +83,7 @@ add_library(mongoscore STATIC
 add_dependencies(mongoscore generate_error_codes generate_action_types)
 target_link_libraries(mongoscore LINK_PRIVATE
   authmongos
+  client_parallel
   )
 
 if (BUILD_TESTING)
