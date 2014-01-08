@@ -20,7 +20,7 @@
 # Suite 330, Boston, MA 02111-1307 USA
 #
 ### BEGIN INIT INFO
-# Provides:          mongodb
+# Provides:          tokumx
 # Required-Start:    $network $local_fs $remote_fs
 # Required-Stop:     $network $local_fs $remote_fs
 # Should-Start:      $named
@@ -50,49 +50,39 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 DAEMON=/usr/bin/mongod
 DESC=database
 
-NAME=mongodb
+NAME=tokumx
 # Defaults.  Can be overridden by the /etc/default/$NAME
 # Other configuration options are located in $CONF file. See here for more:
 # http://dochub.mongodb.org/core/configurationoptions
-CONF=/etc/mongodb.conf
+CONF=/etc/tokumx.conf
 PIDFILE=/var/run/$NAME.pid
-ENABLE_MONGODB=yes
+ENABLE_TOKUMX=yes
 
-# Include mongodb defaults if available
+# Include tokumx defaults if available
 if [ -f /etc/default/$NAME ] ; then
 	. /etc/default/$NAME
 fi
 
-# Handle NUMA access to CPUs (SERVER-3574)
-# This verifies the existence of numactl as well as testing that the command works
-NUMACTL_ARGS="--interleave=all"
-if which numactl >/dev/null 2>/dev/null && numactl $NUMACTL_ARGS ls / >/dev/null 2>/dev/null
-then
-    NUMACTL="`which numactl` -- $NUMACTL_ARGS"
-    DAEMON_OPTS=${DAEMON_OPTS:-"--config $CONF"}
-else
-    NUMACTL=""
-    DAEMON_OPTS="-- "${DAEMON_OPTS:-"--config $CONF"}
-fi
+DAEMON_OPTS=${DAEMON_OPTS:-"--config $CONF"}
 
 if test ! -x $DAEMON; then
     echo "Could not find $DAEMON"
     exit 0
 fi
 
-if test "x$ENABLE_MONGODB" != "xyes"; then
+if test "x$ENABLE_TOKUMX" != "xyes"; then
     exit 0
 fi
 
 . /lib/lsb/init-functions
 
 STARTTIME=1
-DIETIME=10                   # Time to wait for the server to die, in seconds
+DIETIME=60                  # Time to wait for the server to die, in seconds
                             # If this value is set too low you might not
                             # let some servers to die gracefully and
                             # 'restart' will not work
 
-DAEMONUSER=${DAEMONUSER:-mongodb}
+DAEMONUSER=${DAEMONUSER:-tokumx}
 
 set -e
 
@@ -123,7 +113,7 @@ start_server() {
 # Start the process using the wrapper
             start-stop-daemon --background --start --quiet --pidfile $PIDFILE \
                         --make-pidfile --chuid $DAEMONUSER \
-                        --exec $NUMACTL $DAEMON $DAEMON_OPTS
+                        --exec $DAEMON -- $DAEMON_OPTS
             errcode=$?
 	return $errcode
 }

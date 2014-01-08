@@ -1,5 +1,5 @@
 #!/bin/sh
-# postinst script for mongodb
+# postinst script for tokumx
 #
 # see: dh_installdeb(1)
 
@@ -20,20 +20,20 @@ set -e
 
 case "$1" in
     configure)
-	# create a mongodb group and user
-        if ! grep -q mongodb /etc/passwd; then
-		adduser --system --no-create-home mongodb
-		addgroup --system mongodb
-		adduser mongodb mongodb
+	# create a tokumx group and user
+        if ! grep -q tokumx /etc/passwd; then
+		adduser --system --no-create-home tokumx
+		addgroup --system tokumx
+		adduser tokumx tokumx
         fi
 
-	# create db -- note: this should agree with dbpath in mongodb.conf
-	mkdir -p /var/lib/mongodb
-	chown -R mongodb:mongodb /var/lib/mongodb
+	# create db -- note: this should agree with dbpath in tokumx.conf
+	mkdir -p /var/lib/tokumx
+	chown -R tokumx:tokumx /var/lib/tokumx
 
-	# create logdir -- note: this should agree with logpath in mongodb.conf
-	mkdir -p /var/log/mongodb
-	chown -R mongodb:mongodb /var/log/mongodb
+	# create logdir -- note: this should agree with logpath in tokumx.conf
+	mkdir -p /var/log/tokumx
+	chown -R tokumx:tokumx /var/log/tokumx
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)

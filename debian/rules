@@ -14,6 +14,24 @@ configure: configure-stamp
 configure-stamp:
 	dh_testdir
         # Add here commands to configure the package.
+	@mkdir -p opt
+	(cd opt; \
+	  cmake \
+	    -D CMAKE_BUILD_TYPE=Release \
+	    -D TOKU_DEBUG_PARANOID=OFF \
+	    -D USE_VALGRIND=OFF \
+	    -D USE_CTAGS=OFF \
+	    -D USE_ETAGS=OFF \
+	    -D USE_GTAGS=OFF \
+	    -D USE_CSCOPE=OFF \
+	    -D USE_BDB=OFF \
+	    -D USE_SYSTEM_BOOST=ON \
+	    -D USE_SYSTEM_PCRE=ON \
+	    -D TOKUMX_SET_RPATH=OFF \
+	    -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/tokumx-server/usr \
+	    -D BUILD_TESTING=OFF \
+	    -D INSTALL_LIBDIR=lib \
+	    ..)
 
 	touch configure-stamp
 
@@ -24,9 +42,9 @@ build-stamp: configure-stamp
 	dh_testdir
 
         # Add here commands to compile the package.
-	scons 
-        #docbook-to-man debian/mongodb.sgml > mongodb.1
-	ls debian/*.1 > debian/mongodb.manpages
+	(cd opt; $(MAKE))
+        #docbook-to-man debian/tokumx.sgml > tokumx.1
+	ls debian/*.1 > debian/tokumx-server.manpages
 
 	touch $@
 
@@ -35,27 +53,9 @@ clean:
 	dh_testroot
 	rm -f build-stamp configure-stamp
 
-	# FIXME: scons freaks out at the presence of target files
-	# under debian/mongodb.
-	#scons -c
-	rm -rf $(CURDIR)/debian/mongodb
-	rm -f config.log
-	rm -f mongo
-	rm -f mongod
-	rm -f mongoimportjson
-	rm -f mongoexport
-	rm -f mongorestore
-	rm -f mongodump
-	rm -f mongofiles
-	rm -f .sconsign.dblite
-	rm -f libmongoclient.a
-	rm -rf client/*.o
-	rm -rf tools/*.o
-	rm -rf shell/*.o
-	rm -rf .sconf_temp
-	rm -f buildscripts/*.pyc 
-	rm -f *.pyc
-	rm -f buildinfo.cpp
+	$(RM) -r $(CURDIR)/debian/tokumx-server
+	$(RM) -r opt
+
 	dh_clean debian/files
 
 install: build
@@ -64,13 +64,20 @@ install: build
 	dh_prep
 	dh_installdirs
 
-	scons --prefix=$(CURDIR)/debian/mongodb/usr install
-	mkdir -p $(CURDIR)/debian/mongodb/etc
-	cp $(CURDIR)/debian/mongodb.conf $(CURDIR)/debian/mongodb/etc/mongodb.conf 
+	(cd opt; \
+	  cmake -D COMPONENT=tokumx_server -P cmake_install.cmake && \
+	  cmake -D COMPONENT=tokumx_misc -P cmake_install.cmake && \
+	  cmake -D COMPONENT=tokumx_tools -P cmake_install.cmake && \
+	  cmake -D COMPONENT=tokumx_plugins -P cmake_install.cmake && \
+	  cmake -D COMPONENT=tokukv_libs_shared -P cmake_install.cmake && \
+	  cmake -D COMPONENT=tokubackup_libs_shared -P cmake_install.cmake)
 
-	mkdir -p $(CURDIR)/debian/mongodb/usr/share/lintian/overrides/
-	install -m 644 $(CURDIR)/debian/lintian-overrides \
-		$(CURDIR)/debian/mongodb/usr/share/lintian/overrides/mongodb
+	install -Dm644 $(CURDIR)/debian/tokumx.conf $(CURDIR)/debian/tokumx-server/etc/tokumx.conf
+	install -Dm755 $(CURDIR)/debian/tokumx-server/usr/scripts/tokumxstat.py $(CURDIR)/debian/tokumx-server/usr/share/tokumx-server/scripts
+	$(RM) -r $(CURDIR)/debian/tokumx-server/usr/scripts
+
+	install -Dm644 $(CURDIR)/debian/lintian-overrides \
+		$(CURDIR)/debian/tokumx-server/usr/share/lintian/overrides/tokumx-server
 
 # Build architecture-independent files here.
 binary-indep: build install
@@ -81,6 +88,14 @@ binary-arch: build install
 	dh_testdir
 	dh_testroot
 	dh_installchangelogs 
+
+	# this has to happen after installchangelogs or it'll break installchangelogs
+	mv $(CURDIR)/debian/tokumx-server/usr/GNU-AGPL-3.0 $(CURDIR)/debian/tokumx-server/usr/share/doc/tokumx-server
+	mv $(CURDIR)/debian/tokumx-server/usr/NEWS $(CURDIR)/debian/tokumx-server/usr/share/doc/tokumx-server
+	mv $(CURDIR)/debian/tokumx-server/usr/README $(CURDIR)/debian/tokumx-server/usr/share/doc/tokumx-server
+	mv $(CURDIR)/debian/tokumx-server/usr/README-TOKUKV $(CURDIR)/debian/tokumx-server/usr/share/doc/tokumx-server
+	mv $(CURDIR)/debian/tokumx-server/usr/THIRD-PARTY-NOTICES $(CURDIR)/debian/tokumx-server/usr/share/doc/tokumx-server
+
 	dh_installdocs
 	dh_installexamples
 #	dh_install
