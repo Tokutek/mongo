@@ -1,3 +1,5 @@
+etc
 usr/bin
-usr/sbin
-var/lib/mongodb
+usr/lib
+var/lib/tokumx
+var/log/tokumx
