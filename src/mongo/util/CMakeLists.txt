@@ -107,7 +107,7 @@ add_library(fail_point STATIC
   fail_point_registry
   fail_point_service
   )
-add_dependencies(fail_point generate_error_codes generate_action_types)
+add_dependencies(fail_point generate_error_codes generate_action_types install_tdb_h)
 target_link_libraries(fail_point LINK_PRIVATE
   foundation
   bson
