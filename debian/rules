@@ -27,10 +27,11 @@ configure-stamp:
 	    -D USE_BDB=OFF \
 	    -D USE_SYSTEM_BOOST=ON \
 	    -D USE_SYSTEM_PCRE=ON \
-	    -D TOKUMX_SET_RPATH=OFF \
 	    -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/tokumx-server/usr \
 	    -D BUILD_TESTING=OFF \
-	    -D INSTALL_LIBDIR=lib \
+	    -D TOKUMX_SET_RPATH=OFF \
+	    -D CMAKE_INSTALL_RPATH=/usr/lib/tokumx \
+	    -D INSTALL_LIBDIR=lib/tokumx \
 	    ..)
 
 	touch configure-stamp
@@ -73,11 +74,8 @@ install: build
 	  cmake -D COMPONENT=tokubackup_libs_shared -P cmake_install.cmake)
 
 	install -Dm644 $(CURDIR)/debian/tokumx.conf $(CURDIR)/debian/tokumx-server/etc/tokumx.conf
-	install -Dm755 $(CURDIR)/debian/tokumx-server/usr/scripts/tokumxstat.py $(CURDIR)/debian/tokumx-server/usr/share/tokumx-server/scripts
+	install -Dm755 $(CURDIR)/debian/tokumx-server/usr/scripts/tokumxstat.py $(CURDIR)/debian/tokumx-server/usr/share/tokumx-server/scripts/tokumxstat.py
 	$(RM) -r $(CURDIR)/debian/tokumx-server/usr/scripts
-
-	install -Dm644 $(CURDIR)/debian/lintian-overrides \
-		$(CURDIR)/debian/tokumx-server/usr/share/lintian/overrides/tokumx-server
 
 # Build architecture-independent files here.
 binary-indep: build install

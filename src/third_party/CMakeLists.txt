@@ -33,16 +33,18 @@ else ()
   message(SEND_ERROR "no js engine chosen (please set JS_ENGINE=v8)")
 endif ()
 
-set(HOT_BACKUP_LIBNAME HotBackup CACHE STRING "TokuBackup library name" FORCE)
+set(HOT_BACKUP_LIBNAME HotBackup CACHE STRING "TokuBackup library name")
 add_subdirectory(backup)
 set(TokuBackup_FOUND TRUE CACHE BOOL "TokuBackup found" FORCE)
 set(TokuBackup_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/backup" CACHE STRING "TokuBackup include dirs" FORCE)
-set(TokuBackup_LIBRARIES HotBackup CACHE STRING "TokuBackup libraries" FORCE)
+set(TokuBackup_LIBRARIES ${HOT_BACKUP_LIBNAME} CACHE STRING "TokuBackup libraries" FORCE)
 
 set(USE_CTAGS OFF)
 set(USE_CSCOPE OFF)
 set(USE_ETAGS OFF)
 set(USE_GTAGS OFF)
+set(LIBTOKUPORTABILITY tokuportability CACHE STRING "TokuKV portability library name")
+set(LIBTOKUDB tokufractaltree CACHE STRING "TokuKV fractal tree library name")
 add_subdirectory(ft-index)
 
 install(
@@ -62,8 +64,8 @@ set(TokuKV_INCLUDE_DIRS
   "${CMAKE_CURRENT_SOURCE_DIR}/ft-index/util"
   CACHE STRING "TokuKV include dirs" FORCE)
 set(TokuKV_LIBRARIES
-  tokuportability
-  tokufractaltree
+  ${LIBTOKUPORTABILITY}
+  ${LIBTOKUDB}
   CACHE STRING "TokuKV libraries" FORCE)
 
 mark_as_advanced(
