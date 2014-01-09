@@ -88,6 +88,9 @@ namespace mongo {
             // 4mb fractal tree nodes
             int pageSize = 4 * 1024 * 1024;
 
+            // fractal tree fanout is 16
+            int fanout = 16;
+
             if (info.hasField("compression")) {
                 compression = info["compression"].valuestrsafe(); 
             }
@@ -97,7 +100,13 @@ namespace mongo {
             if (info.hasField("pageSize")) {
                 pageSize = BytesQuantity<int>(info["pageSize"]);
             }
-            return BSON("compression" << compression << "readPageSize" << readPageSize << "pageSize" << pageSize);
+            if (info.hasField("fanout")) {
+                fanout = info["fanout"].numberInt();
+            }
+            return BSON("compression" << compression <<
+                        "readPageSize" << readPageSize <<
+                        "pageSize" << pageSize <<
+                        "fanout" << fanout);
         }
             
         Dictionary::Dictionary(const string &dname, const BSONObj &info,
@@ -275,6 +284,11 @@ namespace mongo {
                     }
                     setMap[fn] = boost::make_shared<DBParameterSetterImpl<TOKU_COMPRESSION_METHOD> >(
                         _db, fn, compression, _db->get_compression_method, _db->change_compression_method);
+                } else if (fn == "fanout") {
+                    int fanout = e.numberInt();
+                    uassert(0, "fanout must be number >= 4", fanout >= 4);
+                    setMap[fn] = boost::make_shared<DBParameterSetterImpl<unsigned int> >(
+                        _db, fn, (unsigned int) fanout, _db->get_fanout, _db->change_fanout);
                 } else {
                     uasserted(17234, mongoutils::str::stream() << "cannot set unknown attribute " << fn);
                 }

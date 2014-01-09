@@ -135,6 +135,10 @@ namespace mongo {
         if (e.ok() && !e.isNull()) {
             b.append(e);
         }
+        e = _options["fanout"];
+        if (e.ok() && !e.isNull()) {
+            b.append(e);
+        }
         return b.obj();
     }
 

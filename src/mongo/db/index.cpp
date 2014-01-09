@@ -434,6 +434,15 @@ namespace mongo {
         return ret;
     }
 
+    uint32_t IndexDetails::getFanout() const {
+        uint32_t ret;
+        int r = db()->get_fanout(db(), &ret);
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
+        return ret;
+    }
+
     uint32_t IndexDetails::getPageSize() const {
         uint32_t ret;
         int r = db()->get_pagesize(db(), &ret);
@@ -506,6 +515,7 @@ namespace mongo {
         stats.pageSize = getPageSize();
         stats.readPageSize = getReadPageSize();
         stats.compressionMethod = getCompressionMethod();
+        stats.fanout = getFanout();
         stats.queries = _accessStats.queries.load();
         stats.nscanned = _accessStats.nscanned.load();
         stats.nscannedObjects = _accessStats.nscannedObjects.load();
@@ -521,7 +531,7 @@ namespace mongo {
         b.appendNumber("avgObjSize", count == 0 ? 0.0 : double(dataSize) / double(count));
         b.appendNumber("storageSize", (long long) storageSize / scale);
         b.append("pageSize", pageSize / scale);
-        b.append("readPageSize", readPageSize / scale);
+        b.append("fanout", fanout);
         switch(compressionMethod) {
         case TOKU_NO_COMPRESSION:
             b.append("compression", "uncompressed");
