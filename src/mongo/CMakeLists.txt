@@ -281,6 +281,9 @@ if (APPLE OR PCAP_FOUND)
     ${TokuKV_LIBRARIES}
     ${TOKUMX_SSL_LIBRARIES}
     )
+  install_executables(tokumx_tools
+    mongosniff
+    )
 endif ()
 
 set_source_files_properties(
