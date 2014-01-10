@@ -531,6 +531,7 @@ namespace mongo {
         b.appendNumber("avgObjSize", count == 0 ? 0.0 : double(dataSize) / double(count));
         b.appendNumber("storageSize", (long long) storageSize / scale);
         b.append("pageSize", pageSize / scale);
+        b.append("readPageSize", readPageSize / scale);
         b.append("fanout", fanout);
         switch(compressionMethod) {
         case TOKU_NO_COMPRESSION:
