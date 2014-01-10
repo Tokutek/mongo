@@ -10,20 +10,14 @@ Architecture: amd64
 Depends: ${shlibs:Depends}, ${misc:Depends}, zlib1g, python
 Pre-Depends: adduser
 Description: An object/document-oriented database
- MongoDB is a high-performance, open source, schema-free 
- document-oriented  data store that's easy to deploy, manage
- and use. It's network accessible, written in C++ and offers
- the following features :
+ TokuMX is a high-performance version of MongoDB using Fractal
+ Tree indexes to store indexes and data.  TokuMX is
+ driver-compatible with MongoDB and has the same simple
+ management and operations interface as MongoDB, and adds:
  .
-    * Collection oriented storage - easy storage of object-
-      style data
-    * Full index support, including on inner objects
-    * Query profiling
-    * Replication and fail-over support
-    * Efficient storage of binary data including large 
-      objects (e.g. videos)
-    * Auto-sharding for cloud-level scalability
- .
- High performance, scalability, and reasonable depth of
- functionality are the goals for the project.
-
+    * Much higher performance on out-of-memory write workloads.
+    * Compression of all data, up to 10x in many cases.
+    * Document-level concurrency for all read and write
+      operations.
+    * Transactional semantics including snapshot reads and
+      multi-statement transactions on a single shard basis.
