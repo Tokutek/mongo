@@ -138,6 +138,25 @@ then
   /sbin/chkconfig --add tokumx
 fi
 
+echo ""
+echo "********************************************************************************"
+echo ""
+echo "Edit /etc/tokumx.conf as needed."
+echo "TokuMX can be run with service:"
+echo "  # service tokumx start"
+echo "  # service tokumx stop"
+echo ""
+echo "Please note that TokuMX will not run with transparent huge pages enabled."
+echo "To disable them, run"
+echo "  # echo never > /sys/kernel/mm/transparent_hugepage/enabled"
+echo "or to use sudo, you can run"
+echo "  echo never | sudo tee /sys/kernel/mm/transparent_hugepage/enabled"
+echo ""
+echo "You should add this line to /etc/rc.local to make it persist across reboots."
+echo ""
+echo "********************************************************************************"
+echo ""
+
 %preun server
 if test $1 = 0
 then
@@ -166,8 +185,7 @@ fi
 %{_bindir}/mongorestore
 %{_bindir}/mongotop
 %{_bindir}/mongostat
-# FIXME: uncomment when mongosniff is back in the package
-#%{_bindir}/mongosniff
+%{_bindir}/mongosniff
 
 # FIXME: uncomment this when there's a stable release whose source
 # tree contains a bsondump man page.
@@ -180,8 +198,7 @@ fi
 %{_mandir}/man1/mongorestore.1*
 %{_mandir}/man1/mongotop.1*
 %{_mandir}/man1/mongostat.1*
-# FIXME: uncomment when mongosniff is back in the package
-#%{_mandir}/man1/mongosniff.1*
+%{_mandir}/man1/mongosniff.1*
 
 %{_defaultdocdir}/%{name}/licenses/GNU-AGPL-3.0
 %{_defaultdocdir}/%{name}/licenses/README-TOKUKV
