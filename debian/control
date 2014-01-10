@@ -1,14 +1,14 @@
-Source: mongodb
+Source: tokumx
 Section: devel
 Priority: optional
-Maintainer: Richard Kreuter <richard@10gen.com>
-Build-Depends: debhelper (>= 7), libpcre3, libpcre3-dev, scons, xulrunner-dev, libboost1.35-dev | libboost1.37-dev | libboost1.38-dev | libboost1.40-dev | libboost1.42-dev, libboost-thread1.35-dev | libboost-thread1.37-dev | libboost-thread1.38-dev | libboost-thread1.40-dev | libboost-thread1.42-dev, libboost-filesystem1.35-dev | libboost-filesystem1.37-dev | libboost-filesystem1.38-dev | libboost-filesystem1.40-dev | libboost-filesystem1.42-dev, libboost-program-options1.35-dev | libboost-program-options1.37-dev | libboost-program-options1.38-dev | libboost-program-options1.40-dev | libboost-program-options1.42-dev, libboost-date-time1.35-dev | libboost-date-time1.37-dev | libboost-date-time1.38-dev | libboost-date-time1.40-dev | libboost-date-time1.42-dev, libpcap-dev, libreadline-dev
-Standards-Version: 3.8.0
-Homepage: http://www.mongodb.org
+Maintainer: Leif Walsh <leif.walsh@gmail.com>
+Build-Depends: debhelper (>= 7), libpcre3, libpcre3-dev, cmake, libboost1.35-dev | libboost1.37-dev | libboost1.38-dev | libboost1.40-dev | libboost1.42-dev | libboost1.49-dev | libboost1.53-dev, libboost-thread1.35-dev | libboost-thread1.37-dev | libboost-thread1.38-dev | libboost-thread1.40-dev | libboost-thread1.42-dev | libboost-thread1.49-dev | libboost-thread1.53-dev, libboost-filesystem1.35-dev | libboost-filesystem1.37-dev | libboost-filesystem1.38-dev | libboost-filesystem1.40-dev | libboost-filesystem1.42-dev | libboost-filesystem1.49-dev | libboost-filesystem1.53-dev, libboost-program-options1.35-dev | libboost-program-options1.37-dev | libboost-program-options1.38-dev | libboost-program-options1.40-dev | libboost-program-options1.42-dev | libboost-program-options1.49-dev | libboost-program-options1.53-dev, libboost-date-time1.35-dev | libboost-date-time1.37-dev | libboost-date-time1.38-dev | libboost-date-time1.40-dev | libboost-date-time1.42-dev | libboost-date-time1.49-dev | libboost-date-time1.53-dev, libpcap-dev, libreadline-dev, zlib1g-dev
+Homepage: http://www.tokutek.com/products/tokumx-for-mongodb
 
-Package: mongodb
-Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, xulrunner-dev
+Package: tokumx-server
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}, zlib1g, python
+Pre-Depends: adduser
 Description: An object/document-oriented database
  MongoDB is a high-performance, open source, schema-free 
  document-oriented  data store that's easy to deploy, manage

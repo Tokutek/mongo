@@ -192,6 +192,7 @@ namespace mongo {
         bool changeAttributes(const BSONObj &info, BSONObjBuilder &wasBuilder);
 
         enum toku_compression_method getCompressionMethod() const;
+        uint32_t getFanout() const;
         uint32_t getPageSize() const;
         uint32_t getReadPageSize() const;
         void getStat64(DB_BTREE_STAT64* stats) const;
@@ -255,6 +256,8 @@ namespace mongo {
             uint32_t pageSize;
             uint32_t readPageSize;
             enum toku_compression_method compressionMethod;
+            uint32_t fanout;
+
             uint64_t queries;
             uint64_t nscanned;
             uint64_t nscannedObjects;
@@ -268,6 +271,7 @@ namespace mongo {
                       pageSize(0),
                       readPageSize(0),
                       compressionMethod(TOKU_ZLIB_METHOD),
+                      fanout(0),
                       queries(0),
                       nscanned(0),
                       nscannedObjects(0),
