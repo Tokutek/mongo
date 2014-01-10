@@ -13,10 +13,17 @@ Source0: %{name}-%{version}.tar.gz
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
 
 %description
-Mongo (from "huMONGOus") is a schema-free document-oriented database.
-It features dynamic profileable queries, full indexing, replication
-and fail-over support, efficient storage of large binary data objects,
-and auto-sharding.
+TokuMX is a high-performance version of MongoDB using Fractal
+Tree indexes to store indexes and data.  TokuMX is
+driver-compatible with MongoDB and has the same simple
+management and operations interface as MongoDB, and adds:
+
+   * Much higher performance on out-of-memory write workloads.
+   * Compression of all data, up to 10x in many cases.
+   * Document-level concurrency for all read and write
+     operations.
+   * Transactional semantics including snapshot reads and
+     multi-statement transactions on a single shard basis.
 
 This package provides the mongo shell, import/export tools, and other
 client utilities.
@@ -26,7 +33,8 @@ Summary: tokumx shared libraries
 Group: Applications/Databases
 
 %description libs
-Mongo (from "huMONGOus") is a schema-free document-oriented database.
+TokuMX is a high-performance version of MongoDB using Fractal
+Tree indexes to store indexes and data.
 
 This package provides the libraries shared among the server and tools,
 including a portability layer and the Fractal Tree indexing library.
@@ -37,7 +45,8 @@ Group: Applications/Databases
 Requires: tokumx-libs
 
 %description server
-Mongo (from "huMONGOus") is a schema-free document-oriented database.
+TokuMX is a high-performance version of MongoDB using Fractal
+Tree indexes to store indexes and data.
 
 This package provides the mongo server software, mongo sharding server
 softwware, default configuration files, and init.d scripts.
@@ -47,7 +56,8 @@ Summary: Headers and libraries for mongo development.
 Group: Applications/Databases
 
 %description devel
-Mongo (from "huMONGOus") is a schema-free document-oriented database.
+TokuMX is a high-performance version of MongoDB using Fractal
+Tree indexes to store indexes and data.
 
 This package provides the mongo static library and header files needed
 to develop mongo client software.
