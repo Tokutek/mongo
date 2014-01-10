@@ -34,6 +34,25 @@ case "$1" in
 	# create logdir -- note: this should agree with logpath in tokumx.conf
 	mkdir -p /var/log/tokumx
 	chown -R tokumx:tokumx /var/log/tokumx
+
+	echo ""
+	echo "********************************************************************************"
+	echo ""
+	echo "Edit /etc/tokumx.conf as needed."
+	echo "TokuMX can be run with service:"
+	echo "  service tokumx-server start"
+	echo "  service tokumx-server stop"
+	echo ""
+	echo "Please note that TokuMX will not run with transparent huge pages enabled."
+	echo "To disable them, run (as root)"
+	echo "  echo never > /sys/kernel/mm/transparent_hugepage/enabled"
+	echo "or to use sudo, you can run"
+	echo "  echo never | sudo tee /sys/kernel/mm/transparent_hugepage/enabled"
+	echo ""
+	echo "You should add this line to /etc/rc.local to make it persist across reboots."
+	echo ""
+	echo "********************************************************************************"
+	echo ""
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)
