@@ -100,8 +100,6 @@ rmdir $RPM_BUILD_ROOT/usr/scripts
 
 mkdir -p $RPM_BUILD_ROOT/usr/share/man/man1
 cp debian/*.1 $RPM_BUILD_ROOT/usr/share/man/man1/
-## FIXME: remove this rm when mongosniff is back in the package
-rm -v $RPM_BUILD_ROOT/usr/share/man/man1/mongosniff.1*
 mkdir -p $RPM_BUILD_ROOT/etc/rc.d/init.d
 cp -v rpm/init.d-tokumx $RPM_BUILD_ROOT/etc/rc.d/init.d/tokumx
 chmod a+x $RPM_BUILD_ROOT/etc/rc.d/init.d/tokumx
