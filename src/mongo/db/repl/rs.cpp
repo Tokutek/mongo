@@ -470,6 +470,7 @@ namespace mongo {
     ReplSetImpl::ReplSetImpl() :
         _replInfoUpdateRunning(false),
         _lastPurgedTS(0),
+        _replOplogPartitionRunning(false),
         _replKeepOplogAliveRunning(false),
         _keepOplogPeriodMillis(600*1000), // 10 minutes
         _replBackgroundShouldRun(true),
@@ -1085,8 +1086,85 @@ namespace mongo {
     }
 
     void ReplSetImpl::changeExpireOplog(uint64_t expireOplogDays, uint64_t expireOplogHours) {
+        boost::unique_lock<boost::mutex> lock(_oplogPartitionMutex);
         cmdLine.expireOplogDays = expireOplogDays;
         cmdLine.expireOplogHours = expireOplogHours;
+        _oplogPartitionCond.notify_all();
+    }
+
+    // responsible for adding and dropping partitions from the oplog
+    void ReplSetImpl::oplogPartitionThread() {
+        _replOplogPartitionRunning = true;
+        Client::initThread("oplogPartitionThread");
+        replLocalAuth();
+        log() << "starting thread" << rsLog;
+        while (_replBackgroundShouldRun) {
+            const uint64_t currTime = curTimeMillis64();
+            uint64_t expireMillis = 0;
+            {
+                boost::unique_lock<boost::mutex> lock(_oplogPartitionMutex);
+                expireMillis = expireOplogMilliseconds();
+            }
+            // deal with add partition
+            try {
+                uint64_t lastAddTime = getLastPartitionAddTime();
+                // if expireMillis is greater than a day (or 0), then we partition daily,
+                // otherwise, we partition hourly
+                uint64_t timeBetweenAdds = (expireMillis == 0 || expireMillis >= 24*60*60*1000) ? 24*60*60*1000 : 60*60*1000;
+                LOG(2) << "lastAddTime: " << lastAddTime << 
+                    " currTime: " << currTime <<
+                    " timeBetweenAdds: " << timeBetweenAdds <<
+                    "diff" << currTime - lastAddTime << rsLog;
+                if (currTime > lastAddTime && ((currTime - lastAddTime) > timeBetweenAdds)) {
+                    LOG(2) << "adding partition!" << rsLog;
+                    addOplogPartitions();
+                } 
+                else {
+                    LOG(2) << "not adding partition" << rsLog;
+                }
+            }
+            catch(std::exception& e) {
+                log() << "replSet caught oplog partition thread (when adding): " << e.what() << rsLog;
+            }
+            catch (...) {
+                log() << "exception cought in oplog partition thread (when adding): " << rsLog;
+            }
+
+            // deal with possible drop partition
+            if (expireMillis) {
+                try {
+                    // possibly drop partition
+                    if (currTime > expireMillis) { // avoid overflow error
+                        trimOplogWithTS(curTimeMillis64() - expireMillis);
+                    }
+                    else {
+                        log() << "Not dropping partitions. expireMillis is too large. " <<
+                            "currTime: " << currTime << " expireMillis: " << expireMillis << rsLog;
+                    }
+                }
+                catch(std::exception& e) {
+                    log() << "replSet caught oplog partition thread (when dropping): " << e.what() << rsLog;
+                }
+                catch (...) {
+                    log() << "exception cought in oplog partition thread (when dropping): " << rsLog;
+                }
+            }
+
+            // now sleep for 60 seconds. We basically run this loop once a minute
+            {
+                boost::unique_lock<boost::mutex> lock(_oplogPartitionMutex);
+                LOG(2) << "sleeping" << rsLog;
+                _oplogPartitionCond.timed_wait(
+                    lock,
+                    boost::posix_time::milliseconds(60*1000)
+                    );
+                LOG(2) << "woke up" << rsLog;
+            }
+            
+        }
+        log() << "ending thread" << rsLog;
+        cc().shutdown();
+        _replOplogPartitionRunning = false;
     }
 
     void ReplSetImpl::forceUpdateReplInfo() {
@@ -1165,6 +1243,14 @@ namespace mongo {
         while (_replKeepOplogAliveRunning) {
             sleepsecs(1);
             log() << "still waiting for keep oplog alive thread to end..." << endl;
+        }
+        {
+            boost::unique_lock<boost::mutex> lock(_oplogPartitionMutex);
+            _oplogPartitionCond.notify_all();
+        }
+        while (_replOplogPartitionRunning) {
+            sleepsecs(1);
+            log() << "still waiting for oplog partition thread to end..." << endl;
         }
     }
 

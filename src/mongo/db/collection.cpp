@@ -2779,7 +2779,7 @@ namespace mongo {
         return result.copy();
     }
 
-    void PartitionedCollection::updatePartitionMetadata(uint64_t index, BSONObj newMetadata) {
+    void PartitionedCollection::updatePartitionMetadata(uint64_t index, BSONObj newMetadata, bool checkCreateTime) {
         massert(0, "bad index to updatePartitionMetadata", index < _numPartitions);
 
         BSONObjBuilder b(64);
@@ -2793,7 +2793,9 @@ namespace mongo {
         // verify that id, createTime, and max are the same
         dassert(newMetadata["_id"] == oldMetadata["_id"]);
         massert(0, str::stream() << "bad _id to updatePartitionMetadata" << newMetadata["_id"] << " " << oldMetadata["_id"], newMetadata["_id"] == oldMetadata["_id"]);
-        massert(0, "bad createTime to updatePartitionMetadata", newMetadata["createTime"] == oldMetadata["createTime"]);
+        if (checkCreateTime) {
+            massert(0, "bad createTime to updatePartitionMetadata", newMetadata["createTime"] == oldMetadata["createTime"]);
+        }
         massert(0, "bad pivot", newMetadata["max"] == oldMetadata["max"]);
 
         // now do the update

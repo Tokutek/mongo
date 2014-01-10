@@ -374,6 +374,10 @@ namespace mongo {
         bool _replInfoUpdateRunning;
         GTID _lastPurgedGTID;
         uint64_t _lastPurgedTS;
+        // for oplogPartitionThread
+        boost::mutex _oplogPartitionMutex;
+        boost::condition_variable _oplogPartitionCond;
+        bool _replOplogPartitionRunning;
         // for keepOplogAlive
         bool _replKeepOplogAliveRunning;
         uint64_t _keepOplogPeriodMillis;
@@ -540,6 +544,7 @@ namespace mongo {
         void startThreads();
         void keepOplogAliveThread();
         void updateReplInfoThread();
+        void oplogPartitionThread();
         friend class FeedbackThread;
         friend class CmdReplSetElect;
         friend class Member;

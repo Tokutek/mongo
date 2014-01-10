@@ -582,6 +582,20 @@ namespace mongo {
         addPartitionComment(true);
     }
 
+    // returns the time the last partition was added
+    uint64_t getLastPartitionAddTime() {
+        LOCK_REASON(lockReason, "repl: getting last time of partition add");
+        Client::ReadContext ctx(rsoplog, lockReason);
+        Client::Transaction transaction(DB_TXN_SNAPSHOT);
+        Collection* rsOplogDetails = getCollection(rsoplog);
+        PartitionedOplogCollection* poc = rsOplogDetails->as<PartitionedOplogCollection>();
+        uint64_t refNum = poc->numPartitions();
+        BSONObj refMeta = poc->getPartitionMetadata(refNum-1);
+        BSONElement e = refMeta["createTime"];
+        massert(0, "createTime mysteriously missing from partition metadata", e.ok());
+        return e._numberLong();
+    }
+
     static void trimOplogRefs(GTID maxGTID) {
         Lock::assertWriteLocked("local");
         Collection* rsOplogRefsDetails = getCollection(rsOplogRefs);
@@ -626,12 +640,14 @@ namespace mongo {
         // that means we can drop partition 0, so we would return true
         uint64_t createTime = meta["createTime"]._numberLong();
         transaction.commit();
+        LOG(2) << "tsMillis " << tsMillis << " createTime " << createTime << " currTime " << curTimeMillis64() << rsLog;
         return  createTime <= tsMillis;
     }
 
     // used for trimming an oplog given a timestamp
     void trimOplogWithTS(uint64_t tsMillis) {
         if (!willOplogTrimTS(tsMillis)) {
+            LOG(2) << "will not trim with tsMillis " << tsMillis << rsLog;
             return;
         }
         LOCK_REASON(lockReason, "repl: trim oplog with TS");

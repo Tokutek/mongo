@@ -63,4 +63,60 @@ namespace mongo {
         return Status::OK();
     }
 
+    class CmdChangePartitionCreateTime : public InformationCommand {
+    public:
+        CmdChangePartitionCreateTime() : InformationCommand("_changePartitionCreateTime") {};
+        virtual void help( stringstream& help ) const {
+            help << "internal command used for testing";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {}
+
+        bool run(
+            const string& db,
+            BSONObj& cmdObj,
+            int options, string& errmsg,
+            BSONObjBuilder& result,
+            bool fromRepl = false )
+        {
+            LOCK_REASON(lockReason, "changing create time of a partition in test hook");
+            Client::ReadContext ctx(db, lockReason);
+            Client::Transaction transaction(DB_SERIALIZABLE);
+            string coll = cmdObj[ "_changePartitionCreateTime" ].valuestrsafe();
+            uassert( 0, "_changePartitionCreateTime must specify a collection", !coll.empty() );
+            string ns = db + "." + coll;
+            Collection *cl = getCollection( ns );
+            uassert( 0, "no such collection", cl );
+            uassert( 0, "collection must be partitioned", cl->isPartitioned() );
+
+            // change the create time for a partition at a certain index
+            PartitionedCollection* pc = cl->as<PartitionedCollection>();
+            uint64_t index = cmdObj["index"].numberLong();            
+            BSONObj refMeta = pc->getPartitionMetadata(index);
+            BSONObjBuilder bbb;
+            BSONObjIterator ii( refMeta );
+            while ( ii.more() ) {
+                BSONElement e = ii.next();
+                if ( strcmp( e.fieldName(), "createTime" ) != 0 ) {
+                    bbb.append( e );
+                }
+                else {
+                    verify(cmdObj["createTime"].ok());
+                    bbb.append( cmdObj["createTime"]);
+                }
+            }
+            pc->updatePartitionMetadata(index, bbb.done(), false);
+            transaction.commit();
+            return true;
+        }
+    };
+
+    MONGO_INITIALIZER(RegisterChangePartitionCreateTimeCmd)(InitializerContext* context) {
+        if (Command::testCommandsEnabled) {
+            // Leaked intentionally: a Command registers itself when constructed.
+            new CmdChangePartitionCreateTime();
+        }
+        return Status::OK();
+    }
 }

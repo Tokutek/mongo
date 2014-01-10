@@ -54,6 +54,7 @@ namespace mongo {
     // @return the age, in milliseconds, when an oplog entry expires.
     uint64_t expireOplogMilliseconds();
 
+    uint64_t getLastPartitionAddTime();
     void addOplogPartitions();
     void trimOplogWithTS(uint64_t tsMillis);
     void trimOplogwithGTID(GTID gtid);

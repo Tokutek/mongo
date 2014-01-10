@@ -1411,7 +1411,7 @@ namespace mongo {
         void getPartitionInfo(uint64_t* numPartitions, BSONArray &partitionArray);
         void addClonedPartitionInfo(vector<BSONElement> partitionInfo);
         BSONObj getPartitionMetadata(uint64_t index);
-        void updatePartitionMetadata(uint64_t index, BSONObj newMetadata);
+        void updatePartitionMetadata(uint64_t index, BSONObj newMetadata, bool checkCreateTime = true);
 
         // helper functions
         uint64_t numPartitions() {
