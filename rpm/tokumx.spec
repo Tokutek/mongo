@@ -58,7 +58,7 @@ to develop mongo client software.
 %build
 mkdir -p opt
 (cd opt; \
-  cmake28 \
+  cmake \
     -D CMAKE_BUILD_TYPE=Release \
     -D TOKU_DEBUG_PARANOID=OFF \
     -D USE_VALGRIND=OFF \
@@ -80,12 +80,12 @@ make -C opt %{?_smp_mflags}
 
 %install
 (cd opt; \
-  cmake28 -D COMPONENT=tokumx_server -P cmake_install.cmake && \
-  cmake28 -D COMPONENT=tokumx_misc -P cmake_install.cmake && \
-  cmake28 -D COMPONENT=tokumx_tools -P cmake_install.cmake && \
-  cmake28 -D COMPONENT=tokumx_plugins -P cmake_install.cmake && \
-  cmake28 -D COMPONENT=tokukv_libs_shared -P cmake_install.cmake && \
-  cmake28 -D COMPONENT=tokubackup_libs_shared -P cmake_install.cmake)
+  cmake -D COMPONENT=tokumx_server -P cmake_install.cmake && \
+  cmake -D COMPONENT=tokumx_misc -P cmake_install.cmake && \
+  cmake -D COMPONENT=tokumx_tools -P cmake_install.cmake && \
+  cmake -D COMPONENT=tokumx_plugins -P cmake_install.cmake && \
+  cmake -D COMPONENT=tokukv_libs_shared -P cmake_install.cmake && \
+  cmake -D COMPONENT=tokubackup_libs_shared -P cmake_install.cmake)
 
 mkdir -p ${RPM_BUILD_ROOT}%{_defaultdocdir}/tokumx/licenses
 mv $RPM_BUILD_ROOT/usr/GNU-AGPL-3.0 ${RPM_BUILD_ROOT}%{_defaultdocdir}/%{name}/licenses
