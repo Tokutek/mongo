@@ -56,7 +56,7 @@ restart () {
 	start
 }
 
-ulimit -n 12000
+ulimit -n 12000 || echo "ulimit: error setting NOFILE to 12000"
 RETVAL=0
 
 case "$1" in
