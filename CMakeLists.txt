@@ -137,10 +137,13 @@ if (CMAKE_BUILD_TYPE STREQUAL Debug)
   set(CPACK_SYSTEM_NAME "${CPACK_SYSTEM_NAME}-debug")
 endif ()
 
-find_program(OBJCOPY objcopy)
+option(TOKUMX_STRIP_BINARIES "strip binaries before installing" TRUE)
+if (TOKUMX_STRIP_BINARIES)
+  find_program(OBJCOPY objcopy)
+endif ()
 function (install_executables component)
   foreach (target ${ARGN})
-    if (NOT OBJCOPY MATCHES NOTFOUND)
+    if (TOKUMX_STRIP_BINARIES AND NOT OBJCOPY MATCHES NOTFOUND)
       add_custom_command(TARGET ${target} POST_BUILD
         COMMAND ${OBJCOPY} --only-keep-debug
                 $<TARGET_FILE:${target}> $<TARGET_FILE_DIR:${target}>/${target}.dbg
