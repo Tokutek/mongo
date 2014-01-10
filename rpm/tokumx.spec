@@ -10,9 +10,6 @@ URL: http://www.tokutek.com/products/tokumx-for-mongodb
 Group: Applications/Databases
 
 Source0: %{name}-%{version}.tar.gz
-Source1: ft-index-%{name}-%{version}.tar.gz
-Source2: jemalloc-%{name}-%{version}.tar.gz
-Source3: backup-community-%{name}-%{version}.tar.gz
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
 
 %description
@@ -57,12 +54,6 @@ to develop mongo client software.
 
 %prep
 %setup
-%setup -T -D -b 1
-%setup -T -D -b 2
-%setup -T -D -b 3
-ln -s $RPM_BUILD_DIR/ft-index src/third_party
-ln -s $RPM_BUILD_DIR/jemalloc src/third_party/ft-index/third_party
-ln -s $RPM_BUILD_DIR/backup-community/backup src/third_party
 
 %build
 mkdir -p opt
