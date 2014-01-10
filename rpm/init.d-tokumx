@@ -36,7 +36,7 @@ fi
 start()
 {
   echo -n $"Starting tokumx: "
-  daemon --user "$MONGO_USER" $tokumx $OPTIONS
+  daemon --user "$MONGO_USER" $mongod $OPTIONS
   RETVAL=$?
   echo
   [ $RETVAL -eq 0 ] && touch /var/lock/subsys/tokumx
