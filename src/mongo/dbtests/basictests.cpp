@@ -576,9 +576,9 @@ namespace BasicTests {
             istringstream iss3("\t    this = false  \n#that = true\n  #another = whocares\n\n  other = monkeys  ");
             CmdLine::parseConfigFile( iss3, ss3 );
 
-            ASSERT( ss1.str().compare("\n") == 0 );
-            ASSERT( ss2.str().compare("password=\'foo bar baz\'\n\n") == 0 );
-            ASSERT( ss3.str().compare("\n  other = monkeys  \n\n") == 0 );
+            ASSERT_EQUALS( ss1.str(), "\n" );
+            ASSERT_EQUALS( ss2.str(), "password=\'foo bar baz\'\n\n" );
+            ASSERT_EQUALS( ss3.str(), "\n  other = monkeys  \n\n" );
         }
     };
 
