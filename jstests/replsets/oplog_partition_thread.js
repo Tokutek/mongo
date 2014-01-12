@@ -30,6 +30,8 @@ doTest = function (signal, startPort, txnLimit, expireHours, expireDays, rewindT
 
     // Make sure we have a master
     var master = replTest.getMaster();
+    master.getDB("foo").foo.insert({});
+    master.getDB("foo").getLastError();
     var localdb = master.getDB("local");
     oplogPartitionInfo = localdb.runCommand({getPartitionInfo:"oplog.rs"});
     refsPartitionInfo = localdb.runCommand({getPartitionInfo:"oplog.refs"});
@@ -96,7 +98,11 @@ doOtherTest = function (signal, startPort, txnLimit, expireHours, expireDays, re
 
     // total of 3 partitions
     assert.commandWorked(master.getDB("admin").runCommand({replAddPartition:1}));
+    master.getDB("foo").foo.insert({});
+    master.getDB("foo").getLastError();
     assert.commandWorked(master.getDB("admin").runCommand({replAddPartition:1}));
+    master.getDB("foo").foo.insert({});
+    master.getDB("foo").getLastError();
 
     restartOutOfReplset(replTest);
 
@@ -163,7 +169,11 @@ doThirdTest = function (signal, startPort, txnLimit) {
 
     // total of 3 partitions
     assert.commandWorked(master.getDB("admin").runCommand({replAddPartition:1}));
+    master.getDB("foo").foo.insert({});
+    master.getDB("foo").getLastError();
     assert.commandWorked(master.getDB("admin").runCommand({replAddPartition:1}));
+    master.getDB("foo").foo.insert({});
+    master.getDB("foo").getLastError();
     oplogPartitionInfo = localdb.runCommand({getPartitionInfo:"oplog.rs"});
     assert.eq(3, oplogPartitionInfo.numPartitions);
     assert.eq(0, oplogPartitionInfo["partitions"][0]["_id"]);

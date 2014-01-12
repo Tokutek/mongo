@@ -510,24 +510,6 @@ namespace mongo {
         return hours * millisPerHour;
     }
 
-    // functions for adding partitions and trimming oplog
-    static void addPartitionComment(bool added) {
-        //now that we have committed the transaction
-        // that has added the partitions, let's do one more thing
-        // add this comment for the following reason.
-        // if somebody decides to trim the oplog,
-        // and trims everything but this newly added partition, we will have
-        // an oplog with no data. We would like to avoid that
-        Client::Transaction txn(DB_SERIALIZABLE);
-        if (added) {
-            OpLogHelpers::logComment(BSON("comment" << "added partition to oplog"));
-        }
-        else {
-            OpLogHelpers::logComment(BSON("comment" << "about to try dropping partition(s) from oplog"));
-        }
-        txn.commit();
-    }
-
     // adds a partition to oplog and oplog.refs
     void addOplogPartitions() {
         // add a partition to the oplog
@@ -553,7 +535,6 @@ namespace mongo {
                 // in this case, we just commit the transaction we have
                 // and gracefully exit
                 transaction.commit();
-                addPartitionComment(true);
                 return;
             }
             throw;
@@ -579,7 +560,6 @@ namespace mongo {
         pc->updatePartitionMetadata(refNum-2, b.done());
 
         transaction.commit();
-        addPartitionComment(true);
     }
 
     // returns the time the last partition was added
@@ -652,12 +632,6 @@ namespace mongo {
         }
         LOCK_REASON(lockReason, "repl: trim oplog with TS");
         Client::WriteContext ctx(rsoplog, lockReason);
-        // before doing a drop, add a comment to the oplog just
-        // as a sanity check to ensure that the last partition
-        // has SOME entry. We don't want to risk the last
-        // partition having nothing (which possibly means
-        // the entire oplog would be empty)
-        addPartitionComment(false);
         Client::Transaction transaction(DB_SERIALIZABLE);
         Collection* rsOplogDetails = getCollection(rsoplog);
         PartitionedOplogCollection* poc = rsOplogDetails->as<PartitionedOplogCollection>();
@@ -721,12 +695,6 @@ namespace mongo {
         }
         LOCK_REASON(lockReason, "repl: trim oplog with GTID");
         Client::WriteContext ctx(rsoplog, lockReason);
-        // before doing a drop, add a comment to the oplog just
-        // as a sanity check to ensure that the last partition
-        // has SOME entry. We don't want to risk the last
-        // partition having nothing (which possibly means
-        // the entire oplog would be empty)
-        addPartitionComment(false);
         Client::Transaction transaction(DB_SERIALIZABLE);
         Collection* rsOplogDetails = getCollection(rsoplog);
         PartitionedOplogCollection* poc = rsOplogDetails->as<PartitionedOplogCollection>();

@@ -95,10 +95,9 @@ doOtherTest = function (signal, startPort, txnLimit, trimWithGTID) {
     a.foo.insert({a:0});
     pivot3 = localdb.oplog.rs.find().sort({_id:-1}).next()._id;
     assert.commandWorked(admindb.runCommand({replAddPartition:1}));
-    // don't add any data after this add partition
-    // rest of test will ensure that a comment was logged
-    // by making sure that we can find an element in the oplog
-    // after our trim
+    // add data after this add partition, so we can find something
+    // in search further down
+    a.foo.insert({a:0});
 
     oplogPartitionInfo = localdb.runCommand({getPartitionInfo:"oplog.rs"});
     refsPartitionInfo = localdb.runCommand({getPartitionInfo:"oplog.refs"});
@@ -179,16 +178,22 @@ doTest = function (signal, startPort) {
 
     bigTxnConn.getDB("foo").foo.insert({});
     bigTxnConn.getDB("foo").getLastError();
+    addPartConn.getDB("bar").bar.insert({});
+    addPartConn.getDB("foo").getLastError();
     pivot = localdb.oplog.rs.find().sort({_id:-1}).next()._id;
     assert.commandWorked(addPartConn.getDB("admin").runCommand({replAddPartition:1}));
 
     bigTxnConn.getDB("foo").foo.insert({});
     bigTxnConn.getDB("foo").getLastError();
+    addPartConn.getDB("bar").bar.insert({});
+    addPartConn.getDB("foo").getLastError();
     pivot2 = localdb.oplog.rs.find().sort({_id:-1}).next()._id;
     assert.commandWorked(addPartConn.getDB("admin").runCommand({replAddPartition:1}));
 
     bigTxnConn.getDB("foo").foo.insert({});
     bigTxnConn.getDB("foo").getLastError();
+    addPartConn.getDB("bar").bar.insert({});
+    addPartConn.getDB("foo").getLastError();
     pivot3 = localdb.oplog.rs.find().sort({_id:-1}).next()._id;
     assert.commandWorked(addPartConn.getDB("admin").runCommand({replAddPartition:1}));
 
@@ -250,7 +255,6 @@ doTest = function (signal, startPort) {
 }
 
 doTest( 15, 31000 );
-
 doOtherTest( 15, 31000, 1, 0 );
 doOtherTest( 15, 31000, 1, 1 );
 doOtherTest( 15, 41000, 1000000, 0 );
