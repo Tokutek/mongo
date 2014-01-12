@@ -611,7 +611,6 @@ namespace mongo {
         // The primary index pattern.
         // This is non-const because of how
         // the value is filled in the constructor
-        // TODO: remove this and just reference copy in CollectionData
         BSONObj _pk;
 
         // Every index has an IndexDetails that describes it.

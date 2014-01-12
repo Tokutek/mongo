@@ -469,7 +469,6 @@ namespace mongo {
 
     ReplSetImpl::ReplSetImpl() :
         _replInfoUpdateRunning(false),
-        _lastPurgedTS(0),
         _replOplogPartitionRunning(false),
         _replKeepOplogAliveRunning(false),
         _keepOplogPeriodMillis(600*1000), // 10 minutes
@@ -1075,14 +1074,6 @@ namespace mongo {
         }
         cc().shutdown();
         _replKeepOplogAliveRunning = false;
-    }
-
-    GTID ReplSetImpl::getLastPurgedGTID() {
-        return _lastPurgedGTID;
-    }
-
-    uint64_t ReplSetImpl::getLastPurgedTS() {
-        return _lastPurgedTS;
     }
 
     void ReplSetImpl::changeExpireOplog(uint64_t expireOplogDays, uint64_t expireOplogHours) {

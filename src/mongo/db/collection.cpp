@@ -165,7 +165,6 @@ namespace mongo {
         massert(10356, str::stream() << "invalid ns: " << ns,
                        NamespaceString::validCollectionName(ns));
 
-        // TODO: do some stuff to create _cd
         if (isOplogCollection(ns)) {
             if (options["partitioned"].trueValue()) {
                 _cd = PartitionedOplogCollection::make(ns, options);

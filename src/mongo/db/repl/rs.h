@@ -372,8 +372,6 @@ namespace mongo {
         // for replInfoUpdate
         boost::mutex _replInfoMutex;
         bool _replInfoUpdateRunning;
-        GTID _lastPurgedGTID;
-        uint64_t _lastPurgedTS;
         // for oplogPartitionThread
         boost::mutex _oplogPartitionMutex;
         boost::condition_variable _oplogPartitionCond;
@@ -536,8 +534,6 @@ namespace mongo {
         // for testing
         void setKeepOplogAlivePeriod(uint64_t val);
         void changeExpireOplog(uint64_t expireOplogDays, uint64_t expireOplogHours);
-        GTID getLastPurgedGTID();
-        uint64_t getLastPurgedTS();
     private:
         void _getTargets(list<Target>&, int &configVersion);
         void getTargets(list<Target>&, int &configVersion);

@@ -160,12 +160,6 @@ namespace mongo {
                 minUnapplied,
                 result
                 );
-            addGTIDToBSON(
-                "lastPurgedGTID",
-                theReplSet->getLastPurgedGTID(),
-                result
-                );
-            result.appendDate("lastPurgedTS", theReplSet->getLastPurgedTS());
             const Member *syncTarget = BackgroundSync::get()->getSyncTarget();
             if (syncTarget) {
                 result.append("syncingTo", syncTarget->fullName());
@@ -474,15 +468,6 @@ namespace mongo {
             }
             if ( info.hasElement("minUnappliedGTID")) {
                 mem.minUnappliedGTID= getGTIDFromBSON("minUnappliedGTID", info);
-            }
-            if ( info.hasElement("lastPurgedGTID")) {
-                mem.purgedInfoAvailable = true;
-                mem.lastPurgedGTID = getGTIDFromBSON("lastPurgedGTID", info);
-                // if lastPurgedGTID is available, lastPurgedTS must be as well
-                mem.lastPurgedTS = info["lastPurgedTS"].Date();
-            }
-            else {
-                mem.purgedInfoAvailable = false;
             }
             // see if this member is in the electable set
             if( info["e"].eoo() ) {
