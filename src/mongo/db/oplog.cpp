@@ -109,6 +109,27 @@ namespace mongo {
         _logTransactionOps(gtid, timestamp, hash, opInfo);
     }
 
+    static void updateMaxRefGTID(BSONObj refMeta, uint64_t i, PartitionedCollection* pc, GTID gtid) {
+        BSONObjBuilder bbb;
+        BSONObjIterator ii( refMeta );
+        while ( ii.more() ) {
+            BSONElement e = ii.next();
+            if ( strcmp( e.fieldName(), "maxRefGTID" ) != 0 ) {
+                bbb.append( e );
+            }
+            else {
+                addGTIDToBSON("maxRefGTID", gtid, bbb);
+            }
+        }
+        BSONElement gtidElement = refMeta["maxRefGTID"];
+        if (!gtidElement.ok()) {
+            log() << "maxRefGTID expected, but not found in partition " << 
+                i << ". Unless this is an upgrade, this is unexpected." << endl;
+            addGTIDToBSON("maxRefGTID", gtid, bbb);
+        }
+        pc->updatePartitionMetadata(i, bbb.done());
+    }
+
     void logTransactionOpsRef(GTID gtid, uint64_t timestamp, uint64_t hash, OID& oid) {
         LOCK_REASON(lockReason, "repl: logging to oplog");
         Client::ReadContext ctx(rsoplog, lockReason);
@@ -145,10 +166,15 @@ namespace mongo {
             // only update metadata is there are insertions that happened
             // in partitions OTHER than the last partition ( < numRef-1)
             if (minPartitionInserted < numRef - 1) {
+                // use an alternate transaction stack,
+                // so that this work does not get lumped in with
+                // the rest of the transaction's work (which can be big)
+                // If this transaction commits and the current "big" one
+                // does not, that's ok. The maxRefGTID will be bigger
+                // than it has to be, and that is benign.
                 Client::AlternateTransactionStack altStack;
                 Client::Transaction txn(DB_SERIALIZABLE);
                 for (uint64_t i = minPartitionInserted; i < numRef - 1; i++) {
-                    BSONObjBuilder bbb;
                     // for each one, update metadata
                     BSONObj refMeta = pc->getPartitionMetadata(i);
                     GTID currGTID = getGTIDFromBSON("maxRefGTID", refMeta);
@@ -156,30 +182,7 @@ namespace mongo {
                         // currGTID is already higher, do nothing and return
                         continue;
                     }
-                    BSONObjIterator ii( refMeta );
-                    while ( ii.more() ) {
-                        BSONElement e = ii.next();
-                        if ( strcmp( e.fieldName(), "maxRefGTID" ) != 0 ) {
-                            bbb.append( e );
-                        }
-                        else {
-                            addGTIDToBSON("maxRefGTID", gtid, bbb);
-                        }
-                    }
-                    BSONElement gtidElement = refMeta["maxRefGTID"];
-                    if (!gtidElement.ok()) {
-                        log() << "maxRefGTID expected, but not found in partition " << 
-                            i << " of " << numRef << 
-                            ". Strange, but adding field anyway." << endl;
-                        addGTIDToBSON("maxRefGTID", gtid, bbb);
-                    }
-                    // use an alternate transaction stack,
-                    // so that this work does not get lumped in with
-                    // the rest of the transaction's work (which can be big)
-                    // If this transaction commits and the current "big" one
-                    // does not, that's ok. The maxRefGTID will be bigger
-                    // than it has to be, and that is benign.
-                    pc->updatePartitionMetadata(i, bbb.done());
+                    updateMaxRefGTID(refMeta, i, pc, gtid);
                 }
                 txn.commit();
             }
@@ -510,12 +513,8 @@ namespace mongo {
         return hours * millisPerHour;
     }
 
-    // adds a partition to oplog and oplog.refs
-    void addOplogPartitions() {
-        // add a partition to the oplog
-        LOCK_REASON(lockReason, "repl: adding partition to oplog");
-        Client::WriteContext ctx(rsoplog, lockReason);
-        Client::Transaction transaction(DB_SERIALIZABLE);
+    // assumes we are already in lock and transaction
+    static void addOplogPartitionsInLock() {
         Collection* rsOplogDetails = getCollection(rsoplog);
         PartitionedOplogCollection* poc = rsOplogDetails->as<PartitionedOplogCollection>();
         poc->addPartition();
@@ -534,7 +533,6 @@ namespace mongo {
                 // no spilled transactions in the partition
                 // in this case, we just commit the transaction we have
                 // and gracefully exit
-                transaction.commit();
                 return;
             }
             throw;
@@ -558,7 +556,15 @@ namespace mongo {
         }
         addGTIDToBSON("maxRefGTID", pivot, b);
         pc->updatePartitionMetadata(refNum-2, b.done());
-
+    }
+    
+    // adds a partition to oplog and oplog.refs
+    void addOplogPartitions() {
+        // add a partition to the oplog
+        LOCK_REASON(lockReason, "repl: adding partition to oplog");
+        Client::WriteContext ctx(rsoplog, lockReason);
+        Client::Transaction transaction(DB_SERIALIZABLE);
+        addOplogPartitionsInLock();
         transaction.commit();
     }
 
@@ -591,6 +597,7 @@ namespace mongo {
             BSONElement e = lastMeta["maxRefGTID"];
             if (!e.ok()) {
                 log() << "unexpectedly, maxRefGTID does not exist, exiting trimOplogRefs" << endl;
+                return;
             }
             GTID currGTID = getGTIDFromBSON("maxRefGTID", lastMeta);
             // if the GTID found in maxRefGTID is greater than what we
@@ -682,7 +689,7 @@ namespace mongo {
             return false;
         }
         BSONObj meta = poc->getPartitionMetadata(0);
-        // if the createTime of partition 1 is before tsMillis,
+        // if the GTID of partition 0 is less than gtid,
         // that means we can drop partition 0, so we would return true
         GTID pivot = getGTIDFromBSON("", meta["max"].Obj());
         transaction.commit();
@@ -725,6 +732,46 @@ namespace mongo {
         // only try to trim oplog.refs if we successfully trimmed oplog
         if (oplogTrimmed) {
             trimOplogRefs(maxGTIDTrimmed);
+        }
+        transaction.commit();
+    }
+
+    void convertOplogToPartitionedIfNecessary(GTID gtid) {
+        LOCK_REASON(lockReason, "repl: maybe convert oplog to partitioned on startup");
+        Client::WriteContext ctx(rsoplog, lockReason);
+        Client::Transaction transaction(DB_SERIALIZABLE);
+        bool shouldAddPartition = false;
+        Collection* rsOplogDetails = getCollection(rsoplog);
+        if (!rsOplogDetails->isPartitioned()) {
+            log() << "Oplog was not partitioned, converting it to a partitioned collection" << rsLog;
+            convertToPartitionedCollection(rsoplog);
+            shouldAddPartition = true;
+        }
+        Collection* rsOplogRefsDetails = getCollection(rsOplogRefs);
+        if (!rsOplogRefsDetails->isPartitioned()) {
+            log() << "Oplog.refs was not partitioned, converting it to a partitioned collection" << rsLog;
+            convertToPartitionedCollection(rsOplogRefs);
+            Collection* coll = getCollection(rsOplogRefs);
+            // add maxRefGTID
+            PartitionedCollection* pc = coll->as<PartitionedCollection>();
+            BSONObj refMeta = pc->getPartitionMetadata(0);
+            updateMaxRefGTID(refMeta, 0, pc, gtid);
+        }
+        //
+        // if we converted the oplog from partitioned to non-partitioned,
+        // then we ought to immedietely add a partition
+        // Because we did the conversion, we could not have
+        // done it on an empty oplog, so there should be no issues
+        // adding a partition
+        //
+        // The benefit here is that all work done before upgrade
+        // is in a separate partition and can be dropped sooner
+        // rather than later (which we want, because odds are this
+        // partition is big
+        //
+        if (shouldAddPartition) {
+            log() << "auto adding a partition after upgrade" << rsLog;
+            addOplogPartitionsInLock();
         }
         transaction.commit();
     }

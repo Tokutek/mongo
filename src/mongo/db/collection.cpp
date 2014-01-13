@@ -1347,6 +1347,8 @@ namespace mongo {
         uassert( 16918, "Cannot rename a collection with a background index build in progress",
                         !from_cl->indexBuildInProgress() );
 
+        shared_ptr<CollectionRenamer> renamer = from_cl->getRenamer();
+
         // Kill open cursors before we close and rename the namespace
         ClientCursor::invalidate( from );
 
@@ -1360,6 +1362,8 @@ namespace mongo {
         bool closed = collectionMap(from)->close_ns(from);
         verify(closed);
 
+        // do collection renaming
+        renamer->renameCollection(from, to);
         // Rename each index in system.indexes and system.namespaces
         {
             BSONObj nsQuery = BSON( "ns" << from );
@@ -1379,9 +1383,6 @@ namespace mongo {
                 string idxName = oldIndexSpec["name"].String();
                 string oldIdxNS = IndexDetails::indexNamespace(from, idxName);
                 string newIdxNS = IndexDetails::indexNamespace(to, idxName);
-
-                TOKULOG(1) << "renaming " << oldIdxNS << " to " << newIdxNS << endl;
-                storage::db_rename(oldIdxNS, newIdxNS);
 
                 BSONObj newIndexSpec = replaceNSField( oldIndexSpec, to );
                 removeFromIndexesCatalog(from, idxName);
@@ -1429,6 +1430,88 @@ namespace mongo {
             cm->update_ns(to, newSerialized, false);
             verify(getCollection(to) != NULL);
             verify(getCollection(from) == NULL);
+        }
+    }
+
+    void convertToPartitionedCollection(const StringData& from) {
+        Lock::assertWriteLocked(from);
+
+        Collection *from_cl = getCollection(from);
+        verify( from_cl != NULL );
+
+        uassert( 0, "Collection already partitioned", !from_cl->isPartitioned());
+        uassert( 0, "Cannot convert to partitioned collection when under-going bulk load.",
+                        from != cc().bulkLoadNS() );
+        uassert( 0, "Cannot convert to partitioned collection with a background index build in progress",
+                        !from_cl->indexBuildInProgress() );
+        uassert( 0, "Cannot convert a capped collection to partitioned", !from_cl->isCapped());
+
+        BSONObj serialized = from_cl->serialize();
+        BSONObj options = serialized["options"].Obj();
+        vector<BSONElement> indexes = serialized["indexes"].Array();
+        // if we ever have partitioned collections support secondary indexes,
+        // we will need to change PartitionedCollection::make that takes a renamer,
+        // as that function currently assumes that the collection has only one
+        // index
+        uassert(0, "no secondary indexes allowed when converting to partitioned collection", indexes.size() == 1);
+        uassert(0, str::stream() << "Partitioned Collection cannot have a defined primary key: " << from, !options["primaryKey"].ok());
+        uassert(0, "cannot have multikey bits set on a partitioned collection", serialized["multiKeyIndexBits"].Long() == 0);
+
+        shared_ptr<CollectionRenamer> renamer = from_cl->getRenamer();
+
+        bool closed = collectionMap(from)->close_ns(from);
+        verify(closed);
+
+        // Kill open cursors before we close and rename the namespace
+        ClientCursor::invalidate( from );
+        string sysNamespaces = getSisterNS(from, "system.namespaces");
+
+        shared_ptr<PartitionedCollection> pc;
+        pc = PartitionedCollection::make(serialized, renamer.get()); // make a new partitioned collection from a renamer
+        bool indexBitsChanged = false;
+        pc->close(false, &indexBitsChanged);
+        verify(!indexBitsChanged);
+        pc.reset();
+
+        // Rename the namespace in system.namespaces
+        BSONObj newSpec;
+        {
+            BSONObj oldSpec;
+            verify(Collection::findOne(sysNamespaces, BSON("name" << from), oldSpec));
+            BSONObjBuilder b;
+            BSONObjIterator i( oldSpec.getObjectField( "options" ) );
+            while ( i.more() ) {
+                BSONElement e = i.next();
+                if ( strcmp( e.fieldName(), "partitioned" ) != 0 ) {
+                    b.append( e );
+                }
+                else {
+                    uasserted(0, "should not have found partitioned here");
+                }
+            }
+            b.append("partitioned", 1);
+            newSpec = b.obj();
+            removeFromNamespacesCatalog(from);
+            addToNamespacesCatalog(from, newSpec.isEmpty() ? 0 : &newSpec);
+        }
+        
+        // Update the namespace index
+        {
+            BSONArrayBuilder newIndexesArray;
+            for (vector<BSONElement>::const_iterator it = indexes.begin(); it != indexes.end(); it++) {
+                // this is inefficient.
+                // TODO: learn the nice way to just extract the
+                // array from serialized and pass it back in
+                newIndexesArray.append(it->Obj());
+            }
+            BSONObj newSerialized = Collection::serialize(from, newSpec, serialized["pk"].Obj(),
+                                                              serialized["multiKeyIndexBits"].Long(),
+                                                              newIndexesArray.arr());
+            // Kill the old entry and replace it with the new name and modified spec.
+            // The next user of the newly-named namespace will need to open it.
+            CollectionMap *cm = collectionMap( from );
+            cm->kill_ns(from);
+            cm->update_ns(from, newSerialized, false);
         }
     }
 
@@ -2400,7 +2483,9 @@ namespace mongo {
                                                           newIndexesArray.arr());
     }
 
-    // constructor that creates a PartitionedCollection
+    //
+    // constructor and methods that create a PartitionedCollection
+    //
     PartitionedCollection::PartitionedCollection(const StringData &ns, const BSONObj &options) :
         CollectionData(ns, BSON("_id" << 1)), // the pk MUST be _id:1, we verify below
         _options(options.copy()),
@@ -2442,6 +2527,60 @@ namespace mongo {
         return ret;
     }
 
+    //
+    // constructor and methods to create a partitioned collection
+    // from an existing non-partitioned collection
+    //
+    PartitionedCollection::PartitionedCollection(
+        const BSONObj &serialized,
+        CollectionRenamer* renamer
+        ) :
+           CollectionData(serialized),
+           _options(serialized["options"].Obj().copy()),
+           _ordering(Ordering::make(BSONObj())), // dummy for now, we create it properly below
+           _numPartitions(0)
+    {
+    }
+
+    void PartitionedCollection::initialize(
+        const BSONObj &serialized,
+        CollectionRenamer* renamer
+        )
+    {
+        // first operate as though we are creating a new
+        // collection
+
+        // TODO: check that we have only one index
+        
+        initialize(_ns, _options);
+        verify(_numPartitions == 1);
+        verify(_partitionIDs[0] == 0);
+        // now we need to swap out partitions[0]
+        // with what existing collection
+
+        // delete existing partition
+        _partitions[0]->dropIndexDetails(0);
+        _partitions.erase(_partitions.begin());
+
+        renamer->renameCollection(_ns, getPartitionName(0));
+        //partition 0 ready to go
+        BSONObj currCollSerialized = makePartitionedSerialized(
+            serialized,
+            getPartitionName(0)
+            );
+        _partitions.push_back(openExistingPartition(currCollSerialized));        
+    }
+
+    shared_ptr<PartitionedCollection> PartitionedCollection::make(const BSONObj &serialized, CollectionRenamer* renamer) {
+        shared_ptr<PartitionedCollection> ret;
+        ret.reset(new PartitionedCollection(serialized, renamer));
+        ret->initialize(serialized, renamer);
+        return ret;
+    }
+
+    //
+    // constructor and methods that open an existing PartitionedCollection
+    //
     PartitionedCollection::PartitionedCollection(const BSONObj &serialized) :
         CollectionData(serialized),
         _options(serialized["options"].Obj().copy()),
@@ -2493,7 +2632,7 @@ namespace mongo {
         ret.reset(new PartitionedCollection(serialized));
         ret->initialize(serialized);
         return ret;
-     }
+    }
 
     shared_ptr<CollectionData> PartitionedCollection::makeNewPartition(
         const StringData &ns,

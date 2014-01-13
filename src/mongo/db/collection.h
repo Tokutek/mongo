@@ -65,6 +65,9 @@ namespace mongo {
     // Rename a namespace within current 'client' db.
     // (Arguments should include db name)
     void renameCollection(const StringData &from, const StringData &to);
+    // Convert a collection within current 'client' db to partitioned.
+    // (Arguments should include db name)
+    void convertToPartitionedCollection(const StringData& from);
 
     // Manage bulk loading into a namespace
     //
@@ -81,6 +84,12 @@ namespace mongo {
     extern std::string extendedSystemUsersIndexName;
 
     bool isSystemUsersCollection(const StringData &ns);
+
+    class CollectionRenamer : boost::noncopyable {
+    public:
+        virtual ~CollectionRenamer() { }
+        virtual void renameCollection(const StringData& from, const StringData& to) = 0;
+    };
 
     //
     // Indexing
@@ -246,6 +255,8 @@ namespace mongo {
                                        const int singleIntervalLimit,
                                        const int direction, const int numWanted,
                                        const bool countCursor) = 0;
+
+        virtual shared_ptr<CollectionRenamer> getRenamer() = 0;
 
         template <class T> T *as() {
             T *subclass = dynamic_cast<T *>(this);
@@ -434,6 +445,10 @@ namespace mongo {
 
         void acquireTableLock() {
             _cd->acquireTableLock();
+        }
+
+        shared_ptr<CollectionRenamer> getRenamer() {
+            return _cd->getRenamer();
         }
 
         /* when a background index build is in progress, we don't count the index in nIndexes until
@@ -876,6 +891,35 @@ namespace mongo {
                                        const int singleIntervalLimit,
                                        const int direction, const int numWanted,
                                        const bool countCursor);
+
+        class Renamer : public CollectionRenamer {
+            vector<BSONObj> _indexSpecs;
+        public:
+            Renamer(CollectionBase* cl) {
+                for (int i = 0; i < cl->_nIndexes; i++) {
+                    _indexSpecs.push_back(cl->idx(i).info().copy());
+                }
+            }
+
+            // not sure if it is necessary to pass in from, whether this is the
+            // same as _ns
+            virtual void renameCollection(const StringData& from, const StringData& to) {
+                for ( vector<BSONObj>::const_iterator it = _indexSpecs.begin() ; it != _indexSpecs.end(); it++) {
+                    BSONObj oldIndexSpec = *it;
+                    string idxName = oldIndexSpec["name"].String();
+                    string oldIdxNS = IndexDetails::indexNamespace(from, idxName);
+                    string newIdxNS = IndexDetails::indexNamespace(to, idxName);
+                    TOKULOG(1) << "renaming " << oldIdxNS << " to " << newIdxNS << endl;
+                    storage::db_rename(oldIdxNS, newIdxNS);
+                }
+            }
+        };
+
+        virtual shared_ptr<CollectionRenamer> getRenamer() {
+            shared_ptr<CollectionRenamer> ret;
+            ret.reset(new Renamer(this));
+            return ret;
+        }
 
     protected:
         CollectionBase(const StringData& ns, const BSONObj &pkIndexPattern, const BSONObj &options);
@@ -1403,6 +1447,11 @@ namespace mongo {
                                        const int direction, const int numWanted,
                                        const bool countCursor);
 
+        virtual shared_ptr<CollectionRenamer> getRenamer() {
+            uasserted(0, "cannot rename a partitioned collection");
+        }
+
+
         // functions for adding/dropping partitions
         void dropPartition(uint64_t id);
         void addPartition();
@@ -1426,6 +1475,7 @@ namespace mongo {
         int partitionWithPK(const BSONObj& pk) const;
 
         static shared_ptr<PartitionedCollection> make(const StringData &ns, const BSONObj &options);
+        static shared_ptr<PartitionedCollection> make(const BSONObj &serialized, CollectionRenamer* renamer);
         static shared_ptr<PartitionedCollection> make(const BSONObj &serialized);
     protected:
         // make constructors
@@ -1435,8 +1485,10 @@ namespace mongo {
         // called in constructor
         virtual shared_ptr<CollectionData> openExistingPartition(const BSONObj &serialized);
         PartitionedCollection(const StringData &ns, const BSONObj &options);
+        PartitionedCollection(const BSONObj &serialized, CollectionRenamer* renamer);
         PartitionedCollection(const BSONObj &serialized);
         void initialize(const StringData &ns, const BSONObj &options);
+        void initialize(const BSONObj &serialized, CollectionRenamer* renamer);
         void initialize(const BSONObj &serialized);
     private:
         void createIndexDetails();

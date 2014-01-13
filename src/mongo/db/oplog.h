@@ -58,4 +58,5 @@ namespace mongo {
     void addOplogPartitions();
     void trimOplogWithTS(uint64_t tsMillis);
     void trimOplogwithGTID(GTID gtid);
+    void convertOplogToPartitionedIfNecessary(GTID gtid);
 }

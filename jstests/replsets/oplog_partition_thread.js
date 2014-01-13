@@ -17,6 +17,23 @@ restartInReplset = function(replTest, conns) {
     assert.soon(function() { return conns[0].getDB("admin").isMaster().ismaster; });
 }
 
+restartOutOfReplsetAsSecondary = function (replTest) {
+    // stop secondary, bring it up outside of repl set
+    // and add index
+    print("shutting down");
+    replTest.stop(1);
+    print("restarting without replset");
+    replTest.restartWithoutReplset(1);
+}
+restartInReplsetAsSecondary = function(replTest, conns) {
+    print("shutting down secondary");
+    replTest.stop(1);
+    print("restarting secondary in replset");
+    replTest.restart(1);
+    assert.soon(function() { return conns[1].getDB("admin").isMaster().secondary; });
+}
+
+
 
 doTest = function (signal, startPort, txnLimit, expireHours, expireDays, rewindTime, expectPartitionAdded) {
     var replTest = new ReplSetTest({ name: 'unicomplex', nodes: 1, startPort:startPort, txnMemLimit: txnLimit});
@@ -149,18 +166,20 @@ doOtherTest = function (signal, startPort, txnLimit, expireHours, expireDays, re
 }
 
 doThirdTest = function (signal, startPort, txnLimit) {
-    var replTest = new ReplSetTest({ name: 'unicomplex', nodes: 1, startPort:startPort, txnMemLimit: txnLimit});
+        replTest = new ReplSetTest({ name: 'unicomplex', nodes: 3, startPort:startPort, txnMemLimit: txnLimit});
     var nodes = replTest.nodeList();
 
     var conns = replTest.startSet();
-    var r = replTest.initiate({ "_id": "unicomplex",
-                              "members": [
-                                          { "_id": 0, "host": nodes[0], priority:10 }]
+        var r = replTest.initiate({ "_id": "unicomplex",
+                                  "members": [
+                                              { "_id": 0, "host": nodes[0], priority:10  },
+                                              { "_id": 1, "host": nodes[1]},
+                                              { "_id": 2, "host": nodes[2], arbiterOnly: true}]
                               });
 
     // Make sure we have a master
     var master = replTest.getMaster();
-    var localdb = master.getDB("local");
+    var localdb = conns[1].getDB("local");
     oplogPartitionInfo = localdb.runCommand({getPartitionInfo:"oplog.rs"});
     refsPartitionInfo = localdb.runCommand({getPartitionInfo:"oplog.refs"});
     assert.eq(1, oplogPartitionInfo.numPartitions);
@@ -168,12 +187,15 @@ doThirdTest = function (signal, startPort, txnLimit) {
     assert.eq(undefined, refsPartitionInfo.maxRefGTID);
 
     // total of 3 partitions
-    assert.commandWorked(master.getDB("admin").runCommand({replAddPartition:1}));
+    replTest.awaitReplication();
+    assert.commandWorked(conns[1].getDB("admin").runCommand({replAddPartition:1}));
     master.getDB("foo").foo.insert({});
     master.getDB("foo").getLastError();
-    assert.commandWorked(master.getDB("admin").runCommand({replAddPartition:1}));
+    replTest.awaitReplication();
+    assert.commandWorked(conns[1].getDB("admin").runCommand({replAddPartition:1}));
     master.getDB("foo").foo.insert({});
     master.getDB("foo").getLastError();
+    replTest.awaitReplication();
     oplogPartitionInfo = localdb.runCommand({getPartitionInfo:"oplog.rs"});
     assert.eq(3, oplogPartitionInfo.numPartitions);
     assert.eq(0, oplogPartitionInfo["partitions"][0]["_id"]);
@@ -190,28 +212,28 @@ doThirdTest = function (signal, startPort, txnLimit) {
         assert.eq(1, refsPartitionInfo.numPartitions);
         assert.eq(0, refsPartitionInfo["partitions"][0]["_id"]);
     }
-    restartOutOfReplset(replTest);
+    restartOutOfReplsetAsSecondary(replTest);
     // change create time
     var time = new Date();
     print(time);
     time.setTime(time.valueOf() - 3*60*60*1000); // rewind two hours
     // do it for all 3
-    conns[0].getDB("local").runCommand({_changePartitionCreateTime:"oplog.rs", index:0, createTime:time});
-    conns[0].getDB("local").runCommand({_changePartitionCreateTime:"oplog.rs", index:1, createTime:time});
-    conns[0].getDB("local").runCommand({_changePartitionCreateTime:"oplog.rs", index:2, createTime:time});
+    conns[1].getDB("local").runCommand({_changePartitionCreateTime:"oplog.rs", index:0, createTime:time});
+    conns[1].getDB("local").runCommand({_changePartitionCreateTime:"oplog.rs", index:1, createTime:time});
+    conns[1].getDB("local").runCommand({_changePartitionCreateTime:"oplog.rs", index:2, createTime:time});
 
-    restartInReplset(replTest, conns);
+    restartInReplsetAsSecondary(replTest, conns);
     // make sure that our test hook worked.
-    oplogPartitionInfo = conns[0].getDB("local").runCommand({getPartitionInfo:"oplog.rs"});
+    oplogPartitionInfo = conns[1].getDB("local").runCommand({getPartitionInfo:"oplog.rs"});
     print(time);
     print(oplogPartitionInfo["partitions"][0]["createTime"]);
 
     // change the expireMillis
-    assert.commandWorked(conns[0].getDB("admin").runCommand({replSetExpireOplog:1, expireOplogDays:0, expireOplogHours:1}));
+    assert.commandWorked(conns[1].getDB("admin").runCommand({replSetExpireOplog:1, expireOplogDays:0, expireOplogHours:1}));
 
     sleep(2000); // give the background thread a chance to do what it needs to do, add the partition
-    oplogPartitionInfo = conns[0].getDB("local").runCommand({getPartitionInfo:"oplog.rs"});
-    refsPartitionInfo = conns[0].getDB("local").runCommand({getPartitionInfo:"oplog.refs"});
+    oplogPartitionInfo = conns[1].getDB("local").runCommand({getPartitionInfo:"oplog.rs"});
+    refsPartitionInfo = conns[1].getDB("local").runCommand({getPartitionInfo:"oplog.refs"});
 
     assert.eq(2, oplogPartitionInfo.numPartitions);
     assert.eq(2, oplogPartitionInfo["partitions"][0]["_id"]);
@@ -262,3 +284,4 @@ doTest(15, 31000, 1000000, 0, 1, 25*60*60000, true); // 1 day
 doTest(15, 31000, 1, 0, 1, 25*60*60000, true); // 1 day
 doTest(15, 31000, 1000000, 0, 0, 25*60*60000, true); // 0
 doTest(15, 31000, 1, 0, 0, 25*60*60000, true); // 0
+

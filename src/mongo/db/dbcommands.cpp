@@ -885,6 +885,7 @@ namespace mongo {
                 Collection *cl = getCollection( source );
                 uassert( 10026 ,  "source namespace does not exist", cl );
                 capped = cl->isCapped();
+                uassert(0, "cannot rename a partitioned collection", !cl->isPartitioned());
                 // TODO: Get the capped size
             }
 
@@ -1722,6 +1723,32 @@ namespace mongo {
             return true;
         }
     } cmdAddPartition;
+
+    class CmdConvertToPartitioned : public FileopsCommand {
+    public:
+        CmdConvertToPartitioned() : FileopsCommand("convertToPartitioned") { }
+        virtual bool logTheOp() { return false; }
+        // TODO: maybe slaveOk should be true?
+        virtual bool slaveOk() const { return true; }
+        virtual void help( stringstream& help ) const {
+            help << "convert a normal collection to a partitioned collection\n" <<
+                "Example: {convertToPartitioned:\"foo\"}";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::convertToPartitioned);
+            out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
+        }
+        bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& anObjBuilder, bool /*fromRepl*/) {
+            string coll = cmdObj[ "convertToPartitioned" ].valuestrsafe();
+            uassert( 0, "convertToPartitioned must specify a collection", !coll.empty() );
+            string ns = dbname + "." + coll;
+            convertToPartitionedCollection(ns);
+            return true;
+        }
+    } cmdConvertToPartitioned;
 
     bool _execCommand(Command *c,
                       const string& dbname,

@@ -554,6 +554,10 @@ namespace mongo {
                 LOCK_REASON(lockReason, "repl: stepping up as primary");
                 Lock::GlobalWrite lk(lockReason);
                 theReplSet->gtidManager->catchUnappliedToLive();
+                GTID lastLiveGTID;
+                GTID lastUnappliedGTID;
+                theReplSet->gtidManager->getLiveGTIDs(&lastLiveGTID, &lastUnappliedGTID);
+                convertOplogToPartitionedIfNecessary(lastLiveGTID);
                 changeState(MemberState::RS_PRIMARY);
             }
             else {
@@ -562,13 +566,14 @@ namespace mongo {
                 // acting like a fast sync. If the oplog is not there, it will do
                 // a full clone from someone
                 syncDoInitialSync();
+                GTID lastGTID;
                 {
                     LOCK_REASON(lockReason, "repl: updating GTID manager after initial sync");
                     Client::ReadContext ctx(rsoplog, lockReason);
                     Client::Transaction transaction(0);
                     BSONObj o = getLastEntryInOplog();
                     verify(!o.isEmpty());
-                    GTID lastGTID = getGTIDFromBSON("_id", o);
+                    lastGTID = getGTIDFromBSON("_id", o);
                     uint64_t lastTime = o["ts"]._numberLong();
                     uint64_t lastHash = o["h"].numberLong();
                     theReplSet->gtidManager->resetAfterInitialSync(
@@ -577,6 +582,7 @@ namespace mongo {
                         lastHash
                         );
                 }
+                convertOplogToPartitionedIfNecessary(lastGTID);
                 goLiveAsSecondary = true;
             }
         }

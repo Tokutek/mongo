@@ -23,6 +23,7 @@
 "connPoolStats",
 "connPoolSync",
 "convertToCapped",
+"convertToPartitioned",
 "copyDBTarget",
 "cpuProfiler",
 "createCollection",
