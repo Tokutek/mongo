@@ -49,7 +49,7 @@ case "$1" in
 	echo "or to use sudo, you can run"
 	echo "  echo never | sudo tee /sys/kernel/mm/transparent_hugepage/enabled"
 	echo ""
-	echo "You should add this line to /etc/rc.local to make it persist across reboots."
+	echo "This will be done for you automatically by the initscripts."
 	echo ""
 	echo "********************************************************************************"
 	echo ""

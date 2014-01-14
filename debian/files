@@ -1,1 +1,5 @@
+tokumx_1.3.3_amd64.deb devel optional
+tokumx-clients_1.3.3_amd64.deb devel optional
 tokumx-server_1.3.3_amd64.deb devel optional
+tokumx-common_1.3.3_amd64.deb devel optional
+tokumx-dbg_1.3.3_amd64.deb debug extra

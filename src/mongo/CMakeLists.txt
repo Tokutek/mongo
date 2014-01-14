@@ -312,8 +312,10 @@ target_link_libraries(mongo
   ${PCRE_LIBRARIES}
   ${TOKUMX_SSL_LIBRARIES}
   )
-install_executables(tokumx_server
+install_executables(tokumx_tools
   mongo
+  )
+install_executables(tokumx_server
   mongos
   mongod
   )

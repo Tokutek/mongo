@@ -19,7 +19,17 @@ set -e
 echo "arg: $1"
 
 case "$1" in
-    remove|upgrade|deconfigure)
+    remove)
+	invoke-rc.d tokumx-server stop
+    ;;
+
+    upgrade|deconfigure)
+	if invoke-rc.d tokumx-server status; then
+		echo "prerm \`$1' failed: tokumx is still running" >&2
+		echo "Please shut down tokumx cleanly before upgrading" >&2
+		echo "See the release announcement for specific upgrade instructions" >&2
+		exit 1
+	fi
     ;;
 
     failed-upgrade)
