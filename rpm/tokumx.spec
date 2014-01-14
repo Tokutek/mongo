@@ -278,7 +278,7 @@ fi
 %{_mandir}/man1/mongos.1*
 %dir %attr(0755, %{name}, root) %{_sharedstatedir}/%{name}
 %dir %attr(0755, %{name}, root) %{_localstatedir}/log/%{name}
-%dir %attr(0755, %{name), root) %{_localstatedir}/run/%{name}
+%dir %attr(0755, %{name}, root) %{_localstatedir}/run/%{name}
 %config(noreplace) %{_sysconfdir}/logrotate.d/%{name}
 %config(noreplace) %{_sysconfdir}/%{name}.conf
 %config(noreplace) %{_sysconfdir}/sysconfig/%{daemon}
