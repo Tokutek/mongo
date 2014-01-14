@@ -371,7 +371,7 @@ namespace mongo {
                         ns.c_str(), 
                         options, 
                         errmsg, 
-                        true // logForRepl
+                        logForRepl
                         ) 
                     )
                 {
