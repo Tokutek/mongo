@@ -19,7 +19,9 @@ Source4: %{daemon}.sysconf
 Source5: %{name}-tmpfile
 Source6: %{daemon}.service
 
+%if 0%{?fedora} >= 15
 BuildRequires: boost-devel
+%endif
 BuildRequires: pcre-devel
 BuildRequires: readline-devel
 BuildRequires: libpcap-devel
@@ -105,7 +107,11 @@ mkdir -p opt
     -D USE_GTAGS=OFF \
     -D USE_CSCOPE=OFF \
     -D USE_BDB=OFF \
+%if %{?fedora} >= 15
+    -D USE_SYSTEM_BOOST=ON \
+%else
     -D USE_SYSTEM_BOOST=OFF \
+%endif
     -D USE_SYSTEM_PCRE=ON \
     -D TOKUMX_STRIP_BINARIES=OFF \
     -D TOKUMX_SET_RPATH=OFF \
