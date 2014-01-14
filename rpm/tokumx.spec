@@ -143,7 +143,6 @@ rm -rf %{buildroot}%{_prefix}/scripts
 
 mkdir -p %{buildroot}%{_sharedstatedir}/%{name}
 mkdir -p %{buildroot}%{_localstatedir}/log/%{name}
-touch    %{buildroot}%{_localstatedir}/log/%{name}/%{name}.log
 mkdir -p %{buildroot}%{_localstatedir}/run/%{name}
 
 %if 0%{?fedora} >= 15
@@ -296,7 +295,7 @@ fi
 %endif
 
 %changelog
-* Wed Jan 08 2013 Leif Walsh <leif.walsh@gmail.com>
+* Wed Jan 08 2014 Leif Walsh <leif.walsh@gmail.com>
 - Update for tokumx.
 
 * Thu Jan 28 2010 Richard M Kreuter <richard@10gen.com>
