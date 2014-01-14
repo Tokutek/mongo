@@ -107,7 +107,7 @@ mkdir -p opt
     -D USE_GTAGS=OFF \
     -D USE_CSCOPE=OFF \
     -D USE_BDB=OFF \
-%if %{?fedora} >= 15
+%if 0%{?fedora} >= 15
     -D USE_SYSTEM_BOOST=ON \
 %else
     -D USE_SYSTEM_BOOST=OFF \
