@@ -6,10 +6,15 @@ limit nofile 20000 20000
 kill timeout 300 # wait 300s between SIGTERM and SIGKILL.
 
 pre-start script
-    set -e
     mkdir -p /var/lib/tokumx/
     mkdir -p /var/log/tokumx/
-    echo never > /sys/kernel/mm/transparent_hugepage/enabled
+    if [ -f /sys/kernel/mm/transparent_hugepage/enabled ]; then
+            echo never > /sys/kernel/mm/transparent_hugepage/enabled 
+            if [ "$?" = 0 ]; then
+                    echo "Error disabling transparent_hugepages, are you running in a linux container?" >&2 
+                    echo "If the server fails to start, check that transparent hugepages are disabled." >&2
+            fi
+    fi
 end script
 
 start on runlevel [2345]
