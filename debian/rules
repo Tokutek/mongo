@@ -14,7 +14,6 @@ configure: configure-stamp
 configure-stamp:
 	dh_testdir
         # Add here commands to configure the package.
-	mv ../opt .
 	@mkdir -p opt
 	(cd opt; \
 	  cmake \
@@ -59,8 +58,7 @@ clean:
 	$(RM) -r $(CURDIR)/debian/tokumx-clients
 	$(RM) -r $(CURDIR)/debian/tokumx-common
 	$(RM) -r $(CURDIR)/debian/tokumx-server
-	#$(RM) -r opt
-	mv opt ..
+	$(RM) -r opt
 
 	dh_clean debian/files
 
