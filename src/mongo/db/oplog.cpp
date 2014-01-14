@@ -291,34 +291,39 @@ namespace mongo {
         writeEntryToOplog(op, true);
     }
 
-    // Copy a range of documents to the local oplog.refs collection
-    static void copyOplogRefsRange(OplogReader &r, OID oid) {
-        shared_ptr<DBClientCursor> c = r.getOplogRefsCursor(oid);
-        LOCK_REASON(lockReason, "repl: copying oplog.refs range");
-        Client::ReadContext ctx(rsOplogRefs, lockReason);
-        while (c->more()) {
-            BSONObj b = c->next();
-            BSONElement eOID = b.getFieldDotted("_id.oid");
-            if (oid != eOID.OID()) {
-                break;
-            }
-            LOG(6) << "copyOplogRefsRange " << b << endl;
-            writeEntryToOplogRefs(b);
-        }
-    }
-
     void replicateFullTransactionToOplog(BSONObj& o, OplogReader& r, bool* bigTxn) {
         *bigTxn = false;
         if (o.hasElement("ref")) {
             OID oid = o["ref"].OID();
             LOG(3) << "oplog ref " << oid << endl;
-            copyOplogRefsRange(r, oid);
+            shared_ptr<DBClientCursor> c = r.getOplogRefsCursor(oid);
+            // we are doing the work of copying oplog.refs data and writing to oplog
+            // underneath a read lock
+            // to ensure that neither oplog or oplog.refs has a partition
+            // added, so that the trickery required in logTransactionOpsRef
+            // to update maxRefGTID is not necessary.
+            // If we release the read lock between copying oplog refs range
+            // and writing to oplog, we would have to handle the case
+            // where a partition is added while copying the range
+            LOCK_REASON(lockReason, "repl: copying oplog.refs range");
+            Client::ReadContext ctx(rsOplogRefs, lockReason);
+            while (c->more()) {
+                BSONObj b = c->next();
+                BSONElement eOID = b.getFieldDotted("_id.oid");
+                if (oid != eOID.OID()) {
+                    break;
+                }
+                LOG(6) << "copyOplogRefsRange " << b << endl;
+                writeEntryToOplogRefs(b);
+            }
+            replicateTransactionToOplog(o);
             *bigTxn = true;
         }
-
-        LOCK_REASON(lockReason, "repl: copying entry to local oplog");
-        Client::ReadContext ctx(rsoplog, lockReason);
-        replicateTransactionToOplog(o);
+        else {
+            LOCK_REASON(lockReason, "repl: copying entry to local oplog");
+            Client::ReadContext ctx(rsoplog, lockReason);
+            replicateTransactionToOplog(o);
+        }
     }
 
     // apply all operations in the array
