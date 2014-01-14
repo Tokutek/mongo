@@ -1,12 +1,15 @@
 # Ubuntu upstart file at /etc/init/tokumx.conf
+description "TokuMX"
 
 limit nofile 20000 20000
 
 kill timeout 300 # wait 300s between SIGTERM and SIGKILL.
 
 pre-start script
+    set -e
     mkdir -p /var/lib/tokumx/
     mkdir -p /var/log/tokumx/
+    echo never > /sys/kernel/mm/transparent_hugepage/enabled
 end script
 
 start on runlevel [2345]

@@ -5,11 +5,14 @@ Maintainer: Leif Walsh <leif.walsh@gmail.com>
 Build-Depends: debhelper (>= 7), libpcre3, libpcre3-dev, cmake, libboost1.35-dev | libboost1.37-dev | libboost1.38-dev | libboost1.40-dev | libboost1.42-dev | libboost1.49-dev | libboost1.53-dev, libboost-thread1.35-dev | libboost-thread1.37-dev | libboost-thread1.38-dev | libboost-thread1.40-dev | libboost-thread1.42-dev | libboost-thread1.49-dev | libboost-thread1.53-dev, libboost-filesystem1.35-dev | libboost-filesystem1.37-dev | libboost-filesystem1.38-dev | libboost-filesystem1.40-dev | libboost-filesystem1.42-dev | libboost-filesystem1.49-dev | libboost-filesystem1.53-dev, libboost-program-options1.35-dev | libboost-program-options1.37-dev | libboost-program-options1.38-dev | libboost-program-options1.40-dev | libboost-program-options1.42-dev | libboost-program-options1.49-dev | libboost-program-options1.53-dev, libboost-date-time1.35-dev | libboost-date-time1.37-dev | libboost-date-time1.38-dev | libboost-date-time1.40-dev | libboost-date-time1.42-dev | libboost-date-time1.49-dev | libboost-date-time1.53-dev, libpcap-dev, libreadline-dev, zlib1g-dev
 Homepage: http://www.tokutek.com/products/tokumx-for-mongodb
 
-Package: tokumx-server
+Package: tokumx
 Architecture: amd64
-Depends: ${shlibs:Depends}, ${misc:Depends}, zlib1g, python
-Pre-Depends: adduser
-Description: An object/document-oriented database
+Depends:
+    tokumx-clients (= ${binary:Version}),
+    tokumx-server (= ${binary:Version}),
+    ${misc:Depends}
+Conflicts: mongodb
+Description: object/document-oriented database (metapackage)
  TokuMX is a high-performance version of MongoDB using Fractal
  Tree indexes to store indexes and data.  TokuMX is
  driver-compatible with MongoDB and has the same simple
@@ -21,3 +24,75 @@ Description: An object/document-oriented database
       operations.
     * Transactional semantics including snapshot reads and
       multi-statement transactions on a single shard basis.
+
+Package: tokumx-clients
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}, tokumx-common (= ${binary:Version}), python
+Conflicts: mongodb-clients
+Description: object/document-oriented database (client apps)
+ TokuMX is a high-performance version of MongoDB using Fractal
+ Tree indexes to store indexes and data.  TokuMX is
+ driver-compatible with MongoDB and has the same simple
+ management and operations interface as MongoDB, and adds:
+ .
+    * Much higher performance on out-of-memory write workloads.
+    * Compression of all data, up to 10x in many cases.
+    * Document-level concurrency for all read and write
+      operations.
+    * Transactional semantics including snapshot reads and
+      multi-statement transactions on a single shard basis.
+ .
+ This package includes the mongo shell and utilities for
+ interacting with a TokuMX database server.
+
+Package: tokumx-server
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}, tokumx-common (= ${binary:Version})
+Pre-Depends: adduser
+Conflicts: mongodb-server
+Description: object/document-oriented database (server package)
+ TokuMX is a high-performance version of MongoDB using Fractal
+ Tree indexes to store indexes and data.  TokuMX is
+ driver-compatible with MongoDB and has the same simple
+ management and operations interface as MongoDB, and adds:
+ .
+    * Much higher performance on out-of-memory write workloads.
+    * Compression of all data, up to 10x in many cases.
+    * Document-level concurrency for all read and write
+      operations.
+    * Transactional semantics including snapshot reads and
+      multi-statement transactions on a single shard basis.
+ .
+ This package includes the mongod and mongos data and routing
+ servers for the TokuMX database system.
+
+Package: tokumx-common
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}, zlib1g
+Description: object/document-oriented database (common package)
+ TokuMX is a high-performance version of MongoDB using Fractal
+ Tree indexes to store indexes and data.  TokuMX is
+ driver-compatible with MongoDB and has the same simple
+ management and operations interface as MongoDB, and adds:
+ .
+    * Much higher performance on out-of-memory write workloads.
+    * Compression of all data, up to 10x in many cases.
+    * Document-level concurrency for all read and write
+      operations.
+    * Transactional semantics including snapshot reads and
+      multi-statement transactions on a single shard basis.
+ .
+ This package includes files common to tokumx-clients and
+ tokumx-server, including the Fractal Tree indexing library.
+
+Package: tokumx-dbg
+Architecture: amd64
+Section: debug
+Priority: extra
+Depends:
+    tokumx-clients (= ${binary:Version}),
+    tokumx-server (= ${binary:Version}),
+    ${misc:Depends}
+Description: object/document-oriented database (debug symbols)
+ .
+ This package contains the debugging symbols for tokumx.
