@@ -50,7 +50,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 DAEMON=/usr/bin/mongod
 DESC=database
 
-NAME=tokumx
+NAME=tokumx-server
 # Defaults.  Can be overridden by the /etc/default/$NAME
 # Other configuration options are located in $CONF file. See here for more:
 # http://dochub.mongodb.org/core/configurationoptions
@@ -111,20 +111,22 @@ running() {
 
 start_server() {
 # Start the process using the wrapper
-            start-stop-daemon --background --start --quiet --pidfile $PIDFILE \
-                        --make-pidfile --chuid $DAEMONUSER \
-                        --exec $DAEMON -- $DAEMON_OPTS
-            errcode=$?
+        [ -f /sys/kernel/mm/transparent_hugepage/enabled ] && \
+                echo never > /sys/kernel/mm/transparent_hugepage/enabled
+        start-stop-daemon --background --start --quiet --pidfile $PIDFILE \
+                --make-pidfile --chuid $DAEMONUSER \
+                --exec $DAEMON -- $DAEMON_OPTS
+        errcode=$?
 	return $errcode
 }
 
 stop_server() {
 # Stop the process using the wrapper
-            start-stop-daemon --stop --quiet --pidfile $PIDFILE \
-                        --retry 300 \
-                        --user $DAEMONUSER \
-                        --exec $DAEMON
-            errcode=$?
+        start-stop-daemon --stop --quiet --pidfile $PIDFILE \
+                --retry 300 \
+                --user $DAEMONUSER \
+                --exec $DAEMON
+        errcode=$?
 	return $errcode
 }
 
