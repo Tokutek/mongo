@@ -126,7 +126,7 @@ namespace mongo {
 
             ok = conn->runCommand("admin", cmd, result, 0);
         }
-        catch( const DBException& ex ) {
+        catch( const DBException& ) {
 
             bool ignoreFailure = ShardConnection::ignoreInitialVersionFailure
                                  && conn_in->type() == ConnectionString::SET;
