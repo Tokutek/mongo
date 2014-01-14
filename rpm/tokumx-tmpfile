@@ -1,0 +1,5 @@
+# make sure the mongodb dir is owned by mongodb so the process running as
+# mongodb can write the pid there
+d /var/run/tokumx 0755 tokumx root -
+# disable hugepages
+w /sys/kernel/mm/transparent_hugepage/enabled - - - - never
