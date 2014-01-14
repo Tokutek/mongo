@@ -209,6 +209,15 @@ namespace mongo {
             }
         }
 
+        void logUnsupportedOperation(const char *ns) {
+            if (logTxnOpsForReplication()) {
+                if (isLocalNs(ns)) {
+                    return;
+                }
+                uasserted(0, "The operation is not supported for replication");
+            }
+        }
+
         static void runColdIndexFromOplog(const char *ns, const BSONObj &row) {
             LOCK_REASON(lockReason, "repl: cold index build");
             Client::WriteContext ctx(ns, lockReason);

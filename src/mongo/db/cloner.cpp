@@ -389,6 +389,9 @@ namespace mongo {
                     Collection* cl = getCollection(ns);
                     massert(0, "Could not get collection we just created", cl);
                     PartitionedCollection* pc = cl->as<PartitionedCollection>();
+                    if (logForRepl) {
+                        OpLogHelpers::logUnsupportedOperation(ns.c_str());                        
+                    }
                     pc->addClonedPartitionInfo(res["partitions"].Array());
                 }
             }
@@ -551,6 +554,9 @@ namespace mongo {
                 }
                 Collection* cl = getCollection(to_name);
                 massert(0, "Could not get collection we just created", cl);
+                if (opts.logForRepl) {
+                    OpLogHelpers::logUnsupportedOperation(ns.c_str());                        
+                }
                 PartitionedCollection* pc = cl->as<PartitionedCollection>();
                 pc->addClonedPartitionInfo(res["partitions"].Array());
             }

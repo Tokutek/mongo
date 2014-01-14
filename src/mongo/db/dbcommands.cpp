@@ -1673,6 +1673,7 @@ namespace mongo {
             uassert( 0, "dropPartition must specify a collection", !coll.empty() );
             string ns = dbname + "." + coll;
             Collection *cl = getCollection( ns );
+            OpLogHelpers::logUnsupportedOperation(ns.c_str());
             uassert( 0, "dropPartition no such collection", cl );
             uassert( 0, "collection must be partitioned", cl->isPartitioned() );
 
@@ -1710,6 +1711,7 @@ namespace mongo {
             Collection *cl = getCollection( ns );
             uassert( 0, "addPartition no such collection", cl );
             uassert( 0, "collection must be partitioned", cl->isPartitioned() );
+            OpLogHelpers::logUnsupportedOperation(ns.c_str());
 
             BSONElement e = cmdObj["newPivot"];            
             PartitionedCollection *pc = cl->as<PartitionedCollection>();
@@ -1745,6 +1747,7 @@ namespace mongo {
             string coll = cmdObj[ "convertToPartitioned" ].valuestrsafe();
             uassert( 0, "convertToPartitioned must specify a collection", !coll.empty() );
             string ns = dbname + "." + coll;
+            OpLogHelpers::logUnsupportedOperation(ns.c_str());
             convertToPartitionedCollection(ns);
             return true;
         }
