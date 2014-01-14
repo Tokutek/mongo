@@ -54,5 +54,6 @@ error_code("ExceededTimeLimit", 50)
 error_code("CommandNotFound", 59)
 error_code("NodeNotFound", 74)
 error_code("DuplicateKey", 11000)
+error_code("Interrupted", 11601)
 
 error_class("NetworkError", ["HostUnreachable", "HostNotFound"])
