@@ -326,6 +326,7 @@ namespace mongo {
         bool changeAttributes(const BSONObj &info, BSONObjBuilder &wasBuilder);
 
         enum toku_compression_method getCompressionMethod() const;
+        uint32_t getFanout() const;
         uint32_t getPageSize() const;
         uint32_t getReadPageSize() const;
         void getStat64(DB_BTREE_STAT64* stats) const;
@@ -441,8 +442,8 @@ namespace mongo {
             _idxNum(idxNum)
         {
         }
-        // TODO: implement these
         virtual enum toku_compression_method getCompressionMethod() const;
+        virtual uint32_t getFanout() const;
         virtual uint32_t getPageSize() const;
         virtual uint32_t getReadPageSize() const;
         virtual void getStat64(DB_BTREE_STAT64* stats) const;

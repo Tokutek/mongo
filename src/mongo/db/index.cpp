@@ -620,6 +620,10 @@ namespace mongo {
         return _pc->getPartition(0)->idx(_idxNum).getCompressionMethod();
     }
 
+    uint32_t PartitionedIndexDetails::getFanout() const {
+        return _pc->getPartition(0)->idx(_idxNum).getFanout();
+    }
+
     uint32_t PartitionedIndexDetails::getPageSize() const {
         return _pc->getPartition(0)->idx(_idxNum).getPageSize();
     }
