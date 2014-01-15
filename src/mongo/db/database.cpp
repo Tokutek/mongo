@@ -74,7 +74,23 @@ namespace mongo {
             }
             throw;
         }
-    }    
+    }
+
+    void Database::diskSize(size_t &uncompressedSize, size_t &compressedSize) {
+        list<string> colls;
+        _collectionMap.getNamespaces(colls);
+        Collection::Stats dbstats;
+        for (list<string>::const_iterator it = colls.begin(); it != colls.end(); ++it) {
+            Collection *c = getCollection(*it);
+            if (c == NULL) {
+                DEV warning() << "collection " << *it << " wasn't found in Database::diskSize" << endl;
+                continue;
+            }
+            c->fillCollectionStats(dbstats, NULL, 1);
+        }
+        uncompressedSize += dbstats.size + dbstats.indexSize;
+        compressedSize += dbstats.storageSize + dbstats.indexStorageSize;
+    }
 
     bool Database::setProfilingLevel( int newLevel , string& errmsg ) {
         if ( _profile == newLevel )

@@ -1008,19 +1008,23 @@ namespace mongo {
             vector< BSONObj > dbInfos;
 
             set<string> seen;
-            boost::intmax_t totalSize = 0;
+            size_t totalUncompressedSize = 0;
+            size_t totalCompressedSize = 0;
             for ( vector< string >::iterator i = dbNames.begin(); i != dbNames.end(); ++i ) {
                 BSONObjBuilder b;
                 b.append( "name", *i );
 
-                DEV LOG(0) << "don't know how to calculate the sizeOnDisk of a database yet!" << endl;
-                boost::intmax_t size = 0;
-                b.append( "sizeOnDisk", (double) size );
-                totalSize += size;
-                
-                if (1) {
-                    LOCK_REASON(lockReason, "listDatabases: checking for empty db");
+                {
+                    LOCK_REASON(lockReason, "listDatabases: getting db size");
                     Client::ReadContext rc( getSisterNS(*i, "system.namespaces"), lockReason );
+                    size_t uncompressedSize = 0;
+                    size_t compressedSize = 0;
+                    rc.ctx().db()->diskSize(uncompressedSize, compressedSize);
+                    b.append( "size", (double) uncompressedSize );
+                    b.append( "sizeOnDisk", (double) compressedSize );
+                    totalUncompressedSize += uncompressedSize;
+                    totalCompressedSize += compressedSize;
+
                     b.appendBool( "empty", rc.ctx().db()->isEmpty() );
                 }
                 
@@ -1047,7 +1051,7 @@ namespace mongo {
                 b.append( "name" , name );
                 b.append( "sizeOnDisk" , (double)1.0 );
 
-                if (1) {
+                {
                     LOCK_REASON(lockReason, "listDatabases: checking for empty db");
                     Client::ReadContext ctx( name, lockReason );
                     b.appendBool( "empty", ctx.ctx().db()->isEmpty() );
@@ -1057,7 +1061,8 @@ namespace mongo {
             }
 
             result.append( "databases", dbInfos );
-            result.append( "totalSize", double( totalSize ) );
+            result.append( "totalSize", double( totalCompressedSize ) );
+            result.append( "totalUncompressedSize", double( totalUncompressedSize ) );
             return true;
         }
     } cmdListDatabases;

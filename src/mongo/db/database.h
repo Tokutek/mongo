@@ -41,9 +41,10 @@ namespace mongo {
         */
         static void closeDatabase( const StringData &db, const StringData& path );
 
-        // TODO: This is wrong. The collection map may not be initialized yet,
-        // (ie: it's not open) but that doesn't mean it's empty.
-        bool isEmpty() { return !_collectionMap.allocated(); }
+        bool isEmpty() {
+            _collectionMap.init();
+            return !_collectionMap.allocated();
+        }
 
         int profile() const { return _profile; }
 
@@ -52,6 +53,8 @@ namespace mongo {
         const string &name() const { return _name; }
 
         const string &path() const { return _path; }
+
+        void diskSize(size_t &uncompressedSize, size_t &compressedSize);
 
         /**
          * @return true if success.  false if bad level or error creating profile ns
