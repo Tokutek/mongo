@@ -4,7 +4,7 @@ Name: tokumx
 Conflicts: mongo, mongo-10gen, mongo-10gen-unstable, mongo-stable, mongodb, mongodb-server
 Requires: tokumx-common
 Version: 1.4.0
-Release: alpha.1-1%{?dist}
+Release: alpha.1%{?dist}
 Summary: TokuMX client shell and tools
 License: AGPLv3 and zlib and ASL 2.0 and GPLv2
 Vendor: Tokutek, Inc.
