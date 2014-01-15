@@ -51,7 +51,7 @@ var testOperationsGetRejected = function() {
             t2.remove({});
 
             begin();
-            beginLoad('loaderclientreject', [ ], { });
+            beginLoad('loaderclientreject', [ { key: { zzz: 1 }, name: "zzz_1" } ], { });
 
             var commitAndCheck = function() {
                 commitLoad();

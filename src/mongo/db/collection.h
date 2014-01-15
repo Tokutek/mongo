@@ -212,7 +212,7 @@ namespace mongo {
         // - otherwise, send an optimize message and run hot optimize.
         virtual bool rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &result) = 0;
 
-        virtual void dropIndexDetails(int idxNum) = 0;
+        virtual void dropIndexDetails(int idxNum, bool noteNs) = 0;
         
         virtual void acquireTableLock() = 0;
 
@@ -861,7 +861,7 @@ namespace mongo {
         // - otherwise, send an optimize message and run hot optimize.
         bool rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &result);
 
-        virtual void dropIndexDetails(int idxNum);
+        virtual void dropIndexDetails(int idxNum, bool noteNs);
 
         void acquireTableLock();
 
@@ -1201,7 +1201,7 @@ namespace mongo {
 
         bool rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &wasBuilder);
 
-        void dropIndexDetails(int idxNum);
+        void dropIndexDetails(int idxNum, bool noteNs);
 
     private:
         // When closing a BulkLoadedCollection, we need to make sure the key trackers and
@@ -1365,15 +1365,21 @@ namespace mongo {
             }
         }
 
-        virtual void dropIndexDetails(int idxNum) {
-            // get rid of the index details
+        virtual void dropIndexDetails(int idxNum, bool noteNs) {
+            // get rid of the index details            
+            if (noteNs) {
+                // Note this ns in the rollback so if this transaction aborts, we'll
+                // close this ns, forcing the next user to reload in-memory metadata.
+                CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
+                rollback.noteNs(_ns);
+            }
             _indexDetails.erase(_indexDetails.begin() + idxNum);
             for (IndexCollVector::const_iterator it = _partitions.begin(); 
                  it != _partitions.end(); 
                  ++it) 
             {
                 CollectionData *currColl = it->get();
-                currColl->dropIndexDetails(idxNum);
+                currColl->dropIndexDetails(idxNum, false);
             }
             // not sure I like this, but if we are dropping the primary key,
             // then we are dropping the collection, which means we need
@@ -1381,7 +1387,7 @@ namespace mongo {
             // change CollectionData API to explicitly handle this
             if (idxNum == 0) {
                 verify(_metaCollection->nIndexes() == 1);
-                _metaCollection->dropIndexDetails(0);
+                _metaCollection->dropIndexDetails(0, false);
             }
         }
         

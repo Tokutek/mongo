@@ -1065,6 +1065,7 @@ namespace NamespaceTests {
                 Collection* cl = nsd();
                 CollectionBase* cd = cl->as<CollectionBase>();
                 cd->setIndexIsMultikey( 1, &dummy );
+                cl->noteMultiKeyChanged(); // this is what now clears the query cache
                 ASSERT( nsd()->isMultikey( 1 ) );
                 assertCachedIndexKey( BSONObj() );
                 

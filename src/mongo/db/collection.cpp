@@ -268,11 +268,11 @@ namespace mongo {
                 _cd.reset(new IndexedCollection(serialized));
             }                              
         }
+        _pk = _cd->pkPattern().copy();
         if (reserializeNeeded) {
             // Write a clean version of this collection's info to the collection map, now that we've rectified it.
             collectionMap(_ns)->update_ns(_ns, serialize(), true);
         }
-        _pk = _cd->pkPattern().copy();
 
         // after _cd stuff:
         computeIndexKeys();
@@ -867,7 +867,19 @@ namespace mongo {
         indexer->commit();
     }
 
-    void CollectionBase::dropIndexDetails(int idxNum) {
+    void CollectionBase::dropIndexDetails(int idxNum, bool noteNs) {
+        // Hate the fact that we need to have this bool here,
+        // but this function may be called on a partition of a PartitionedCollection.
+        // In that case, we do NOT want to note the NS.
+        // Could not push this to caller either, as bulk loaded collections
+        // would have issues with dropIndex
+        if (noteNs) {
+            // Note this ns in the rollback so if this transaction aborts, we'll
+            // close this ns, forcing the next user to reload in-memory metadata.
+            CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
+            rollback.noteNs(_ns);
+        }
+
         IndexDetailsBase& idx = *_indexes[idxNum];
         idx.kill_idx();
         _indexes.erase(_indexes.begin() + idxNum);
@@ -945,20 +957,16 @@ namespace mongo {
 
         IndexDetails &idx = _cd->idx(idxNum);
 
-        // Note this ns in the rollback so if this transaction aborts, we'll
-        // close this ns, forcing the next user to reload in-memory metadata.
-        CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
-        rollback.noteNs(_ns);
-
         // Remove this index from the system catalogs
         removeFromNamespacesCatalog(idx.indexNamespace());
         if (nsToCollectionSubstring(_ns) != "system.indexes") {
             removeFromIndexesCatalog(_ns, idx.indexName());
         }
 
-        _cd->dropIndexDetails(idxNum);
+        _cd->dropIndexDetails(idxNum, true);
         
         resetTransient();
+
         // Updated whatever in memory structures are necessary, now update the collectionMap.
         collectionMap(_ns)->update_ns(_ns, serialize(), true);
     }
@@ -2451,7 +2459,7 @@ namespace mongo {
         uasserted( 16895, "Cannot optimize a collection under-going bulk load." );
     }
 
-    void BulkLoadedCollection::dropIndexDetails(const int idxNum) {
+    void BulkLoadedCollection::dropIndexDetails(const int idxNum, bool noteNs) {
         uasserted( 16894, "Cannot perform drop/dropIndexes on of a collection under-going bulk load." );
     }
 
@@ -2559,7 +2567,7 @@ namespace mongo {
         // with what existing collection
 
         // delete existing partition
-        _partitions[0]->dropIndexDetails(0);
+        _partitions[0]->dropIndexDetails(0, false);
         _partitions.erase(_partitions.begin());
 
         renamer->renameCollection(_ns, getPartitionName(0));
@@ -3063,7 +3071,7 @@ namespace mongo {
         // ugly way to "drop" a collection. Perhaps we need
         // a CollectionData method for this.
         for (int i = 0; i < nIndexes(); i++) {
-            _partitions[index]->dropIndexDetails(i);
+            _partitions[index]->dropIndexDetails(i, false);
         }
         _partitions.erase(_partitions.begin() + index);
         

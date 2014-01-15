@@ -16,7 +16,7 @@ restartInReplset = function(replTest, conns, i) {
     replTest.stop(i);
     print("restarting secondary in replset");
     replTest.restart(i);
-    assert.soon(function() { return conns[i].getDB("admin").isMaster().ismaster; });
+    assert.soon(function() { return conns[i].getDB("admin").isMaster().ismaster || conns[i].getDB("admin").isMaster().secondary; });
 }
 
 
@@ -122,7 +122,8 @@ doTest = function (signal, startPort, txnLimit) {
         assert(refsPartitionInfo.numPartitions == 1);
     }
 
-    conns[0].getDB("foo").foo.insert({});
+    var master = replTest.getMaster();
+    master.getDB("foo").foo.insert({});
     replTest.awaitReplication();
     insertedGTID = conns[0].getDB("local").oplog.rs.find().sort({_id:-1}).next()._id;
 
