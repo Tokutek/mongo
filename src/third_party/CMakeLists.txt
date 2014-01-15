@@ -9,7 +9,7 @@ set(PCRE_INCLUDE_DIRS ${PCRE_INCLUDE_DIRS} PARENT_SCOPE)
 set(PCRE_LIBRARIES ${PCRE_LIBRARIES} PARENT_SCOPE)
 
 if (USE_SYSTEM_BOOST)
-  find_package(Boost 1.49 REQUIRED
+  find_package(Boost 1.48 REQUIRED
     COMPONENTS system thread filesystem program_options
     )
 else ()
