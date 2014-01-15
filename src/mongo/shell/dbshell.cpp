@@ -898,10 +898,11 @@ int _main( int argc, char* argv[], char **envp ) {
         }
 
         if ( !hasMongoRC && isatty(fileno(stdin)) ) {
-           cout << "Welcome to the MongoDB shell.\n"
+           cout << "Welcome to the TokuMX shell.\n"
                    "For interactive help, type \"help\".\n"
                    "For more comprehensive documentation, see\n\thttp://docs.mongodb.org/\n"
-                   "Questions? Try the support group\n\thttp://groups.google.com/group/mongodb-user" << endl;
+                   "and the TokuMX Users' Guide available at\n\thttp://www.tokutek.com/products/downloads/tokumx-ce-downloads/\n"
+                   "Questions? Try the support group\n\thttp://groups.google.com/group/tokumx-user" << endl;
            fstream f;
            f.open(rcLocation.c_str(), ios_base::out );
            f.close();
