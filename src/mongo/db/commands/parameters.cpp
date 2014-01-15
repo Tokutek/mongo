@@ -190,6 +190,12 @@ namespace mongo {
                                                           &cmdLine.syncdelay,
                                                           true,
                                                           true );
+
+        ExportedServerParameter<bool> LoaderCompressTmpSetting( ServerParameterSet::getGlobal(),
+                                                                "loaderCompressTmp",
+                                                                &cmdLine.loaderCompressTmp,
+                                                                true,
+                                                                true );
     }
 
 }

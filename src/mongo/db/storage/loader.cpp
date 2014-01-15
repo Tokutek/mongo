@@ -16,6 +16,9 @@
 
 #include "mongo/pch.h"
 
+#include <db.h>
+
+#include "mongo/db/cmdline.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/interrupt_status.h"
 #include "mongo/db/storage/env.h"
@@ -33,7 +36,9 @@ namespace mongo {
 
             uint32_t db_flags = 0;
             uint32_t dbt_flags = 0;
-            const int loader_flags = 0; 
+            const int loader_flags = (cmdLine.loaderCompressTmp
+                                      ? LOADER_COMPRESS_INTERMEDIATES
+                                      : 0);
             int r = storage::env->create_loader(storage::env, cc().txn().db_txn(),
                                                 &_loader, _dbs[0], _n, _dbs,
                                                 &db_flags, &dbt_flags, loader_flags);

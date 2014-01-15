@@ -511,6 +511,7 @@ static void buildOptionsDescriptions(po::options_description *pVisible,
     ("lockTimeout", po::value(&cmdLine.lockTimeout), "tokumx row lock wait timeout (in ms), 0 means wait as long as necessary")
     ("locktreeMaxMemory", po::value(&cmdLine.locktreeMaxMemory), "tokumx memory limit (in bytes) for storing transactions' row locks.")
     ("loaderMaxMemory", po::value(&cmdLine.loaderMaxMemory), "tokumx memory limit (in bytes) for a single bulk loader to use. the bulk loader is used to build foreground indexes and is also utilized by mongorestore/import")
+    ("loaderCompressTmp", po::value(&cmdLine.loaderCompressTmp), "the bulk loader (used for mongoimport/mongorestore and non-background index builds) will compress intermediate files (see tmpDir) when writing them to disk")
     ("noauth", "run without security")
     ("nohttpinterface", "disable http interface")
     ("nojournal", "DEPRECATED)")
