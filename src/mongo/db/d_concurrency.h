@@ -151,6 +151,7 @@ namespace mongo {
             WrapperForRWLock *_weLocked;
             const string _what;
             bool _nested;
+            Nestable _nestedDB;
         };
 
         // lock this database for reading. do not shared_lock globally first, that is handledin herein. 
@@ -170,6 +171,7 @@ namespace mongo {
             WrapperForRWLock *_weLocked;
             string _what;
             bool _nested;
+            Nestable _nestedDB;
             
         };
 
