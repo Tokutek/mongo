@@ -434,10 +434,15 @@ if (USE_SASL_CLIENT)
     ${SASL_LIBRARIES}
     )
 endif ()
-if (CMAKE_SYSTEM_NAME STREQUAL Linux)
-  set_property(TARGET mongoclient APPEND PROPERTY
-    LINK_FLAGS -Wl,--as-needed -Wl,-zdefs
-    )
+if (TOKUMX_CLIENT_LIB_SHARED AND CMAKE_SYSTEM_NAME STREQUAL Linux)
+  foreach (prop
+      -Wl,--as-needed
+      -Wl,-zdefs
+      )
+    set_property(TARGET mongoclient APPEND PROPERTY
+      LINK_FLAGS ${prop}
+      )
+  endforeach ()
 endif ()
 install(TARGETS mongoclient
   DESTINATION ${INSTALL_LIBDIR}
