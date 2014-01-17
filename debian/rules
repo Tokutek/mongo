@@ -57,6 +57,7 @@ clean:
 
 	$(RM) -r $(CURDIR)/debian/tokumx-clients
 	$(RM) -r $(CURDIR)/debian/tokumx-common
+	$(RM) -r $(CURDIR)/debian/tokumx-dev
 	$(RM) -r $(CURDIR)/debian/tokumx-server
 	$(RM) -r opt
 
