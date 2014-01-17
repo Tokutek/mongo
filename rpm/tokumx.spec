@@ -86,7 +86,7 @@ softwware, default configuration files, and init.d scripts.
 %package -n lib%{name}
 Summary: TokuMX shared libraries
 Group: Development/Libraries
-Depends: %{name}-common = %{version}-%{release}
+Requires: %{name}-common = %{version}-%{release}
 
 %description -n lib%{name}
 TokuMX is a high-performance version of MongoDB using Fractal
