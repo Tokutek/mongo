@@ -1,6 +1,6 @@
 %global daemon tokumx
 
-%if %{tokumx_enterprise}
+%if 0%{tokumx_enterprise}
 Name: tokumx-enterprise
 %else
 Name: tokumx
