@@ -19,7 +19,6 @@
 #pragma once
 
 #include "mongo/pch.h"
-
 #include "mongo/db/jsobj.h"
 #include "mongo/util/net/message.h"
 #include "mongo/util/processinfo.h"
