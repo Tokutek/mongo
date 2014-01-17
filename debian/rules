@@ -74,7 +74,9 @@ install: build
 	  cmake -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/tokumx-clients/usr -D COMPONENT=tokumx_tools -P cmake_install.cmake && \
 	  cmake -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/tokumx-server/usr -D COMPONENT=tokumx_plugins -P cmake_install.cmake && \
 	  cmake -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/tokumx-common/usr -D COMPONENT=tokukv_libs_shared -P cmake_install.cmake && \
-	  cmake -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/tokumx-common/usr -D COMPONENT=tokubackup_libs_shared -P cmake_install.cmake)
+	  cmake -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/tokumx-common/usr -D COMPONENT=tokubackup_libs_shared -P cmake_install.cmake && \
+	  cmake -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/tokumx-dev/usr -D COMPONENT=tokumx_client_headers -P cmake_install.cmake && \
+	  cmake -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/tokumx-dev/usr -D COMPONENT=tokumx_client_libs -P cmake_install.cmake)
 
 	install -Dm644 $(CURDIR)/debian/tokumx.conf $(CURDIR)/debian/tokumx-server/etc/tokumx.conf
 	install -Dm755 $(CURDIR)/debian/tokumx-clients/usr/scripts/tokumxstat.py $(CURDIR)/debian/tokumx-clients/usr/share/tokumx/scripts/tokumxstat.py

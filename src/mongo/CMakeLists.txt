@@ -411,10 +411,19 @@ if (USE_SASL_CLIENT)
     client/sasl_client_session.cpp
     )
 endif ()
-add_library(mongoclient STATIC
-  "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.cpp"
-  "${CMAKE_CURRENT_BINARY_DIR}/buildinfo.cpp"
-  ${client_sources})
+if (TOKUMX_CLIENT_LIB_SHARED)
+  add_library(mongoclient SHARED
+    "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/buildinfo.cpp"
+    ${client_sources}
+    )
+else ()
+  add_library(mongoclient STATIC
+    "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/buildinfo.cpp"
+    ${client_sources}
+    )
+endif ()
 add_dependencies(mongoclient generate_error_codes generate_action_types install_tdb_h)
 target_link_libraries(mongoclient LINK_PRIVATE
   ${Boost_LIBRARIES}
@@ -425,8 +434,20 @@ if (USE_SASL_CLIENT)
     ${SASL_LIBRARIES}
     )
 endif ()
+if (CMAKE_SYSTEM_NAME STREQUAL Linux)
+  set_property(TARGET mongoclient APPEND PROPERTY
+    LINK_FLAGS -Wl,--as-needed -Wl,-zdefs
+    )
+endif ()
+install(TARGETS mongoclient
+  DESTINATION ${INSTALL_LIBDIR}
+  COMPONENT tokumx_client_libs
+  )
 
-foreach (src ${client_sources})
+foreach (src
+    ${client_sources}
+    bson/bsondemo/bsondemo.cpp
+    )
   get_filename_component(dir ${src} PATH)
   install(FILES ${src}
     DESTINATION src/mongo/${dir}
@@ -445,11 +466,15 @@ endif ()
 install(FILES
   "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.cpp"
   "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.h"
+  base/generate_error_codes.py
+  base/error_codes.err
   DESTINATION src/mongo/base
   COMPONENT tokumx_client_sources
   )
 install(FILES
   "${CMAKE_CURRENT_BINARY_DIR}/db/auth/action_type.h"
+  db/auth/generate_action_types.py
+  db/auth/action_types.txt
   DESTINATION src/mongo/db/auth
   COMPONENT tokumx_client_sources
   )
@@ -485,7 +510,7 @@ foreach (client_header_dir
     ${client_header_dir}/*.hpp
     )
   install(FILES ${headers}
-    DESTINATION src/mongo/${client_header_dir}
+    DESTINATION include/mongo/${client_header_dir}
     COMPONENT tokumx_client_headers
     )
 endforeach ()

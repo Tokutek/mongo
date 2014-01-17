@@ -1,10 +1,14 @@
 %global daemon tokumx
 
+%if %{tokumx_enterprise}
+Name: tokumx-enterprise
+%else
 Name: tokumx
+%endif
 Conflicts: mongo, mongo-10gen, mongo-10gen-unstable, mongo-stable, mongodb, mongodb-server
 Requires: tokumx-common
-Version: 1.4.0
-Release: alpha.1%{?dist}
+Version: %{?tokumx_version}%{!?tokumx_version:1.4.0}
+Release: %{?tokumx_rpm_release_version}%{!?tokumx_rpm_release_version:1}%{?dist}
 Summary: TokuMX client shell and tools
 License: AGPLv3 and zlib and ASL 2.0 and GPLv2
 Vendor: Tokutek, Inc.
@@ -28,6 +32,7 @@ BuildRequires: libpcap-devel
 %if 0%{?fedora} >= 15
 BuildRequires: systemd
 %endif
+Requires: %{name}-common = %{version}-%{release}
 
 %description
 TokuMX is a high-performance version of MongoDB using Fractal
@@ -59,7 +64,7 @@ including a portability layer and the Fractal Tree indexing library.
 %package server
 Summary: tokumx server, sharding server, and support scripts
 Group: Applications/Databases
-Requires: tokumx-common
+Requires: %{name}-common = %{version}-%{release}
 Requires(pre): shadow-utils
 %if 0%{?fedora} >= 15
 Requires(post): systemd-units
@@ -78,16 +83,30 @@ Tree indexes to store indexes and data.
 This package provides the mongo server software, mongo sharding server
 softwware, default configuration files, and init.d scripts.
 
-%package devel
-Summary: Headers and libraries for mongo development. 
-Group: Applications/Databases
+%package -n lib%{name}
+Summary: TokuMX shared libraries
+Group: Development/Libraries
+Depends: %{name}-common = %{version}-%{release}
 
-%description devel
+%description -n lib%{name}
 TokuMX is a high-performance version of MongoDB using Fractal
 Tree indexes to store indexes and data.
 
-This package provides the mongo static library and header files needed
-to develop tokumx client software.
+This package provides the shared library for the TokuMX client.
+
+%package -n lib%{name}-devel
+Summary: TokuMX header files
+Group: Development/Libraries
+Requires: lib%{name} = %{version}-%{release}
+Requires: boost-devel
+Provides: tokumx-devel = %{version}-%{release}
+Obsoletes: mongodb-devel
+
+%description -n lib%{name}-devel
+TokuMX is a high-performance version of MongoDB using Fractal
+Tree indexes to store indexes and data.
+
+This package provides the header files and C++ driver for TokuMX.
 
 %prep
 %setup
@@ -119,6 +138,13 @@ mkdir -p opt
     -D BUILD_TESTING=OFF \
     -D INSTALL_LIBDIR=%{_lib}/%{name} \
     -D CMAKE_INSTALL_RPATH=%{_libdir}/%{name} \
+    -D TOKUMX_CLIENT_LIB_SHARED=ON \
+%if 0%{?tokumx_revision:1}
+    -D TOKUMX_GIT_VERSION=%{tokumx_revision} \
+%endif
+%if 0%{?tokukv_revision:1}
+    -D TOKUKV_GIT_VERSION=%{tokukv_revision} \
+%endif
     ..)
 make -C opt %{?_smp_mflags}
 
@@ -129,7 +155,9 @@ make -C opt %{?_smp_mflags}
   cmake -D COMPONENT=tokumx_tools -P cmake_install.cmake && \
   cmake -D COMPONENT=tokumx_plugins -P cmake_install.cmake && \
   cmake -D COMPONENT=tokukv_libs_shared -P cmake_install.cmake && \
-  cmake -D COMPONENT=tokubackup_libs_shared -P cmake_install.cmake)
+  cmake -D COMPONENT=tokubackup_libs_shared -P cmake_install.cmake && \
+  cmake -D COMPONENT=tokumx_client_headers -P cmake_install.cmake && \
+  cmake -D COMPONENT=tokumx_client_libs -P cmake_install.cmake)
 
 install -p -dm755 %{buildroot}%{_docdir}/%{name}/licenses
 mv %{buildroot}%{_prefix}/GNU-AGPL-3.0        %{buildroot}%{_docdir}/%{name}/licenses
@@ -275,6 +303,15 @@ fi
 %{_libdir}/%{name}/libHotBackup.so
 %{_libdir}/%{name}/libtokufractaltree.so
 %{_libdir}/%{name}/libtokuportability.so
+%{_libdir}/%{name}/plugins
+
+%files -n lib%{name}
+
+%{_libdir}/libmongoclient.so
+
+%files -n lib%{name}-devel
+
+%{_includedir}
 
 %files server
 %{_bindir}/mongod
