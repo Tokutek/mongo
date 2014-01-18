@@ -303,7 +303,9 @@ fi
 %{_libdir}/%{name}/libHotBackup.so
 %{_libdir}/%{name}/libtokufractaltree.so
 %{_libdir}/%{name}/libtokuportability.so
+%if 0%{tokumx_enterprise}
 %{_libdir}/%{name}/plugins
+%endif
 
 %files -n lib%{name}
 
