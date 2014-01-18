@@ -332,11 +332,11 @@ fi
 %{_libdir}/%{product_name}/plugins
 %endif
 
-%files -n lib%{product_name}
+%files -n lib%{name}
 
 %{_libdir}/libmongoclient.so
 
-%files -n lib%{product_name}-devel
+%files -n lib%{name}-devel
 
 %{_includedir}
 
