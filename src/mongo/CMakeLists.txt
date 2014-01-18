@@ -417,28 +417,37 @@ if (TOKUMX_CLIENT_LIB_SHARED)
     "${CMAKE_CURRENT_BINARY_DIR}/buildinfo.cpp"
     ${client_sources}
     )
+  target_link_libraries(mongoclient
+    ${Boost_LIBRARIES}
+    ${CMAKE_THREAD_LIBS_INIT}
+    )
+  if (USE_SASL_CLIENT)
+    target_link_libraries(mongoclient
+      ${SASL_LIBRARIES}
+      )
+  endif ()
+  if (CMAKE_SYSTEM_NAME STREQUAL Linux)
+    set_target_properties(mongoclient PROPERTIES
+      LINK_FLAGS "-Wl,--as-needed -Wl,-zdefs"
+      )
+  endif ()
 else ()
   add_library(mongoclient STATIC
     "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.cpp"
     "${CMAKE_CURRENT_BINARY_DIR}/buildinfo.cpp"
     ${client_sources}
     )
+  target_link_libraries(mongoclient LINK_PRIVATE
+    ${Boost_LIBRARIES}
+    ${CMAKE_THREAD_LIBS_INIT}
+    )
+  if (USE_SASL_CLIENT)
+    target_link_libraries(mongoclient LINK_PRIVATE
+      ${SASL_LIBRARIES}
+      )
+  endif ()
 endif ()
 add_dependencies(mongoclient generate_error_codes generate_action_types install_tdb_h)
-target_link_libraries(mongoclient LINK_PRIVATE
-  ${Boost_LIBRARIES}
-  ${CMAKE_THREAD_LIBS_INIT}
-  )
-if (USE_SASL_CLIENT)
-  target_link_libraries(mongoclient LINK_PRIVATE
-    ${SASL_LIBRARIES}
-    )
-endif ()
-if (TOKUMX_CLIENT_LIB_SHARED AND CMAKE_SYSTEM_NAME STREQUAL Linux)
-  set_target_properties(mongoclient PROPERTIES
-    LINK_FLAGS "-Wl,--as-needed -Wl,-zdefs"
-    )
-endif ()
 install(TARGETS mongoclient
   DESTINATION ${INSTALL_LIBDIR}
   COMPONENT tokumx_client_libs
