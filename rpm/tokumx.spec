@@ -188,6 +188,8 @@ install -p -Dm644 %{SOURCE4} %{buildroot}%{_sysconfdir}/sysconfig/%{daemon}
 install -dm755 %{buildroot}%{_mandir}/man1
 install -p -m644 -t %{buildroot}%{_mandir}/man1 debian/*.1
 
+mv %{buildroot}%{_libdir}/%{name}/libmongoclient.so %{buildroot}%{_libdir}
+
 %post -p /sbin/ldconfig
 
 %postun -p /sbin/ldconfig

@@ -83,6 +83,9 @@ install: build
 	install -Dm755 $(CURDIR)/debian/tokumx-clients/usr/scripts/tokumxstat.py $(CURDIR)/debian/tokumx-clients/usr/share/tokumx/scripts/tokumxstat.py
 	$(RM) -r $(CURDIR)/debian/tokumx-clients/usr/scripts
 
+	mv $(CURDIR)/debian/tokumx-dev/usr/lib/tokumx/* $(CURDIR)/debian/tokumx-dev/usr/lib
+	rmdir $(CURDIR)/debian/tokumx-dev/usr/lib/tokumx
+
 # Build architecture-independent files here.
 binary-indep: build install
 # We have nothing to do by default.
