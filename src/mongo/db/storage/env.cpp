@@ -549,6 +549,45 @@ namespace mongo {
                     }
                 }
             }
+
+            uint64_t getInteger(const StringData &key) const {
+                for (uint64_t i = 0; i < _num_rows; ++i) {
+                    TOKU_ENGINE_STATUS_ROW row = &_rows[i];
+                    if (key == row->keyname) {
+                        switch (row->type) {
+                        case FS_STATE:
+                        case UINT64:
+                            return row->value.num;
+                        case PARCOUNT:
+                            return read_partitioned_counter(row->value.parcount);
+                        case CHARSTR:
+                        case UNIXTIME:
+                        case TOKUTIME:
+                            msgasserted(0, "wrong engine status type for getInteger");
+                        }
+                    }
+                }
+                msgasserted(0, mongoutils::str::stream() << "no such key: " << key);
+            }
+
+            double getDuration(const StringData &key) const {
+                for (uint64_t i = 0; i < _num_rows; ++i) {
+                    TOKU_ENGINE_STATUS_ROW row = &_rows[i];
+                    if (key == row->keyname) {
+                        switch (row->type) {
+                        case TOKUTIME:
+                            return tokutime_to_seconds(row->value.num);
+                        case CHARSTR:
+                        case UNIXTIME:
+                        case FS_STATE:
+                        case UINT64:
+                        case PARCOUNT:
+                            msgasserted(0, "wrong engine status type for getDuration");
+                        }
+                    }
+                }
+                msgasserted(0, mongoutils::str::stream() << "no such key: " << key);
+            }
         };
 
         void get_status(BSONObjBuilder &result) {
@@ -614,8 +653,49 @@ namespace mongo {
                     }
                     {
                         BSONObjBuilder b2(b.subobjStart("miss"));
-                        status.appendInfo(b2, "count", "CT_MISS", true);
-                        status.appendInfo(b2, "time", "CT_MISSTIME", true);
+                        uint64_t fullMisses = status.getInteger("CT_MISS");
+                        double fullMisstime = status.getDuration("CT_MISSTIME");
+                        {
+                            BSONObjBuilder b3(b2.subobjStart("full"));
+                            b3.append("count", fullMisses);
+                            b3.append("time", fullMisstime);
+                            b3.doneFast();
+                        }
+                        uint64_t partialMisses = 0;
+                        double partialMisstime = 0.0;
+                        const char *partialMissKeys[] = {"FT_NUM_BASEMENTS_FETCHED_NORMAL",
+                                                         "FT_NUM_BASEMENTS_FETCHED_AGGRESSIVE",
+                                                         "FT_NUM_BASEMENTS_FETCHED_PREFETCH",
+                                                         "FT_NUM_BASEMENTS_FETCHED_WRITE",
+                                                         "FT_NUM_MSG_BUFFER_FETCHED_NORMAL",
+                                                         "FT_NUM_MSG_BUFFER_FETCHED_AGGRESSIVE",
+                                                         "FT_NUM_MSG_BUFFER_FETCHED_PREFETCH",
+                                                         "FT_NUM_MSG_BUFFER_FETCHED_WRITE"};
+                        const char *partialMisstimeKeys[] = {"FT_TOKUTIME_BASEMENTS_FETCHED_NORMAL",
+                                                             "FT_TOKUTIME_BASEMENTS_FETCHED_AGGRESSIVE",
+                                                             "FT_TOKUTIME_BASEMENTS_FETCHED_PREFETCH",
+                                                             "FT_TOKUTIME_BASEMENTS_FETCHED_WRITE",
+                                                             "FT_TOKUTIME_MSG_BUFFER_FETCHED_NORMAL",
+                                                             "FT_TOKUTIME_MSG_BUFFER_FETCHED_AGGRESSIVE",
+                                                             "FT_TOKUTIME_MSG_BUFFER_FETCHED_PREFETCH",
+                                                             "FT_TOKUTIME_MSG_BUFFER_FETCHED_WRITE"};
+                        dassert((sizeof partialMissKeys) == (sizeof partialMisstimeKeys));
+                        for (size_t i = 0; i < (sizeof partialMissKeys); ++i) {
+                            partialMisses += status.getInteger(partialMissKeys[i]);
+                            partialMisstime += status.getDuration(partialMisstimeKeys[i]);
+                        }
+                        {
+                            BSONObjBuilder b3(b2.subobjStart("partial"));
+                            b3.append("count", partialMisses);
+                            b3.append("time", partialMisstime);
+                            b3.doneFast();
+                        }
+                        {
+                            BSONObjBuilder b3(b2.subobjStart("any"));
+                            b3.append("count", fullMisses + partialMisses);
+                            b3.append("time", fullMisstime + partialMisstime);
+                            b3.doneFast();
+                        }
                         b2.doneFast();
                     }
                     {
