@@ -1049,6 +1049,24 @@ rs.remove = function (hn) {
     return "error: couldn't find "+hn+" in "+tojson(c.members);
 };
 
+rs.oplogPartitionInfo = function () {
+    var s = db.getSisterDB("local");
+    return s.runCommand({getPartitionInfo:"oplog.rs"});
+}
+
+rs.oplogRefsPartitionInfo = function () {
+    var s = db.getSisterDB("local");
+    return s.runCommand({getPartitionInfo:"oplog.refs"});
+}
+
+rs.trimToTS = function(timeParam) {
+    return db._adminCommand({replTrimOplog:1, ts:timeParam});
+}
+
+rs.trimToGTID = function(gtidParam) {
+    return db._adminCommand({replTrimOplog:1, gtid:gtidParam});
+}
+
 rs.debug = {};
 
 rs.debug.nullLastOpWritten = function(primary, secondary) {
