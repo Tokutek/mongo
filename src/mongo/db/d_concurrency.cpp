@@ -38,16 +38,8 @@
 // system.profile writing
 // oplog now
 
-#define MONGOD_CONCURRENCY_LEVEL_GLOBAL 0
-#define MONGOD_CONCURRENCY_LEVEL_DB 1
-
-#ifndef MONGOD_CONCURRENCY_LEVEL
-#define MONGOD_CONCURRENCY_LEVEL MONGOD_CONCURRENCY_LEVEL_DB
-#endif
 
 namespace mongo { 
-
-    static const bool DB_LEVEL_LOCKING_ENABLED = ( ( MONGOD_CONCURRENCY_LEVEL ) >= MONGOD_CONCURRENCY_LEVEL_DB );
 
     inline LockState& lockState() { 
         return cc().lockState();
@@ -241,10 +233,6 @@ namespace mongo {
             msgasserted(16105, str::stream() << "expected to be write locked for " << ns);
         }
     }
-    bool Lock::dbLevelLockingEnabled() {
-        return DB_LEVEL_LOCKING_ENABLED;
-    }
-
     Lock::ScopedLock::ScopedLock( char type ) 
         : _type(type), _stat(0) {
         LockState& ls = lockState();
@@ -436,21 +424,17 @@ namespace mongo {
 
 
         massert( 16186 , "can't get a DBWrite while having a read lock" , ! ls.hasAnyReadLock() );
-        if( ls.isW() )
+        if( ls.isW() ) {
             return;
+        }
 
-        if (DB_LEVEL_LOCKING_ENABLED) {
-            StringData db = nsToDatabaseSubstring( ns );
-            Nestable nested = n(db);
-            if( !nested )
-                lockOther(db, context);
-            lockTop(ls);
-            if( nested )
-                lockNestable(nested, context);
-        } 
-        else {
-            qlk.lock_W();
-            _locked_w = true;
+        StringData db = nsToDatabaseSubstring( ns );
+        Nestable nested = n(db);
+        if( !nested )
+            lockOther(db, context);
+        lockTop(ls);
+        if( nested ) {
+            lockNestable(nested, context);
         }
     }
 
@@ -462,22 +446,17 @@ namespace mongo {
         _locked_r=false; 
         _weLocked=0; 
 
-        if ( ls.isRW() )
+        if ( ls.isRW() ) {
             return;
-        if (DB_LEVEL_LOCKING_ENABLED) {
-            StringData db = nsToDatabaseSubstring(ns);
-            Nestable nested = n(db);
-            if( nested == notnestable ) {
-                lockOther(db, context);
-            }
-            lockTop(ls);
-            if( nested != notnestable ) {
-                lockNestable(nested, context);
-            }
-        } 
-        else {
-            qlk.lock_R();
-            _locked_r = true;
+        }
+        StringData db = nsToDatabaseSubstring(ns);
+        Nestable nested = n(db);
+        if( nested == notnestable ) {
+            lockOther(db, context);
+        }
+        lockTop(ls);
+        if( nested != notnestable ) {
+            lockNestable(nested, context);
         }
     }
 
@@ -520,11 +499,7 @@ namespace mongo {
         }
 
         if( _locked_w ) {
-            if (DB_LEVEL_LOCKING_ENABLED) {
-                qlk.unlock_w();
-            } else {
-                qlk.unlock_W();
-            }
+            qlk.unlock_w();
         }
         if( _locked_W ) {
             qlk.unlock_W();
@@ -554,11 +529,7 @@ namespace mongo {
         }
 
         if( _locked_r ) {
-            if (DB_LEVEL_LOCKING_ENABLED) {
-                qlk.unlock_r();
-            } else {
-                qlk.unlock_R();
-            }
+            qlk.unlock_r();
         }
         _weLocked = 0;
         _locked_r = false;
