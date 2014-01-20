@@ -700,6 +700,56 @@ namespace mongo {
                         b2.doneFast();
                     }
                     {
+                        BSONObjBuilder b2(b.subobjStart("evictions"));
+                        {
+                            BSONObjBuilder b3(b.subobjStart("partial"));
+                            {
+                                BSONObjBuilder b4(b.subobjStart("nonleaf"));
+                                status.appendInfo(b4, "count", "FT_PARTIAL_EVICTIONS_NONLEAF", true);
+                                status.appendInfo(b4, "bytes", "FT_PARTIAL_EVICTIONS_NONLEAF_BYTES", true, scale);
+                                b4.doneFast();
+                            }
+                            {
+                                BSONObjBuilder b4(b.subobjStart("leaf"));
+                                status.appendInfo(b4, "count", "FT_PARTIAL_EVICTIONS_LEAF", true);
+                                status.appendInfo(b4, "bytes", "FT_PARTIAL_EVICTIONS_LEAF_BYTES", true, scale);
+                                b4.doneFast();
+                            }
+                            b3.doneFast();
+                        }
+                        {
+                            BSONObjBuilder b3(b.subobjStart("full"));
+                            {
+                                BSONObjBuilder b4(b.subobjStart("nonleaf"));
+                                status.appendInfo(b4, "count", "FT_FULL_EVICTIONS_NONLEAF", true);
+                                status.appendInfo(b4, "bytes", "FT_FULL_EVICTIONS_NONLEAF_BYTES", true);
+                                {
+                                    BSONObjBuilder b5(b.subobjStart("dirty"));
+                                    status.appendInfo(b5, "count", "FT_DISK_FLUSH_NONLEAF", true);
+                                    status.appendInfo(b5, "bytes", "FT_DISK_FLUSH_NONLEAF_UNCOMPRESSED_BYTES", true, scale);
+                                    status.appendInfo(b5, "time", "FT_DISK_FLUSH_NONLEAF_TOKUTIME", true);
+                                    b5.doneFast();
+                                }
+                                b4.doneFast();
+                            }
+                            {
+                                BSONObjBuilder b4(b.subobjStart("leaf"));
+                                status.appendInfo(b4, "count", "FT_FULL_EVICTIONS_LEAF", true);
+                                status.appendInfo(b4, "bytes", "FT_FULL_EVICTIONS_LEAF_BYTES", true);
+                                {
+                                    BSONObjBuilder b5(b.subobjStart("dirty"));
+                                    status.appendInfo(b5, "count", "FT_DISK_FLUSH_LEAF", true);
+                                    status.appendInfo(b5, "bytes", "FT_DISK_FLUSH_LEAF_UNCOMPRESSED_BYTES", true, scale);
+                                    status.appendInfo(b5, "time", "FT_DISK_FLUSH_LEAF_TOKUTIME", true);
+                                    b5.doneFast();
+                                }
+                                b4.doneFast();
+                            }
+                            b3.doneFast();
+                        }
+                        b2.doneFast();
+                    }
+                    {
                         BSONObjBuilder lwb;
                         status.appendInfo(lwb, "count", "CT_LONG_WAIT_PRESSURE_COUNT", false);
                         status.appendInfo(lwb, "time", "CT_LONG_WAIT_PRESSURE_TIME", false);
@@ -718,6 +768,7 @@ namespace mongo {
                         status.appendInfo(b2, "limit", "LTM_SIZE_LIMIT", true, scale);
                         b2.doneFast();
                     }
+                    status.appendInfo(b, "requestsPending", "LTM_LOCK_REQUESTS_PENDING", false);
                     {
                         BSONObjBuilder lwb;
                         status.appendInfo(lwb, "count", "LTM_LONG_WAIT_COUNT", false);
