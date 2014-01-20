@@ -969,6 +969,7 @@ rs.slaveOk = function (value) { return db.getMongo().setSlaveOk(value); }
 rs.status = function () { return db._adminCommand("replSetGetStatus"); }
 rs.isMaster = function () { return db.isMaster(); }
 rs.initiate = function (c) { return db._adminCommand({ replSetInitiate: c }); }
+rs.addPartition = function () { return db._adminCommand("replAddPartition"); }
 rs._runCmd = function (c) {
     // after the command, catch the disconnect and reconnect if necessary
     var res = null;
