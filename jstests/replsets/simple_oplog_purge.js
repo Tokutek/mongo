@@ -86,6 +86,10 @@ doOtherTest = function (signal, startPort, txnLimit, trimWithGTID) {
     a.foo.insert({a:0});
     a.foo.insert({a:0});
     pivot2 = localdb.oplog.rs.find().sort({_id:-1}).next()._id;
+    assert.commandFailed(localdb.runCommand({addPartition:"oplog.rs"}));
+    if (txnLimit < 15) {
+        assert.commandFailed(localdb.runCommand({addPartition:"oplog.refs"}));
+    }
     assert.commandWorked(admindb.runCommand({replAddPartition:1}));
 
 
@@ -106,6 +110,8 @@ doOtherTest = function (signal, startPort, txnLimit, trimWithGTID) {
     // now let's test test trim
 
     // first test that a trim with parameters too low will not trim anything
+    assert.commandFailed(localdb.runCommand({dropPartition:"oplog.rs", id:0}));
+    assert.commandFailed(localdb.runCommand({dropPartition:"oplog.refs", id:0}));
     assert.commandWorked(admindb.runCommand({replTrimOplog:1, ts:ISODate("1981-11-01T17:17:44.477Z")}));
     oplogPartitionInfo = localdb.runCommand({getPartitionInfo:"oplog.rs"});
     refsPartitionInfo = localdb.runCommand({getPartitionInfo:"oplog.refs"});
