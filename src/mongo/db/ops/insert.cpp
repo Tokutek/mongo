@@ -31,7 +31,7 @@
 
 namespace mongo {
 
-    static void validateInsert(const BSONObj &obj) {
+    void validateInsert(const BSONObj &obj) {
         uassert(10059, "object to insert too large", obj.objsize() <= BSONObjMaxUserSize);
         for (BSONObjIterator i(obj); i.more(); ) {
             const BSONElement e = i.next();

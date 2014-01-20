@@ -1717,6 +1717,7 @@ namespace mongo {
             PartitionedCollection *pc = cl->as<PartitionedCollection>();
             if (e.ok()) {
                 e.embeddedObjectUserCheck();
+                validateInsert(e.embeddedObject());
                 pc->manuallyAddPartition(e.embeddedObject());
             }
             else {
