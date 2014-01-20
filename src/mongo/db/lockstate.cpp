@@ -221,7 +221,6 @@ namespace mongo {
         // we leave _otherName and _otherLock set as
         // _otherLock exists to cache a pointer
         _otherCount = 0;
-        _otherLock = 0;
         _context = NULL;
     }
 
