@@ -127,9 +127,11 @@ binary-arch: build install
 	dh_compress
 	dh_fixperms
 
-	for suffix in preinst postinst prerm postrm; do \
-	    mv debian/tokumx-server.$$suffix debian/$(PRODUCT)-server.$$suffix; \
-	done
+	if [ x"tokumx" != x"$(PRODUCT)" ]; then \
+	    for suffix in preinst postinst prerm postrm; do \
+	        mv debian/tokumx-server.$$suffix debian/$(PRODUCT)-server.$$suffix; \
+	    done; \
+	fi
 
 	dh_installdeb
 	dh_shlibdeps
