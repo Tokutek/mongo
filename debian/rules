@@ -99,7 +99,8 @@ binary-arch: build install
 	# this has to happen after installchangelogs or it'll break installchangelogs
 	install -dm755 $(CURDIR)/debian/tokumx-common/usr/share/doc/tokumx
 	mv $(CURDIR)/debian/tokumx-common/usr/GNU-AGPL-3.0 $(CURDIR)/debian/tokumx-common/usr/share/doc/tokumx
-	mv $(CURDIR)/debian/tokumx-common/usr/NEWS $(CURDIR)/debian/tokumx-common/usr/share/doc/tokumx
+	mv $(CURDIR)/debian/tokumx-common/usr/NEWS $(CURDIR)/debian/tokumx-common/usr/share/doc/tokumx/changelog
+	gzip -9 $(CURDIR)/debian/tokumx-common/usr/share/doc/tokumx/changelog
 	mv $(CURDIR)/debian/tokumx-common/usr/README $(CURDIR)/debian/tokumx-common/usr/share/doc/tokumx
 	mv $(CURDIR)/debian/tokumx-common/usr/README-TOKUKV $(CURDIR)/debian/tokumx-common/usr/share/doc/tokumx
 	mv $(CURDIR)/debian/tokumx-common/usr/THIRD-PARTY-NOTICES $(CURDIR)/debian/tokumx-common/usr/share/doc/tokumx
