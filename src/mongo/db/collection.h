@@ -224,6 +224,12 @@ namespace mongo {
 
         virtual bool isPartitioned() const = 0;
 
+        // returns the maximum PK the collection's storage knows
+        // of. If this CollectionData is part of a partitioned collection,
+        // any newly added partition must be greater than or equal to
+        // the value returned here
+        virtual bool getMaxPKForPartitionCap(BSONObj &result) const = 0;
+
         // optional to implement, populate the obj builder with collection specific stats
         virtual void fillSpecificStats(BSONObjBuilder &result, int scale) const = 0;
 
@@ -268,6 +274,7 @@ namespace mongo {
         const BSONObj &pkPattern() const {
             return _pk;
         }
+
 
     protected:
         CollectionData(const StringData& ns, const BSONObj &pkIndexPattern) :
@@ -756,6 +763,8 @@ namespace mongo {
             return false;
         }
 
+        virtual bool getMaxPKForPartitionCap(BSONObj &result) const;
+
         // Extracts and returns an owned BSONObj representing
         // the primary key portion of the given query, if each
         // portion of the primary key exists in the query and
@@ -960,6 +969,7 @@ namespace mongo {
             findByPKCallbackExtra(BSONObj &o) : obj(o), ex(NULL) { }
         };
         static int findByPKCallback(const DBT *key, const DBT *value, void *extra);
+        static int getLastKeyCallback(const DBT *key, const DBT *value, void *extra);
 
         // @return the smallest (in terms of dataSize, which is key length + value length)
         //         index in _indexes that is one-to-one with the primary key. specifically,
@@ -1405,6 +1415,10 @@ namespace mongo {
 
         virtual bool isPartitioned() const {
             return true;
+        }
+
+        virtual bool getMaxPKForPartitionCap(BSONObj &result) const {
+            msgasserted(17311, "should not call getMaxPKForPartitionCap on a partitioned collection");
         }
 
         virtual void fillSpecificStats(BSONObjBuilder &result, int scale) const {

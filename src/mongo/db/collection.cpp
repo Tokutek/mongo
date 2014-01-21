@@ -538,6 +538,41 @@ namespace mongo {
         return false;
     }
 
+    int CollectionBase::getLastKeyCallback(const DBT *key, const DBT *value, void *extra) {
+        struct findByPKCallbackExtra *info = reinterpret_cast<findByPKCallbackExtra *>(extra);
+        try {
+            if (key != NULL && key->data != NULL) {
+                struct findByPKCallbackExtra *info = reinterpret_cast<findByPKCallbackExtra *>(extra);
+                storage::Key sKey(key);
+                info->obj = sKey.key().copy();
+            }
+            return 0;
+        } catch (std::exception &e) {
+            info->ex = &e;
+        }
+        return -1;
+    }
+    bool CollectionBase::getMaxPKForPartitionCap(BSONObj &result) const {
+        TOKULOG(3) << "CollectionBase::getMaxPKForPartitionCap" << endl;
+        DB *db = getPKIndexBase().db();
+
+        BSONObj obj;
+        struct findByPKCallbackExtra extra(obj);
+        const int r = db->get_last_key(db, getLastKeyCallback, &extra);
+        if (extra.ex != NULL) {
+            throw *extra.ex;
+        }
+        if (r != 0 && r != DB_NOTFOUND) {
+            storage::handle_ydb_error(r);
+        }
+
+        if (!obj.isEmpty()) {
+            result = obj;
+            return true;
+        }
+        return false;
+    }
+
     void CollectionBase::insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags, bool* indexBitChanged) {
         *indexBitChanged = false; // just for initialization
         dassert(!pk.isEmpty());
@@ -2766,22 +2801,8 @@ namespace mongo {
     // helper function for add partition
     void PartitionedCollection::capLastPartition() {
         BSONObj currPK;
-        // in the last partition, look up the max value,
-        // make a reverse cursor on the last partition
-        {
-            Client::AlternateTransactionStack altStack;
-            Client::Transaction txn(DB_READ_UNCOMMITTED);
-            shared_ptr<Cursor> c( Cursor::make(_partitions[_numPartitions-1].get(), -1, false));
-            // if there is nothing in the partition, then we cannot cap it
-            // so throw an error. This may happen if a user tries to create
-            // a partition on top of an empty one. We disallow this because
-            // having multiple partitions with the same max key can
-            // lead to bugs.
-            uassert(storage::ASSERT_IDS::CapPartitionFailed, "can only cap a partition with no pivot if it is non-empty", c->ok());        
-            currPK = c->currPK().copy();
-            txn.commit();
-        }
-        // make the max PK new pivot
+        bool foundLast = _partitions[_numPartitions-1]->getMaxPKForPartitionCap(currPK);
+        uassert(storage::ASSERT_IDS::CapPartitionFailed, "can only cap a partition with no pivot if it is non-empty", foundLast);
         overwritePivot(_numPartitions-1, currPK);
     }
 
@@ -2800,22 +2821,14 @@ namespace mongo {
         }
         // in the last partition, look up the max value,
         // make a reverse cursor on the last partition
-        {
-            Client::AlternateTransactionStack altStack;
-            Client::Transaction txn(DB_READ_UNCOMMITTED);
-            shared_ptr<Cursor> c( Cursor::make(_partitions[_numPartitions-1].get(), -1, false));
-            if (c->ok()) {
-                BSONObj currPK = c->currPK();
-                // make sure that the pivot we want to add
-                // is greater than the maximum value we see
-                // in the partition (hence a valid pivot)
-                uassert(
-                    17250, 
-                    str::stream() << "new pivot must be greater than max element in collection, newPivot: " <<
-                    newPivot.str() << " max element: " << currPK.str(), 
-                    newPivot.woCompare(currPK, _ordering) > 0);
-            }
-            txn.commit();
+        BSONObj currPK;
+        bool foundLast = _partitions[_numPartitions-1]->getMaxPKForPartitionCap(currPK);
+        if (foundLast) {
+            uassert(
+                17250, 
+                str::stream() << "new pivot must be greater than max element in collection, newPivot: " <<
+                newPivot.str() << " max element: " << currPK.str(), 
+                newPivot.woCompare(currPK, _ordering) > 0);
         }
         overwritePivot(_numPartitions-1, newPivot);
     }
