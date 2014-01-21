@@ -332,7 +332,7 @@ namespace mongo {
                 return;
             }
             ls.lockedLocal(1,context);
-            fassert(0,_weLocked==0);
+            fassert(17255,_weLocked==0);
             _weLocked = nestableLocks[db];
             _weLocked->lock();
         }
@@ -340,9 +340,9 @@ namespace mongo {
             if (ls.adminLocked()) {
                 return;
             }
-            massert(0, "should not lock local before admin", !ls.localLocked());
+            massert(17256, "should not lock local before admin", !ls.localLocked());
             ls.lockedAdmin(1,context);
-            fassert(0,_weLocked==0);
+            fassert(17257,_weLocked==0);
             _weLocked = nestableLocks[db];
             _weLocked->lock();
         }
@@ -356,7 +356,7 @@ namespace mongo {
                 return;
             }
             ls.lockedLocal(-1,context);
-            fassert(0,_weLocked==0);
+            fassert(17258,_weLocked==0);
             _weLocked = nestableLocks[db];
             _weLocked->lock_shared();
         }
@@ -364,7 +364,7 @@ namespace mongo {
             if (ls.adminLocked()) {
                 return;
             }
-            massert(0, "should not lock local before admin", !ls.localLocked());
+            massert(17259, "should not lock local before admin", !ls.localLocked());
             ls.lockedAdmin(-1,context);
             fassert(16133,_weLocked==0);
             _weLocked = nestableLocks[db];
@@ -385,7 +385,7 @@ namespace mongo {
 
         // first lock for this db. check consistent order with local db lock so we never deadlock. local always comes last
         massert(16098, str::stream() << "can't dblock:" << db << " when local is already locked", !ls.localLocked());
-        massert(0, str::stream() << "can't dblock:" << db << " when admin is already locked", !ls.adminLocked());
+        massert(17260, str::stream() << "can't dblock:" << db << " when admin is already locked", !ls.adminLocked());
 
         if( db != ls.otherName() )
         {
@@ -572,7 +572,7 @@ namespace mongo {
 
         // first lock for this db. check consistent order with local db lock so we never deadlock. local always comes last
         massert(16100, str::stream() << "can't dblock:" << db << " when local is already locked", !ls.localLocked());
-        massert(0, str::stream() << "can't dblock:" << db << " when admin is already locked", !ls.adminLocked());
+        massert(17261, str::stream() << "can't dblock:" << db << " when admin is already locked", !ls.adminLocked());
 
         if( db != ls.otherName() )
         {

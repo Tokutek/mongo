@@ -214,7 +214,7 @@ namespace mongo {
                 if (isLocalNs(ns)) {
                     return;
                 }
-                uasserted(0, "The operation is not supported for replication");
+                uasserted(17293, "The operation is not supported for replication");
             }
         }
 

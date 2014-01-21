@@ -84,11 +84,11 @@ namespace mongo {
             Client::ReadContext ctx(db, lockReason);
             Client::Transaction transaction(DB_SERIALIZABLE);
             string coll = cmdObj[ "_changePartitionCreateTime" ].valuestrsafe();
-            uassert( 0, "_changePartitionCreateTime must specify a collection", !coll.empty() );
+            uassert( 17263, "_changePartitionCreateTime must specify a collection", !coll.empty() );
             string ns = db + "." + coll;
             Collection *cl = getCollection( ns );
-            uassert( 0, "no such collection", cl );
-            uassert( 0, "collection must be partitioned", cl->isPartitioned() );
+            uassert( 17264, "no such collection", cl );
+            uassert( 17265, "collection must be partitioned", cl->isPartitioned() );
 
             // change the create time for a partition at a certain index
             PartitionedCollection* pc = cl->as<PartitionedCollection>();

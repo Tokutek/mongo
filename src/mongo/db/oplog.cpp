@@ -583,7 +583,7 @@ namespace mongo {
         uint64_t refNum = poc->numPartitions();
         BSONObj refMeta = poc->getPartitionMetadata(refNum-1);
         BSONElement e = refMeta["createTime"];
-        massert(0, "createTime mysteriously missing from partition metadata", e.ok());
+        massert(17262, "createTime mysteriously missing from partition metadata", e.ok());
         return e._numberLong();
     }
 

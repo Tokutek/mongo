@@ -387,7 +387,7 @@ namespace mongo {
                         LOG(0) << errmsg << endl;
                     }
                     Collection* cl = getCollection(ns);
-                    massert(0, "Could not get collection we just created", cl);
+                    massert(17309, "Could not get collection we just created", cl);
                     PartitionedCollection* pc = cl->as<PartitionedCollection>();
                     if (logForRepl) {
                         OpLogHelpers::logUnsupportedOperation(ns.c_str());                        
@@ -553,7 +553,7 @@ namespace mongo {
                     return false;
                 }
                 Collection* cl = getCollection(to_name);
-                massert(0, "Could not get collection we just created", cl);
+                massert(17310, "Could not get collection we just created", cl);
                 if (opts.logForRepl) {
                     OpLogHelpers::logUnsupportedOperation(ns.c_str());                        
                 }

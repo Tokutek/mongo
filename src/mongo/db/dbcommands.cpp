@@ -885,7 +885,7 @@ namespace mongo {
                 Collection *cl = getCollection( source );
                 uassert( 10026 ,  "source namespace does not exist", cl );
                 capped = cl->isCapped();
-                uassert(0, "cannot rename a partitioned collection", !cl->isPartitioned());
+                uassert(17295, "cannot rename a partitioned collection", !cl->isPartitioned());
                 // TODO: Get the capped size
             }
 
@@ -1636,11 +1636,11 @@ namespace mongo {
         }
         bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& anObjBuilder, bool /*fromRepl*/) {
             string coll = cmdObj[ "getPartitionInfo" ].valuestrsafe();
-            uassert( 0, "getPartitionInfo must specify a collection", !coll.empty() );
+            uassert( 17296, "getPartitionInfo must specify a collection", !coll.empty() );
             string ns = dbname + "." + coll;
             Collection *cl = getCollection( ns );
-            uassert( 0, "getPartitionInfo no such collection", cl );
-            uassert( 0, "collection must be partitioned", cl->isPartitioned() );
+            uassert( 17297, "getPartitionInfo no such collection", cl );
+            uassert( 17298, "collection must be partitioned", cl->isPartitioned() );
             PartitionedCollection *pc = cl->as<PartitionedCollection>();
             uint64_t numPartitions = 0;
             BSONArray arr;
@@ -1670,18 +1670,18 @@ namespace mongo {
         }
         bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& anObjBuilder, bool /*fromRepl*/) {
             string coll = cmdObj[ "dropPartition" ].valuestrsafe();
-            uassert( 0, "dropPartition must specify a collection", !coll.empty() );
+            uassert( 17299, "dropPartition must specify a collection", !coll.empty() );
             string ns = dbname + "." + coll;
             BSONElement force = cmdObj["force"];
             bool isOplogNS = (strcmp(ns.c_str(), rsoplog) == 0) || (strcmp(ns.c_str(), rsOplogRefs) == 0);
-            uassert( 0, "cannot manually drop partition on oplog or oplog.refs", force.ok() || !isOplogNS);
+            uassert( 17300, "cannot manually drop partition on oplog or oplog.refs", force.ok() || !isOplogNS);
             Collection *cl = getCollection( ns );
             OpLogHelpers::logUnsupportedOperation(ns.c_str());
-            uassert( 0, "dropPartition no such collection", cl );
-            uassert( 0, "collection must be partitioned", cl->isPartitioned() );
+            uassert( 17301, "dropPartition no such collection", cl );
+            uassert( 17302, "collection must be partitioned", cl->isPartitioned() );
 
             BSONElement e = cmdObj["id"];
-            uassert(0, "invalid id", e.ok() && e.isNumber());
+            uassert(17303, "invalid id", e.ok() && e.isNumber());
             
             PartitionedCollection *pc = cl->as<PartitionedCollection>();
             pc->dropPartition(e.numberLong());
@@ -1709,14 +1709,14 @@ namespace mongo {
         }
         bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& anObjBuilder, bool /*fromRepl*/) {
             string coll = cmdObj[ "addPartition" ].valuestrsafe();
-            uassert( 0, "addPartition must specify a collection", !coll.empty() );
+            uassert( 17304, "addPartition must specify a collection", !coll.empty() );
             string ns = dbname + "." + coll;
             BSONElement force = cmdObj["force"];
             bool isOplogNS = (strcmp(ns.c_str(), rsoplog) == 0) || (strcmp(ns.c_str(), rsOplogRefs) == 0);
-            uassert( 0, "cannot manually add partition on oplog or oplog.refs", force.ok() || !isOplogNS);
+            uassert( 17305, "cannot manually add partition on oplog or oplog.refs", force.ok() || !isOplogNS);
             Collection *cl = getCollection( ns );
-            uassert( 0, "addPartition no such collection", cl );
-            uassert( 0, "collection must be partitioned", cl->isPartitioned() );
+            uassert( 17306, "addPartition no such collection", cl );
+            uassert( 17307, "collection must be partitioned", cl->isPartitioned() );
             OpLogHelpers::logUnsupportedOperation(ns.c_str());
 
             BSONElement e = cmdObj["newPivot"];            
@@ -1752,7 +1752,7 @@ namespace mongo {
         }
         bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& anObjBuilder, bool /*fromRepl*/) {
             string coll = cmdObj[ "convertToPartitioned" ].valuestrsafe();
-            uassert( 0, "convertToPartitioned must specify a collection", !coll.empty() );
+            uassert( 17308, "convertToPartitioned must specify a collection", !coll.empty() );
             string ns = dbname + "." + coll;
             OpLogHelpers::logUnsupportedOperation(ns.c_str());
             convertToPartitionedCollection(ns);

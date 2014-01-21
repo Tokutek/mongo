@@ -183,7 +183,7 @@ namespace mongo {
             uassert( 16852, "System profile must be a capped collection.", options["capped"].trueValue() );
             _cd.reset(new ProfileCollection(ns, options));
         } else if (options["partitioned"].trueValue()) {
-            uassert(0, "Partitioned Collection cannot be capped", !options["capped"].trueValue());
+            uassert(17266, "Partitioned Collection cannot be capped", !options["capped"].trueValue());
             _cd = PartitionedCollection::make(ns, options);
         } else if (options["capped"].trueValue()) {
             _cd.reset(new CappedCollection(ns, options));
@@ -218,7 +218,7 @@ namespace mongo {
         if (isOplogCollection(ns)) {
             // We may bulk load the oplog since it's an IndexedCollection
             if (bulkLoad) {
-                uassert( 0, "Should not bulk load the oplog", !bulkLoad );
+                uassert( 17267, "Should not bulk load the oplog", !bulkLoad );
             }
             if (serialized["options"]["partitioned"].trueValue()) {
                 _cd = PartitionedOplogCollection::make(serialized);
@@ -1445,14 +1445,14 @@ namespace mongo {
         Lock::assertWriteLocked(from);
 
         Collection *from_cl = getCollection(from);
-        uassert( 0, "Cannot find collection to convert to partitioned", from_cl != NULL );
+        uassert( 17268, "Cannot find collection to convert to partitioned", from_cl != NULL );
 
-        uassert( 0, "Collection already partitioned", !from_cl->isPartitioned());
-        uassert( 0, "Cannot convert to partitioned collection when under-going bulk load.",
+        uassert( 17269, "Collection already partitioned", !from_cl->isPartitioned());
+        uassert( 17270, "Cannot convert to partitioned collection when under-going bulk load.",
                         from != cc().bulkLoadNS() );
-        uassert( 0, "Cannot convert to partitioned collection with a background index build in progress",
+        uassert( 17271, "Cannot convert to partitioned collection with a background index build in progress",
                         !from_cl->indexBuildInProgress() );
-        uassert( 0, "Cannot convert a capped collection to partitioned", !from_cl->isCapped());
+        uassert( 17272, "Cannot convert a capped collection to partitioned", !from_cl->isCapped());
 
         BSONObj serialized = from_cl->serialize();
         BSONObj options = serialized["options"].Obj();
@@ -1461,9 +1461,9 @@ namespace mongo {
         // we will need to change PartitionedCollection::make that takes a renamer,
         // as that function currently assumes that the collection has only one
         // index
-        uassert(0, "no secondary indexes allowed when converting to partitioned collection", indexes.size() == 1);
-        uassert(0, str::stream() << "Partitioned Collection cannot have a defined primary key: " << from, !options["primaryKey"].ok());
-        uassert(0, "cannot have multikey bits set on a partitioned collection", serialized["multiKeyIndexBits"].Long() == 0);
+        uassert(17273, "no secondary indexes allowed when converting to partitioned collection", indexes.size() == 1);
+        uassert(17274, str::stream() << "Partitioned Collection cannot have a defined primary key: " << from, !options["primaryKey"].ok());
+        uassert(17275, "cannot have multikey bits set on a partitioned collection", serialized["multiKeyIndexBits"].Long() == 0);
 
         shared_ptr<CollectionRenamer> renamer = from_cl->getRenamer();
 
@@ -1494,7 +1494,7 @@ namespace mongo {
                     b.append( e );
                 }
                 else {
-                    uasserted(0, "should not have found partitioned here");
+                    uasserted(17276, "should not have found partitioned here");
                 }
             }
             b.append("partitioned", 1);
@@ -1826,7 +1826,7 @@ namespace mongo {
 
     OplogPartition::OplogPartition(const StringData &ns, const BSONObj &options) :
         IndexedCollection(ns, options) {
-        uassert(0, "must not define a primary key for the oplog",
+        uassert(17277, "must not define a primary key for the oplog",
                        !options["primaryKey"].ok());
     } 
 
@@ -1858,7 +1858,7 @@ namespace mongo {
 
     PartitionedOplogCollection::PartitionedOplogCollection(const StringData &ns, const BSONObj &options) :
         PartitionedCollection(ns, options) {
-        uassert(0, "must not define a primary key for the oplog",
+        uassert(17278, "must not define a primary key for the oplog",
                        !options["primaryKey"].ok());
     } 
 
@@ -2895,14 +2895,14 @@ namespace mongo {
 
     // create partitions from the cloner
     void PartitionedCollection::addClonedPartitionInfo(vector<BSONElement> partitionInfo) {
-        uassert(0, "Called addClonedPartitionInfo with more than one current partition", (_numPartitions == 1));
+        uassert(17279, "Called addClonedPartitionInfo with more than one current partition", (_numPartitions == 1));
         // Note that the caller of this function needs to be REALLY careful
         // we don't do a lot of sanity checks that we theoretically could do,
         // such as "the collection has one partition and is empty"
         // we assume this is being called right after userCreateNS and within the cloner
 
         // just a simple sanity check
-        uassert(0, "sanity check if id of first partition failed", (_partitionIDs[0] == 0));
+        uassert(17280, "sanity check if id of first partition failed", (_partitionIDs[0] == 0));
         
         // first drop the existing partition.
         dropPartitionInternal(_partitionIDs[0]);
@@ -2914,35 +2914,35 @@ namespace mongo {
     }
 
     BSONObj PartitionedCollection::getPartitionMetadata(uint64_t index) {
-        massert(0, str::stream() << "invalid index passed into getPartitionMetadata: " << index, index < _numPartitions);
+        massert(17281, str::stream() << "invalid index passed into getPartitionMetadata: " << index, index < _numPartitions);
         
         BSONObjBuilder b(64);
         b.append("", _partitionIDs[index]);
         BSONObj pk = b.done();
         BSONObj result;
         bool idExists = _metaCollection->findByPK(b.done(), result);
-        uassert(0, str::stream() << "could not find partition " << _partitionIDs[index] << " of ns " << _ns, idExists);
+        uassert(17282, str::stream() << "could not find partition " << _partitionIDs[index] << " of ns " << _ns, idExists);
         return result.copy();
     }
 
     void PartitionedCollection::updatePartitionMetadata(uint64_t index, BSONObj newMetadata, bool checkCreateTime) {
-        massert(0, "bad index to updatePartitionMetadata", index < _numPartitions);
+        massert(17283, "bad index to updatePartitionMetadata", index < _numPartitions);
 
         BSONObjBuilder b(64);
         b.append("", _partitionIDs[index]);
         BSONObj pk = b.done();
         BSONObj oldMetadata;
         bool idExists = _metaCollection->findByPK(b.done(), oldMetadata);
-        massert(0, str::stream() << "could not find partition " << _partitionIDs[index] << " of ns " << _ns, idExists);
+        massert(17284, str::stream() << "could not find partition " << _partitionIDs[index] << " of ns " << _ns, idExists);
 
         // first do some sanity checks
         // verify that id, createTime, and max are the same
         dassert(newMetadata["_id"] == oldMetadata["_id"]);
-        massert(0, str::stream() << "bad _id to updatePartitionMetadata" << newMetadata["_id"] << " " << oldMetadata["_id"], newMetadata["_id"] == oldMetadata["_id"]);
+        massert(17285, str::stream() << "bad _id to updatePartitionMetadata" << newMetadata["_id"] << " " << oldMetadata["_id"], newMetadata["_id"] == oldMetadata["_id"]);
         if (checkCreateTime) {
-            massert(0, "bad createTime to updatePartitionMetadata", newMetadata["createTime"] == oldMetadata["createTime"]);
+            massert(17286, "bad createTime to updatePartitionMetadata", newMetadata["createTime"] == oldMetadata["createTime"]);
         }
-        massert(0, "bad pivot", newMetadata["max"] == oldMetadata["max"]);
+        massert(17287, "bad pivot", newMetadata["max"] == oldMetadata["max"]);
 
         // now do the update
         bool indexBitChanged = false;

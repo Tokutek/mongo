@@ -1454,7 +1454,7 @@ namespace mongo {
                                        const bool countCursor);
 
         virtual shared_ptr<CollectionRenamer> getRenamer() {
-            uasserted(0, "cannot rename a partitioned collection");
+            uasserted(17294, "cannot rename a partitioned collection");
         }
 
 
