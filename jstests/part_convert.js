@@ -6,6 +6,8 @@ t = db.part_convert;
 tname = 'part_convert';
 t.drop();
 
+// test that we cannot run it on a non-existent collection
+assert.commandFailed(db.runCommand({convertToPartitioned:tname}));
 // test that we cannot convert a collection with a pk
 assert.commandWorked(db.runCommand({ create: tname, primaryKey: { a: 1, _id: 1 } }));
 assert.commandFailed(db.runCommand({convertToPartitioned:tname}));

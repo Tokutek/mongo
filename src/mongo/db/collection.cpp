@@ -1445,7 +1445,7 @@ namespace mongo {
         Lock::assertWriteLocked(from);
 
         Collection *from_cl = getCollection(from);
-        verify( from_cl != NULL );
+        uassert( 0, "Cannot find collection to convert to partitioned", from_cl != NULL );
 
         uassert( 0, "Collection already partitioned", !from_cl->isPartitioned());
         uassert( 0, "Cannot convert to partitioned collection when under-going bulk load.",
