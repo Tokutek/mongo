@@ -86,9 +86,9 @@ install: build
 	mv $(CURDIR)/debian/$(PRODUCT)-dev/usr/lib/tokumx/* $(CURDIR)/debian/$(PRODUCT)-dev/usr/lib
 	rmdir $(CURDIR)/debian/$(PRODUCT)-dev/usr/lib/tokumx
 
-	echo 'distsrc/GNU-AGPL-3.0'         > debian/$(PRODUCT)-common.docs
-	echo 'distsrc/README'              >> debian/$(PRODUCT)-common.docs
-	echo 'distsrc/THIRD-PARTY-NOTICES' >> debian/$(PRODUCT)-common.docs
+	echo 'distsrc/GNU-AGPL-3.0'         > $(CURDIR)/debian/$(PRODUCT)-common.docs
+	echo 'distsrc/README'              >> $(CURDIR)/debian/$(PRODUCT)-common.docs
+	echo 'distsrc/THIRD-PARTY-NOTICES' >> $(CURDIR)/debian/$(PRODUCT)-common.docs
 
 # Build architecture-independent files here.
 binary-indep: build install
@@ -101,9 +101,9 @@ binary-arch: build install
 	dh_installchangelogs 
 
 # this has to happen after installchangelogs or it'll break installchangelogs
-	install -p -Dm644 distsrc/NEWS $(CURDIR)/debian/$(PRODUCT)-common/usr/share/doc/tokumx/changelog
+	install -p -Dm644 $(CURDIR)/distsrc/NEWS $(CURDIR)/debian/$(PRODUCT)-common/usr/share/doc/tokumx/changelog
 	gzip -9 $(CURDIR)/debian/$(PRODUCT)-common/usr/share/doc/tokumx/changelog
-	mv $(CURDIR)/debian/$(PRODUCT)-common/usr/README-TOKUKV $(CURDIR)/debian/$(PRODUCT)-common/usr/share/doc/tokumx
+	install -p -Dm644 $(CURDIR)/src/third_party/ft-index/README-TOKUDB $(CURDIR)/debian/$(PRODUCT)-common/usr/share/doc/tokumx/README-TOKUKV
 
 	dh_installdocs
 	dh_installexamples
