@@ -79,8 +79,8 @@ install: build
 	  cmake -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/$(PRODUCT)-dev/usr -D COMPONENT=tokumx_client_headers -P cmake_install.cmake && \
 	  cmake -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/$(PRODUCT)-dev/usr -D COMPONENT=tokumx_client_libs -P cmake_install.cmake)
 
-	install -Dm644 $(CURDIR)/debian/tokumx.conf $(CURDIR)/debian/$(PRODUCT)-server/etc/tokumx.conf
-	install -Dm755 $(CURDIR)/debian/$(PRODUCT)-clients/usr/scripts/tokumxstat.py $(CURDIR)/debian/$(PRODUCT)-clients/usr/share/tokumx/scripts/tokumxstat.py
+	install -P -Dm644 $(CURDIR)/debian/tokumx.conf $(CURDIR)/debian/$(PRODUCT)-server/etc/tokumx.conf
+	install -P -Dm755 $(CURDIR)/debian/$(PRODUCT)-clients/usr/scripts/tokumxstat.py $(CURDIR)/debian/$(PRODUCT)-clients/usr/share/tokumx/scripts/tokumxstat.py
 	$(RM) -r $(CURDIR)/debian/$(PRODUCT)-clients/usr/scripts
 
 	mv $(CURDIR)/debian/$(PRODUCT)-dev/usr/lib/tokumx/* $(CURDIR)/debian/$(PRODUCT)-dev/usr/lib
@@ -101,8 +101,7 @@ binary-arch: build install
 	dh_installchangelogs 
 
 # this has to happen after installchangelogs or it'll break installchangelogs
-	install -dm755 $(CURDIR)/debian/$(PRODUCT)-common/usr/share/doc/tokumx
-	mv $(CURDIR)/debian/$(PRODUCT)-common/usr/NEWS $(CURDIR)/debian/$(PRODUCT)-common/usr/share/doc/tokumx/changelog
+	install -p -Dm644 distsrc/NEWS $(CURDIR)/debian/$(PRODUCT)-common/usr/share/doc/tokumx/changelog
 	gzip -9 $(CURDIR)/debian/$(PRODUCT)-common/usr/share/doc/tokumx/changelog
 	mv $(CURDIR)/debian/$(PRODUCT)-common/usr/README-TOKUKV $(CURDIR)/debian/$(PRODUCT)-common/usr/share/doc/tokumx
 
