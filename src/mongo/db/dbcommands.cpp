@@ -1758,7 +1758,17 @@ namespace mongo {
             convertToPartitionedCollection(ns);
             return true;
         }
-    } cmdConvertToPartitioned;
+    } ;
+    // for now, making this a test only function until we make partitioning
+    // a more widely used feature
+    MONGO_INITIALIZER(RegisterConvertToPartitionedCmd)(InitializerContext* context) {
+        if (Command::testCommandsEnabled) {
+            // Leaked intentionally: a Command registers itself when constructed.
+            new CmdConvertToPartitioned();
+        }
+        return Status::OK();
+    }
+
 
     bool _execCommand(Command *c,
                       const string& dbname,
