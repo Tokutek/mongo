@@ -128,7 +128,7 @@ binary-arch: build install
 	dh_fixperms
 
 	for suffix in preinst postinst prerm postrm; do \
-	    mv debian/tokumx-server.$$suffix debian/$(PRODUCT)-server.$$suffix \
+	    mv debian/tokumx-server.$$suffix debian/$(PRODUCT)-server.$$suffix; \
 	done
 
 	dh_installdeb
