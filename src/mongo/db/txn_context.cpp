@@ -148,8 +148,44 @@ namespace mongo {
         }
     }
 
-    void TxnContext::commit(int flags) {
-        verify(!_retired);
+    void TxnContext::commitChild(int flags) {
+        verify(hasParent());
+        // handle work related to logging of transaction for replication
+        // this piece must be done before the _txn.commit
+        try {
+            // This does something
+            // a bit dangerous in that it may spill parent's stuff
+            // with this child transaction that is committing. If something
+            // goes wrong and this child transaction aborts, we will miss
+            // some ops
+            //
+            // This ought to be ok, because we are in this try/catch block
+            // where if something goes wrong, we will crash the server.
+            // NOTHING better go wrong here, unless under bad rare
+            // circumstances
+            _txnOps.finishChildCommit();
+            // handle work related to logging of transaction for chunk migrations
+            if (!_txnOpsForSharding.empty()) {
+                transferOpsForShardingToParent();
+            }
+
+            _clientCursorRollback.preComplete();
+            _txn.commit(flags);
+        }
+        catch (std::exception &e) {
+            log() << "exception during critical section of txn child commit, aborting system: " << e.what() << endl;
+            printStackTrace();
+            logflush();
+            ::abort();
+        }
+
+        // These rollback items must be processed after the ydb transaction completes.
+        _cappedRollback.transfer(_parent->_cappedRollback);
+        _collectionMapRollback.transfer(_parent->_collectionMapRollback);
+    }
+
+    void TxnContext::commitRoot(int flags) {
+        verify(!hasParent());
         bool gotGTID = false;
         GTID gtid;
         // do this in case we are writing the first entry
@@ -159,20 +195,7 @@ namespace mongo {
         // handle work related to logging of transaction for replication
         // this piece must be done before the _txn.commit
         try {
-            if (hasParent()) {
-                // This does something
-                // a bit dangerous in that it may spill parent's stuff
-                // with this child transaction that is committing. If something
-                // goes wrong and this child transaction aborts, we will miss
-                // some ops
-                //
-                // This ought to be ok, because we are in this try/catch block
-                // where if something goes wrong, we will crash the server.
-                // NOTHING better go wrong here, unless under bad rare
-                // circumstances
-                _txnOps.finishChildCommit();
-            }
-            else if (!_txnOps.empty()) {
+            if (!_txnOps.empty()) {
                 uint64_t timestamp = 0;
                 uint64_t hash = 0;
                 if (!_initiatingRS) {
@@ -193,21 +216,23 @@ namespace mongo {
             }
             // handle work related to logging of transaction for chunk migrations
             if (!_txnOpsForSharding.empty()) {
-                if (hasParent()) {
-                    transferOpsForShardingToParent();
-                }
-                else {
-                    writeTxnOpsToMigrateLog();
-                }
+                writeTxnOpsToMigrateLog();
             }
 
             _clientCursorRollback.preComplete();
-            _txn.commit(flags);
+            try {
+                _txn.commit(flags);
+            }
+            catch (std::exception &e) {
+                log() << "exception during critical section of txn root commit, aborting system: " << e.what() << endl;
+                printStackTrace();
+                logflush();
+                ::abort();
+            }
 
             // if the commit of this transaction got a GTID, then notify 
             // the GTIDManager that the commit is now done.
             if (gotGTID && !_initiatingRS) {
-                dassert(txnGTIDManager);
                 // save the GTID for the client so that
                 // getLastError will know what GTID slaves
                 // need to be caught up to.
@@ -216,19 +241,23 @@ namespace mongo {
             }
         }
         catch (std::exception &e) {
-            log() << "exception during critical section of txn commit, aborting system: " << e.what() << endl;
-            printStackTrace();
-            logflush();
-            ::abort();
+            if (gotGTID && !_initiatingRS) {
+                txnGTIDManager->noteLiveGTIDDone(gtid);
+            }
         }
 
         // These rollback items must be processed after the ydb transaction completes.
+        _cappedRollback.commit();
+        _collectionMapRollback.commit();
+    }
+
+    void TxnContext::commit(int flags) {
+        verify(!_retired);
         if (hasParent()) {
-            _cappedRollback.transfer(_parent->_cappedRollback);
-            _collectionMapRollback.transfer(_parent->_collectionMapRollback);
-        } else {
-            _cappedRollback.commit();
-            _collectionMapRollback.commit();
+            commitChild(flags);
+        }
+        else {
+            commitRoot(flags);
         }
         _retired = true;
     }

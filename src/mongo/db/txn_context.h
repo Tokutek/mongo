@@ -243,6 +243,8 @@ namespace mongo {
         }
 
     private:
+        void commitChild(int flags);
+        void commitRoot(int flags);
         // transfer operations in _txnOps to _parent->_txnOps
         void transferOpsToParent();
         void transferOpsForShardingToParent();
