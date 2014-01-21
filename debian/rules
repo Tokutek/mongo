@@ -116,7 +116,7 @@ binary-arch: build install
 #	dh_installmime
 
 	for suffix in init upstart; do \
-	    mv debian/tokumx-server.$$suffix debian/$(PRODUCT)-server.tokumx.$$suffix \
+	    mv debian/tokumx-server.$$suffix debian/$(PRODUCT)-server.tokumx.$$suffix; \
 	done
 
 	dh_installinit --name=tokumx
