@@ -27,40 +27,6 @@ set_source_files_properties(
   "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.cpp"
   PROPERTIES GENERATED TRUE)
 
-if (NOT (TOKUMX_GIT_VERSION AND TOKUKV_GIT_VERSION))
-  find_program(GIT git)
-  if (GIT MATCHES NOTFOUND)
-    set(SEND_ERROR "git not found")
-  endif ()
-endif ()
-if (NOT TOKUMX_GIT_VERSION)
-  execute_process(
-    COMMAND ${GIT} rev-parse HEAD
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../.."
-    OUTPUT_VARIABLE TOKUMX_GIT_VERSION
-    RESULT_VARIABLE retval
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_QUIET
-    )
-  if (NOT retval EQUAL 0)
-    message(WARNING "${GIT}: error: ${retval}")
-    set(TOKUMX_GIT_VERSION "unknown")
-  endif ()
-endif ()
-if (NOT TOKUKV_GIT_VERSION)
-  execute_process(
-    COMMAND ${GIT} rev-parse HEAD
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/ft-index"
-    OUTPUT_VARIABLE TOKUKV_GIT_VERSION
-    RESULT_VARIABLE retval
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_QUIET
-    )
-  if (NOT retval EQUAL 0)
-    message(WARNING "${GIT}: error: ${retval}")
-    set(TOKUKV_GIT_VERSION "unknown")
-  endif ()
-endif ()
 if (JS_ENGINE STREQUAL v8)
   set(TOKUMX_JS_ENGINE V8)
 elseif (JS_ENGINE STREQUAL sm)
