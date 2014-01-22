@@ -843,18 +843,23 @@ namespace mongo {
         }
 
         if (logop) {
-            OpLogHelpers::logUpdate(_ns.c_str(), pk, oldObj, newObj, fromMigrate);
+            OpLogHelpers::logUpdate(_ns.c_str(), pk, oldObj, newObj, BSONObj(), fromMigrate);
         }
     }
 
-    void CollectionBase::updateObjectMods(const BSONObj &pk, const BSONObj &updateObj,
+    void CollectionBase::updateObjectMods(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateObj,
                                           const bool logop, const bool fromMigrate,
                                           uint64_t flags) {
+        verify(!updateObj.isEmpty());
+
         IndexDetailsBase &pkIdx = getPKIndexBase();
         pkIdx.updatePair(pk, NULL, updateObj, flags);
-
         if (logop) {
-            OpLogHelpers::logUpdateMods(_ns.c_str(), pk, updateObj, fromMigrate);
+            if (oldObj.isEmpty()) {
+                OpLogHelpers::logUpdateMods(_ns.c_str(), pk, updateObj, fromMigrate);
+            } else {
+                OpLogHelpers::logUpdate(_ns.c_str(), pk, oldObj, BSONObj(), updateObj, fromMigrate);
+            }
         }
     }
 
@@ -2187,7 +2192,7 @@ namespace mongo {
         }
     }
 
-    void CappedCollection::updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
+    void CappedCollection::updateObjectMods(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateobj,
                                             const bool logop, const bool fromMigrate,
                                             uint64_t flags) {
         msgasserted(17217, "bug: cannot (fast) update a capped collection, "
@@ -2388,7 +2393,7 @@ namespace mongo {
         msgasserted( 16850, "bug: The profile collection should not be updated." );
     }
 
-    void ProfileCollection::updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
+    void ProfileCollection::updateObjectMods(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateobj,
                                              const bool logop, const bool fromMigrate,
                                              uint64_t flags) {
         msgasserted( 17219, "bug: The profile collection should not be updated." );
@@ -2484,7 +2489,7 @@ namespace mongo {
         uasserted( 16866, "Cannot update a collection under-going bulk load." );
     }
 
-    void BulkLoadedCollection::updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
+    void BulkLoadedCollection::updateObjectMods(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateobj,
                                                 const bool logop, const bool fromMigrate,
                                                 uint64_t flags) {
         uasserted( 17218, "Cannot update a collection under-going bulk load." );
@@ -3156,14 +3161,13 @@ namespace mongo {
     }
     
     void PartitionedCollection::updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
-                              const bool logop, const bool fromMigrate,
-                              uint64_t flags, bool* indexBitChanged)
-    {
+                                             const bool logop, const bool fromMigrate,
+                                             uint64_t flags, bool* indexBitChanged) {
         int whichPartition = partitionWithPK(pk);
         // note we are passing false for logop
         _partitions[whichPartition]->updateObject(pk, oldObj, newObj, false, fromMigrate, flags, indexBitChanged);
         if (logop) {
-            OpLogHelpers::logUpdate(_ns.c_str(), pk, oldObj, newObj, fromMigrate);
+            OpLogHelpers::logUpdate(_ns.c_str(), pk, oldObj, newObj, BSONObj(), fromMigrate);
         }
     }
 

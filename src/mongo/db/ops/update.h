@@ -46,6 +46,7 @@ namespace mongo {
 
     void updateOneObject(Collection *cl, const BSONObj &pk, 
                          const BSONObj &oldObj, const BSONObj &newObj, 
+                         const BSONObj &updateobj,
                          const bool logop, const bool fromMigrate,
                          uint64_t flags = 0);
 

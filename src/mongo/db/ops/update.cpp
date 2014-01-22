@@ -36,9 +36,17 @@ namespace mongo {
 
     void updateOneObject(Collection *cl, const BSONObj &pk, 
                          const BSONObj &oldObj, const BSONObj &newObj, 
+                         const BSONObj &updateobj,
                          const bool logop, const bool fromMigrate,
                          uint64_t flags) {
-        cl->updateObject(pk, oldObj, newObj, logop, fromMigrate, flags);
+        if (flags & Collection::KEYS_UNAFFECTED_HINT && !updateobj.isEmpty()) {
+            // - operator style update gets applied as an update message
+            // - does not maintain sencondary indexes so we can only do it
+            // when no indexes were affected
+            cl->updateObjectMods(pk, oldObj, updateobj, logop, fromMigrate, flags);
+        } else {
+            cl->updateObject(pk, oldObj, newObj, logop, fromMigrate, flags);
+        }
         cl->notifyOfWriteOp();
     }
 
@@ -105,11 +113,12 @@ namespace mongo {
     } _storageUpdateCallback; // installed as the ydb update callback in db.cpp via set_update_callback
 
     static void updateUsingMods(Collection *cl, const BSONObj &pk, const BSONObj &obj,
+                                const BSONObj &updateobj,
                                 ModSetState &mss, const bool modsAreIndexed,
                                 const bool logop, const bool fromMigrate) {
         const BSONObj newObj = mss.createNewFromMods();
         checkTooLarge(newObj);
-        updateOneObject(cl, pk, obj, newObj, logop, fromMigrate,
+        updateOneObject(cl, pk, obj, newObj, updateobj, logop, fromMigrate,
                         modsAreIndexed ? 0 : Collection::KEYS_UNAFFECTED_HINT);
     }
 
@@ -119,7 +128,7 @@ namespace mongo {
         // and modifies it in-place if a timestamp needs to be set.
         BSONElementManipulator::lookForTimestamps(updateobj);
         checkNoMods(updateobj);
-        updateOneObject(cl, pk, obj, updateobj, logop, fromMigrate);
+        updateOneObject(cl, pk, obj, updateobj, BSONObj(), logop, fromMigrate);
     }
 
     static UpdateResult upsertAndLog(Collection *cl, const BSONObj &patternOrig,
@@ -178,7 +187,7 @@ namespace mongo {
             // Further, we specifically do _not_ check if upsert is true because it's
             // implied when using fastupdates.
             cc().curop()->debug().fastmod = true;
-            cl->updateObjectMods(pk, updateobj, logop, fromMigrate, flags);
+            cl->updateObjectMods(pk, BSONObj(), updateobj, logop, fromMigrate, flags);
             cl->notifyOfWriteOp();
             return UpdateResult(0, 1, 1, BSONObj());
         }
@@ -203,7 +212,7 @@ namespace mongo {
                 mods.reset(mods->fixDynamicArray(queryResult.matchDetails.elemMatchKey()));
             }
             auto_ptr<ModSetState> mss = mods->prepare(obj, false /* not an insertion */);
-            updateUsingMods(cl, pk, obj, *mss, mods->isIndexed() > 0, logop, fromMigrate);
+            updateUsingMods(cl, pk, obj, updateobj, *mss, mods->isIndexed() > 0, logop, fromMigrate);
         } else {
             // replace-style update
             updateNoMods(cl, pk, obj, updateobj, logop, fromMigrate);
@@ -342,7 +351,7 @@ namespace mongo {
                 mymodset.reset(useMods);
             }
             auto_ptr<ModSetState> mss = useMods->prepare(currentObj, false /* not an insertion */);
-            updateUsingMods(cl, currPK, currentObj, *mss, useMods->isIndexed() > 0, logop, fromMigrate);
+            updateUsingMods(cl, currPK, currentObj, updateobj, *mss, useMods->isIndexed() > 0, logop, fromMigrate);
             numModded++;
 
             if (!multi) {

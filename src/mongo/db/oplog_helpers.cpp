@@ -21,6 +21,7 @@
 #include "mongo/db/repl_block.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/ops/update.h"
+#include "mongo/db/ops/update_internal.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/repl/rs.h"
@@ -103,11 +104,12 @@ namespace mongo {
             }
         }
 
-        void logUpdate(const char *ns, const BSONObj& pk,
-                       const BSONObj& oldRow, const BSONObj& newRow,
+        void logUpdate(const char *ns, const BSONObj &pk,
+                       const BSONObj &oldObj, const BSONObj &newObj,
+                       const BSONObj &updateobj,
                        bool fromMigrate) {
             bool logForSharding = !fromMigrate &&
-                shouldLogTxnUpdateOpForSharding(OP_STR_UPDATE, ns, oldRow, newRow);
+                shouldLogTxnUpdateOpForSharding(OP_STR_UPDATE, ns, oldObj, newObj);
             if (logTxnOpsForReplication() || logForSharding) {
                 BSONObjBuilder b;
                 if (isLocalNs(ns)) {
@@ -118,8 +120,15 @@ namespace mongo {
                 appendNsStr(ns, &b);
                 appendMigrate(fromMigrate, &b);
                 b.append(KEY_STR_PK, pk);
-                b.append(KEY_STR_OLD_ROW, oldRow);
-                b.append(KEY_STR_NEW_ROW, newRow);
+                b.append(KEY_STR_OLD_ROW, oldObj);
+                if (!updateobj.isEmpty()) {
+                    // old row plus mods is sufficient
+                    b.append(KEY_STR_MODS, updateobj);
+                } else {
+                    // otherwise we just log the full old row and full new row
+                    verify(!newObj.isEmpty());
+                    b.append(KEY_STR_NEW_ROW, newObj);
+                }
                 BSONObj logObj = b.obj();
                 if (logTxnOpsForReplication()) {
                     cc().txn().logOpForReplication(logObj);
@@ -384,24 +393,31 @@ namespace mongo {
         static void runUpdateFromOplogWithLock(
             const char* ns,
             const BSONObj &pk,
-            const BSONObj &oldRow,
-            const BSONObj &newRow,
+            const BSONObj &oldObj,
+            BSONObj newObj,
+            const BSONObj &updateobj,
             bool isRollback)
         {
             Collection *cl = getCollection(ns);
-            // note the only difference between these two cases is
-            // what is passed as the before image, and what is passed
-            // as after. In normal replication, we replace oldRow with newRow.
-            // In rollback, we replace newRow with oldRow
-            const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
+
+            uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
+            if (newObj.isEmpty() && !updateobj.isEmpty()) {
+                // We have an update obj and we need to create the new obj
+                scoped_ptr<ModSet> mods(new ModSet(updateobj, cl->indexKeys()));
+                auto_ptr<ModSetState> mss = mods->prepare(oldObj);
+                newObj = mss->createNewFromMods();
+                // Make sure we pass the best hint in the case of an unindexed update
+                flags |= (mods->isIndexed() > 0 ? 0 : Collection::KEYS_UNAFFECTED_HINT);
+            }
+
             if (isRollback) {
-                // if this is a rollback, then the newRow is what is in the
-                // collections, that we want to replace with oldRow
-                updateOneObject(cl, pk, newRow, oldRow, false, false, flags);
+                // if this is a rollback, then the newObj is what is in the
+                // collections, that we want to replace with oldObj
+                updateOneObject(cl, pk, newObj, oldObj, updateobj, false, false, flags);
             }
             else {
                 // normal replication case
-                updateOneObject(cl, pk, oldRow, newRow, false, false, flags);
+                updateOneObject(cl, pk, oldObj, newObj, updateobj, false, false, flags);
             }
         }
 
@@ -409,23 +425,27 @@ namespace mongo {
             const char *names[] = {
                 KEY_STR_PK,
                 KEY_STR_OLD_ROW, 
-                KEY_STR_NEW_ROW
+                KEY_STR_NEW_ROW,
+                KEY_STR_MODS, 
                 };
-            BSONElement fields[3];
-            op.getFields(3, names, fields);
-            const BSONObj pk = fields[0].Obj();
-            const BSONObj oldRow = fields[1].Obj();
-            const BSONObj newRow = fields[2].Obj();
+            BSONElement fields[4];
+            op.getFields(4, names, fields);
+            const BSONObj pk = fields[0].Obj();     // must exist
+            const BSONObj oldObj = fields[1].Obj(); // must exist
+            const BSONObj newObj = fields[2].ok() ? fields[2].Obj() : BSONObj();
+            const BSONObj updateobj = fields[3].ok() ? fields[3].Obj() : BSONObj();
+            // must be given at least one of the new object or an update obj
+            verify(!newObj.isEmpty() || !updateobj.isEmpty());
 
             try {
                 LOCK_REASON(lockReason, "repl: applying update");
                 Client::ReadContext ctx(ns, lockReason);
-                runUpdateFromOplogWithLock(ns, pk, oldRow, newRow, isRollback);
+                runUpdateFromOplogWithLock(ns, pk, oldObj, newObj, updateobj, isRollback);
             }
             catch (RetryWithWriteLock &e) {
                 LOCK_REASON(lockReason, "repl: applying update with write lock");
                 Client::WriteContext ctx(ns, lockReason);
-                runUpdateFromOplogWithLock(ns, pk, oldRow, newRow, isRollback);
+                runUpdateFromOplogWithLock(ns, pk, oldObj, newObj, updateobj, isRollback);
             }
         }
 

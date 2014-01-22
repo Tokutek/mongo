@@ -203,7 +203,7 @@ namespace mongo {
         // update an object in the namespace by pk, described by the updateObj's $ operators
         //
         // handles logging
-        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
+        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateObj, 
                                       const bool logop, const bool fromMigrate,
                                       uint64_t flags) = 0;
 
@@ -562,10 +562,10 @@ namespace mongo {
         // update an object in the namespace by pk, described by the updateObj's $ operators
         //
         // handles logging
-        void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
-                                      const bool logop, const bool fromMigrate,
-                                      uint64_t flags = 0) {
-            _cd->updateObjectMods(pk, updateObj, logop, fromMigrate, flags);
+        void updateObjectMods(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateObj, 
+                              const bool logop, const bool fromMigrate,
+                              uint64_t flags = 0) {
+            _cd->updateObjectMods(pk, oldObj, updateObj, logop, fromMigrate, flags);
         }
 
         // Rebuild indexes. Details are implementation specific. This is typically an online operation.
@@ -787,7 +787,7 @@ namespace mongo {
         // update an object in the namespace by pk, described by the updateObj's $ operators
         //
         // handles logging
-        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
+        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateObj, 
                                       const bool logop, const bool fromMigrate,
                                       uint64_t flags);
         
@@ -1093,7 +1093,7 @@ namespace mongo {
                           const bool logop, const bool fromMigrate,
                           uint64_t flags, bool* indexBitChanged);
 
-        void updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
+        void updateObjectMods(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateobj,
                               const bool logop, const bool fromMigrate,
                               uint64_t flags);
 
@@ -1173,9 +1173,9 @@ namespace mongo {
                           const bool logop, const bool fromMigrate,
                           uint64_t flags, bool* indexBitChanged);
 
-        void updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
-                          const bool logop, const bool fromMigrate,
-                          uint64_t flags);
+        void updateObjectMods(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateobj,
+                              const bool logop, const bool fromMigrate,
+                              uint64_t flags);
 
     private:
         void createIndex(const BSONObj &idx_info);
@@ -1203,7 +1203,7 @@ namespace mongo {
                           const bool logop, const bool fromMigrate,
                           uint64_t flags, bool* indexBitChanged);
 
-        void updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
+        void updateObjectMods(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateobj,
                               const bool logop, const bool fromMigrate,
                               uint64_t flags);
 
@@ -1354,7 +1354,7 @@ namespace mongo {
             return false;
         }
 
-        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
+        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateObj, 
                                       const bool logop, const bool fromMigrate,
                                       uint64_t flags) {
             uasserted(17239, "cannot do a fast update on a partitioned collection");
