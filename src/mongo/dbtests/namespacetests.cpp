@@ -32,16 +32,16 @@ namespace NamespaceTests {
         class Base {
             Lock::GlobalWrite lk;
             Client::Context _context;
-            shared_ptr<IndexDetails> _idx;
+            shared_ptr<IndexDetailsBase> _idx;
         public:
-            IndexDetails &idx() { return *_idx; }
+            IndexDetailsBase &idx() { return *_idx; }
             Base() : _context(ns()), _idx() {
             }
             virtual ~Base() {
             }
         protected:
             void create() {
-                _idx.reset(new IndexDetails(info()));
+                _idx.reset(new IndexDetailsBase(info()));
             }
             virtual bool isSparse() const {
                 return false;
@@ -1061,13 +1061,16 @@ namespace NamespaceTests {
                 registerIndexKey( BSON( "a" << 1 ) );
 
                 ASSERT( !nsd()->isMultikey( 1 ) );
-                
-                nsd()->setIndexIsMultikey( 1 );
+                bool dummy;
+                Collection* cl = nsd();
+                CollectionBase* cd = cl->as<CollectionBase>();
+                cd->setIndexIsMultikey( 1, &dummy );
+                cl->noteMultiKeyChanged(); // this is what now clears the query cache
                 ASSERT( nsd()->isMultikey( 1 ) );
                 assertCachedIndexKey( BSONObj() );
                 
                 registerIndexKey( BSON( "a" << 1 ) );
-                nsd()->setIndexIsMultikey( 1 );
+                cd->setIndexIsMultikey( 1, &dummy );
                 assertCachedIndexKey( BSON( "a" << 1 ) );
             }
         };

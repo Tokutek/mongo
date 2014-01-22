@@ -372,19 +372,15 @@ namespace mongo {
         // for replInfoUpdate
         boost::mutex _replInfoMutex;
         bool _replInfoUpdateRunning;
-        // for oplog purge thread
-        bool _replOplogPurgeRunning;
-        boost::mutex _purgeMutex;
-        boost::condition_variable _purgeCond;
-        GTID _lastPurgedGTID;
-        uint64_t _lastPurgedTS;
+        // for oplogPartitionThread
+        boost::mutex _oplogPartitionMutex;
+        boost::condition_variable _oplogPartitionCond;
+        bool _replOplogPartitionRunning;
         // for keepOplogAlive
         bool _replKeepOplogAliveRunning;
         uint64_t _keepOplogPeriodMillis;
         boost::mutex _keepOplogAliveMutex;
         boost::condition_variable _keepOplogAliveCond;
-        // for optimize oplog thread, uses same _purgeMutex
-        bool _replOplogOptimizeRunning;
 
         bool _replBackgroundShouldRun;
         
@@ -538,16 +534,13 @@ namespace mongo {
         // for testing
         void setKeepOplogAlivePeriod(uint64_t val);
         void changeExpireOplog(uint64_t expireOplogDays, uint64_t expireOplogHours);
-        GTID getLastPurgedGTID();
-        uint64_t getLastPurgedTS();
     private:
         void _getTargets(list<Target>&, int &configVersion);
         void getTargets(list<Target>&, int &configVersion);
         void startThreads();
         void keepOplogAliveThread();
-        void purgeOplogThread();
-        void optimizeOplogThread();
         void updateReplInfoThread();
+        void oplogPartitionThread();
         friend class FeedbackThread;
         friend class CmdReplSetElect;
         friend class Member;

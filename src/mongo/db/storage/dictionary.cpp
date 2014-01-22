@@ -286,7 +286,7 @@ namespace mongo {
                         _db, fn, compression, _db->get_compression_method, _db->change_compression_method);
                 } else if (fn == "fanout") {
                     int fanout = e.numberInt();
-                    uassert(0, "fanout must be number >= 4", fanout >= 4);
+                    uassert(17288, "fanout must be number >= 4", fanout >= 4);
                     setMap[fn] = boost::make_shared<DBParameterSetterImpl<unsigned int> >(
                         _db, fn, (unsigned int) fanout, _db->get_fanout, _db->change_fanout);
                 } else {

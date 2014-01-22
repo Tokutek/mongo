@@ -160,12 +160,6 @@ namespace mongo {
                 minUnapplied,
                 result
                 );
-            addGTIDToBSON(
-                "lastPurgedGTID",
-                theReplSet->getLastPurgedGTID(),
-                result
-                );
-            result.appendDate("lastPurgedTS", theReplSet->getLastPurgedTS());
             const Member *syncTarget = BackgroundSync::get()->getSyncTarget();
             if (syncTarget) {
                 result.append("syncingTo", syncTarget->fullName());
@@ -475,15 +469,6 @@ namespace mongo {
             if ( info.hasElement("minUnappliedGTID")) {
                 mem.minUnappliedGTID= getGTIDFromBSON("minUnappliedGTID", info);
             }
-            if ( info.hasElement("lastPurgedGTID")) {
-                mem.purgedInfoAvailable = true;
-                mem.lastPurgedGTID = getGTIDFromBSON("lastPurgedGTID", info);
-                // if lastPurgedGTID is available, lastPurgedTS must be as well
-                mem.lastPurgedTS = info["lastPurgedTS"].Date();
-            }
-            else {
-                mem.purgedInfoAvailable = false;
-            }
             // see if this member is in the electable set
             if( info["e"].eoo() ) {
                 // for backwards compatibility
@@ -557,9 +542,8 @@ namespace mongo {
         boost::thread producer(boost::bind(&BackgroundSync::applierThread, sync));
         boost::thread applier(boost::bind(&BackgroundSync::producerThread, sync));
         boost::thread replInfoUpdater(boost::bind(&ReplSetImpl::updateReplInfoThread, this));
-        boost::thread replPurgeOplog(boost::bind(&ReplSetImpl::purgeOplogThread, this));
         boost::thread replKeepOplogAlive(boost::bind(&ReplSetImpl::keepOplogAliveThread, this));
-        boost::thread optimizeOplog(boost::bind(&ReplSetImpl::optimizeOplogThread, this));
+        boost::thread replOplogPartition(boost::bind(&ReplSetImpl::oplogPartitionThread, this));
 
         task::fork(ghost);
 

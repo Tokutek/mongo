@@ -41,19 +41,11 @@
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/jsobjmanipulator.h"
 #include "mongo/util/elapsed_tracker.h"
+#include "mongo/db/storage/assert_ids.h"
 
 namespace mongo {
 
-    // cached copies of these...so don't rename them, drop them, etc.!!!
-    static Collection *rsOplogDetails = NULL;
-    static Collection *rsOplogRefsDetails = NULL;
-    static Collection *replInfoDetails = NULL;
-    
     void deleteOplogFiles() {
-        rsOplogDetails = NULL;
-        rsOplogRefsDetails = NULL;
-        replInfoDetails = NULL;
-        
         Client::Context ctx(rsoplog, dbpath);
         // TODO: code review this for possible error cases
         // although, I don't think we care about error cases,
@@ -76,32 +68,9 @@ namespace mongo {
         }
     }
 
-    bool oplogFilesOpen() {
-        return (rsOplogDetails != NULL && rsOplogRefsDetails != NULL && replInfoDetails != NULL);
-    }
-
-    void openOplogFiles() {
-        const char *logns = rsoplog;
-        if (rsOplogDetails == NULL) {
-            Client::Context ctx(logns , dbpath);
-            rsOplogDetails = getCollection(logns);
-            massert(13347, "local.oplog.rs missing. did you drop it? if so restart server", rsOplogDetails);
-        }
-        if (rsOplogRefsDetails == NULL) {
-            Client::Context ctx(rsOplogRefs , dbpath);
-            rsOplogRefsDetails = getCollection(rsOplogRefs);
-            massert(16814, "local.oplog.refs missing. did you drop it? if so restart server", rsOplogRefsDetails);
-        }
-        if (replInfoDetails == NULL) {
-            Client::Context ctx(rsReplInfo , dbpath);
-            replInfoDetails = getCollection(rsReplInfo);
-            massert(16747, "local.replInfo missing. did you drop it? if so restart server", replInfoDetails);
-        }
-    }
-    
     static void _logTransactionOps(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) {
         LOCK_REASON(lockReason, "repl: logging to oplog");
-        Lock::DBRead lk1("local", lockReason);
+        Client::ReadContext ctx(rsoplog, lockReason);
 
         BSONObjBuilder b;
         addGTIDToBSON("_id", gtid, b);
@@ -118,6 +87,8 @@ namespace mongo {
 
     // assumes it is locked on entry
     void logToReplInfo(GTID minLiveGTID, GTID minUnappliedGTID) {
+        Client::Context ctx(rsOplogRefs , dbpath);
+        Collection* replInfoDetails = getCollection(rsReplInfo);
         BufBuilder bufbuilder(256);
         BSONObjBuilder b(bufbuilder);
         b.append("_id", "minLive");
@@ -138,9 +109,30 @@ namespace mongo {
         _logTransactionOps(gtid, timestamp, hash, opInfo);
     }
 
+    static void updateMaxRefGTID(BSONObj refMeta, uint64_t i, PartitionedCollection* pc, GTID gtid) {
+        BSONObjBuilder bbb;
+        BSONObjIterator ii( refMeta );
+        while ( ii.more() ) {
+            BSONElement e = ii.next();
+            if ( strcmp( e.fieldName(), "maxRefGTID" ) != 0 ) {
+                bbb.append( e );
+            }
+            else {
+                addGTIDToBSON("maxRefGTID", gtid, bbb);
+            }
+        }
+        BSONElement gtidElement = refMeta["maxRefGTID"];
+        if (!gtidElement.ok()) {
+            log() << "maxRefGTID expected, but not found in partition " << 
+                i << ". Unless this is an upgrade, this is unexpected." << endl;
+            addGTIDToBSON("maxRefGTID", gtid, bbb);
+        }
+        pc->updatePartitionMetadata(i, bbb.done());
+    }
+
     void logTransactionOpsRef(GTID gtid, uint64_t timestamp, uint64_t hash, OID& oid) {
         LOCK_REASON(lockReason, "repl: logging to oplog");
-        Lock::DBRead lk1("local", lockReason);
+        Client::ReadContext ctx(rsoplog, lockReason);
         BSONObjBuilder b;
         addGTIDToBSON("_id", gtid, b);
         b.appendDate("ts", timestamp);
@@ -149,11 +141,57 @@ namespace mongo {
         b.append("ref", oid);
         BSONObj bb = b.done();
         writeEntryToOplog(bb, true);
+        // If the OID has elements that are not in the last partition,
+        // then we need to update the last partition's metadata to reflect
+        // this, so when it comes time to trimming, we don't
+        // accidentally trim a piece of oplog.refs that is still referenced
+        // by an existing piece of the oplog
+        {
+            Collection* rsOplogRefsDetails = getCollection(rsOplogRefs);
+            verify(rsOplogRefsDetails);
+            PartitionedCollection* pc = rsOplogRefsDetails->as<PartitionedCollection>();
+            uint64_t numRef = pc->numPartitions();
+
+            uint64_t minPartitionInserted = 0;
+            {
+                BSONObjBuilder b;            
+                // build the _id
+                BSONObjBuilder b_id;
+                b_id.append("oid", oid);
+                // probably not necessary to increment _seq, but safe to do
+                b_id.append("seq", 0);
+                b.append("", b_id.obj());
+                minPartitionInserted = pc->partitionWithPK(b.done());
+            }
+            // only update metadata is there are insertions that happened
+            // in partitions OTHER than the last partition ( < numRef-1)
+            if (minPartitionInserted < numRef - 1) {
+                // use an alternate transaction stack,
+                // so that this work does not get lumped in with
+                // the rest of the transaction's work (which can be big)
+                // If this transaction commits and the current "big" one
+                // does not, that's ok. The maxRefGTID will be bigger
+                // than it has to be, and that is benign.
+                Client::AlternateTransactionStack altStack;
+                Client::Transaction txn(DB_SERIALIZABLE);
+                for (uint64_t i = minPartitionInserted; i < numRef - 1; i++) {
+                    // for each one, update metadata
+                    BSONObj refMeta = pc->getPartitionMetadata(i);
+                    GTID currGTID = getGTIDFromBSON("maxRefGTID", refMeta);
+                    if (GTID::cmp(currGTID, gtid) >= 0) {
+                        // currGTID is already higher, do nothing and return
+                        continue;
+                    }
+                    updateMaxRefGTID(refMeta, i, pc, gtid);
+                }
+                txn.commit();
+            }
+        }
     }
 
     void logOpsToOplogRef(BSONObj o) {
         LOCK_REASON(lockReason, "repl: logging to oplog.refs");
-        Lock::DBRead lk("local", lockReason);
+        Client::ReadContext ctx(rsOplogRefs, lockReason);
         writeEntryToOplogRefs(o);
     }
 
@@ -177,7 +215,7 @@ namespace mongo {
 
         /* create an oplog collection, if it doesn't yet exist. */
         BSONObjBuilder b;
-
+        b.append("partitioned", 1);
         // create the namespace
         string err;
         BSONObj o = b.done();
@@ -186,7 +224,7 @@ namespace mongo {
         verify(ret);
         ret = userCreateNS(rsOplogRefs, o, err, false);
         verify(ret);
-        ret = userCreateNS(replInfoNS, o, err, false);
+        ret = userCreateNS(replInfoNS, BSONObj(), err, false);
         verify(ret);
     }
 
@@ -197,7 +235,6 @@ namespace mongo {
     bool getLastGTIDinOplog(GTID* gtid) {
         LOCK_REASON(lockReason, "repl: looking up last GTID in oplog");
         Client::ReadContext ctx(rsoplog, lockReason);
-        // TODO: Should this be using rsOplogDetails, verifying non-null?
         Collection *cl = getCollection(rsoplog);
         shared_ptr<Cursor> c( Cursor::make(cl, -1) );
         if (c->ok()) {
@@ -218,6 +255,7 @@ namespace mongo {
     }
 
     static void _writeEntryToOplog(BSONObj entry) {
+        Collection* rsOplogDetails = getCollection(rsoplog);
         verify(rsOplogDetails);
 
         const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
@@ -235,6 +273,7 @@ namespace mongo {
     }
 
     void writeEntryToOplogRefs(BSONObj o) {
+        Collection* rsOplogRefsDetails = getCollection(rsOplogRefs);
         verify(rsOplogRefsDetails);
 
         TimerHolder insertTimer(&oplogInsertStats);
@@ -252,34 +291,39 @@ namespace mongo {
         writeEntryToOplog(op, true);
     }
 
-    // Copy a range of documents to the local oplog.refs collection
-    static void copyOplogRefsRange(OplogReader &r, OID oid) {
-        shared_ptr<DBClientCursor> c = r.getOplogRefsCursor(oid);
-        LOCK_REASON(lockReason, "repl: copying oplog.refs range");
-        Client::ReadContext ctx(rsOplogRefs, lockReason);
-        while (c->more()) {
-            BSONObj b = c->next();
-            BSONElement eOID = b.getFieldDotted("_id.oid");
-            if (oid != eOID.OID()) {
-                break;
-            }
-            LOG(6) << "copyOplogRefsRange " << b << endl;
-            writeEntryToOplogRefs(b);
-        }
-    }
-
     void replicateFullTransactionToOplog(BSONObj& o, OplogReader& r, bool* bigTxn) {
         *bigTxn = false;
         if (o.hasElement("ref")) {
             OID oid = o["ref"].OID();
             LOG(3) << "oplog ref " << oid << endl;
-            copyOplogRefsRange(r, oid);
+            shared_ptr<DBClientCursor> c = r.getOplogRefsCursor(oid);
+            // we are doing the work of copying oplog.refs data and writing to oplog
+            // underneath a read lock
+            // to ensure that neither oplog or oplog.refs has a partition
+            // added, so that the trickery required in logTransactionOpsRef
+            // to update maxRefGTID is not necessary.
+            // If we release the read lock between copying oplog refs range
+            // and writing to oplog, we would have to handle the case
+            // where a partition is added while copying the range
+            LOCK_REASON(lockReason, "repl: copying oplog.refs range");
+            Client::ReadContext ctx(rsOplogRefs, lockReason);
+            while (c->more()) {
+                BSONObj b = c->next();
+                BSONElement eOID = b.getFieldDotted("_id.oid");
+                if (oid != eOID.OID()) {
+                    break;
+                }
+                LOG(6) << "copyOplogRefsRange " << b << endl;
+                writeEntryToOplogRefs(b);
+            }
+            replicateTransactionToOplog(o);
             *bigTxn = true;
         }
-
-        LOCK_REASON(lockReason, "repl: copying entry to local oplog");
-        Client::ReadContext ctx(rsoplog, lockReason);
-        replicateTransactionToOplog(o);
+        else {
+            LOCK_REASON(lockReason, "repl: copying entry to local oplog");
+            Client::ReadContext ctx(rsoplog, lockReason);
+            replicateTransactionToOplog(o);
+        }
     }
 
     // apply all operations in the array
@@ -344,7 +388,7 @@ namespace mongo {
             BSONElementManipulator(entry["a"]).setBool(true);
             {
                 LOCK_REASON(lockReason, "repl: setting oplog entry's applied bit");
-                Lock::DBRead lk1("local", lockReason);
+                Client::ReadContext ctx(rsoplog, lockReason);
                 writeEntryToOplog(entry, false);
             }
             // If this code fails, it is impossible to recover from
@@ -383,6 +427,7 @@ namespace mongo {
             {
                 LOCK_REASON(lockReason, "repl: rolling back entry from oplog.refs");
                 Client::ReadContext ctx(rsOplogRefs, lockReason);
+                Collection* rsOplogRefsDetails = getCollection(rsOplogRefs);
                 verify(rsOplogRefsDetails != NULL);
                 shared_ptr<Cursor> c(
                     Cursor::make(
@@ -428,7 +473,7 @@ namespace mongo {
         }
         {
             LOCK_REASON(lockReason, "repl: purging entry from oplog");
-            Lock::DBRead lk1("local", lockReason);
+            Client::ReadContext ctx(rsoplog, lockReason);
             if (purgeEntry) {
                 purgeEntryFromOplog(entry);
             }
@@ -441,8 +486,9 @@ namespace mongo {
         }
         transaction.commit(DB_TXN_NOSYNC);
     }
-    
+
     void purgeEntryFromOplog(BSONObj entry) {
+        Collection* rsOplogDetails = getCollection(rsoplog);
         verify(rsOplogDetails);
         if (entry.hasElement("ref")) {
             OID oid = entry["ref"].OID();
@@ -472,16 +518,266 @@ namespace mongo {
         return hours * millisPerHour;
     }
 
-    void hotOptimizeOplogTo(GTID gtid, const int timeout, uint64_t *loops_run) {
-        LOCK_REASON(lockReason, "repl: optimizing oplog");
+    // assumes we are already in lock and transaction
+    static void addOplogPartitionsInLock() {
+        Collection* rsOplogDetails = getCollection(rsoplog);
+        PartitionedOplogCollection* poc = rsOplogDetails->as<PartitionedOplogCollection>();
+        poc->addPartition();
+
+        // try to add a partition to the oplog.refs
+        // if the last partition had no insertions, then we cannot
+        // add a partition, so it will stay as-is
+        Collection* rsOplogRefsDetails = getCollection(rsOplogRefs);
+        PartitionedCollection* pc = rsOplogRefsDetails->as<PartitionedCollection>();
+        try {
+            pc->addPartition();
+        }
+        catch ( UserException& ue ) {
+            if (ue.getCode() == storage::ASSERT_IDS::CapPartitionFailed) {
+                // capping the partition failed, likely because there were
+                // no spilled transactions in the partition
+                // in this case, we just commit the transaction we have
+                // and gracefully exit
+                return;
+            }
+            throw;
+        }
+
+        // get the metadata of the last partition (which was just added)
+        uint64_t opNum = poc->numPartitions();
+        verify (opNum > 1); // we just added a partition, so there better be more than 1
+        BSONObj opMeta = poc->getPartitionMetadata(opNum-2);
+        GTID pivot = getGTIDFromBSON("", opMeta["max"].Obj());
+        
+        uint64_t refNum = pc->numPartitions();
+        verify (refNum > 1); // we just added a partition, so there better be more than 1
+        BSONObj refMeta = pc->getPartitionMetadata(refNum-2);
+
+        BSONObjBuilder b;
+        BSONObjIterator i( refMeta );
+        while ( i.more() ) {
+            BSONElement e = i.next();
+            b.append( e );
+        }
+        addGTIDToBSON("maxRefGTID", pivot, b);
+        pc->updatePartitionMetadata(refNum-2, b.done());
+    }
+    
+    // adds a partition to oplog and oplog.refs
+    void addOplogPartitions() {
+        // add a partition to the oplog
+        LOCK_REASON(lockReason, "repl: adding partition to oplog");
+        Client::WriteContext ctx(rsoplog, lockReason);
+        Client::Transaction transaction(DB_SERIALIZABLE);
+        addOplogPartitionsInLock();
+        transaction.commit();
+    }
+
+    // returns the time the last partition was added
+    uint64_t getLastPartitionAddTime() {
+        LOCK_REASON(lockReason, "repl: getting last time of partition add");
         Client::ReadContext ctx(rsoplog, lockReason);
+        Client::Transaction transaction(DB_TXN_SNAPSHOT);
+        Collection* rsOplogDetails = getCollection(rsoplog);
+        PartitionedOplogCollection* poc = rsOplogDetails->as<PartitionedOplogCollection>();
+        uint64_t refNum = poc->numPartitions();
+        BSONObj refMeta = poc->getPartitionMetadata(refNum-1);
+        BSONElement e = refMeta["createTime"];
+        massert(17262, "createTime mysteriously missing from partition metadata", e.ok());
+        return e._numberLong();
+    }
 
-        // do a hot optimize up until gtid;
-        BSONObjBuilder q;
-        addGTIDToBSON("", gtid, q);
+    static void trimOplogRefs(GTID maxGTID) {
+        Lock::assertWriteLocked("local");
+        Collection* rsOplogRefsDetails = getCollection(rsOplogRefs);
+        PartitionedCollection* pc = rsOplogRefsDetails->as<PartitionedCollection>();
+        while (true) {
+            uint64_t numPartitions = pc->numPartitions();
+            if (numPartitions == 1) {
+                // nothing worth trimming
+                return;
+            }
+            BSONObj lastMeta = pc->getPartitionMetadata(0); 
+            uint64_t lastID = lastMeta["_id"].Long();
+            BSONElement e = lastMeta["maxRefGTID"];
+            if (!e.ok()) {
+                log() << "unexpectedly, maxRefGTID does not exist, exiting trimOplogRefs" << endl;
+                return;
+            }
+            GTID currGTID = getGTIDFromBSON("maxRefGTID", lastMeta);
+            // if the GTID found in maxRefGTID is greater than what we
+            // have trimmed to, then we cannot safely drop this partition
+            if (GTID::cmp(currGTID, maxGTID) > 0) {
+                break;
+            }
+            pc->dropPartition(lastID);
+        }
+    }
 
-        // TODO: rsOplogDetails should be stored as OplogCollection, not Collection
-        OplogCollection *cl = rsOplogDetails->as<OplogCollection>();
-        cl->optimizePK(minKey, q.done(), timeout, loops_run);
+    static bool willOplogTrimTS(uint64_t tsMillis) {
+        // we first grab a read lock to test if any trimming will happen
+        LOCK_REASON(lockReason, "repl: checking if we can trim oplog");
+        Client::ReadContext ctx(rsoplog, lockReason);
+        Client::Transaction transaction(DB_SERIALIZABLE);
+        Collection* rsOplogDetails = getCollection(rsoplog);
+        PartitionedOplogCollection* poc = rsOplogDetails->as<PartitionedOplogCollection>();
+        uint64_t numPartitions = poc->numPartitions();
+        verify(numPartitions > 0);
+        if (numPartitions == 1) {
+            // nothing worth trimming
+            return false;
+        }
+        BSONObj meta = poc->getPartitionMetadata(1);
+        // if the createTime of partition 1 is before tsMillis,
+        // that means we can drop partition 0, so we would return true
+        uint64_t createTime = meta["createTime"]._numberLong();
+        transaction.commit();
+        LOG(2) << "tsMillis " << tsMillis << " createTime " << createTime << " currTime " << curTimeMillis64() << rsLog;
+        return  createTime <= tsMillis;
+    }
+
+    // used for trimming an oplog given a timestamp
+    void trimOplogWithTS(uint64_t tsMillis) {
+        if (!willOplogTrimTS(tsMillis)) {
+            LOG(2) << "will not trim with tsMillis " << tsMillis << rsLog;
+            return;
+        }
+        LOCK_REASON(lockReason, "repl: trim oplog with TS");
+        Client::WriteContext ctx(rsoplog, lockReason);
+        Client::Transaction transaction(DB_SERIALIZABLE);
+        Collection* rsOplogDetails = getCollection(rsoplog);
+        PartitionedOplogCollection* poc = rsOplogDetails->as<PartitionedOplogCollection>();
+
+        bool oplogTrimmed = false;
+        // we have this while loop instead of a conventional for-loop because
+        // as we drop partitions, the indexes of the partitions shift
+        GTID maxGTIDTrimmed;
+        while (true) {
+            uint64_t numPartitions = poc->numPartitions();
+            if (numPartitions == 1) {
+                // nothing worth trimming
+                break;
+            }
+            BSONObj lastMeta = poc->getPartitionMetadata(0); 
+            uint64_t lastID = lastMeta["_id"].Long();
+            BSONObj meta = poc->getPartitionMetadata(1);
+            // if the partitions create time is after tsMillis, we cannot drop
+            // the previous partition as the previous partition may also
+            // have data that is greater than tsMillis
+            uint64_t createTime = meta["createTime"]._numberLong();
+            if (createTime > tsMillis) {
+                break;
+            }
+            maxGTIDTrimmed = getGTIDFromBSON("", lastMeta["max"].Obj());
+            poc->dropPartition(lastID);
+            oplogTrimmed = true;
+        }
+
+        // only try to trim oplog.refs if we successfully trimmed oplog
+        if (oplogTrimmed) {
+            trimOplogRefs(maxGTIDTrimmed);
+        }
+        transaction.commit();
+    }
+
+    static bool willOplogTrimGTID(GTID gtid) {
+        // we first grab a read lock to test if any trimming will happen
+        LOCK_REASON(lockReason, "repl: checking if we can trim oplog");
+        Client::ReadContext ctx(rsoplog, lockReason);
+        Client::Transaction transaction(DB_SERIALIZABLE);
+        Collection* rsOplogDetails = getCollection(rsoplog);
+        PartitionedOplogCollection* poc = rsOplogDetails->as<PartitionedOplogCollection>();
+        uint64_t numPartitions = poc->numPartitions();
+        verify(numPartitions > 0);
+        if (numPartitions == 1) {
+            // nothing worth trimming
+            return false;
+        }
+        BSONObj meta = poc->getPartitionMetadata(0);
+        // if the GTID of partition 0 is less than gtid,
+        // that means we can drop partition 0, so we would return true
+        GTID pivot = getGTIDFromBSON("", meta["max"].Obj());
+        transaction.commit();
+        return GTID::cmp(pivot, gtid) <= 0;
+    }
+
+    void trimOplogwithGTID(GTID gtid) {
+        if (!willOplogTrimGTID(gtid)) {
+            return;
+        }
+        LOCK_REASON(lockReason, "repl: trim oplog with GTID");
+        Client::WriteContext ctx(rsoplog, lockReason);
+        Client::Transaction transaction(DB_SERIALIZABLE);
+        Collection* rsOplogDetails = getCollection(rsoplog);
+        PartitionedOplogCollection* poc = rsOplogDetails->as<PartitionedOplogCollection>();
+
+        bool oplogTrimmed = false;
+        // we have this while loop instead of a conventional for-loop because
+        // as we drop partitions, the indexes of the partitions shift
+        GTID maxGTIDTrimmed;
+        while (true) {
+            uint64_t numPartitions = poc->numPartitions();
+            if (numPartitions == 1) {
+                // nothing worth trimming
+                break;
+            }
+            uint64_t lastID = poc->getPartitionMetadata(0)["_id"].Long();
+            BSONObj meta = poc->getPartitionMetadata(0);
+            GTID pivot = getGTIDFromBSON("", meta["max"].Obj());
+            // if the partitions pivot is greater than GTID, we cannot drop
+            // the partition
+            if (GTID::cmp(pivot, gtid) > 0) {
+                break;
+            }
+            poc->dropPartition(lastID);
+            maxGTIDTrimmed = pivot;
+            oplogTrimmed = true;
+        }
+
+        // only try to trim oplog.refs if we successfully trimmed oplog
+        if (oplogTrimmed) {
+            trimOplogRefs(maxGTIDTrimmed);
+        }
+        transaction.commit();
+    }
+
+    void convertOplogToPartitionedIfNecessary(GTID gtid) {
+        LOCK_REASON(lockReason, "repl: maybe convert oplog to partitioned on startup");
+        Client::WriteContext ctx(rsoplog, lockReason);
+        Client::Transaction transaction(DB_SERIALIZABLE);
+        bool shouldAddPartition = false;
+        Collection* rsOplogDetails = getCollection(rsoplog);
+        if (!rsOplogDetails->isPartitioned()) {
+            log() << "Oplog was not partitioned, converting it to a partitioned collection" << rsLog;
+            convertToPartitionedCollection(rsoplog);
+            shouldAddPartition = true;
+        }
+        Collection* rsOplogRefsDetails = getCollection(rsOplogRefs);
+        if (!rsOplogRefsDetails->isPartitioned()) {
+            log() << "Oplog.refs was not partitioned, converting it to a partitioned collection" << rsLog;
+            convertToPartitionedCollection(rsOplogRefs);
+            Collection* coll = getCollection(rsOplogRefs);
+            // add maxRefGTID
+            PartitionedCollection* pc = coll->as<PartitionedCollection>();
+            BSONObj refMeta = pc->getPartitionMetadata(0);
+            updateMaxRefGTID(refMeta, 0, pc, gtid);
+        }
+        //
+        // if we converted the oplog from partitioned to non-partitioned,
+        // then we ought to immedietely add a partition
+        // Because we did the conversion, we could not have
+        // done it on an empty oplog, so there should be no issues
+        // adding a partition
+        //
+        // The benefit here is that all work done before upgrade
+        // is in a separate partition and can be dropped sooner
+        // rather than later (which we want, because odds are this
+        // partition is big
+        //
+        if (shouldAddPartition) {
+            log() << "auto adding a partition after upgrade" << rsLog;
+            addOplogPartitionsInLock();
+        }
+        transaction.commit();
     }
 }

@@ -143,7 +143,7 @@ namespace {
             Client::WriteContext ctx(_ns);
             Client::Transaction txn(DB_SERIALIZABLE);
             // This would throw if we didn't handle the corruption fix properly
-            d = mongo::Collection::make(mongo::CollectionBase::serialize(_ns, BSONObj(), BSON("_id" << 1), 0ULL, b.arr()));
+            d = mongo::Collection::make(mongo::Collection::serialize(_ns, BSONObj(), BSON("_id" << 1), 0ULL, b.arr()));
             ASSERT(d);
             ASSERT_GREATER_THAN(d->findIndexByKeyPattern(mongo::extendedSystemUsersKeyPattern), 0);
             ASSERT_LESS_THAN(d->findIndexByKeyPattern(mongo::oldSystemUsersKeyPattern), 0);

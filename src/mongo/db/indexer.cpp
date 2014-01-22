@@ -95,7 +95,7 @@ namespace mongo {
 
         uassert(12505, str::stream() << "add index fails, too many indexes for " <<
                        name << " key:" << keyPattern.toString(),
-                       _cl->nIndexes() < NIndexesMax);
+                       _cl->nIndexes() < Collection::NIndexesMax);
 
         // The first index we create should be the pk index, when we first create the collection.
         if (!_isSecondaryIndex) {
@@ -109,7 +109,7 @@ namespace mongo {
 
         // Store the index in the _indexes array so that others know an
         // index with this name / key pattern exists and is being built.
-        _idx = IndexDetails::make(_info);
+        _idx = IndexDetailsBase::make(_info);
         _cl->_indexes.push_back(_idx);
         _cl->_indexBuildInProgress = true;
 
@@ -128,10 +128,6 @@ namespace mongo {
         // rolling back the index creation in the destructor.
         _cl->_indexBuildInProgress = false;
         _cl->_nIndexes++;
-
-        // Pass true for includeHotIndex to serialize()
-        collectionMap(_cl->_ns)->update_ns(_cl->_ns, _cl->serialize(true), _isSecondaryIndex);
-        _cl->resetTransient();
     }
 
     CollectionBase::HotIndexer::HotIndexer(CollectionBase *cl, const BSONObj &info) :
@@ -146,7 +142,7 @@ namespace mongo {
             // will be set during index creation if multikeys are generated.
             // see storage::generate_keys()
             _multiKeyTracker.reset(new MultiKeyTracker(_idx->db()));
-            _indexer.reset(new storage::Indexer(_cl->getPKIndex().db(), _idx->db()));
+            _indexer.reset(new storage::Indexer(_cl->getPKIndexBase().db(), _idx->db()));
             _indexer->setPollMessagePrefix(str::stream() << "Hot index build progress: "
                                                          << _cl->_ns << ", key "
                                                          << _idx->keyPattern()
@@ -177,7 +173,8 @@ namespace mongo {
                 storage::handle_ydb_error(r);
             }
             if (_multiKeyTracker->isMultiKey()) {
-                _cl->setIndexIsMultikey(_cl->idxNo(*_idx.get()));
+                bool indexBitChanged;
+                _cl->setIndexIsMultikey(_cl->idxNo(*_idx.get()), &indexBitChanged);
             }
         }
     }
@@ -189,17 +186,17 @@ namespace mongo {
     void CollectionBase::ColdIndexer::build() {
         Lock::assertWriteLocked(_cl->_ns);
         if (_isSecondaryIndex) {
-            IndexDetails::Builder builder(*_idx);
+            IndexDetailsBase::Builder builder(*_idx);
 
-            const int indexNum = _cl->idxNo(*_idx);
-            for (shared_ptr<Cursor> cursor(Cursor::make(_cl));
+            for (shared_ptr<Cursor> cursor(Cursor::make(_cl, 1, false));
                  cursor->ok(); cursor->advance()) {
                 BSONObj pk = cursor->currPK();
                 BSONObj obj = cursor->current();
                 BSONObjSet keys;
                 _idx->getKeysFromObject(obj, keys);
                 if (keys.size() > 1) {
-                    _cl->setIndexIsMultikey(indexNum);
+                    bool indexBitChanged;
+                    _cl->setIndexIsMultikey(_cl->idxNo(*_idx.get()), &indexBitChanged);
                 }
                 for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
                     builder.insertPair(*ki, &pk, obj);

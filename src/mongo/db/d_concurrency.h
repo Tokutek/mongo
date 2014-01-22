@@ -53,8 +53,6 @@ namespace mongo {
         static bool atLeastReadLocked(const StringData& ns); // true if this db is locked
         static void assertAtLeastReadLocked(const StringData& ns);
         static void assertWriteLocked(const StringData& ns);
-
-        static bool dbLevelLockingEnabled(); 
         
         static LockStat* globalLockStat();
         static LockStat* nestableLockStat( Nestable db );
@@ -151,6 +149,7 @@ namespace mongo {
             WrapperForRWLock *_weLocked;
             const string _what;
             bool _nested;
+            Nestable _nestedDB;
         };
 
         // lock this database for reading. do not shared_lock globally first, that is handledin herein. 
@@ -170,6 +169,7 @@ namespace mongo {
             WrapperForRWLock *_weLocked;
             string _what;
             bool _nested;
+            Nestable _nestedDB;
             
         };
 

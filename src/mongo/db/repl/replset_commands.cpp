@@ -604,19 +604,6 @@ namespace mongo {
                 return false;
             }
             try {
-                // This assumes the user is running this command
-                // after startup. We are not doing anything here to protect
-                // against possible races with starting up the machine
-                //
-                // Also, these pointers will remain set
-                // we are not protecting against the case where
-                // the user drops and recreates any oplog related
-                // files.
-                if (!oplogFilesOpen()) {
-                    LOCK_REASON(lockReason, "repl: opening oplog for replUndoOplogEntry");
-                    Lock::DBRead lk("local", lockReason);
-                    openOplogFiles();
-                }
                 bool purgeEntry = true;
                 if (cmdObj.hasElement("keepEntry")) {
                     purgeEntry = false;
@@ -668,9 +655,6 @@ namespace mongo {
 
             LOCK_REASON(lockReason, "repl: logging info");
             Lock::DBRead lk("local", lockReason);
-            if (!oplogFilesOpen()) {
-                openOplogFiles();
-            }
             Client::Transaction transaction(DB_SERIALIZABLE);
             logToReplInfo(minLiveGTID, minUnappliedGTID);
             transaction.commit();
@@ -679,4 +663,78 @@ namespace mongo {
         }
     } cmdLogReplInfo;
 
+    class CmdReplAddPartition : public ReplSetCommand {
+    public:
+        virtual bool canRunInMultiStmtTxn() const { return false; }
+        virtual void help( stringstream &help ) const {
+            help << "add a partition to the oplog and oplog.refs collections\n";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::replAddPartition);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
+    
+        CmdReplAddPartition() : ReplSetCommand("replAddPartition") { }
+    
+        // This command is not meant to be run in a concurrent manner. Assumes user is running this in
+        // a controlled setting.
+        virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            addOplogPartitions();
+            return true;
+        }
+    } cmdReplAddPartition;
+
+    class CmdReplTrimOplog: public ReplSetCommand {
+    public:
+        virtual bool canRunInMultiStmtTxn() const { return false; }
+        virtual void help( stringstream &help ) const {
+            // TODO: add more here
+            help << "trim oplog and oplog.refs collections\n" <<
+                "Either pass {ts : Date} or {GTID : gtid}";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::replTrimOplog);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
+
+        CmdReplTrimOplog() : ReplSetCommand("replTrimOplog") { }
+
+        // This command is not meant to be run in a concurrent manner. Assumes user is running this in
+        // a controlled setting.
+        virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            BSONElement tse = cmdObj["ts"];
+            BSONElement gtide = cmdObj["gtid"];
+            if (tse.ok() && gtide.ok()) {
+                errmsg = "Can supply either gtid or ts, but not both";
+                return false;
+            }
+            if (!tse.ok() && !gtide.ok()) {
+                errmsg = "Must supply either ts or gtid as parameter for trimming";
+                return false;
+            }
+            if (tse.ok()) {
+                if (tse.type() != mongo::Date) {
+                    errmsg = "Must supply a date for the ts field";
+                    return false;
+                }
+                trimOplogWithTS(tse._numberLong());
+            }
+            else if (gtide.ok()) {
+                // do some sanity checks
+                if (!isValidGTID(gtide)) {
+                    errmsg = "gtid is not valid and cannot be parsed";
+                    return false;
+                }
+                GTID gtid = getGTIDFromBSON("gtid",cmdObj);
+                trimOplogwithGTID(gtid);
+            }
+            return true;
+        }
+    } cmdTrimOplog;
 }

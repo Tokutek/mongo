@@ -136,10 +136,12 @@ namespace mongo {
             );
 
         bool copyCollection(
+            const string& dbname,
             const string& ns , 
             const BSONObj& query , 
             string& errmsg , 
-            bool copyIndexes
+            bool copyIndexes,
+            bool logForRepl
             );
         
         void copyCollectionData(
@@ -232,7 +234,12 @@ namespace mongo {
                             }
                             BSONObj row = rowBuilder.obj();
                             CappedCollection *cappedCl = cl->as<CappedCollection>();
-                            cappedCl->insertObjectWithPK(pk, row, Collection::NO_LOCKTREE);
+                            bool indexBitChanged = false;
+                            cappedCl->insertObjectWithPK(pk, row, Collection::NO_LOCKTREE, &indexBitChanged);
+                            // Hack copied from Collection::insertObject. TODO: find a better way to do this                        
+                            if (indexBitChanged) {
+                                cl->noteMultiKeyChanged();
+                            }
                         }
                         else {
                             insertObject(to_collection, js, 0, logForRepl);
@@ -346,10 +353,12 @@ namespace mongo {
     }
 
     bool Cloner::copyCollection(
+        const string& dbname,
         const string& ns, 
         const BSONObj& query,
         string& errmsg,
-        bool copyIndexes
+        bool copyIndexes,
+        bool logForRepl
         ) 
     {
         {
@@ -357,19 +366,37 @@ namespace mongo {
             string temp = getSisterNS(cc().database()->name(), "system.namespaces");
             BSONObj config = conn->findOne( temp , BSON( "name" << ns ) );
             if ( config["options"].isABSONObj() ) {
+                BSONObj options = config["options"].Obj();
                 if ( !userCreateNS(
                         ns.c_str(), 
-                        config["options"].Obj(), 
+                        options, 
                         errmsg, 
-                        true // logForRepl
+                        logForRepl
                         ) 
-                    ) 
+                    )
                 {
                     return false;
                 }
+                
+                if (options["partitioned"].trueValue()) {
+                    BSONObj res;
+                    StringData collectionName = nsToCollectionSubstring(ns);
+                    bool ok = conn->runCommand(dbname, BSON("getPartitionInfo" << collectionName), res);
+                    if (!ok) {
+                        errmsg = res["errmsg"].String();
+                        LOG(0) << errmsg << endl;
+                    }
+                    Collection* cl = getCollection(ns);
+                    massert(17309, "Could not get collection we just created", cl);
+                    PartitionedCollection* pc = cl->as<PartitionedCollection>();
+                    if (logForRepl) {
+                        OpLogHelpers::logUnsupportedOperation(ns.c_str());                        
+                    }
+                    pc->addClonedPartitionInfo(res["partitions"].Array());
+                }
             }
         }
-        copyCollectionData(ns, query, copyIndexes, true);
+        copyCollectionData(ns, query, copyIndexes, logForRepl);
         return true;
     }
 
@@ -423,6 +450,7 @@ namespace mongo {
         list<BSONObj> toClone;
         vector<string> toCloneNames;
         clonedColls.clear();
+        BSONArrayBuilder collsToIgnoreBarr;
         if ( opts.syncData ) {
             mayInterrupt( opts.mayBeInterrupted );
 
@@ -471,6 +499,7 @@ namespace mongo {
                     // system.users and s.js is cloned -- but nothing else from system.
                     // * system.indexes is handled specially at the end
                     if( legalClientSystemNS( from_name , true ) == 0 ) {
+                        collsToIgnoreBarr.append(from_name);
                         LOG(2) << "\t\t not cloning because system collection" << endl;
                         continue;
                     }
@@ -516,6 +545,23 @@ namespace mongo {
                 const char *toname = to_name.c_str();
                 userCreateNS(toname, options, err, opts.logForRepl);
             }
+            if (options["partitioned"].trueValue()) {
+                BSONObj res;
+                StringData collectionName = nsToCollectionSubstring(from_name);
+                bool ok = conn->runCommand(opts.fromDB, BSON("getPartitionInfo" << collectionName), res);
+                if (!ok) {
+                    errmsg = res["errmsg"].String();
+                    LOG(0) << errmsg << endl;
+                    return false;
+                }
+                Collection* cl = getCollection(to_name);
+                massert(17310, "Could not get collection we just created", cl);
+                if (opts.logForRepl) {
+                    OpLogHelpers::logUnsupportedOperation(ns.c_str());                        
+                }
+                PartitionedCollection* pc = cl->as<PartitionedCollection>();
+                pc->addClonedPartitionInfo(res["partitions"].Array());
+            }
             LOG(1) << "\t\t cloning " << from_name << " -> " << to_name << endl;
             Query q;
             copy(
@@ -548,9 +594,8 @@ namespace mongo {
             // is dubious here at the moment.
             
             // build a $nin query filter for the collections we *don't* want
-            BSONArrayBuilder barr;
-            barr.append( opts.collsToIgnore );
-            BSONArray arr = barr.arr();
+            collsToIgnoreBarr.append( opts.collsToIgnore );
+            BSONArray arr = collsToIgnoreBarr.arr();
             
             // Also don't copy the _id_ index
             BSONObj query = BSON("name" << NE << "_id_" << "ns" << NIN << arr);
@@ -671,8 +716,9 @@ namespace mongo {
             );
     }
 
-    void cloneCollectionData(
+    void cloneCollection(
         shared_ptr<DBClientBase> conn,
+        const string& dbname,
         const string& ns, 
         const BSONObj& query,
         bool copyIndexes,
@@ -680,9 +726,12 @@ namespace mongo {
         ) 
     {
         Cloner c(conn);
-        c.copyCollectionData(
+        string errmsg;
+        c.copyCollection(
+            dbname,
             ns,
             query,
+            errmsg,
             copyIndexes,
             logForRepl
             );
@@ -879,10 +928,12 @@ namespace mongo {
             
             Cloner c(conn);
             bool retval = c.copyCollection(
+                dbname,
                 collection,
                 query,
                 errmsg,
-                copyIndexes
+                copyIndexes,
+                true
                 );
 
             if (retval) {

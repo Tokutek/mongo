@@ -137,7 +137,6 @@ namespace mongo {
         else {
             // check for spoofing of the ns such that it does not match the one originally there for the cursor
             uassert(14833, "auth error", str::equals(ns, client_cursor->ns().c_str()));
-            uassert(16784, "oplog cursor reading data that is too old", !client_cursor->lastOpForSlaveTooOld());
 
             int queryOptions = client_cursor->queryOptions();
             OpSettings settings;
@@ -739,8 +738,6 @@ namespace mongo {
             new ClientCursor( options, cursor, ns, BSONObj(), false, false )
             );
 
-        // for oplog cursors, we check if we are reading data that is too old and might
-        // be stale.
         bool opChecked = false;
         bool slaveLocationUpdated = false;
         BSONObj last;
@@ -771,7 +768,6 @@ namespace mongo {
                 // check if data we are about to return may be too stale
                 if (!opChecked) {
                     ccPointer->storeOpForSlave(current);
-                    uassert(16785, "oplog cursor reading data that is too old", !ccPointer->lastOpForSlaveTooOld());
                     opChecked = true;
                 }
             }

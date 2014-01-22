@@ -40,8 +40,6 @@ namespace mongo {
     void logTransactionOpsRef(GTID gtid, uint64_t timestamp, uint64_t hash, OID& oid);
     void logOpsToOplogRef(BSONObj o);
     void deleteOplogFiles();
-    bool oplogFilesOpen();
-    void openOplogFiles();
     
     GTID getGTIDFromOplogEntry(BSONObj o);
     bool getLastGTIDinOplog(GTID* gtid);
@@ -56,22 +54,9 @@ namespace mongo {
     // @return the age, in milliseconds, when an oplog entry expires.
     uint64_t expireOplogMilliseconds();
 
-    // hot optimize oplog up to gtid, used by purge thread to vacuum stale entries
-    // @param timeout: how many seconds to run before backing off. 0 means no timeout.
-    void hotOptimizeOplogTo(GTID gtid, const int timeout, uint64_t *loops_run);
-    
-    /** puts obj in the oplog as a comment (a no-op).  Just for diags.
-        convention is
-          { msg : "text", ... }
-    */
-
-    class QueryPlan;
-    
-    class Sync {
-    protected:
-        string hn;
-    public:
-        Sync(const string& hostname) : hn(hostname) {}
-        virtual ~Sync() {}
-    };
+    uint64_t getLastPartitionAddTime();
+    void addOplogPartitions();
+    void trimOplogWithTS(uint64_t tsMillis);
+    void trimOplogwithGTID(GTID gtid);
+    void convertOplogToPartitionedIfNecessary(GTID gtid);
 }

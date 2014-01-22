@@ -38,16 +38,8 @@
 // system.profile writing
 // oplog now
 
-#define MONGOD_CONCURRENCY_LEVEL_GLOBAL 0
-#define MONGOD_CONCURRENCY_LEVEL_DB 1
-
-#ifndef MONGOD_CONCURRENCY_LEVEL
-#define MONGOD_CONCURRENCY_LEVEL MONGOD_CONCURRENCY_LEVEL_DB
-#endif
 
 namespace mongo { 
-
-    static const bool DB_LEVEL_LOCKING_ENABLED = ( ( MONGOD_CONCURRENCY_LEVEL ) >= MONGOD_CONCURRENCY_LEVEL_DB );
 
     inline LockState& lockState() { 
         return cc().lockState();
@@ -241,10 +233,6 @@ namespace mongo {
             msgasserted(16105, str::stream() << "expected to be write locked for " << ns);
         }
     }
-    bool Lock::dbLevelLockingEnabled() {
-        return DB_LEVEL_LOCKING_ENABLED;
-    }
-
     Lock::ScopedLock::ScopedLock( char type ) 
         : _type(type), _stat(0) {
         LockState& ls = lockState();
@@ -337,29 +325,47 @@ namespace mongo {
 
     void Lock::DBWrite::lockNestable(Nestable db, const string &context) {
         _nested = true;
+        _nestedDB = db;
         LockState& ls = lockState();
-        if( ls.nestableCount() ) { 
-            if( db != ls.whichNestable() ) { 
-                error() << "can't lock local and admin db at the same time " << (int) db << ' ' << (int) ls.whichNestable() << endl;
-                fassert(16131,false);
+        if (db == Lock::local) {
+            if (ls.localLocked()) {
+                return;
             }
-            verify( ls.nestableCount() > 0 );
+            ls.lockedLocal(1,context);
+            fassert(17255,_weLocked==0);
+            _weLocked = nestableLocks[db];
+            _weLocked->lock();
         }
-        else {
-            fassert(16132,_weLocked==0);
-            ls.lockedNestable(db, 1, context);
+        else if (db == Lock::admin) {
+            if (ls.adminLocked()) {
+                return;
+            }
+            massert(17256, "should not lock local before admin", !ls.localLocked());
+            ls.lockedAdmin(1,context);
+            fassert(17257,_weLocked==0);
             _weLocked = nestableLocks[db];
             _weLocked->lock();
         }
     }
     void Lock::DBRead::lockNestable(Nestable db, const string &context) {
         _nested = true;
+        _nestedDB = db;
         LockState& ls = lockState();
-        if( ls.nestableCount() ) { 
-            // we are nested in our locking of local.  previous lock could be read OR write lock on local.
+        if (db == Lock::local) {
+            if (ls.localLocked()) {
+                return;
+            }
+            ls.lockedLocal(-1,context);
+            fassert(17258,_weLocked==0);
+            _weLocked = nestableLocks[db];
+            _weLocked->lock_shared();
         }
-        else {
-            ls.lockedNestable(db,-1,context);
+        else if (db == Lock::admin) {
+            if (ls.adminLocked()) {
+                return;
+            }
+            massert(17259, "should not lock local before admin", !ls.localLocked());
+            ls.lockedAdmin(-1,context);
             fassert(16133,_weLocked==0);
             _weLocked = nestableLocks[db];
             _weLocked->lock_shared();
@@ -378,7 +384,8 @@ namespace mongo {
         }
 
         // first lock for this db. check consistent order with local db lock so we never deadlock. local always comes last
-        massert(16098, str::stream() << "can't dblock:" << db << " when local or admin is already locked", ls.nestableCount() == 0);
+        massert(16098, str::stream() << "can't dblock:" << db << " when local is already locked", !ls.localLocked());
+        massert(17260, str::stream() << "can't dblock:" << db << " when admin is already locked", !ls.adminLocked());
 
         if( db != ls.otherName() )
         {
@@ -417,27 +424,17 @@ namespace mongo {
 
 
         massert( 16186 , "can't get a DBWrite while having a read lock" , ! ls.hasAnyReadLock() );
-        if( ls.isW() )
+        if( ls.isW() ) {
             return;
+        }
 
-        if (DB_LEVEL_LOCKING_ENABLED) {
-            StringData db = nsToDatabaseSubstring( ns );
-            Nestable nested = n(db);
-            if( nested == admin ) { 
-                // we can't nestedly lock both admin and local as implemented. so lock_W.
-                qlk.lock_W();
-                _locked_W = true;
-                return;
-            } 
-            if( !nested )
-                lockOther(db, context);
-            lockTop(ls);
-            if( nested )
-                lockNestable(nested, context);
-        } 
-        else {
-            qlk.lock_W();
-            _locked_w = true;
+        StringData db = nsToDatabaseSubstring( ns );
+        Nestable nested = n(db);
+        if( !nested )
+            lockOther(db, context);
+        lockTop(ls);
+        if( nested ) {
+            lockNestable(nested, context);
         }
     }
 
@@ -449,30 +446,27 @@ namespace mongo {
         _locked_r=false; 
         _weLocked=0; 
 
-        if ( ls.isRW() )
+        if ( ls.isRW() ) {
             return;
-        if (DB_LEVEL_LOCKING_ENABLED) {
-            StringData db = nsToDatabaseSubstring(ns);
-            Nestable nested = n(db);
-            if( !nested )
-                lockOther(db, context);
-            lockTop(ls);
-            if( nested )
-                lockNestable(nested, context);
-        } 
-        else {
-            qlk.lock_R();
-            _locked_r = true;
+        }
+        StringData db = nsToDatabaseSubstring(ns);
+        Nestable nested = n(db);
+        if( nested == notnestable ) {
+            lockOther(db, context);
+        }
+        lockTop(ls);
+        if( nested != notnestable ) {
+            lockNestable(nested, context);
         }
     }
 
     Lock::DBWrite::DBWrite( const StringData& ns, const string &context )
-        : ScopedLock( 'w' ), _what(ns.toString()), _nested(false) {
+        : ScopedLock( 'w' ), _what(ns.toString()), _nested(false), _nestedDB(Lock::notnestable) {
         lockDB( _what, context );
     }
 
     Lock::DBRead::DBRead( const StringData& ns, const string &context )
-        : ScopedLock( 'r' ), _what(ns.toString()), _nested(false) {
+        : ScopedLock( 'r' ), _what(ns.toString()), _nested(false), _nestedDB(Lock::notnestable) {
         lockDB( _what, context );
     }
 
@@ -487,20 +481,25 @@ namespace mongo {
         if( _weLocked ) {
             recordTime();  // for lock stats
         
-            if ( _nested )
-                lockState().unlockedNestable();
-            else
+            if ( _nested ) {
+                if (_nestedDB == Lock::local) {
+                    lockState().unlockedLocal();
+                }
+                else if (_nestedDB == Lock::admin) {
+                    lockState().unlockedAdmin();
+                }
+                else {
+                    verify(false);
+                }
+            }
+            else {
                 lockState().unlockedOther();
-    
+            }    
             _weLocked->unlock();
         }
 
         if( _locked_w ) {
-            if (DB_LEVEL_LOCKING_ENABLED) {
-                qlk.unlock_w();
-            } else {
-                qlk.unlock_W();
-            }
+            qlk.unlock_w();
         }
         if( _locked_W ) {
             qlk.unlock_W();
@@ -511,21 +510,26 @@ namespace mongo {
     void Lock::DBRead::unlockDB() {
         if( _weLocked ) {
             recordTime();  // for lock stats
-        
-            if( _nested )
-                lockState().unlockedNestable();
-            else
-                lockState().unlockedOther();
 
+            if ( _nested ) {
+                if (_nestedDB == Lock::local) {
+                    lockState().unlockedLocal();
+                }
+                else if (_nestedDB == Lock::admin) {
+                    lockState().unlockedAdmin();
+                }
+                else {
+                    verify(false);
+                }
+            }
+            else {
+                lockState().unlockedOther();
+            }
             _weLocked->unlock_shared();
         }
 
         if( _locked_r ) {
-            if (DB_LEVEL_LOCKING_ENABLED) {
-                qlk.unlock_r();
-            } else {
-                qlk.unlock_R();
-            }
+            qlk.unlock_r();
         }
         _weLocked = 0;
         _locked_r = false;
@@ -567,7 +571,8 @@ namespace mongo {
         }
 
         // first lock for this db. check consistent order with local db lock so we never deadlock. local always comes last
-        massert(16100, str::stream() << "can't dblock:" << db << " when local or admin is already locked", ls.nestableCount() == 0);
+        massert(16100, str::stream() << "can't dblock:" << db << " when local is already locked", !ls.localLocked());
+        massert(17261, str::stream() << "can't dblock:" << db << " when admin is already locked", !ls.adminLocked());
 
         if( db != ls.otherName() )
         {

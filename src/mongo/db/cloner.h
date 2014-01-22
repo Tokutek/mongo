@@ -56,8 +56,9 @@ namespace mongo {
         string& errmsg /* out */
         );
     
-    void cloneCollectionData(
+    void cloneCollection(
         shared_ptr<DBClientBase> conn,
+        const string& dbname,
         const string& ns, 
         const BSONObj& query,
         bool copyIndexes,

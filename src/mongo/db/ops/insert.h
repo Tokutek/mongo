@@ -25,6 +25,9 @@ namespace mongo {
 
     class Collection;
 
+    // validate an object before insertion
+    void validateInsert(const BSONObj &obj);
+
     // Insert an object into the given namespace. May modify the object (ie: maybe add _id field). Does not log.
     void insertOneObject(Collection *cl, BSONObj &obj, uint64_t flags = 0);
 

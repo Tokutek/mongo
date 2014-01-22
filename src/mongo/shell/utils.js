@@ -969,6 +969,7 @@ rs.slaveOk = function (value) { return db.getMongo().setSlaveOk(value); }
 rs.status = function () { return db._adminCommand("replSetGetStatus"); }
 rs.isMaster = function () { return db.isMaster(); }
 rs.initiate = function (c) { return db._adminCommand({ replSetInitiate: c }); }
+rs.addPartition = function () { return db._adminCommand("replAddPartition"); }
 rs._runCmd = function (c) {
     // after the command, catch the disconnect and reconnect if necessary
     var res = null;
@@ -1047,6 +1048,24 @@ rs.remove = function (hn) {
 
     return "error: couldn't find "+hn+" in "+tojson(c.members);
 };
+
+rs.oplogPartitionInfo = function () {
+    var s = db.getSisterDB("local");
+    return s.runCommand({getPartitionInfo:"oplog.rs"});
+}
+
+rs.oplogRefsPartitionInfo = function () {
+    var s = db.getSisterDB("local");
+    return s.runCommand({getPartitionInfo:"oplog.refs"});
+}
+
+rs.trimToTS = function(timeParam) {
+    return db._adminCommand({replTrimOplog:1, ts:timeParam});
+}
+
+rs.trimToGTID = function(gtidParam) {
+    return db._adminCommand({replTrimOplog:1, gtid:gtidParam});
+}
 
 rs.debug = {};
 

@@ -106,11 +106,14 @@ namespace {
 
         // Read-write role
         readWriteRoleActions.addAllActionsFromSet(readRoleActions);
+        readWriteRoleActions.addAction(ActionType::addPartition);
         readWriteRoleActions.addAction(ActionType::cloneCollectionTarget);
         readWriteRoleActions.addAction(ActionType::convertToCapped);
+        readWriteRoleActions.addAction(ActionType::convertToPartitioned);
         readWriteRoleActions.addAction(ActionType::createCollection); // db admin gets this also
         readWriteRoleActions.addAction(ActionType::dropCollection);
         readWriteRoleActions.addAction(ActionType::dropIndexes);
+        readWriteRoleActions.addAction(ActionType::dropPartition);
         readWriteRoleActions.addAction(ActionType::emptycapped);
         readWriteRoleActions.addAction(ActionType::ensureIndex);
         readWriteRoleActions.addAction(ActionType::insert);
@@ -123,16 +126,19 @@ namespace {
         userAdminRoleActions.addAction(ActionType::userAdmin);
 
         // DB admin role
+        dbAdminRoleActions.addAction(ActionType::addPartition);
         dbAdminRoleActions.addAction(ActionType::clean);
         dbAdminRoleActions.addAction(ActionType::cloneCollectionLocalSource);
         dbAdminRoleActions.addAction(ActionType::collMod);
         dbAdminRoleActions.addAction(ActionType::collStats);
         dbAdminRoleActions.addAction(ActionType::compact);
         dbAdminRoleActions.addAction(ActionType::convertToCapped);
+        readWriteRoleActions.addAction(ActionType::convertToPartitioned);
         dbAdminRoleActions.addAction(ActionType::createCollection); // read_write gets this also
         dbAdminRoleActions.addAction(ActionType::dbStats);
         dbAdminRoleActions.addAction(ActionType::dropCollection);
         dbAdminRoleActions.addAction(ActionType::dropIndexes);
+        dbAdminRoleActions.addAction(ActionType::dropPartition);
         dbAdminRoleActions.addAction(ActionType::ensureIndex);
         dbAdminRoleActions.addAction(ActionType::indexRead);
         dbAdminRoleActions.addAction(ActionType::indexStats);
@@ -202,9 +208,11 @@ namespace {
         clusterAdminRoleWriteActions.addAction(ActionType::movePrimary);
         clusterAdminRoleWriteActions.addAction(ActionType::removeShard);
         clusterAdminRoleWriteActions.addAction(ActionType::repairDatabase);
+        clusterAdminRoleWriteActions.addAction(ActionType::replAddPartition);
         clusterAdminRoleWriteActions.addAction(ActionType::replSetExpireOplog);
         clusterAdminRoleWriteActions.addAction(ActionType::replSetInitiate);
         clusterAdminRoleWriteActions.addAction(ActionType::replSetReconfig);
+        clusterAdminRoleWriteActions.addAction(ActionType::replTrimOplog);
         clusterAdminRoleWriteActions.addAction(ActionType::replUndoOplogEntry);
         clusterAdminRoleWriteActions.addAction(ActionType::resync);
         clusterAdminRoleWriteActions.addAction(ActionType::shardCollection);

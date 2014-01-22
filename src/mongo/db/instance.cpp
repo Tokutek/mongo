@@ -821,7 +821,7 @@ namespace mongo {
         const StringData &coll = info["ns"].Stringdata();
 
         scoped_ptr<Client::Transaction> transaction(new Client::Transaction(DB_SERIALIZABLE));
-        shared_ptr<Collection::Indexer> indexer;
+        shared_ptr<CollectionIndexer> indexer;
 
         // Prepare the index build. Performs index validation and marks
         // the collection as having an index build in progress.
@@ -856,6 +856,9 @@ namespace mongo {
         {
             Client::Context ctx(ns);
             indexer->commit();
+            Collection *cl = getCollection(coll);
+            verify(cl);
+            cl->noteIndexBuilt();
         }
         transaction->commit();
     }

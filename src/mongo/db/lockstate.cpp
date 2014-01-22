@@ -30,8 +30,8 @@ namespace mongo {
     LockState::LockState() 
         : _recursive(0),
           _threadState(0),
-          _whichNestable( Lock::notnestable ),
-          _nestableCount(0), 
+          _adminLockCount(0),
+          _localLockCount(0),
           _otherCount(0), 
           _otherLock(NULL),
           _scopedLk(NULL),
@@ -64,12 +64,10 @@ namespace mongo {
         if ( _otherCount && db == _otherName )
             return true;
 
-        if ( _nestableCount ) {
-            if ( mongoutils::str::equals( db , "local" ) )
-                return _whichNestable == Lock::local;
-            if ( mongoutils::str::equals( db , "admin" ) )
-                return _whichNestable == Lock::admin;
-        }
+        if ( _localLockCount && mongoutils::str::equals( db , "local" ) )
+            return true;
+        if ( _adminLockCount && mongoutils::str::equals( db , "admin" ) )
+            return true;
 
         return false;
     }
@@ -112,13 +110,11 @@ namespace mongo {
             buf[1] = 0;
             b.append("^", buf);
         }
-        if( _nestableCount ) {
-            string s = "?";
-            if( _whichNestable == Lock::local ) 
-                s = "^local";
-            else if( _whichNestable == Lock::admin ) 
-                s = "^admin";
-            b.append(s, kind(_nestableCount));
+        if (_adminLockCount) {
+            b.append("^admin", kind(_adminLockCount));
+        }
+        if (_localLockCount) {
+            b.append("^local", kind(_localLockCount));
         }
         if( _otherCount ) { 
             WrapperForRWLock *k = _otherLock;
@@ -156,14 +152,11 @@ namespace mongo {
             if( _otherCount ) {
                 ss << " otherdb:" << _otherName;
             }
-            if( _nestableCount ) {
-                ss << " nestableCount:" << _nestableCount << " which:";
-                if( _whichNestable == Lock::local ) 
-                    ss << "local";
-                else if( _whichNestable == Lock::admin ) 
-                    ss << "admin";
-                else 
-                    ss << (int)_whichNestable;
+            if (_adminLockCount) {
+                ss << " adminLockCount:" << _adminLockCount;
+            }
+            if (_localLockCount) {
+                ss << " localLockCount:" << _localLockCount;
             }
         }
         log() << ss.str() << endl;
@@ -190,16 +183,23 @@ namespace mongo {
         return temp;
     }
 
-    void LockState::lockedNestable( Lock::Nestable what , int type, const string &context ) {
-        verify( type );
-        _whichNestable = what;
-        _nestableCount += type;
+    void LockState::lockedAdmin(int type, const string &context) {
+        _adminLockCount += type;
         _context = &context;
     }
 
-    void LockState::unlockedNestable() {
-        _whichNestable = Lock::notnestable;
-        _nestableCount = 0;
+    void LockState::lockedLocal(int type, const string &context) {
+        _localLockCount += type;
+        _context = &context;
+    }
+
+    void LockState::unlockedAdmin() {
+        _adminLockCount = 0;
+        _context = NULL;
+    }
+
+    void LockState::unlockedLocal() {
+        _localLockCount = 0;
         _context = NULL;
     }
 
@@ -218,17 +218,25 @@ namespace mongo {
     }
 
     void LockState::unlockedOther() {
-        _otherName = "";
+        // we leave _otherName and _otherLock set as
+        // _otherLock exists to cache a pointer
         _otherCount = 0;
-        _otherLock = 0;
         _context = NULL;
     }
 
     LockStat* LockState::getRelevantLockStat() {
-        if ( _whichNestable )
-            return Lock::nestableLockStat( _whichNestable );
-
-        if ( _otherLock )
+        // this requires further review. In mongodb
+        // one can never have both admin and local locked
+        // whereas with TokuMX we can. If both are locked,
+        // not sure which should be returned.
+        // going with local for now
+        if (_localLockCount) {
+            return Lock::nestableLockStat(Lock::local);
+        }
+        if (_adminLockCount) {
+            return Lock::nestableLockStat(Lock::admin);
+        }
+        if (  _otherCount && _otherLock  )
             return &_otherLock->stats;
         
         if ( isRW() ) 

@@ -415,8 +415,6 @@ namespace mongo {
                 bb.append("lastUnappliedGTID", lastUnapplied.toString());
                 bb.append("minLiveGTID", minLive.toString());
                 bb.append("minUnappliedGTID", minUnapplied.toString());                
-                bb.append("nextPurgedGTID", _lastPurgedGTID.toString());
-                bb.appendDate("nextPurgedTS", _lastPurgedTS);
             }
 
             int maintenance = _maintenanceMode;
@@ -455,10 +453,6 @@ namespace mongo {
                 bb.append("lastUnappliedGTID", m->hbinfo().lastUnappliedGTID.toString());
                 bb.append("minLiveGTID", m->hbinfo().minLiveGTID.toString());
                 bb.append("minUnappliedGTID", m->hbinfo().minUnappliedGTID.toString());
-                if (m->hbinfo().purgedInfoAvailable) {
-                    bb.append("nextPurgedGTID", m->hbinfo().lastPurgedGTID.toString());
-                    bb.appendDate("nextPurgedTS", m->hbinfo().lastPurgedTS);
-                }
             }
             bb.appendTimeT("lastHeartbeat", m->hbinfo().lastHeartbeat);
             bb.appendTimeT("lastHeartbeatRecv", m->getLastRecvHeartbeat());

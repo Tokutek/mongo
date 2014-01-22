@@ -378,4 +378,15 @@ namespace mongo {
         return ret;
     }
 
+    bool isValidGTID(BSONElement e) {
+        if (e.type() != mongo::BinData) {
+            return false;
+        }
+        int len;
+        e.binData(len);
+        if ((uint32_t)len != GTID::GTIDBinarySize()) {
+            return false;
+        }
+        return true;
+    }
 } // namespace mongo

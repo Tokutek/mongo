@@ -563,11 +563,11 @@ namespace mongo {
                         case CHARSTR:
                         case UNIXTIME:
                         case TOKUTIME:
-                            msgasserted(0, "wrong engine status type for getInteger");
+                            msgasserted(17289, "wrong engine status type for getInteger");
                         }
                     }
                 }
-                msgasserted(0, mongoutils::str::stream() << "no such key: " << key);
+                msgasserted(17290, mongoutils::str::stream() << "no such key: " << key);
             }
 
             double getDuration(const StringData &key) const {
@@ -582,11 +582,11 @@ namespace mongo {
                         case FS_STATE:
                         case UINT64:
                         case PARCOUNT:
-                            msgasserted(0, "wrong engine status type for getDuration");
+                            msgasserted(17291, "wrong engine status type for getDuration");
                         }
                     }
                 }
-                msgasserted(0, mongoutils::str::stream() << "no such key: " << key);
+                msgasserted(17292, mongoutils::str::stream() << "no such key: " << key);
             }
         };
 
