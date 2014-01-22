@@ -294,9 +294,9 @@ set(CPACK_COMPONENT_TOKUMX_TOOLS_GROUP main)
 set(CPACK_COMPONENT_TOKUMX_LIBS_EXTRA_GROUP main)
 set(CPACK_COMPONENT_TOKUMX_PLUGINS_GROUP main)
 set(CPACK_COMPONENT_TOKUMX_CLIENT_HEADERS_GROUP devel)
-set(CPACK_COMPONENT_TOKUMX_CLIENT_SOURCES_GROUP devel)
+set(CPACK_COMPONENT_TOKUMX_CLIENT_SOURCES_GROUP devel-source)
 set(CPACK_COMPONENT_TOKUMX_CLIENT_LIBS_GROUP devel)
-set(CPACK_COMPONENT_TOKUMX_CLIENT_MISC_GROUP devel)
+set(CPACK_COMPONENT_TOKUMX_CLIENT_MISC_GROUP devel-source)
 set(CPACK_COMPONENT_TOKUKV_LIBS_SHARED_GROUP main)
 set(CPACK_COMPONENT_TOKUBACKUP_LIBS_SHARED_GROUP main)
 set(CPACK_COMPONENTS_ALL
@@ -306,8 +306,7 @@ set(CPACK_COMPONENTS_ALL
   tokumx_libs_extra
   tokumx_plugins
   tokumx_client_headers
-  tokumx_client_sources
-  tokumx_client_misc
+  tokumx_client_libs
   tokukv_libs_shared
   tokubackup_libs_shared
   tokumx_debuginfo
