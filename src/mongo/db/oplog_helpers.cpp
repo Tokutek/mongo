@@ -25,6 +25,7 @@
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/stats/counters.h"
+#include "mongo/db/relock.h"
 
 // BSON fields for oplog entries
 static const char *KEY_STR_OP_NAME = "op";
@@ -277,6 +278,19 @@ namespace mongo {
             }
         }
 
+        static void runNonSystemInsertFromOplogWithLock(
+            const char *ns, 
+            const BSONObj &row
+            )
+        {
+            Collection *cl = getCollection(ns);
+            
+            // overwrite set to true because we are running on a secondary
+            const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
+            BSONObj obj = row;
+            insertOneObject(cl, obj, flags);
+        }
+
         static void runInsertFromOplog(const char *ns, const BSONObj &op) {
             const BSONObj row = op[KEY_STR_ROW].Obj();
             // handle add index case
@@ -291,23 +305,25 @@ namespace mongo {
                 }
             }
             else {
-                LOCK_REASON(lockReason, "repl: applying insert");
-                Client::ReadContext ctx(ns, lockReason);
-                Collection *cl = getCollection(ns);
-
-                // overwrite set to true because we are running on a secondary
-                const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
-                BSONObj obj = row;
-                insertOneObject(cl, obj, flags);
+                try {
+                    LOCK_REASON(lockReason, "repl: applying insert");
+                    Client::ReadContext ctx(ns, lockReason);
+                    runNonSystemInsertFromOplogWithLock(ns, row);
+                }
+                catch (RetryWithWriteLock &e) {
+                    LOCK_REASON(lockReason, "repl: applying insert with write lock");
+                    Client::WriteContext ctx(ns, lockReason);
+                    runNonSystemInsertFromOplogWithLock(ns, row);
+                }
             }
         }
 
-        static void runCappedInsertFromOplog(const char *ns, const BSONObj &op) {
-            const BSONObj pk = op[KEY_STR_PK].Obj();
-            const BSONObj row = op[KEY_STR_ROW].Obj();
-
-            LOCK_REASON(lockReason, "repl: applying capped insert");
-            Client::ReadContext ctx(ns, lockReason);
+        static void runCappedInsertFromOplogWithLock(
+            const char* ns,
+            const BSONObj& pk,
+            const BSONObj& row
+            )
+        {
             Collection *cl = getCollection(ns);
 
             verify(cl->isCapped());
@@ -321,6 +337,21 @@ namespace mongo {
                 cl->noteMultiKeyChanged();
             }
             cl->notifyOfWriteOp();
+        }
+
+        static void runCappedInsertFromOplog(const char *ns, const BSONObj &op) {
+            const BSONObj pk = op[KEY_STR_PK].Obj();
+            const BSONObj row = op[KEY_STR_ROW].Obj();
+            try {
+                LOCK_REASON(lockReason, "repl: applying capped insert");
+                Client::ReadContext ctx(ns, lockReason);
+                runCappedInsertFromOplogWithLock(ns, pk, row);
+            }
+            catch (RetryWithWriteLock &e) {
+                LOCK_REASON(lockReason, "repl: applying capped insert with write lock");
+                Client::WriteContext ctx(ns, lockReason);
+                runCappedInsertFromOplogWithLock(ns, pk, row);
+            }
         }
 
         static void runDeleteFromOplog(const char *ns, const BSONObj &op) {
@@ -350,21 +381,14 @@ namespace mongo {
             cl->notifyOfWriteOp();
         }
 
-        static void runUpdateFromOplog(const char *ns, const BSONObj &op, bool isRollback) {
-            LOCK_REASON(lockReason, "repl: applying update");
-            Client::ReadContext ctx(ns, lockReason);
+        static void runUpdateFromOplogWithLock(
+            const char* ns,
+            const BSONObj &pk,
+            const BSONObj &oldRow,
+            const BSONObj &newRow,
+            bool isRollback)
+        {
             Collection *cl = getCollection(ns);
-
-            const char *names[] = {
-                KEY_STR_PK,
-                KEY_STR_OLD_ROW, 
-                KEY_STR_NEW_ROW
-                };
-            BSONElement fields[3];
-            op.getFields(3, names, fields);
-            const BSONObj pk = fields[0].Obj();
-            const BSONObj oldRow = fields[1].Obj();
-            const BSONObj newRow = fields[2].Obj();
             // note the only difference between these two cases is
             // what is passed as the before image, and what is passed
             // as after. In normal replication, we replace oldRow with newRow.
@@ -378,6 +402,30 @@ namespace mongo {
             else {
                 // normal replication case
                 updateOneObject(cl, pk, oldRow, newRow, false, false, flags);
+            }
+        }
+
+        static void runUpdateFromOplog(const char *ns, const BSONObj &op, bool isRollback) {
+            const char *names[] = {
+                KEY_STR_PK,
+                KEY_STR_OLD_ROW, 
+                KEY_STR_NEW_ROW
+                };
+            BSONElement fields[3];
+            op.getFields(3, names, fields);
+            const BSONObj pk = fields[0].Obj();
+            const BSONObj oldRow = fields[1].Obj();
+            const BSONObj newRow = fields[2].Obj();
+
+            try {
+                LOCK_REASON(lockReason, "repl: applying update");
+                Client::ReadContext ctx(ns, lockReason);
+                runUpdateFromOplogWithLock(ns, pk, oldRow, newRow, isRollback);
+            }
+            catch (RetryWithWriteLock &e) {
+                LOCK_REASON(lockReason, "repl: applying update with write lock");
+                Client::WriteContext ctx(ns, lockReason);
+                runUpdateFromOplogWithLock(ns, pk, oldRow, newRow, isRollback);
             }
         }
 

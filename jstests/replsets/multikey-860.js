@@ -26,9 +26,28 @@ doTest = function (signal, startPort, txnLimit) {
     // lets do an update that sets an index to multikey
     x.foo.insert({_id:0, tags:0});
     x.foo.update({_id:0},{tags : [1,2,3]});
-    // now lets do an insert that sets an index to multikey
-    x.foo.insert({tags : [1,2,3]});
     replTest.awaitReplication();
+    // now lets do an insert that sets an index to multikey
+    x.bar.insert({tags : [1,2,3]});
+    replTest.awaitReplication();
+    x.foo.drop();
+    x.bar.drop();
+    replTest.awaitReplication();
+
+
+    x.createCollection("foo", {capped:true, size:1024});
+    x.foo.ensureIndex({tags:1});
+    x.createCollection("bar", {capped:true, size:1024});
+    x.bar.ensureIndex({tags:1});
+
+    // lets do an update that sets an index to multikey
+    x.foo.insert({_id:0, tags:0});
+    x.foo.update({_id:0},{tags : [1,2,3]});
+    replTest.awaitReplication();
+    // now lets do an insert that sets an index to multikey
+    x.bar.insert({tags : [1,2,3]});
+    replTest.awaitReplication();
+
 
     replTest.stopSet(signal);
 }
