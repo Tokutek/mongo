@@ -439,15 +439,23 @@ if (NOT USE_SASL_CLIENT)
     )
 endif ()
 install(FILES
-  "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.cpp"
   "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.h"
+  DESTINATION include/mongo/base
+  COMPONENT tokumx_client_headers
+  )
+install(FILES
+  "${CMAKE_CURRENT_BINARY_DIR}/db/auth/action_type.h"
+  DESTINATION include/mongo/db/auth
+  COMPONENT tokumx_client_headers
+  )
+install(FILES
+  "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.cpp"
   base/generate_error_codes.py
   base/error_codes.err
   DESTINATION src/mongo/base
   COMPONENT tokumx_client_sources
   )
 install(FILES
-  "${CMAKE_CURRENT_BINARY_DIR}/db/auth/action_type.h"
   db/auth/generate_action_types.py
   db/auth/action_types.txt
   DESTINATION src/mongo/db/auth
