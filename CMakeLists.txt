@@ -203,14 +203,16 @@ if (EXISTS src/mongo/plugins/tokumx-backup-plugin/)
 endif ()
 
 function (git_version name dir)
-  if (NOT ${${name}_GIT_VERSION})
+  if ("${${name}_GIT_VERSION}" STREQUAL "")
     find_program(GIT git)
     if (GIT MATCHES NOTFOUND)
       set(FATAL_ERROR "git not found")
     endif ()
+
+    get_filename_component(_real_dir ${dir} REALPATH)
     execute_process(
       COMMAND ${GIT} rev-parse HEAD
-      WORKING_DIRECTORY "${dir}"
+      WORKING_DIRECTORY "${_real_dir}"
       OUTPUT_VARIABLE _git_version
       RESULT_VARIABLE _git_retval
       OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -220,17 +222,17 @@ function (git_version name dir)
       message(WARNING "${GIT}: error: ${retval}")
       set(_git_version "unknown")
     endif ()
-    set(${name}_GIT_VERSION ${_git_version} PARENT_SCOPE)
+    set(${name}_GIT_VERSION ${_git_version} CACHE STRING "git version for ${name}")
   endif ()
   string(SUBSTRING ${${name}_GIT_VERSION} 0 7 _git_shortver)
-  set(${name}_GIT_SHORTVER ${_git_shortver} PARENT_SCOPE)
+  set(${name}_GIT_SHORTVER ${_git_shortver} CACHE STRING "git shortver for ${name}" FORCE)
 endfunction ()
 
 git_version(TOKUMX "${CMAKE_SOURCE_DIR}")
 git_version(TOKUKV "${CMAKE_SOURCE_DIR}/src/third_party/ft-index")
 
 if (TOKUMX_ENTERPRISE)
-  git_version(TOKUBACKUP "${CMAKE_SOURCE_DIR}/src/third_party/backup")
+  git_version(TOKUBACKUP "${CMAKE_SOURCE_DIR}/src/third_party/backup/")
   git_version(TOKUMX_BACKUP_PLUGIN "${CMAKE_SOURCE_DIR}/src/mongo/plugins/tokumx-backup-plugin")
 endif ()
 
