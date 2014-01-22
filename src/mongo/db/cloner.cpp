@@ -450,6 +450,7 @@ namespace mongo {
         list<BSONObj> toClone;
         vector<string> toCloneNames;
         clonedColls.clear();
+        BSONArrayBuilder collsToIgnoreBarr;
         if ( opts.syncData ) {
             mayInterrupt( opts.mayBeInterrupted );
 
@@ -498,6 +499,7 @@ namespace mongo {
                     // system.users and s.js is cloned -- but nothing else from system.
                     // * system.indexes is handled specially at the end
                     if( legalClientSystemNS( from_name , true ) == 0 ) {
+                        collsToIgnoreBarr.append(from_name);
                         LOG(2) << "\t\t not cloning because system collection" << endl;
                         continue;
                     }
@@ -592,9 +594,8 @@ namespace mongo {
             // is dubious here at the moment.
             
             // build a $nin query filter for the collections we *don't* want
-            BSONArrayBuilder barr;
-            barr.append( opts.collsToIgnore );
-            BSONArray arr = barr.arr();
+            collsToIgnoreBarr.append( opts.collsToIgnore );
+            BSONArray arr = collsToIgnoreBarr.arr();
             
             // Also don't copy the _id_ index
             BSONObj query = BSON("name" << NE << "_id_" << "ns" << NIN << arr);
