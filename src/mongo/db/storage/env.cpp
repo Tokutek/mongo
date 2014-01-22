@@ -656,12 +656,6 @@ namespace mongo {
                         uint64_t fullMisses = status.getInteger("CT_MISS");
                         // unfortunately, this is a uint64 when it's actually a tokutime...
                         double fullMisstime = tokutime_to_seconds(status.getInteger("CT_MISSTIME"));
-                        {
-                            BSONObjBuilder b3(b2.subobjStart("full"));
-                            b3.append("count", fullMisses);
-                            b3.append("time", fullMisstime);
-                            b3.doneFast();
-                        }
                         uint64_t partialMisses = 0;
                         double partialMisstime = 0.0;
                         const char *partialMissKeys[] = {"FT_NUM_BASEMENTS_FETCHED_NORMAL",
@@ -685,16 +679,19 @@ namespace mongo {
                             partialMisses += status.getInteger(partialMissKeys[i]);
                             partialMisstime += status.getDuration(partialMisstimeKeys[i]);
                         }
+
+                        b2.append("count", fullMisses + partialMisses);
+                        b2.append("time", fullMisstime + partialMisstime);
+                        {
+                            BSONObjBuilder b3(b2.subobjStart("full"));
+                            b3.append("count", fullMisses);
+                            b3.append("time", fullMisstime);
+                            b3.doneFast();
+                        }
                         {
                             BSONObjBuilder b3(b2.subobjStart("partial"));
                             b3.append("count", partialMisses);
                             b3.append("time", partialMisstime);
-                            b3.doneFast();
-                        }
-                        {
-                            BSONObjBuilder b3(b2.subobjStart("any"));
-                            b3.append("count", fullMisses + partialMisses);
-                            b3.append("time", fullMisstime + partialMisstime);
                             b3.doneFast();
                         }
                         b2.doneFast();
