@@ -19,6 +19,8 @@
 
 #include "pch.h"
 
+#include <limits>
+
 #include "mongo/base/parse_number.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/json.h"
@@ -758,6 +760,26 @@ namespace JSTests {
             ASSERT( s->exec( "f = {f:a.a.top}", "foo", false, true, false ) );
             out = s->getObject( "f" );
             ASSERT( Undefined == out.firstElement().type() );
+        }
+    };
+
+    class InvalidTimestamp {
+    public:
+        void run() {
+            auto_ptr<Scope> s( globalScriptEngine->newScope() );
+            s->localConnect( "blah" );
+
+            // Timestamp 't' component cannot exceed max for int32_t.
+            // Use appendTimestamp(field, Date) to bypass OpTime construction.
+            BSONObj in;
+            {
+                BSONObjBuilder b;
+                b.appendTimestamp( "a", std::numeric_limits<unsigned long long>::max() );
+                in = b.obj();
+            }
+            s->setObject( "a" , in );
+
+            ASSERT_FALSE( s->exec( "x = tojson( a ); " ,"foo" , false , true , false ) );
         }
     };
 
@@ -1606,6 +1628,22 @@ namespace JSTests {
             }
         };
 
+        class TimestampMax : public TestRoundTrip {
+            virtual BSONObj bson() const {
+                BSONObjBuilder b;
+                b.appendMaxForType( "a", mongo::Timestamp );
+                BSONObj o = b.obj();
+                return o;
+            }
+            virtual string json() const {
+                OpTime opTime = OpTime::max();
+                stringstream ss;
+                ss << "{ \"a\" : Timestamp( " << opTime.getSecs() << ", " << opTime.getInc()
+                   << " ) }";
+                return ss.str();
+            }
+        };
+
         class Regex : public TestRoundTrip {
             virtual BSONObj bson() const {
                 BSONObjBuilder b;
@@ -2027,6 +2065,7 @@ namespace JSTests {
             add< TypeConservation >();
             add< NumberLong >();
             add< NumberLong2 >();
+            add< InvalidTimestamp >();
             add< RenameTest >();
 
             add< WeirdObjects >();
@@ -2083,6 +2122,7 @@ namespace JSTests {
             add< RoundTripTests::DateNonzero >();
             add< RoundTripTests::DateNegative >();
             add< RoundTripTests::Timestamp >();
+            add< RoundTripTests::TimestampMax >();
             add< RoundTripTests::Regex >();
             add< RoundTripTests::RegexWithQuotes >();
             add< RoundTripTests::UnquotedFieldName >();

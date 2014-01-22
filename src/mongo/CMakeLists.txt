@@ -113,6 +113,7 @@ set(client_sources
   base/string_data.cpp
   bson/bson_validate.cpp
   bson/oid.cpp
+  bson/optime.cpp
   bson/util/bson_extract.cpp
   client/auth_helpers.cpp
   client/clientAndShell.cpp
