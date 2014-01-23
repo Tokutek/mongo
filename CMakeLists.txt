@@ -200,6 +200,8 @@ endif ()
 
 if (EXISTS src/mongo/plugins/tokumx-backup-plugin/)
   set(TOKUMX_ENTERPRISE ON)
+else ()
+  set(TOKUMX_ENTERPRISE OFF)
 endif ()
 
 function (git_version name dir)
@@ -271,9 +273,10 @@ set(CPACK_PACKAGE_VERSION_MAJOR ${CMAKE_MATCH_2})
 set(CPACK_PACKAGE_VERSION_MINOR ${CMAKE_MATCH_3})
 set(CPACK_PACKAGE_VERSION_PATCH ${CMAKE_MATCH_4})
 
-set(TOKUMX_PRODUCTNAME "tokumx")
 if (TOKUMX_ENTERPRISE)
-  set(TOKUMX_PRODUCTNAME "${TOKUMX_PRODUCTNAME}-e")
+  set(TOKUMX_PRODUCTNAME "tokumx-e")
+else ()
+  set(TOKUMX_PRODUCTNAME "tokumx")
 endif ()
 if (NOT TOKUMX_DISTNAME)
   set(TOKUMX_DISTNAME "${TOKUMX_GIT_SHORTVER}-ft-${TOKUKV_GIT_SHORTVER}")
@@ -282,7 +285,6 @@ if (NOT TOKUMX_DISTNAME)
   endif ()
 endif ()
 
-set(CPACK_PACKAGE_NAME "${TOKUMX_PRODUCTNAME}")
 set(CPACK_PACKAGE_FILE_NAME "${TOKUMX_PRODUCTNAME}-${TOKUMX_DISTNAME}-${CPACK_SYSTEM_NAME}")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "a high-performance mongodb server with fractal tree storage")
 set(CPACK_PACKAGE_VENDOR "Tokutek, Inc.")
@@ -314,5 +316,12 @@ set(CPACK_COMPONENTS_ALL
   tokubackup_libs_shared
   tokumx_debuginfo
   )
+
+if (TOKUMX_ENTERPRISE)
+  message(STATUS "Building TokuMX Enterprise ${CPACK_PACKAGE_VERSION}")
+else ()
+  message(STATUS "Building TokuMX Community ${CPACK_PACKAGE_VERSION}")
+endif ()
+message(STATUS "Package name: ${CPACK_PACKAGE_FILE_NAME}")
 
 include(CPack)
