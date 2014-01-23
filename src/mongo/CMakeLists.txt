@@ -27,40 +27,6 @@ set_source_files_properties(
   "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.cpp"
   PROPERTIES GENERATED TRUE)
 
-if (NOT (TOKUMX_GIT_VERSION AND TOKUKV_GIT_VERSION))
-  find_program(GIT git)
-  if (GIT MATCHES NOTFOUND)
-    set(SEND_ERROR "git not found")
-  endif ()
-endif ()
-if (NOT TOKUMX_GIT_VERSION)
-  execute_process(
-    COMMAND ${GIT} rev-parse HEAD
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../.."
-    OUTPUT_VARIABLE TOKUMX_GIT_VERSION
-    RESULT_VARIABLE retval
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_QUIET
-    )
-  if (NOT retval EQUAL 0)
-    message(WARNING "${GIT}: error: ${retval}")
-    set(TOKUMX_GIT_VERSION "unknown")
-  endif ()
-endif ()
-if (NOT TOKUKV_GIT_VERSION)
-  execute_process(
-    COMMAND ${GIT} rev-parse HEAD
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/ft-index"
-    OUTPUT_VARIABLE TOKUKV_GIT_VERSION
-    RESULT_VARIABLE retval
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_QUIET
-    )
-  if (NOT retval EQUAL 0)
-    message(WARNING "${GIT}: error: ${retval}")
-    set(TOKUKV_GIT_VERSION "unknown")
-  endif ()
-endif ()
 if (JS_ENGINE STREQUAL v8)
   set(TOKUMX_JS_ENGINE V8)
 elseif (JS_ENGINE STREQUAL sm)
@@ -443,13 +409,25 @@ if (NOT USE_SASL_CLIENT)
     )
 endif ()
 install(FILES
-  "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.cpp"
   "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.h"
+  DESTINATION include/mongo/base
+  COMPONENT tokumx_client_headers
+  )
+install(FILES
+  "${CMAKE_CURRENT_BINARY_DIR}/db/auth/action_type.h"
+  DESTINATION include/mongo/db/auth
+  COMPONENT tokumx_client_headers
+  )
+install(FILES
+  "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.cpp"
+  base/generate_error_codes.py
+  base/error_codes.err
   DESTINATION src/mongo/base
   COMPONENT tokumx_client_sources
   )
 install(FILES
-  "${CMAKE_CURRENT_BINARY_DIR}/db/auth/action_type.h"
+  db/auth/generate_action_types.py
+  db/auth/action_types.txt
   DESTINATION src/mongo/db/auth
   COMPONENT tokumx_client_sources
   )

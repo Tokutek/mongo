@@ -198,6 +198,44 @@ if (TOKUMX_SET_RPATH)
   endif ()
 endif ()
 
+if (EXISTS src/mongo/plugins/tokumx-backup-plugin/)
+  set(TOKUMX_ENTERPRISE ON)
+endif ()
+
+function (git_version name dir)
+  if ("${${name}_GIT_VERSION}" STREQUAL "")
+    find_program(GIT git)
+    if (GIT MATCHES NOTFOUND)
+      set(FATAL_ERROR "git not found")
+    endif ()
+
+    get_filename_component(_real_dir ${dir} REALPATH)
+    execute_process(
+      COMMAND ${GIT} rev-parse HEAD
+      WORKING_DIRECTORY "${_real_dir}"
+      OUTPUT_VARIABLE _git_version
+      RESULT_VARIABLE _git_retval
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      ERROR_QUIET
+      )
+    if (NOT _git_retval EQUAL 0)
+      message(WARNING "${GIT}: error: ${retval}")
+      set(_git_version "unknown")
+    endif ()
+    set(${name}_GIT_VERSION ${_git_version} CACHE STRING "git version for ${name}")
+  endif ()
+  string(SUBSTRING ${${name}_GIT_VERSION} 0 7 _git_shortver)
+  set(${name}_GIT_SHORTVER ${_git_shortver} CACHE STRING "git shortver for ${name}" FORCE)
+endfunction ()
+
+git_version(TOKUMX "${CMAKE_SOURCE_DIR}")
+git_version(TOKUKV "${CMAKE_SOURCE_DIR}/src/third_party/ft-index")
+
+if (TOKUMX_ENTERPRISE)
+  git_version(TOKUBACKUP "${CMAKE_SOURCE_DIR}/src/third_party/backup/")
+  git_version(TOKUMX_BACKUP_PLUGIN "${CMAKE_SOURCE_DIR}/src/mongo/plugins/tokumx-backup-plugin")
+endif ()
+
 add_subdirectory(src/third_party)
 include_directories(
   ${Boost_INCLUDE_DIRS}
@@ -233,24 +271,37 @@ set(CPACK_PACKAGE_VERSION_MAJOR ${CMAKE_MATCH_2})
 set(CPACK_PACKAGE_VERSION_MINOR ${CMAKE_MATCH_3})
 set(CPACK_PACKAGE_VERSION_PATCH ${CMAKE_MATCH_4})
 
+set(TOKUMX_PRODUCTNAME "tokumx")
+if (TOKUMX_ENTERPRISE)
+  set(TOKUMX_PRODUCTNAME "${TOKUMX_PRODUCTNAME}-e")
+endif ()
+if (NOT TOKUMX_DISTNAME)
+  set(TOKUMX_DISTNAME "${TOKUMX_GIT_SHORTVER}-ft-${TOKUKV_GIT_SHORTVER}")
+  if (TOKUMX_ENTERPRISE)
+    set(TOKUMX_DISTNAME "${TOKUMX_DISTNAME}-ba-${TOKUBACKUP_GIT_SHORTVER}-bp-${TOKUMX_BACKUP_PLUGIN_GIT_SHORTVER}")
+  endif ()
+endif ()
+
+set(CPACK_PACKAGE_NAME "${TOKUMX_PRODUCTNAME}")
+set(CPACK_PACKAGE_FILE_NAME "${TOKUMX_PRODUCTNAME}-${TOKUMX_DISTNAME}-${CPACK_SYSTEM_NAME}")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "a high-performance mongodb server with fractal tree storage")
 set(CPACK_PACKAGE_VENDOR "Tokutek, Inc.")
-set(CPACK_PACKAGE_INSTALL_DIRECTORY "tokumx-${CPACK_PACKAGE_VERSION}")
 set(CPACK_ARCHIVE_COMPONENT_INSTALL TRUE)
 set(CPACK_COMPONENT_INCLUDE_TOPLEVEL_DIRECTORY TRUE)
 set(CPACK_GENERATOR TGZ)
 
 set(CPACK_COMPONENT_TOKUMX_DEBUGINFO_GROUP debuginfo)
-set(CPACK_COMPONENT_TOKUMX_SERVER_GROUP server)
-set(CPACK_COMPONENT_TOKUMX_MISC_GROUP server)
-set(CPACK_COMPONENT_TOKUMX_TOOLS_GROUP server)
-set(CPACK_COMPONENT_TOKUMX_LIBS_EXTRA_GROUP server)
-set(CPACK_COMPONENT_TOKUMX_PLUGINS_GROUP server)
-set(CPACK_COMPONENT_TOKUMX_CLIENT_HEADERS_GROUP client)
-set(CPACK_COMPONENT_TOKUMX_CLIENT_SOURCES_GROUP client)
-set(CPACK_COMPONENT_TOKUMX_CLIENT_MISC_GROUP client)
-set(CPACK_COMPONENT_TOKUKV_LIBS_SHARED_GROUP server)
-set(CPACK_COMPONENT_TOKUBACKUP_LIBS_SHARED_GROUP server)
+set(CPACK_COMPONENT_TOKUMX_SERVER_GROUP main)
+set(CPACK_COMPONENT_TOKUMX_MISC_GROUP main)
+set(CPACK_COMPONENT_TOKUMX_TOOLS_GROUP main)
+set(CPACK_COMPONENT_TOKUMX_LIBS_EXTRA_GROUP main)
+set(CPACK_COMPONENT_TOKUMX_PLUGINS_GROUP main)
+set(CPACK_COMPONENT_TOKUMX_CLIENT_HEADERS_GROUP devel)
+set(CPACK_COMPONENT_TOKUMX_CLIENT_SOURCES_GROUP devel-source)
+set(CPACK_COMPONENT_TOKUMX_CLIENT_LIBS_GROUP devel)
+set(CPACK_COMPONENT_TOKUMX_CLIENT_MISC_GROUP devel-source)
+set(CPACK_COMPONENT_TOKUKV_LIBS_SHARED_GROUP main)
+set(CPACK_COMPONENT_TOKUBACKUP_LIBS_SHARED_GROUP main)
 set(CPACK_COMPONENTS_ALL
   tokumx_server
   tokumx_misc
@@ -258,8 +309,7 @@ set(CPACK_COMPONENTS_ALL
   tokumx_libs_extra
   tokumx_plugins
   tokumx_client_headers
-  tokumx_client_sources
-  tokumx_client_misc
+  tokumx_client_libs
   tokukv_libs_shared
   tokubackup_libs_shared
   tokumx_debuginfo
