@@ -898,8 +898,8 @@ DB.prototype.getReplicationInfo = function() {
         if(tfirst && tlast) {
             result.timeDiff = (tlast - tfirst) / 1000;
             result.timeDiffHours = Math.round(result.timeDiff / 36) / 100;
-            result.tFirst = tfirst;
-            result.tLast = tlast;
+            result.tFirst = tfirst.toString();
+            result.tLast = tlast.toString();
             result.now = Date();
         }
         else {
