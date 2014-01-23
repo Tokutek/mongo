@@ -393,7 +393,7 @@ private:
         if (cursor->more()) {
             createColl = false;
             BSONObj nsObj = cursor->next();
-            if (!nsObj.hasField("options") || !optionsSame(cmdObj, nsObj["options"].Obj())) {
+            if (!nsObj.hasField("options") || !optionsSame(obj, nsObj["options"].Obj())) {
                     log() << "WARNING: collection " << _curns << " exists with different options than are in the metadata.json file and not using --drop. Options in the metadata file will be ignored." << endl;
             }
         }
