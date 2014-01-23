@@ -362,34 +362,29 @@ private:
         return nfields == obj2.nFields();
     }
 
-    void createCollectionWithOptions(BSONObj cmdObj) {
+    void createCollectionWithOptions(BSONObj obj) {
+        BSONObjIterator i(obj);
 
-        // Create a new cmdObj to skip undefined fields and fix collection name
+        // Rebuild obj as a command object for the "create" command.
+        // - {create: <name>} comes first, where <name> is the new name for the collection
+        // - elements with type Undefined get skipped over
         BSONObjBuilder bo;
-
-        // Add a "create" field if it doesn't exist
-        if (!cmdObj.hasField("create")) {
-            bo.append("create", _curcoll);
-        }
-
-        BSONObjIterator i(cmdObj);
-        while ( i.more() ) {
+        bo.append("create", _curcoll);
+        while (i.more()) {
             BSONElement e = i.next();
 
-            // Replace the "create" field with the name of the collection we are actually creating
             if (strcmp(e.fieldName(), "create") == 0) {
-                bo.append("create", _curcoll);
+                continue;
             }
-            else {
-                if (e.type() == Undefined) {
-                    log() << _curns << ": skipping undefined field: " << e.fieldName() << endl;
-                }
-                else {
-                    bo.append(e);
-                }
+
+            if (e.type() == Undefined) {
+                log() << _curns << ": skipping undefined field: " << e.fieldName() << endl;
+                continue;
             }
+
+            bo.append(e);
         }
-        cmdObj = bo.obj();
+        obj = bo.obj();
 
         BSONObj fields = BSON("options" << 1);
         scoped_ptr<DBClientCursor> cursor(conn().query(_curdb + ".system.namespaces", Query(BSON("name" << _curns)), 0, 0, &fields));
@@ -397,8 +392,8 @@ private:
         bool createColl = true;
         if (cursor->more()) {
             createColl = false;
-            BSONObj obj = cursor->next();
-            if (!obj.hasField("options") || !optionsSame(cmdObj, obj["options"].Obj())) {
+            BSONObj nsObj = cursor->next();
+            if (!nsObj.hasField("options") || !optionsSame(cmdObj, nsObj["options"].Obj())) {
                     log() << "WARNING: collection " << _curns << " exists with different options than are in the metadata.json file and not using --drop. Options in the metadata file will be ignored." << endl;
             }
         }
@@ -408,10 +403,10 @@ private:
         }
 
         BSONObj info;
-        if (!conn().runCommand(_curdb, cmdObj, info)) {
+        if (!conn().runCommand(_curdb, obj, info)) {
             uasserted(15936, "Creating collection " + _curns + " failed. Errmsg: " + info["errmsg"].String());
         } else {
-            log() << "\tCreated collection " << _curns << " with options: " << cmdObj.jsonString() << endl;
+            log() << "\tCreated collection " << _curns << " with options: " << obj.jsonString() << endl;
         }
     }
 
