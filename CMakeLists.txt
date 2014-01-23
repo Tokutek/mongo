@@ -198,7 +198,7 @@ if (TOKUMX_SET_RPATH)
   endif ()
 endif ()
 
-if (EXISTS src/mongo/plugins/tokumx-backup-plugin/)
+if (EXISTS "${CMAKE_SOURCE_DIR}/src/mongo/plugins/tokumx-backup-plugin/")
   set(TOKUMX_ENTERPRISE ON)
 else ()
   set(TOKUMX_ENTERPRISE OFF)
