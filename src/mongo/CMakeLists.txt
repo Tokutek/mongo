@@ -217,6 +217,7 @@ target_link_whole_libraries(mongos
   dbcmdline
   mongodandmongos
   s_upgrade
+  base
   )
 target_link_libraries(mongos
   ${TokuKV_LIBRARIES}
