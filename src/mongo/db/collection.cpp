@@ -578,10 +578,6 @@ namespace mongo {
         dassert(!pk.isEmpty());
         dassert(!obj.isEmpty());
 
-        if (isSystemUsersCollection(_ns)) {
-            uassertStatusOK(AuthorizationManager::checkValidPrivilegeDocument(nsToDatabaseSubstring(_ns), obj));
-        }
-
         const int n = nIndexesBeingBuilt();
         DB *dbs[n];
         storage::DBTArrays keyArrays(n);
@@ -744,8 +740,8 @@ namespace mongo {
         deleteFromIndexes(pk, obj, flags);
     }
 
-    void CollectionBase::updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
-                                      const bool logop, const bool fromMigrate, uint64_t flags, bool* indexBitChanged) {
+    void CollectionBase::updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj,
+                                      const bool fromMigrate, uint64_t flags, bool* indexBitChanged) {
         TOKULOG(4) << "CollectionBase::updateObject pk "
             << pk << ", old " << oldObj << ", new " << newObj << endl;
         *indexBitChanged = false;
@@ -753,10 +749,6 @@ namespace mongo {
         dassert(!pk.isEmpty());
         dassert(!oldObj.isEmpty());
         dassert(!newObj.isEmpty());
-
-        if (isSystemUsersCollection(_ns)) {
-            uassertStatusOK(AuthorizationManager::checkValidPrivilegeDocument(nsToDatabaseSubstring(_ns), newObj));
-        }
 
         const int n = nIndexesBeingBuilt();
         DB *dbs[n];
@@ -842,25 +834,15 @@ namespace mongo {
             storage::handle_ydb_error(r);
         }
 
-        if (logop) {
-            OpLogHelpers::logUpdate(_ns.c_str(), pk, oldObj, newObj, BSONObj(), fromMigrate);
-        }
     }
 
-    void CollectionBase::updateObjectMods(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateObj,
-                                          const bool logop, const bool fromMigrate,
+    void CollectionBase::updateObjectMods(const BSONObj &pk, const BSONObj &updateObj,
+                                          const bool fromMigrate,
                                           uint64_t flags) {
         verify(!updateObj.isEmpty());
 
         IndexDetailsBase &pkIdx = getPKIndexBase();
         pkIdx.updatePair(pk, NULL, updateObj, flags);
-        if (logop) {
-            if (oldObj.isEmpty()) {
-                OpLogHelpers::logUpdateMods(_ns.c_str(), pk, updateObj, fromMigrate);
-            } else {
-                OpLogHelpers::logUpdate(_ns.c_str(), pk, oldObj, BSONObj(), updateObj, fromMigrate);
-            }
-        }
     }
 
     // only set indexBitsChanged if true, NEVER set to false
@@ -1781,27 +1763,23 @@ namespace mongo {
         insertIntoIndexes(pk, obj, flags | (!_idPrimaryKey ? Collection::NO_PK_UNIQUE_CHECKS : 0), indexBitChanged);
     }
 
-    void IndexedCollection::updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
-                                         const bool logop, const bool fromMigrate,
+    void IndexedCollection::updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj,
+                                         const bool fromMigrate,
                                          uint64_t flags, bool* indexBitChanged) {
-        const BSONObj newObjWithId = inheritIdField(oldObj, newObj);
+        newObj = inheritIdField(oldObj, newObj);
 
         if (_idPrimaryKey) {
-            CollectionBase::updateObject(pk, oldObj, newObjWithId, logop, fromMigrate, flags | Collection::NO_PK_UNIQUE_CHECKS, indexBitChanged);
+            CollectionBase::updateObject(pk, oldObj, newObj, fromMigrate, flags | Collection::NO_PK_UNIQUE_CHECKS, indexBitChanged);
         } else {
-            const BSONObj newPK = getValidatedPKFromObject(newObjWithId);
+            const BSONObj newPK = getValidatedPKFromObject(newObj);
             dassert(newPK.nFields() == pk.nFields());
             if (newPK != pk) {
                 // Primary key has changed - that means all indexes will be affected.
                 deleteFromIndexes(pk, oldObj, flags);
-                insertIntoIndexes(newPK, newObjWithId, flags, indexBitChanged);
-                if (logop) {
-                    OpLogHelpers::logDelete(_ns.c_str(), oldObj, fromMigrate);
-                    OpLogHelpers::logInsert(_ns.c_str(), newObjWithId);
-                }
+                insertIntoIndexes(newPK, newObj, flags, indexBitChanged);
             } else {
                 // Skip unique checks on the primary key - we know it did not change.
-                CollectionBase::updateObject(pk, oldObj, newObjWithId, logop, fromMigrate, flags | Collection::NO_PK_UNIQUE_CHECKS, indexBitChanged);
+                CollectionBase::updateObject(pk, oldObj, newObj, fromMigrate, flags | Collection::NO_PK_UNIQUE_CHECKS, indexBitChanged);
             }
         }
     }
@@ -2046,6 +2024,29 @@ namespace mongo {
         IndexedCollection(serialized, reserializeNeeded) {
     }
 
+    void SystemUsersCollection::insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged) {
+        uassertStatusOK(AuthorizationManager::checkValidPrivilegeDocument(nsToDatabaseSubstring(_ns), obj));
+        IndexedCollection::insertObject(obj, flags, indexBitChanged);
+    }
+    
+    void SystemUsersCollection::updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj,
+                      const bool fromMigrate,
+                      uint64_t flags, bool* indexBitChanged)
+    {
+        uassertStatusOK(AuthorizationManager::checkValidPrivilegeDocument(nsToDatabaseSubstring(_ns), newObj));
+        IndexedCollection::updateObject(pk, oldObj, newObj, fromMigrate, flags, indexBitChanged);
+    }
+
+    void SystemUsersCollection::updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
+                                            const bool fromMigrate,
+                                            uint64_t flags) {
+        // updating the system users collection requires calling
+        // AuthorizationManager::checkValidPrivilegeDocument. See above.
+        // As a result, updateObject should be called
+        msgasserted(0, "bug: cannot (fast) update on the system users collection, "
+                           " should have been enforced higher in the stack" );
+    }
+
     // ------------------------------------------------------------------------
 
     // Capped collections have natural order insert semantics but borrow (ie: copy)
@@ -2179,21 +2180,21 @@ namespace mongo {
         _lastDeletedPK = BSONObj();
     }
 
-    void CappedCollection::updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
-                                        const bool logop, const bool fromMigrate,
+    void CappedCollection::updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj,
+                                        const bool fromMigrate,
                                         uint64_t flags, bool* indexBitChanged) {
-        const BSONObj newObjWithId = inheritIdField(oldObj, newObj);
-        long long diff = newObjWithId.objsize() - oldObj.objsize();
+        newObj = inheritIdField(oldObj, newObj);
+        long long diff = newObj.objsize() - oldObj.objsize();
         uassert( 10003 , "failing update: objects in a capped ns cannot grow", diff <= 0 );
 
-        CollectionBase::updateObject(pk, oldObj, newObjWithId, logop, fromMigrate, flags, indexBitChanged);
+        CollectionBase::updateObject(pk, oldObj, newObj, fromMigrate, flags, indexBitChanged);
         if (diff < 0) {
             _currentSize.addAndFetch(diff);
         }
     }
 
-    void CappedCollection::updateObjectMods(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateobj,
-                                            const bool logop, const bool fromMigrate,
+    void CappedCollection::updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
+                                            const bool fromMigrate,
                                             uint64_t flags) {
         msgasserted(17217, "bug: cannot (fast) update a capped collection, "
                            " should have been enforced higher in the stack" );
@@ -2387,14 +2388,14 @@ namespace mongo {
         _insertObject(obj, flags, indexBitChanged);
     }
 
-    void ProfileCollection::updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
-                                         const bool logop, const bool fromMigrate,
+    void ProfileCollection::updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj,
+                                         const bool fromMigrate,
                                          uint64_t flags, bool* indexBitChanged) {
         msgasserted( 16850, "bug: The profile collection should not be updated." );
     }
 
-    void ProfileCollection::updateObjectMods(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateobj,
-                                             const bool logop, const bool fromMigrate,
+    void ProfileCollection::updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
+                                             const bool fromMigrate,
                                              uint64_t flags) {
         msgasserted( 17219, "bug: The profile collection should not be updated." );
     }
@@ -2483,14 +2484,14 @@ namespace mongo {
         uasserted( 16865, "Cannot delete from a collection under-going bulk load." );
     }
 
-    void BulkLoadedCollection::updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
-                                            const bool logop, const bool fromMigrate,
+    void BulkLoadedCollection::updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj,
+                                            const bool fromMigrate,
                                             uint64_t flags, bool* indexBitChanged) {
         uasserted( 16866, "Cannot update a collection under-going bulk load." );
     }
 
-    void BulkLoadedCollection::updateObjectMods(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateobj,
-                                                const bool logop, const bool fromMigrate,
+    void BulkLoadedCollection::updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
+                                                const bool fromMigrate,
                                                 uint64_t flags) {
         uasserted( 17218, "Cannot update a collection under-going bulk load." );
     }
@@ -2860,8 +2861,9 @@ namespace mongo {
         }
         bool indexBitChanged = false;
         BSONObj pk = _metaCollection->getValidatedPKFromObject(result);
-        _metaCollection->updateObject(pk, result, b.done(),
-                                            false, false,
+        BSONObj newObj = b.done().copy();
+        _metaCollection->updateObject(pk, result, newObj,
+                                            false,
                                             0, &indexBitChanged);
         verify(!indexBitChanged);
 
@@ -2965,7 +2967,7 @@ namespace mongo {
         // now do the update
         bool indexBitChanged = false;
         _metaCollection->updateObject(pk, oldMetadata, newMetadata,
-                                            false, false,
+                                            false,
                                             0, &indexBitChanged);
         verify(!indexBitChanged);
     }
@@ -3160,15 +3162,11 @@ namespace mongo {
         return ss.str();
     }
     
-    void PartitionedCollection::updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
-                                             const bool logop, const bool fromMigrate,
+    void PartitionedCollection::updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj,
+                                             const bool fromMigrate,
                                              uint64_t flags, bool* indexBitChanged) {
         int whichPartition = partitionWithPK(pk);
-        // note we are passing false for logop
-        _partitions[whichPartition]->updateObject(pk, oldObj, newObj, false, fromMigrate, flags, indexBitChanged);
-        if (logop) {
-            OpLogHelpers::logUpdate(_ns.c_str(), pk, oldObj, newObj, BSONObj(), fromMigrate);
-        }
+        _partitions[whichPartition]->updateObject(pk, oldObj, newObj, fromMigrate, flags, indexBitChanged);
     }
 
 } // namespace mongo

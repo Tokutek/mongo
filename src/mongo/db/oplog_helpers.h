@@ -23,15 +23,9 @@ namespace mongo {
 
     namespace OpLogHelpers {
 
-        // values for types of operations in oplog
-        static const char OP_STR_INSERT[] = "i";
-        static const char OP_STR_CAPPED_INSERT[] = "ci";
-        static const char OP_STR_UPDATE[] = "u";
-        static const char OP_STR_UPDATE_MODS[] = "um";
-        static const char OP_STR_DELETE[] = "d";
-        static const char OP_STR_CAPPED_DELETE[] = "cd";
-        static const char OP_STR_COMMENT[] = "n";
-        static const char OP_STR_COMMAND[] = "c";
+        // helper functions for sharding
+        bool shouldLogOpForSharding(const char *opstr);
+        bool invalidOpForSharding(const char *opstr);
 
         // Used by normal operations to write to the oplog
 
@@ -41,9 +35,11 @@ namespace mongo {
 
         void logInsertForCapped(const char *ns, const BSONObj &pk, const BSONObj &row);
 
-        void logUpdate(const char *ns, const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj, const BSONObj &updateobj, bool fromMigrate);
+        void logUpdate(const char *ns, const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj, bool fromMigrate);
 
-        void logUpdateMods(const char *ns, const BSONObj &pk, const BSONObj &updateobj, bool fromMigrate);
+        void logUpdateModsWithRow(const char *ns, const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateobj, bool fromMigrate, const BSONObj &newObj);
+
+        void logUpdateModsWithOnlyPK(const char *ns, const BSONObj &pk, const BSONObj &updateobj, bool fromMigrate);
 
         void logDelete(const char *ns, const BSONObj &row, bool fromMigrate);
 

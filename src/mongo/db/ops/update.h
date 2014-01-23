@@ -45,12 +45,12 @@ namespace mongo {
     BSONObj invertUpdateMods(const BSONObj &updateobj);
 
     void updateOneObject(Collection *cl, const BSONObj &pk, 
-                         const BSONObj &oldObj, const BSONObj &newObj, 
+                         const BSONObj &oldObj, BSONObj &newObj, 
                          const BSONObj &updateobj,
-                         const bool logop, const bool fromMigrate,
-                         uint64_t flags = 0);
+                         const bool fromMigrate,
+                         uint64_t flags);
 
-    UpdateResult updateByPK(Collection *cl,
+    UpdateResult updateByPK(const char *ns, Collection *cl,
                             const BSONObj &pk, const BSONObj &patternOrig,
                             const BSONObj &updateobj,
                             const bool upsert, const bool fastupdateOk,

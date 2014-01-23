@@ -35,17 +35,14 @@ assert.eq(1, secondary.x.find({ c: 1 }).hint({ c: 1 }).itcount());
 // and full insert to the oplog.
 primary.x.update({ z: 1 }, { c: 1, z: 0 });
 replTest.awaitReplication();
-print('primary oplog contents: ');
-primaryOplog.find().forEach(printjson);
-print('secondary oplog contents: ');
-secondaryOplog.find().forEach(printjson);
-
-primaryOps = primaryOplog.findOne({ $and: [ { ops: { $elemMatch: { op: "i" } } }, { ops: { $elemMatch: { op: "d" } } } ] }).ops;
-secondaryOps = secondaryOplog.findOne({ $and: [ { ops: { $elemMatch: { op: "i" } } }, { ops: { $elemMatch: { op: "d" } } } ] }).ops;
-assert.eq({ _id: 0, c: 1, z: 1 }, primaryOps[0].o);
-assert.eq({ _id: 0, c: 1, z: 0 }, primaryOps[1].o);
-assert.eq({ _id: 0, c: 1, z: 1 }, secondaryOps[0].o);
-assert.eq({ _id: 0, c: 1, z: 0 }, secondaryOps[1].o);
+print('primary last oplog contents: ');
+px = primaryOplog.find().sort({_id:-1}).next();
+printjson(px);
+print('secondary last oplog contents: ');
+sx = secondaryOplog.find().sort({_id:-1}).next();
+printjson(sx);
+assert(px["ops"][0]["op"] == "u");
+assert(sx["ops"][0]["op"] == "u");
 
 assert.eq(0, primary.x.find({ z: 1 }).hint({ _id: 1 }).itcount());
 assert.eq(0, primary.x.find({ z: 1 }).hint({ z: 1, _id: 1 }).itcount());

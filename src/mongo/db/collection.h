@@ -167,6 +167,8 @@ namespace mongo {
         // Find by primary key (single element bson object, no field name).
         virtual bool findByPK(const BSONObj &pk, BSONObj &result) const = 0;
 
+        virtual bool isPKHidden() const = 0;
+
         // Extracts and returns validates an owned BSONObj represetning
         // the primary key portion of the given object. Validates each
         // field, ensuring there are no undefined, regex, or array types.
@@ -191,8 +193,8 @@ namespace mongo {
         // update an object in the namespace by pk, replacing oldObj with newObj
         //
         // handles logging
-        virtual void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
-                                  const bool logop, const bool fromMigrate,
+        virtual void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj,
+                                  const bool fromMigrate,
                                   uint64_t flags, bool* indexBitChanged) = 0;
 
         // @return true, if fastupdates are ok for this collection.
@@ -200,11 +202,13 @@ namespace mongo {
         //         and the primary key does not contain the full shard key.
         virtual bool fastupdatesOk() = 0;
 
+        virtual bool updateObjectModsOk() = 0;
+
         // update an object in the namespace by pk, described by the updateObj's $ operators
         //
         // handles logging
-        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateObj, 
-                                      const bool logop, const bool fromMigrate,
+        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
+                                      const bool fromMigrate,
                                       uint64_t flags) = 0;
 
         // rebuild the given index, online.
@@ -505,6 +509,10 @@ namespace mongo {
             return _cd->findByPK(pk, result);
         }
 
+        bool isPKHidden() const {
+            return _cd->isPKHidden();
+        }
+
         // Extracts and returns validates an owned BSONObj represetning
         // the primary key portion of the given object. Validates each
         // field, ensuring there are no undefined, regex, or array types.
@@ -542,11 +550,11 @@ namespace mongo {
         // update an object in the namespace by pk, replacing oldObj with newObj
         //
         // handles logging
-        void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
-                                  const bool logop, const bool fromMigrate,
+        void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj,
+                                  const bool fromMigrate,
                                   uint64_t flags = 0) {
             bool indexBitChanged = false;
-            _cd->updateObject(pk, oldObj, newObj, logop, fromMigrate, flags, &indexBitChanged);
+            _cd->updateObject(pk, oldObj, newObj, fromMigrate, flags, &indexBitChanged);
             if (indexBitChanged) {
                 noteMultiKeyChanged();
             }
@@ -559,13 +567,17 @@ namespace mongo {
             return _cd->fastupdatesOk();
         }
 
+        bool updateObjectModsOk() {
+            return _cd->updateObjectModsOk();
+        }
+
         // update an object in the namespace by pk, described by the updateObj's $ operators
         //
         // handles logging
-        void updateObjectMods(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateObj, 
-                              const bool logop, const bool fromMigrate,
+        void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
+                              const bool fromMigrate,
                               uint64_t flags = 0) {
-            _cd->updateObjectMods(pk, oldObj, updateObj, logop, fromMigrate, flags);
+            _cd->updateObjectMods(pk, updateObj, fromMigrate, flags);
         }
 
         // Rebuild indexes. Details are implementation specific. This is typically an online operation.
@@ -743,6 +755,9 @@ namespace mongo {
         //         fastupdates are not ok for this collection if it's sharded
         //         and the primary key does not contain the full shard key.
         bool fastupdatesOk();
+        bool updateObjectModsOk() {
+            return true;
+        }
 
         // Extracts and returns validates an owned BSONObj represetning
         // the primary key portion of the given object. Validates each
@@ -780,15 +795,15 @@ namespace mongo {
         // update an object in the namespace by pk, replacing oldObj with newObj
         //
         // handles logging
-        virtual void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
-                                  const bool logop, const bool fromMigrate,
+        virtual void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj,
+                                  const bool fromMigrate,
                                   uint64_t flags, bool* indexBitChanged);
 
         // update an object in the namespace by pk, described by the updateObj's $ operators
         //
         // handles logging
-        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateObj, 
-                                      const bool logop, const bool fromMigrate,
+        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
+                                      const bool fromMigrate,
                                       uint64_t flags);
         
         void setIndexIsMultikey(const int idxNum, bool* indexBitChanged);
@@ -990,9 +1005,13 @@ namespace mongo {
         // inserts an object into this namespace, taking care of secondary indexes if they exist
         void insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged);
 
-        void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
-                          const bool logop, const bool fromMigrate,
+        void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj,
+                          const bool fromMigrate,
                           uint64_t flags, bool* indexBitChanged);
+        
+        bool isPKHidden() const {
+            return false;
+        }
 
         // Overridden to optimize the case where we have an _id primary key.
         BSONObj getValidatedPKFromObject(const BSONObj &obj) const;
@@ -1021,6 +1040,10 @@ namespace mongo {
 
         // insert an object, using a fresh auto-increment primary key
         void insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged);
+
+        bool isPKHidden() const {
+            return true;
+        }
 
     protected:
         AtomicWord<long long> _nextPK;
@@ -1055,6 +1078,16 @@ namespace mongo {
         static BSONObj extendedSystemUsersIndexInfo(const StringData &ns);
         SystemUsersCollection(const StringData &ns, const BSONObj &options);
         SystemUsersCollection(const BSONObj &serialized, bool* reserializeNeeded);
+        void insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged);
+        void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj,
+                          const bool fromMigrate,
+                          uint64_t flags, bool* indexBitChanged);
+        void updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
+                              const bool fromMigrate,
+                              uint64_t flags);
+        bool updateObjectModsOk() {
+            return false;
+        }
     };
 
     // Capped collections have natural order insert semantics but borrow (ie: copy)
@@ -1089,13 +1122,17 @@ namespace mongo {
 
         void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
 
-        void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
-                          const bool logop, const bool fromMigrate,
+        void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj,
+                          const bool fromMigrate,
                           uint64_t flags, bool* indexBitChanged);
 
-        void updateObjectMods(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateobj,
-                              const bool logop, const bool fromMigrate,
+        void updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
+                              const bool fromMigrate,
                               uint64_t flags);
+
+        bool updateObjectModsOk() {
+            return false;
+        }
 
         // Hacked interface for handling oplogging and replaying ops from a secondary.
         void insertObjectAndLogOps(const BSONObj &obj, uint64_t flags, bool* indexBitChanged);
@@ -1169,12 +1206,12 @@ namespace mongo {
 
         void insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged);
 
-        void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
-                          const bool logop, const bool fromMigrate,
+        void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj,
+                          const bool fromMigrate,
                           uint64_t flags, bool* indexBitChanged);
 
-        void updateObjectMods(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateobj,
-                              const bool logop, const bool fromMigrate,
+        void updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
+                              const bool fromMigrate,
                               uint64_t flags);
 
     private:
@@ -1199,12 +1236,12 @@ namespace mongo {
 
         void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
 
-        void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
-                          const bool logop, const bool fromMigrate,
+        void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj,
+                          const bool fromMigrate,
                           uint64_t flags, bool* indexBitChanged);
 
-        void updateObjectMods(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateobj,
-                              const bool logop, const bool fromMigrate,
+        void updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
+                              const bool fromMigrate,
                               uint64_t flags);
 
         void empty();
@@ -1324,6 +1361,10 @@ namespace mongo {
             return _partitions[whichPartition]->findByPK(pk, result);
         }
 
+        virtual bool isPKHidden() const {
+            return _partitions[0]->isPKHidden();
+        }
+        
         virtual BSONObj getValidatedPKFromObject(const BSONObj &obj) const {
             // it does not matter which partition we answer this from
             // it should all be the same
@@ -1346,18 +1387,23 @@ namespace mongo {
             _partitions[whichPartition]->deleteObject(pk, obj, flags);
         }
 
-        virtual void updateObject(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj,
-                                  const bool logop, const bool fromMigrate,
+        virtual void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj,
+                                  const bool fromMigrate,
                                   uint64_t flags, bool* indexBitChanged);
 
         virtual bool fastupdatesOk() {
-            return false;
+            return _partitions[0]->fastupdatesOk();
         }
 
-        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateObj, 
-                                      const bool logop, const bool fromMigrate,
+        virtual bool updateObjectModsOk() {
+            return true;
+        }
+
+        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
+                                      const bool fromMigrate,
                                       uint64_t flags) {
-            uasserted(17239, "cannot do a fast update on a partitioned collection");
+            int whichPartition = partitionWithPK(pk);
+            _partitions[whichPartition]->updateObjectMods(pk, updateObj, fromMigrate, flags);
         }
 
         virtual bool rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &result) {

@@ -34,18 +34,30 @@
 
 namespace mongo {
 
+    static bool hasClusteringSecondaryKey(Collection *cl) {
+        for (int i = 0; i < cl->nIndexesBeingBuilt(); i++) {
+            IndexDetails &idx = cl->idx(i);
+            if (!cl->isPKIndex(idx) && idx.clustering()) {
+                // has a clustering secondary key
+                return true;
+            }
+        }
+        // no clustering secondary keys
+        return false;
+    }
+
     void updateOneObject(Collection *cl, const BSONObj &pk, 
-                         const BSONObj &oldObj, const BSONObj &newObj, 
+                         const BSONObj &oldObj, BSONObj &newObj, 
                          const BSONObj &updateobj,
-                         const bool logop, const bool fromMigrate,
+                         const bool fromMigrate,
                          uint64_t flags) {
-        if (flags & Collection::KEYS_UNAFFECTED_HINT && !updateobj.isEmpty()) {
+        if (flags & Collection::KEYS_UNAFFECTED_HINT && !updateobj.isEmpty() && !hasClusteringSecondaryKey(cl)) {
             // - operator style update gets applied as an update message
             // - does not maintain sencondary indexes so we can only do it
             // when no indexes were affected
-            cl->updateObjectMods(pk, oldObj, updateobj, logop, fromMigrate, flags);
+            cl->updateObjectMods(pk, updateobj, fromMigrate, flags);
         } else {
-            cl->updateObject(pk, oldObj, newObj, logop, fromMigrate, flags);
+            cl->updateObject(pk, oldObj, newObj, fromMigrate, flags);
         }
         cl->notifyOfWriteOp();
     }
@@ -86,7 +98,7 @@ namespace mongo {
             try {
                 // The update message is simply an update object, supplied by the user.
                 ModSet mods(msg);
-                auto_ptr<ModSetState> mss = mods.prepare(oldObj);
+                auto_ptr<ModSetState> mss = mods.prepare(oldObj, false);
                 const BSONObj newObj = mss->createNewFromMods();
                 checkTooLarge(newObj);
                 return newObj;
@@ -112,23 +124,47 @@ namespace mongo {
         Timer _loggingTimer;
     } _storageUpdateCallback; // installed as the ydb update callback in db.cpp via set_update_callback
 
-    static void updateUsingMods(Collection *cl, const BSONObj &pk, const BSONObj &obj,
-                                const BSONObj &updateobj,
-                                ModSetState &mss, const bool modsAreIndexed,
+    static void updateUsingMods(const char *ns, Collection *cl, const BSONObj &pk, const BSONObj &obj,
+                                const BSONObj &updateobj, shared_ptr<ModSet> mods, MatchDetails* details,
                                 const bool logop, const bool fromMigrate) {
-        const BSONObj newObj = mss.createNewFromMods();
+        ModSet *useMods = mods.get();
+        auto_ptr<ModSet> mymodset;
+        bool hasDynamicArray = mods->hasDynamicArray();
+        if (details->hasElemMatchKey() && hasDynamicArray) {
+            useMods = mods->fixDynamicArray(details->elemMatchKey());
+            mymodset.reset(useMods);
+        }
+        auto_ptr<ModSetState> mss = useMods->prepare(obj, false /* not an insertion */);
+        BSONObj newObj = mss->createNewFromMods();
         checkTooLarge(newObj);
-        updateOneObject(cl, pk, obj, newObj, updateobj, logop, fromMigrate,
-                        modsAreIndexed ? 0 : Collection::KEYS_UNAFFECTED_HINT);
+        bool modsAreIndexed = useMods->isIndexed() > 0;
+        bool forceFullUpdate = hasDynamicArray || !cl->updateObjectModsOk();
+        updateOneObject(cl, pk, obj, newObj,
+            forceFullUpdate ? BSONObj() : updateobj, // if we have a dynamic array, force it to do a full overwrite
+            fromMigrate, modsAreIndexed ? 0 : Collection::KEYS_UNAFFECTED_HINT);
+
+        // must happen after updateOneObject
+        if (logop) {
+            if (forceFullUpdate) {
+                OpLogHelpers::logUpdate(ns, pk, obj, newObj, fromMigrate);
+            }
+            else {
+                OpLogHelpers::logUpdateModsWithRow(ns, pk, obj, updateobj, fromMigrate, newObj);
+            }
+        }
     }
 
-    static void updateNoMods(Collection *cl, const BSONObj &pk, const BSONObj &obj, const BSONObj &updateobj,
+    static void updateNoMods(const char *ns, Collection *cl, const BSONObj &pk, const BSONObj &obj, BSONObj &updateobj,
                              const bool logop, const bool fromMigrate) {
         // This is incredibly un-intiutive, but it takes a const BSONObj
         // and modifies it in-place if a timestamp needs to be set.
         BSONElementManipulator::lookForTimestamps(updateobj);
         checkNoMods(updateobj);
-        updateOneObject(cl, pk, obj, updateobj, BSONObj(), logop, fromMigrate);
+        updateOneObject(cl, pk, obj, updateobj, BSONObj(), fromMigrate, 0);
+        // must happen after updateOneObject
+        if (logop) {
+            OpLogHelpers::logUpdate(ns, pk, obj, updateobj, fromMigrate);
+        }
     }
 
     static UpdateResult upsertAndLog(Collection *cl, const BSONObj &patternOrig,
@@ -154,26 +190,14 @@ namespace mongo {
         return UpdateResult(0, isOperatorUpdate, 1, newObj);
     }
 
-    static bool hasClusteringSecondaryKey(Collection *cl) {
-        for (int i = 0; i < cl->nIndexesBeingBuilt(); i++) {
-            IndexDetails &idx = cl->idx(i);
-            if (!cl->isPKIndex(idx) && idx.clustering()) {
-                // has a clustering secondary key
-                return true;
-            }
-        }
-        // no clustering secondary keys
-        return false;
-    }
-
-    UpdateResult updateByPK(Collection *cl,
+    UpdateResult updateByPK(const char *ns, Collection *cl,
                             const BSONObj &pk, const BSONObj &patternOrig,
                             const BSONObj &updateobj,
                             const bool upsert, const bool fastupdateOk,
                             const bool logop, const bool fromMigrate,
                             uint64_t flags) {
         // Create a mod set for $ style updates.
-        scoped_ptr<ModSet> mods;
+        shared_ptr<ModSet> mods;
         const bool isOperatorUpdate = updateobj.firstElementFieldName()[0] == '$';
         if (isOperatorUpdate) {
             mods.reset(new ModSet(updateobj, cl->indexKeys()));
@@ -187,7 +211,10 @@ namespace mongo {
             // Further, we specifically do _not_ check if upsert is true because it's
             // implied when using fastupdates.
             cc().curop()->debug().fastmod = true;
-            cl->updateObjectMods(pk, BSONObj(), updateobj, logop, fromMigrate, flags);
+            cl->updateObjectMods(pk, updateobj, fromMigrate, flags);
+            if (logop) {
+                OpLogHelpers::logUpdateModsWithOnlyPK(ns, pk, updateobj, fromMigrate);
+            }
             cl->notifyOfWriteOp();
             return UpdateResult(0, 1, 1, BSONObj());
         }
@@ -207,15 +234,11 @@ namespace mongo {
         }
 
         if (isOperatorUpdate) {
-            // operator-style update
-            if (queryResult.matchDetails.hasElemMatchKey() && mods->hasDynamicArray()) {
-                mods.reset(mods->fixDynamicArray(queryResult.matchDetails.elemMatchKey()));
-            }
-            auto_ptr<ModSetState> mss = mods->prepare(obj, false /* not an insertion */);
-            updateUsingMods(cl, pk, obj, updateobj, *mss, mods->isIndexed() > 0, logop, fromMigrate);
+            updateUsingMods(ns, cl, pk, obj, updateobj, mods, &queryResult.matchDetails, logop, fromMigrate);
         } else {
             // replace-style update
-            updateNoMods(cl, pk, obj, updateobj, logop, fromMigrate);
+            BSONObj copy = updateobj.copy();
+            updateNoMods(ns, cl, pk, obj, copy, logop, fromMigrate);
         }
         return UpdateResult(1, isOperatorUpdate, 1, BSONObj());
     }
@@ -284,7 +307,7 @@ namespace mongo {
                 // - Collection must ok with it (may not be for some sharded collections)
                 // - modifications to the destination object must be invertible (for repl rollback)
                 const bool fastupdatesOk = cmdLine.fastupdates && cl->fastupdatesOk() && modsAreInvertible(updateobj);
-                return updateByPK(cl, pk, patternOrig, updateobj,
+                return updateByPK(ns, cl, pk, patternOrig, updateobj,
                                   upsert, fastupdatesOk, logop, fromMigrate);
             }
         }
@@ -293,7 +316,7 @@ namespace mongo {
 
         set<BSONObj> seenObjects;
         MatchDetails details;
-        auto_ptr<ModSet> mods;
+        shared_ptr<ModSet> mods;
 
         const bool isOperatorUpdate = updateobj.firstElementFieldName()[0] == '$';
         if (isOperatorUpdate) {
@@ -321,7 +344,8 @@ namespace mongo {
             if (!isOperatorUpdate) {
                 // replace-style update only affects a single matching document
                 uassert(10158, "multi update only works with $ operators", !multi);
-                updateNoMods(cl, currPK, currentObj, updateobj, logop, fromMigrate);
+                BSONObj copy = updateobj.copy();
+                updateNoMods(ns, cl, currPK, currentObj, copy, logop, fromMigrate);
                 return UpdateResult(1, 0, 1, BSONObj());
             }
 
@@ -344,14 +368,7 @@ namespace mongo {
                 }
             }
 
-            ModSet *useMods = mods.get();
-            auto_ptr<ModSet> mymodset;
-            if (details.hasElemMatchKey() && mods->hasDynamicArray()) {
-                useMods = mods->fixDynamicArray(details.elemMatchKey());
-                mymodset.reset(useMods);
-            }
-            auto_ptr<ModSetState> mss = useMods->prepare(currentObj, false /* not an insertion */);
-            updateUsingMods(cl, currPK, currentObj, updateobj, *mss, useMods->isIndexed() > 0, logop, fromMigrate);
+            updateUsingMods(ns, cl, currPK, currentObj, updateobj, mods, &details, logop, fromMigrate);
             numModded++;
 
             if (!multi) {

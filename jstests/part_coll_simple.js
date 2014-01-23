@@ -52,6 +52,16 @@ function doWritesTest() {
         assert.eq(x.b, 2*i);
     }
 
+    for (i = 0; i < 1000; i++) {
+        t.update({_id:i}, {$set : { b :3*i}});
+    }
+    assert.eq(1000, t.count());
+    for (i = 0; i < 1000; i++) {
+        x = t.find({_id:i}).next();
+        assert.eq(x._id, i);
+        assert.eq(x.b, 3*i);
+    }
+
     // "fast" update some data (which is disabled)
     for (i = 0; i < 1000; i++) {
         t.update({_id:i}, {$inc : {b : 1}});
@@ -60,7 +70,7 @@ function doWritesTest() {
     for (i = 0; i < 1000; i++) {
         x = t.find({_id:i}).next();
         assert.eq(x._id, i);
-        assert.eq(x.b, 2*i + 1);
+        assert.eq(x.b, 3*i + 1);
     }
 
     // delete all data
@@ -73,7 +83,7 @@ function doWritesTest() {
     for (i = 500; i < 1000; i++) {
         x = t.find({_id:i}).next();
         assert.eq(x._id, i);
-        assert.eq(x.b, 2*i + 1);
+        assert.eq(x.b, 3*i + 1);
     }
 }
 function doQueriesTest() {

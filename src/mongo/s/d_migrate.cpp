@@ -333,17 +333,13 @@ namespace mongo {
                     << "a capped collection is being sharded, this should not happen"
                     << " ns: " << ns
                     << " opstr: " << opstr,
-                    !(mongoutils::str::equals(opstr, OpLogHelpers::OP_STR_CAPPED_INSERT) ||
-                      mongoutils::str::equals(opstr, OpLogHelpers::OP_STR_CAPPED_DELETE)));
+                    !OpLogHelpers::invalidOpForSharding(opstr));
 
             if (!_snapshotTaken) {
                 return false;
             }
 
-            if (mongoutils::str::equals(opstr, OpLogHelpers::OP_STR_INSERT) ||
-                mongoutils::str::equals(opstr, OpLogHelpers::OP_STR_DELETE) ||
-                mongoutils::str::equals(opstr, OpLogHelpers::OP_STR_UPDATE) ||
-                mongoutils::str::equals(opstr, OpLogHelpers::OP_STR_UPDATE_MODS)) {
+            if (OpLogHelpers::shouldLogOpForSharding(opstr)) {
                 return isInRange(obj, _min, _max, _shardKeyPattern);
             }
             return false;

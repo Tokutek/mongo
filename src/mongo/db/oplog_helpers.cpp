@@ -39,9 +39,32 @@ static const char *KEY_STR_PK = "pk";
 static const char *KEY_STR_COMMENT = "o";
 static const char *KEY_STR_MIGRATE = "fromMigrate";
 
+// values for types of operations in oplog
+static const char OP_STR_INSERT[] = "i"; // normal insert
+static const char OP_STR_CAPPED_INSERT[] = "ci"; // insert into capped collection
+static const char OP_STR_UPDATE[] = "u"; // normal update with full pre-image and full post-image
+static const char OP_STR_UPDATE_ROW_WITH_MOD[] = "ur"; // update with full pre-image and mods to generate post-image
+static const char OP_STR_UPDATE_PK_WITH_MOD[] = "um"; // update with just PK and mods to generate post-image
+static const char OP_STR_DELETE[] = "d"; // delete with full pre-image
+static const char OP_STR_CAPPED_DELETE[] = "cd"; // delete from capped collection
+static const char OP_STR_COMMENT[] = "n"; // a no-op
+static const char OP_STR_COMMAND[] = "c"; // command
+
 namespace mongo {
 
     namespace OpLogHelpers {
+        bool shouldLogOpForSharding(const char *opstr) {
+            return mongoutils::str::equals(opstr, OP_STR_INSERT) ||
+                mongoutils::str::equals(opstr, OP_STR_DELETE) ||
+                mongoutils::str::equals(opstr, OP_STR_UPDATE) ||
+                mongoutils::str::equals(opstr, OP_STR_UPDATE_ROW_WITH_MOD) ||
+                mongoutils::str::equals(opstr, OP_STR_UPDATE_PK_WITH_MOD);
+        }
+
+        bool invalidOpForSharding(const char *opstr) {
+            return mongoutils::str::equals(opstr, OP_STR_CAPPED_INSERT) ||
+                mongoutils::str::equals(opstr, OP_STR_CAPPED_DELETE);
+        }
 
         static inline void appendOpType(const char *opstr, BSONObjBuilder* b) {
             b->append(KEY_STR_OP_NAME, opstr);
@@ -106,7 +129,6 @@ namespace mongo {
 
         void logUpdate(const char *ns, const BSONObj &pk,
                        const BSONObj &oldObj, const BSONObj &newObj,
-                       const BSONObj &updateobj,
                        bool fromMigrate) {
             bool logForSharding = !fromMigrate &&
                 shouldLogTxnUpdateOpForSharding(OP_STR_UPDATE, ns, oldObj, newObj);
@@ -121,14 +143,9 @@ namespace mongo {
                 appendMigrate(fromMigrate, &b);
                 b.append(KEY_STR_PK, pk);
                 b.append(KEY_STR_OLD_ROW, oldObj);
-                if (!updateobj.isEmpty()) {
-                    // old row plus mods is sufficient
-                    b.append(KEY_STR_MODS, updateobj);
-                } else {
-                    // otherwise we just log the full old row and full new row
-                    verify(!newObj.isEmpty());
-                    b.append(KEY_STR_NEW_ROW, newObj);
-                }
+                // otherwise we just log the full old row and full new row
+                verify(!newObj.isEmpty());
+                b.append(KEY_STR_NEW_ROW, newObj);
                 BSONObj logObj = b.obj();
                 if (logTxnOpsForReplication()) {
                     cc().txn().logOpForReplication(logObj);
@@ -139,7 +156,40 @@ namespace mongo {
             }
         }
 
-        void logUpdateMods(const char *ns, const BSONObj &pk,
+        void logUpdateModsWithRow(
+            const char *ns,
+            const BSONObj &pk,
+            const BSONObj &oldObj,
+            const BSONObj &updateobj,
+            bool fromMigrate,
+            const BSONObj &newObj // this is not needed and is not logged, just used for a sanity check in shouldLogTxnUpdateOpForSharding
+            ) 
+        {
+            bool logForSharding = !fromMigrate &&
+                shouldLogTxnUpdateOpForSharding(OP_STR_UPDATE, ns, oldObj, newObj);
+            if (logTxnOpsForReplication() || logForSharding) {
+                BSONObjBuilder b;
+                if (isLocalNs(ns)) {
+                    return;
+                }
+
+                appendOpType(OP_STR_UPDATE_ROW_WITH_MOD, &b);
+                appendNsStr(ns, &b);
+                appendMigrate(fromMigrate, &b);
+                b.append(KEY_STR_PK, pk);
+                b.append(KEY_STR_OLD_ROW, oldObj);
+                b.append(KEY_STR_MODS, updateobj);
+                BSONObj logObj = b.obj();
+                if (logTxnOpsForReplication()) {
+                    cc().txn().logOpForReplication(logObj);
+                }
+                if (logForSharding) {
+                    cc().txn().logOpForSharding(logObj);
+                }
+            }
+        }
+
+        void logUpdateModsWithOnlyPK(const char *ns, const BSONObj &pk,
                            const BSONObj &updateobj,
                            bool fromMigrate) {
             bool logForSharding = !fromMigrate &&
@@ -150,7 +200,7 @@ namespace mongo {
                     return;
                 }
 
-                appendOpType(OP_STR_UPDATE_MODS, &b);
+                appendOpType(OP_STR_UPDATE_PK_WITH_MOD, &b);
                 appendNsStr(ns, &b);
                 appendMigrate(fromMigrate, &b);
                 b.append(KEY_STR_PK, pk);
@@ -363,16 +413,24 @@ namespace mongo {
             }
         }
 
-        static void runDeleteFromOplog(const char *ns, const BSONObj &op) {
-            LOCK_REASON(lockReason, "repl: applying delete");
-            Client::ReadContext ctx(ns, lockReason);
+        static void runRowDelete(const BSONObj& row, Collection* cl) {
+            const BSONObj pk = cl->getValidatedPKFromObject(row);
+            const uint64_t flags = Collection::NO_LOCKTREE;
+            deleteOneObject(cl, pk, row, flags);
+        }
+
+        static void runDeleteFromOplogWithLock(const char *ns, const BSONObj &op) {
             Collection *cl = getCollection(ns);
 
             const BSONObj row = op[KEY_STR_ROW].Obj();
             // Use "validated" version for paranoia, which checks for bad types like regex
-            const BSONObj pk = cl->getValidatedPKFromObject(row);
-            const uint64_t flags = Collection::NO_LOCKTREE;
-            deleteOneObject(cl, pk, row, flags);
+            runRowDelete(row, cl);
+        }
+
+        static void runDeleteFromOplog(const char *ns, const BSONObj &op) {
+            LOCK_REASON(lockReason, "repl: applying delete");
+            Client::ReadContext ctx(ns, lockReason);
+            runDeleteFromOplogWithLock(ns, op);
         }
         
         static void runCappedDeleteFromOplog(const char *ns, const BSONObj &op) {
@@ -395,29 +453,31 @@ namespace mongo {
             const BSONObj &pk,
             const BSONObj &oldObj,
             BSONObj newObj,
-            const BSONObj &updateobj,
-            bool isRollback)
+            bool isRollback
+            )
         {
             Collection *cl = getCollection(ns);
 
             uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
-            if (newObj.isEmpty() && !updateobj.isEmpty()) {
-                // We have an update obj and we need to create the new obj
-                scoped_ptr<ModSet> mods(new ModSet(updateobj, cl->indexKeys()));
-                auto_ptr<ModSetState> mss = mods->prepare(oldObj);
-                newObj = mss->createNewFromMods();
-                // Make sure we pass the best hint in the case of an unindexed update
-                flags |= (mods->isIndexed() > 0 ? 0 : Collection::KEYS_UNAFFECTED_HINT);
-            }
-
             if (isRollback) {
-                // if this is a rollback, then the newObj is what is in the
-                // collections, that we want to replace with oldObj
-                updateOneObject(cl, pk, newObj, oldObj, updateobj, false, false, flags);
+                if (cl->isPKHidden()) {
+                    // if this is a rollback, then the newObj is what is in the
+                    // collections, that we want to replace with oldObj
+                    // with a hidden PK, we know the PK cannot change
+                    BSONObj oldObjCopy = oldObj.copy(); // to get around constness, it's rollback, so we don't care about memcpy
+                    updateOneObject(cl, pk, newObj, oldObjCopy, BSONObj(), false, flags);
+                }
+                else {
+                    // the pk is not hidden, so it may change
+                    // even though this is inefficient, just do a delete followed by an insert
+                    LOG(6) << "update rollback: running delete and insert on " << oldObj << " " << newObj << rsLog;
+                    runRowDelete(newObj, cl);
+                    runNonSystemInsertFromOplogWithLock(ns, oldObj);
+                }
             }
             else {
                 // normal replication case
-                updateOneObject(cl, pk, oldObj, newObj, updateobj, false, false, flags);
+                updateOneObject(cl, pk, oldObj, newObj, BSONObj(), false, flags);
             }
         }
 
@@ -425,31 +485,96 @@ namespace mongo {
             const char *names[] = {
                 KEY_STR_PK,
                 KEY_STR_OLD_ROW, 
-                KEY_STR_NEW_ROW,
-                KEY_STR_MODS, 
+                KEY_STR_NEW_ROW
                 };
-            BSONElement fields[4];
-            op.getFields(4, names, fields);
+            BSONElement fields[3];
+            op.getFields(3, names, fields);
             const BSONObj pk = fields[0].Obj();     // must exist
             const BSONObj oldObj = fields[1].Obj(); // must exist
-            const BSONObj newObj = fields[2].ok() ? fields[2].Obj() : BSONObj();
-            const BSONObj updateobj = fields[3].ok() ? fields[3].Obj() : BSONObj();
+            const BSONObj newObj = fields[2].Obj(); // must exist
             // must be given at least one of the new object or an update obj
-            verify(!newObj.isEmpty() || !updateobj.isEmpty());
+            verify(!newObj.isEmpty());
 
             try {
                 LOCK_REASON(lockReason, "repl: applying update");
                 Client::ReadContext ctx(ns, lockReason);
-                runUpdateFromOplogWithLock(ns, pk, oldObj, newObj, updateobj, isRollback);
+                runUpdateFromOplogWithLock(ns, pk, oldObj, newObj, isRollback);
             }
             catch (RetryWithWriteLock &e) {
                 LOCK_REASON(lockReason, "repl: applying update with write lock");
                 Client::WriteContext ctx(ns, lockReason);
-                runUpdateFromOplogWithLock(ns, pk, oldObj, newObj, updateobj, isRollback);
+                runUpdateFromOplogWithLock(ns, pk, oldObj, newObj, isRollback);
             }
         }
 
-        static void runUpdateModsFromOplog(const char *ns, const BSONObj &op, bool isRollback) {
+        static void runUpdateModsWithRowWithLock(
+            const char* ns,
+            const BSONObj &pk,
+            const BSONObj &oldObj,
+            const BSONObj &updateobj,
+            bool isRollback
+            )
+        {
+            Collection *cl = getCollection(ns);
+            scoped_ptr<ModSet> mods(new ModSet(updateobj, cl->indexKeys()));
+            auto_ptr<ModSetState> mss = mods->prepare(oldObj);
+            BSONObj newObj = mss->createNewFromMods();
+            // Make sure we pass the best hint in the case of an unindexed update
+
+            if (isRollback) {
+                // we've generated the newObj and the oldObj, reuse code.
+                // This code is correct for both cases, but we only run it in this
+                // case because it is more inefficient.  It never uses
+                // the updateUsingMods path
+                runUpdateFromOplogWithLock(
+                    ns,
+                    pk,
+                    oldObj,
+                    newObj,
+                    isRollback
+                    );
+            }
+            else {
+                uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
+                if (mods->isIndexed() <= 0) {
+                    flags |= Collection::KEYS_UNAFFECTED_HINT;
+                }
+                // normal replication case
+                // optimization for later: if we know we are using
+                // the updateUsingMods path in updateOneObject,
+                // then we have constructed newObj unnecessarily
+                updateOneObject(cl, pk, oldObj, newObj, updateobj, false, flags);
+            }
+        }
+
+        static void runUpdateModsWithRowFromOplog(const char *ns, const BSONObj &op, bool isRollback) {
+            const char *names[] = {
+                KEY_STR_PK,
+                KEY_STR_OLD_ROW,
+                KEY_STR_MODS
+                };
+            BSONElement fields[3];
+            op.getFields(3, names, fields);
+            const BSONObj pk = fields[0].Obj();     // must exist
+            const BSONObj oldObj = fields[1].Obj(); // must exist
+            const BSONObj updateobj = fields[2].Obj(); // must exist
+            // must be given at least one of the new object or an update obj
+            verify(!updateobj.isEmpty());
+
+            // We have an update obj and we need to create the new obj
+            try {
+                LOCK_REASON(lockReason, "repl: applying update");
+                Client::ReadContext ctx(ns, lockReason);
+                runUpdateModsWithRowWithLock(ns, pk, oldObj, updateobj, isRollback);
+            }
+            catch (RetryWithWriteLock &e) {
+                LOCK_REASON(lockReason, "repl: applying update with write lock");
+                Client::WriteContext ctx(ns, lockReason);
+                runUpdateModsWithRowWithLock(ns, pk, oldObj, updateobj, isRollback);
+            }
+        }
+
+        static void runUpdateModsWithPKFromOplog(const char *ns, const BSONObj &op, bool isRollback) {
             LOCK_REASON(lockReason, "repl: applying update with mods");
             Client::ReadContext ctx(ns, lockReason);
             Collection *cl = getCollection(ns);
@@ -460,7 +585,7 @@ namespace mongo {
             const BSONObj pk = fields[0].Obj();
             const BSONObj updateobj = fields[1].Obj();
             const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
-            updateByPK(cl, pk, pk /* patternOrig, the "full" query */,
+            updateByPK(ns, cl, pk, pk /* patternOrig, the "full" query */,
                        // for rollback, we need to invert the update object to 'roll back' the update.
                        !isRollback ? updateobj : invertUpdateMods(updateobj),
                        false, true /* fastupdates always okay on secondary */,
@@ -502,9 +627,13 @@ namespace mongo {
                 opCounters->gotUpdate();
                 runUpdateFromOplog(ns, op, false);
             }
-            else if (strcmp(opType, OP_STR_UPDATE_MODS) == 0) {
+            else if (strcmp(opType, OP_STR_UPDATE_ROW_WITH_MOD) == 0) {
                 opCounters->gotUpdate();
-                runUpdateModsFromOplog(ns, op, false);
+                runUpdateModsWithRowFromOplog(ns, op, false);
+            }
+            else if (strcmp(opType, OP_STR_UPDATE_PK_WITH_MOD) == 0) {
+                opCounters->gotUpdate();
+                runUpdateModsWithPKFromOplog(ns, op, false);
             }
             else if (strcmp(opType, OP_STR_DELETE) == 0) {
                 opCounters->gotDelete();
@@ -557,8 +686,11 @@ namespace mongo {
             else if (strcmp(opType, OP_STR_UPDATE) == 0) {
                 runUpdateFromOplog(ns, op, true);
             }
-            else if (strcmp(opType, OP_STR_UPDATE_MODS) == 0) {
-                runUpdateModsFromOplog(ns, op, true);
+            else if (strcmp(opType, OP_STR_UPDATE_ROW_WITH_MOD) == 0) {
+                runUpdateModsWithRowFromOplog(ns, op, true);
+            }
+            else if (strcmp(opType, OP_STR_UPDATE_PK_WITH_MOD) == 0) {
+                runUpdateModsWithPKFromOplog(ns, op, true);
             }
             else if (strcmp(opType, OP_STR_DELETE) == 0) {
                 // the rollback of a delete is to do the insert

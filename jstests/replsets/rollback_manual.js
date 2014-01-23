@@ -100,6 +100,81 @@ doTest = function (signal, txnLimit, startPort) {
     assert.eq(0, conns[1].getDB("foo").foo.find({_id:0}).count());
     restartSlaveInReplset(replTest, conns);
 
+    print('Testing capped collection update rollback');
+    a.createCollection("bar", {capped:1, size:1000000000});
+    a.bar.insert({_id:0, a:0});
+    a.bar.update({_id:0}, {a:2});
+    replTest.awaitReplication();
+    restartSlaveOutOfReplset(replTest);
+    x = conns[1].getDB("foo").bar.findOne();
+    assert.eq(0, x._id);
+    assert.eq(2, x.a);
+    rollbackLastItem(conns, txnLimit);
+    x = conns[1].getDB("foo").bar.findOne();
+    assert.eq(0, x._id);
+    assert.eq(0, x.a);
+    restartSlaveInReplset(replTest, conns);
+    a.bar.update({_id:0}, {$set : {a:3}});
+    replTest.awaitReplication();
+    restartSlaveOutOfReplset(replTest);
+    x = conns[1].getDB("foo").bar.findOne();
+    assert.eq(0, x._id);
+    assert.eq(3, x.a);
+    rollbackLastItem(conns, txnLimit);
+    x = conns[1].getDB("foo").bar.findOne();
+    assert.eq(0, x._id);
+    assert.eq(2, x.a);
+    restartSlaveInReplset(replTest, conns);
+
+    print('Testing rollback of update with custom PK');
+    a.bar.drop();
+    assert.commandWorked(a.runCommand({create: "bar", primaryKey : {a:1, _id : 1}}));
+    a.bar.insert({_id:0, a:0, b:0});
+    a.bar.update({_id:0}, {a:2}); // test update that changes PK
+    restartSlaveOutOfReplset(replTest);
+    x = conns[1].getDB("foo").bar.findOne();
+    assert.eq(0, x._id);
+    assert.eq(2, x.a);
+    rollbackLastItem(conns, txnLimit);
+    x = conns[1].getDB("foo").bar.findOne();
+    assert.eq(0, x._id);
+    assert.eq(0, x.a);
+    restartSlaveInReplset(replTest, conns);
+    a.bar.update({_id:0}, {$set : {a:3}});
+    replTest.awaitReplication();
+    restartSlaveOutOfReplset(replTest);
+    x = conns[1].getDB("foo").bar.findOne();
+    assert.eq(0, x._id);
+    assert.eq(3, x.a);
+    rollbackLastItem(conns, txnLimit);
+    x = conns[1].getDB("foo").bar.findOne();
+    assert.eq(0, x._id);
+    assert.eq(2, x.a);
+    restartSlaveInReplset(replTest, conns);
+    print('Done testing 0\n');
+    a.bar.remove({});
+    print('Removed everything, testing 1\n');
+    a.bar.insert({_id:1, a:1, b:1});
+    replTest.awaitReplication();
+    x = a.bar.find({_id:1}).next();
+    printjson(x);
+    a.bar.update({_id:1}, {$set : {b:3}});
+    replTest.awaitReplication();
+    x = a.bar.find({_id:1}).next();
+    printjson(x);
+    restartSlaveOutOfReplset(replTest);
+    x = conns[1].getDB("foo").bar.find({_id:1}).next();
+    assert.eq(1, x._id);
+    assert.eq(1, x.a);
+    assert.eq(3, x.b);
+    rollbackLastItem(conns, txnLimit);
+    x = conns[1].getDB("foo").bar.find({_id:1}).next();
+    assert.eq(1, x._id);
+    assert.eq(1, x.a);
+    assert.eq(1, x.b);
+    restartSlaveInReplset(replTest, conns);
+
+    print('Testing simple update rollback');
     for (i = 0; i < 2; i++) {
         a.foo.remove({_id:1});
         a.foo.insert({_id:1, a:1});
@@ -108,6 +183,7 @@ doTest = function (signal, txnLimit, startPort) {
         restartSlaveOutOfReplset(replTest);
         var currDoc = conns[1].getDB("foo").foo.find({_id:1}).next();
         assert.eq(2, currDoc.a);
+        print("running rollback of update with i " + i);
         rollbackLastItem(conns, txnLimit);
         currDoc = conns[1].getDB("foo").foo.find({_id:1}).next();
         assert.eq(1, currDoc.a);
@@ -175,6 +251,6 @@ doTest = function (signal, txnLimit, startPort) {
 }
 
 // if we ever change this, need to change rollbackLastItem, which uses the value of 1
-doTest( 15, 1, 41000 );
 doTest( 15, 1000000, 31000 );
+doTest( 15, 1, 41000 );
 
