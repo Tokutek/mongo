@@ -115,7 +115,7 @@ files.forEach(function(x) {
 	    'queryoptimizera|' +
 	    'indexStatsCommand|' +
 	    'reversecursor|' +
-        'block_check_supported|' +
+            'block_check_supported|' +
 	    'stats|' +
 	    'txn_.*|' +
 	    'loader_.*|' +
@@ -124,7 +124,9 @@ files.forEach(function(x) {
 	    'collection_exists_cmd|' +
 	    'getNamespaces_after_close|' +
 	    'ops_after_close|' +
-	    'collections_exist_cmd' +
+	    'collections_exist_cmd|' +
+            'update_fast|' +
+            'update_fasterrors'
         ')\.js$');
 
     if (failsInShardingPattern.test(x.name)) {
