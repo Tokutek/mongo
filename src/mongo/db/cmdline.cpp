@@ -189,7 +189,7 @@ namespace {
         string s;
         char line[MAX_LINE_LENGTH];
 
-        while ( f ) {
+        while ( f.good() ) {
             f.getline(line, MAX_LINE_LENGTH);
             s = line;
             std::remove(s.begin(), s.end(), ' ');
