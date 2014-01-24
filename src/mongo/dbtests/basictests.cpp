@@ -577,8 +577,8 @@ namespace BasicTests {
             CmdLine::parseConfigFile( iss3, ss3 );
 
             ASSERT_EQUALS( ss1.str(), "\n" );
-            ASSERT_EQUALS( ss2.str(), "password=\'foo bar baz\'\n\n" );
-            ASSERT_EQUALS( ss3.str(), "\n  other = monkeys  \n\n" );
+            ASSERT_EQUALS( ss2.str(), "password=\'foo bar baz\'\n" );
+            ASSERT_EQUALS( ss3.str(), "\n  other = monkeys  \n" );
         }
     };
 
