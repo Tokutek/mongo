@@ -14,6 +14,7 @@ target_link_libraries(server_parameters foundation bson)
 add_library(index_set STATIC
   index_set
   )
+add_dependencies(index_set generate_error_codes generate_action_types)
 
 add_library(dbcmdline STATIC
   cmdline
