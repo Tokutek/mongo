@@ -10,8 +10,7 @@ if (BUILD_TESTING)
       --dbpath "${js_dbpath}"
       --fork
       --logpath "${js_logpath}"
-      --setParameter enableTestCommands=true
-      --setParameter numCachetableBucketMutexes=32
+      --setParameter enableTestCommands=1
     )
   add_test(
     NAME mongo/js/stop-mongod
@@ -34,6 +33,7 @@ if (BUILD_TESTING)
           --port 27999
           "${CMAKE_CURRENT_SOURCE_DIR}/${jstest}"
           --eval "TestData = new Object();
+TestData.testDir = '${CMAKE_CURRENT_SOURCE_DIR}';
 TestData.testPath = '${CMAKE_CURRENT_SOURCE_DIR}/${jstest}';
 TestData.testFile = '${jstest}';
 TestData.testName = '${jstestname}';

@@ -54,8 +54,8 @@ function doIt( ev, wait, where ) {
 }
 
 // nested scope with nested invoke()
-doIt("db.getSiblingDB('" + db.getName() + "').jstests_evald.count( { $where: function() { while(1) { sleep(1); } } } )", true, true);
-doIt("db.getSiblingDB('" + db.getName() + "').jstests_evald.count( { $where: function() { while(1) { sleep(1); } } } )", false, true);
+doIt("db.getSiblingDB(\"" + db.getName() + "\").jstests_evald.count( { $where: function() { while(1) { sleep(1); } } } )", true, true);
+doIt("db.getSiblingDB(\"" + db.getName() + "\").jstests_evald.count( { $where: function() { while(1) { sleep(1); } } } )", false, true);
 
 // simple tight loop tests with callback
 doIt("while(1) { sleep(1); }", false);
@@ -66,10 +66,10 @@ doIt("while(1) {;}", false);
 doIt("while(1) {;}", true);
 
 // the for loops are currently required, as a spawned op masks the parent op - see SERVER-1931
-doIt("while(1) { for( var i = 0; i < 10000; ++i ) {;} db.getSiblingDB('" + db.getName() + "').jstests_evald.count({i:10}); }", true);
-doIt("while(1) { for( var i = 0; i < 10000; ++i ) {;} db.getSiblingDB('" + db.getName() + "').jstests_evald.count({i:10}); }", false);
-doIt("while(1) { for( var i = 0; i < 10000; ++i ) {;} db.getSiblingDB('" + db.getName() + "').jstests_evald.count(); }", true);
-doIt("while(1) { for( var i = 0; i < 10000; ++i ) {;} db.getSiblingDB('" + db.getName() + "').jstests_evald.count(); }", false);
+doIt("while(1) { for( var i = 0; i < 10000; ++i ) {;} db.getSiblingDB(\"" + db.getName() + "\").jstests_evald.count({i:10}); }", true);
+doIt("while(1) { for( var i = 0; i < 10000; ++i ) {;} db.getSiblingDB(\"" + db.getName() + "\").jstests_evald.count({i:10}); }", false);
+doIt("while(1) { for( var i = 0; i < 10000; ++i ) {;} db.getSiblingDB(\"" + db.getName() + "\").jstests_evald.count(); }", true);
+doIt("while(1) { for( var i = 0; i < 10000; ++i ) {;} db.getSiblingDB(\"" + db.getName() + "\").jstests_evald.count(); }", false);
 
 // try/catch with tight-loop kill tests.  Catch testing is important
 // due to v8::TerminateExecution internals.
@@ -77,7 +77,7 @@ doIt("while(1) { for( var i = 0; i < 10000; ++i ) {;} db.getSiblingDB('" + db.ge
 doIt("while(1) {                                  " +
      "   for(var i = 0; i < 10000; ++i) {;}       " +
      "   try {                                    " +
-     "      db.getSiblingDB('" + db.getName() + "').jstests_evald.count({i:10});       " +
+     "      db.getSiblingDB(\"" + db.getName() + "\").jstests_evald.count({i:10});       " +
      "   } catch (e) {}                           " +
      "}", true );
 

@@ -1,6 +1,6 @@
 // Test that a simple commit or abort load works.
 
-load("jstests/loader_helpers.js");
+load(TestData.testDir + "/loader_helpers.js");
 
 var testCommitLoadNoBegin = function() {
     commitLoadShouldFail();
@@ -17,7 +17,7 @@ var testSimpleCommit = function() {
     beginLoad('loadcommit', [ ] , { });
     commitLoad();
     commit();
-    assert.eq(1, db.system.namespaces.count({ "name" : "test.loadcommit" }));
+    assert.eq(1, db.system.namespaces.count({ "name" : db.getName() + ".loadcommit" }));
 }();
 
 var testSimpleAbort = function() {
@@ -27,7 +27,7 @@ var testSimpleAbort = function() {
     beginLoad('loadabort', [ ] , { });
     abortLoad();
     commit();
-    assert.eq(0, db.system.namespaces.count({ "name" : "test.loadabort" }));
+    assert.eq(0, db.system.namespaces.count({ "name" : db.getName() + ".loadabort" }));
     t.insert({});
     assert.eq(1, t.count()); // should be re-created by insert aborted load
 }();
@@ -39,14 +39,14 @@ var testSimpleRollback = function() {
     beginLoad('loadrollback', [ ] , { });
     commitLoad();
     rollback();
-    assert.eq(0, db.system.namespaces.count({ "name" : "test.loadrollback" }));
+    assert.eq(0, db.system.namespaces.count({ "name" : db.getName() + ".loadrollback" }));
 
     t.drop();
     begin();
     beginLoad('loadrollback', [ ] , { });
     abortLoad();
     rollback();
-    assert.eq(0, db.system.namespaces.count({ "name" : "test.loadrollback" }));
+    assert.eq(0, db.system.namespaces.count({ "name" : db.getName() + ".loadrollback" }));
 }();
 
 var testCommitCommit = function() {
@@ -60,8 +60,8 @@ var testCommitCommit = function() {
     beginLoad('loadcommit2', [ ], { });
     commitLoad();
     commit();
-    assert.eq(1, db.system.namespaces.count({ "name" : "test.loadcommit1" }));
-    assert.eq(1, db.system.namespaces.count({ "name" : "test.loadcommit2" }));
+    assert.eq(1, db.system.namespaces.count({ "name" : db.getName() + ".loadcommit1" }));
+    assert.eq(1, db.system.namespaces.count({ "name" : db.getName() + ".loadcommit2" }));
 
     // Test rollback
     t1.drop();
@@ -72,8 +72,8 @@ var testCommitCommit = function() {
     beginLoad('testb2bloads2', [ ], { });
     commitLoad();
     rollback();
-    assert.eq(0, db.system.namespaces.count({ "name" : "test.loadcommit1" }));
-    assert.eq(0, db.system.namespaces.count({ "name" : "test.loadcommit2" }));
+    assert.eq(0, db.system.namespaces.count({ "name" : db.getName() + ".loadcommit1" }));
+    assert.eq(0, db.system.namespaces.count({ "name" : db.getName() + ".loadcommit2" }));
 }();
 
 var testAbortAbort = function() {
@@ -87,8 +87,8 @@ var testAbortAbort = function() {
     beginLoad('loadabort2', [ ], { });
     abortLoad();
     commit();
-    assert.eq(0, db.system.namespaces.count({ "name" : "test.loadabort1" }));
-    assert.eq(0, db.system.namespaces.count({ "name" : "test.loadabort2" }));
+    assert.eq(0, db.system.namespaces.count({ "name" : db.getName() + ".loadabort1" }));
+    assert.eq(0, db.system.namespaces.count({ "name" : db.getName() + ".loadabort2" }));
 
     // Test rollback
     t1.drop();
@@ -99,8 +99,8 @@ var testAbortAbort = function() {
     beginLoad('loadabort2', [ ], { });
     abortLoad();
     rollback();
-    assert.eq(0, db.system.namespaces.count({ "name" : "test.loadabort1" }));
-    assert.eq(0, db.system.namespaces.count({ "name" : "test.loadabort2" }));
+    assert.eq(0, db.system.namespaces.count({ "name" : db.getName() + ".loadabort1" }));
+    assert.eq(0, db.system.namespaces.count({ "name" : db.getName() + ".loadabort2" }));
 }();
 
 var testCommitAbort = function() {
@@ -114,8 +114,8 @@ var testCommitAbort = function() {
     beginLoad('loadcommitabort2', [ ], { });
     abortLoad();
     commit();
-    assert.eq(1, db.system.namespaces.count({ "name" : "test.loadcommitabort1" }));
-    assert.eq(0, db.system.namespaces.count({ "name" : "test.loadcommitabort2" }));
+    assert.eq(1, db.system.namespaces.count({ "name" : db.getName() + ".loadcommitabort1" }));
+    assert.eq(0, db.system.namespaces.count({ "name" : db.getName() + ".loadcommitabort2" }));
 
     // Test rollback
     t1.drop();
@@ -126,8 +126,8 @@ var testCommitAbort = function() {
     beginLoad('loadcommitabort2', [ ], { });
     abortLoad();
     rollback();
-    assert.eq(0, db.system.namespaces.count({ "name" : "test.loadcommitabort1" }));
-    assert.eq(0, db.system.namespaces.count({ "name" : "test.loadcommitabort2" }));
+    assert.eq(0, db.system.namespaces.count({ "name" : db.getName() + ".loadcommitabort1" }));
+    assert.eq(0, db.system.namespaces.count({ "name" : db.getName() + ".loadcommitabort2" }));
 }();
 
 var testAbortCommit = function() {
@@ -141,8 +141,8 @@ var testAbortCommit = function() {
     beginLoad('loadabortcommit2', [ ], { });
     commitLoad();
     commit();
-    assert.eq(0, db.system.namespaces.count({ "name" : "test.loadabortcommit1" }));
-    assert.eq(1, db.system.namespaces.count({ "name" : "test.loadabortcommit2" }));
+    assert.eq(0, db.system.namespaces.count({ "name" : db.getName() + ".loadabortcommit1" }));
+    assert.eq(1, db.system.namespaces.count({ "name" : db.getName() + ".loadabortcommit2" }));
 
     // Test rollback
     t1.drop();
@@ -153,15 +153,15 @@ var testAbortCommit = function() {
     beginLoad('loadabortcommit2', [ ], { });
     abortLoad();
     rollback();
-    assert.eq(0, db.system.namespaces.count({ "name" : "test.loadabortcommit1" }));
-    assert.eq(0, db.system.namespaces.count({ "name" : "test.loadabortcommit2" }));
+    assert.eq(0, db.system.namespaces.count({ "name" : db.getName() + ".loadabortcommit1" }));
+    assert.eq(0, db.system.namespaces.count({ "name" : db.getName() + ".loadabortcommit2" }));
 }();
 
 var testIdIndexSpecified = function() {
     t = db.loadid;
     t.drop();
     begin();
-    beginLoad('loadid', [ { key: { _id: 1 }, ns: 'test.loadid', unique: true, clustering: true, name: "_id_" } ], { });
+    beginLoad('loadid', [ { key: { _id: 1 }, ns: db.getName() + '.loadid', unique: true, clustering: true, name: "_id_" } ], { });
     t.insert({ bulkLoaded: 1 });
     commitLoad();
     commit();
