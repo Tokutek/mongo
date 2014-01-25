@@ -36,5 +36,5 @@ assert.eq( key , idx[1].key , "M2" );
 assert( idx[1].unique , "M3" );
 //printjson( idx );
 
-db.system.indexes.insert( { ns : "test" , key : { x : 1 } , name : "x" } );
+db.system.indexes.insert( { ns : db.getName() , key : { x : 1 } , name : "x" } );
 assert( db.getLastError().indexOf( "invalid" ) >= 0 , "Z1" );
