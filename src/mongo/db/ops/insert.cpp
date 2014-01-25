@@ -114,14 +114,18 @@ namespace mongo {
     void insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags, bool logop ) {
         StringData _ns(ns);
         if (NamespaceString::isSystem(_ns)) {
+            StringData db = nsToDatabaseSubstring(_ns);
             massert(16748, "need transaction to run insertObjects", cc().txnStackSize() > 0);
-            uassert(10095, "attempt to insert in reserved database name 'system'", nsToDatabaseSubstring(_ns) != "system");
+            uassert(10095, "attempt to insert in reserved database name 'system'", db != "system");
             massert(16750, "attempted to insert multiple objects into a system namspace at once", objs.size() == 1);
 
             // Trying to insert into a system collection.  Fancy side-effects go here:
             if (nsToCollectionSubstring(ns) == "system.indexes") {
                 BSONObj obj = stripDropDups(objs[0]);
-                Collection *cl = getOrCreateCollection(obj["ns"].Stringdata(), logop);
+                StringData collns = obj["ns"].Stringdata();
+                uassert(0, mongoutils::str::stream() << "cannot build index on incorrect ns " << collns
+                        << " for current database " << db, nsToDatabaseSubstring(collns) == db);
+                Collection *cl = getOrCreateCollection(collns, logop);
                 bool ok = cl->ensureIndex(obj);
                 if (!ok) {
                     // Already had that index
