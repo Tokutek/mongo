@@ -35,7 +35,14 @@ namespace mongo {
                                                   const HashSeed &seed,
                                                   const HashVersion &v) {
         massert( 16245, "Only HashVersion 0 has been defined", v == 0 );
-        return BSONElementHasher::hash64( e , seed );
+        // Integer keys are only representible as numbers when they are less
+        // than 2^52 (maximum value for a double). If they are bigger, they're
+        // encoded as BSON (incredibly slow/inefficient to compare).
+        //
+        // Ensure that this hash only has the low order 50 bits set so we're
+        // guaranteed not to generate a BSON key, but instead a fast, integer key.
+        const unsigned long long mask = ((1ULL << 50) - 1);
+        return BSONElementHasher::hash64(e , seed) & mask;
     }
 
     void HashKeyGenerator::getKeys(const BSONObj &obj, BSONObjSet &keys) {
