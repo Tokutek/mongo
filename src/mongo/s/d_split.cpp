@@ -84,6 +84,12 @@ namespace mongo {
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
 
             const char* ns = jsobj.getStringField( "checkShardingIndex" );
+
+            if (nsToDatabaseSubstring(ns) != dbname) {
+                errmsg = "incorrect database in ns";
+                return false;
+            }
+
             BSONObj keyPattern = jsobj.getObjectField( "keyPattern" );
 
             if ( keyPattern.isEmpty() ) {
