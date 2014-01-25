@@ -48,11 +48,12 @@ for (i = 0; i < 100; i++) {
 }
   
 var v = db.getCollection( "test_db" ).validate();
-if( v.ns != "test.test_db" ) { 
+var mydbname = db.getName();
+if( v.ns != mydbname + ".test_db" ) {
     print("Error: wrong ns name");
     print(tojson(v));
 }
-assert (v.ns == "test.test_db",9);
+assert (v.ns == mydbname + ".test_db",9);
 assert (v.ok == 1,10);
 
 // TOKUDB: validate is deprecated, nrecords doesn't matter

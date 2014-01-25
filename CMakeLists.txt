@@ -266,6 +266,8 @@ install(FILES src/SConscript.client
   DESTINATION src
   )
 
+add_subdirectory(jstests)
+
 file(READ src/mongo/util/version.cpp version_cpp_contents)
 string(REGEX MATCH "const char tokumxVersionString\\[\\] = \"(([0-9]+)\\.([0-9]+)\\.([0-9]+)([^\"]*))\"\\;" unused "${version_cpp_contents}")
 set(CPACK_PACKAGE_VERSION ${CMAKE_MATCH_1})
