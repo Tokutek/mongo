@@ -20,7 +20,7 @@ function ops(q) {
 print("start shell");
 
 // sleep for a second for each (of 100) documents; can be killed in between documents & test should complete before 100 seconds 
-s1 = startParallelShell("db.jstests_currentop.count( { '$where': function() { sleep(1000); } } )");
+s1 = startParallelShell("db.getSiblingDB('" + db.getName() + "').jstests_currentop.count( { '$where': function() { sleep(1000); } } )");
 
 print("sleep");
 sleep(1000);
@@ -41,18 +41,18 @@ assert.soon( function(){
 }, "have_some_ops");
 print("ok");
     
-s2 = startParallelShell( "db.jstests_currentop.update( { '$where': function() { sleep(150); } }, { 'num': 1 }, false, true ); db.getLastError()" );
+s2 = startParallelShell( "db.getSiblingDB('" + db.getName() + "').jstests_currentop.update( { '$where': function() { sleep(150); } }, { 'num': 1 }, false, true ); db.getLastError()" );
 
 o = [];
 
 function f() {
-    o = ops({ "ns": "test.jstests_currentop" });
+    o = ops({ "ns": db.getName() + ".jstests_currentop" });
 
     printjson(o);
 
-    var writes = ops({ "locks.^test": "w", "ns": "test.jstests_currentop" }).length;
+    var writes = ops({ "locks.^test": "w", "ns": db.getName() + ".jstests_currentop" }).length;
 
-    var readops = ops({ "locks.^test": "r", "ns": "test.jstests_currentop" });
+    var readops = ops({ "locks.^test": "r", "ns": db.getName() + ".jstests_currentop" });
     print("readops:");
     printjson(readops);
     var reads = readops.length;
