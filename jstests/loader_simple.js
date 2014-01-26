@@ -1,6 +1,11 @@
 // Test that a simple commit or abort load works.
 
-load(TestData.testDir + "/loader_helpers.js");
+var filename;
+if (TestData.testDir !== undefined) {
+    load(TestData.testDir + "/loader_helpers.js");
+} else {
+    load('jstests/loader_helpers.js');
+}
 
 var testCommitLoadNoBegin = function() {
     commitLoadShouldFail();
