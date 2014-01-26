@@ -53,29 +53,23 @@ try {
     // check write lock stats are set
     o = lastOp();
     assert.eq('insert', o.op);
-    assert.lt( 0, o.lockStats.timeLockedMicros.r );
-    assert.lt( 0, o.lockStats.timeLockedMicros.w ); // RFP: t created, so expect write lock taken
-    assert.lt( 0, o.lockStats.timeAcquiringMicros.r );
-    assert.lt( 0, o.lockStats.timeAcquiringMicros.w );
+    assert.lt( 0, o.lockStats.timeLockedMicros.r + o.lockStats.timeAcquiringMicros.r );
+    assert.lt( 0, o.lockStats.timeLockedMicros.w + o.lockStats.timeAcquiringMicros.w ); // RFP: t created, so expect write lock taken
     printjson(o.lockStats);
 
     t.save( {} );
     o = lastOp();
     assert.eq('insert', o.op);
-    assert.lt( 0, o.lockStats.timeLockedMicros.r );
-    assert.eq( 0, o.lockStats.timeLockedMicros.w );
-    assert.lt( 0, o.lockStats.timeAcquiringMicros.r );
-    assert.eq( 0, o.lockStats.timeAcquiringMicros.w );
+    assert.lt( 0, o.lockStats.timeLockedMicros.r + o.lockStats.timeAcquiringMicros.r );
+    assert.eq( 0, o.lockStats.timeLockedMicros.w + o.lockStats.timeAcquiringMicros.w );
     printjson(o.lockStats);
 
     // check read lock stats are set
     t.find();
     o = lastOp();
     assert.eq('query', o.op);
-    assert.eq( 0, o.lockStats.timeLockedMicros.w );
-    assert.lt( 0, o.lockStats.timeLockedMicros.r );
-    assert.lt( 0, o.lockStats.timeAcquiringMicros.r );
-    assert.eq( 0, o.lockStats.timeAcquiringMicros.w );
+    assert.lt( 0, o.lockStats.timeLockedMicros.r + o.lockStats.timeAcquiringMicros.r );
+    assert.eq( 0, o.lockStats.timeLockedMicros.w + o.lockStats.timeAcquiringMicros.w );
     printjson(o.lockStats);
 
     t.save( {} );
