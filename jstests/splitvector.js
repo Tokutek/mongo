@@ -17,7 +17,7 @@ assertChunkSizes = function ( splitVec , numDocs , maxChunkSize , msg ){
     for ( i=0; i<splitVec.length-1; i++) { 
         min = splitVec[i];
         max = splitVec[i+1];
-        size = db.runCommand( { datasize: "test.jstests_splitvector" , min: min , max: max } ).size;
+        size = db.runCommand( { datasize: db.getName() + ".jstests_splitvector" , min: min , max: max } ).size;
 
         // It is okay for the last chunk to be  smaller. A collection's size does not
         // need to be exactly a multiple of maxChunkSize.
@@ -61,21 +61,21 @@ f.drop();
 // -------------------------
 // Case 1: missing parameters 
 
-assert.eq( false, db.runCommand( { splitVector: "test.jstests_splitvector" } ).ok , "1a" );
-assert.eq( false, db.runCommand( { splitVector: "test.jstests_splitvector" , maxChunkSize: 1} ).ok , "1b" );
+assert.eq( false, db.runCommand( { splitVector: db.getName() + ".jstests_splitvector" } ).ok , "1a" );
+assert.eq( false, db.runCommand( { splitVector: db.getName() + ".jstests_splitvector" , maxChunkSize: 1} ).ok , "1b" );
 
 
 // -------------------------
 // Case 2: missing index
 
-assert.eq( false, db.runCommand( { splitVector: "test.jstests_splitvector" , keyPattern: {x:1} , maxChunkSize: 1 } ).ok , "2");
+assert.eq( false, db.runCommand( { splitVector: db.getName() + ".jstests_splitvector" , keyPattern: {x:1} , maxChunkSize: 1 } ).ok , "2");
 
 
 // -------------------------
 // Case 3: empty collection
 
 f.ensureIndex( { x: 1}, {clustering:cl} );
-assert.eq( [], db.runCommand( { splitVector: "test.jstests_splitvector" , keyPattern: {x:1} , maxChunkSize: 1 } ).splitKeys , "3");
+assert.eq( [], db.runCommand( { splitVector: db.getName() + ".jstests_splitvector" , keyPattern: {x:1} , maxChunkSize: 1 } ).splitKeys , "3");
 
 
 // -------------------------
@@ -89,7 +89,7 @@ var case4 = function() {
     filler = "";
     while( filler.length < 500 ) filler += "a";
     f.save( { x: 0, y: filler } );
-    docSize = db.runCommand( { datasize: "test.jstests_splitvector" } ).size;
+    docSize = db.runCommand( { datasize: db.getName() + ".jstests_splitvector" } ).size;
     assert.gt( docSize, 500 , "4a" );
 
     // Fill collection and get split vector for 1MB maxChunkSize
@@ -98,7 +98,7 @@ var case4 = function() {
         f.save( { x: i, y: filler } );
     }
     db.getLastError();
-    res = db.runCommand( { splitVector: "test.jstests_splitvector" , keyPattern: {x:1} , maxChunkSize: 1 } );
+    res = db.runCommand( { splitVector: db.getName() + ".jstests_splitvector" , keyPattern: {x:1} , maxChunkSize: 1 } );
 
     // splitVector aims at getting half-full chunks after split
     factor = 0.5;
@@ -130,7 +130,7 @@ var case5 = function() {
         f.save( { x: i, y: filler } );
     }
     db.getLastError();
-    res = db.runCommand( { splitVector: "test.jstests_splitvector" , keyPattern: {x:1} , maxChunkSize: 1 , maxSplitPoints: 1} );
+    res = db.runCommand( { splitVector: db.getName() + ".jstests_splitvector" , keyPattern: {x:1} , maxChunkSize: 1 , maxSplitPoints: 1} );
 
     assert.eq( true , res.ok , "5a" );
     assert.eq( 1 , res.splitKeys.length , "5b" );
@@ -155,7 +155,7 @@ var case6 = function() {
         f.save( { x: i, y: filler } );
     }
     db.getLastError();
-    res = db.runCommand( { splitVector: "test.jstests_splitvector" , keyPattern: {x:1} , maxChunkSize: 1 , maxChunkObjects: 500} );
+    res = db.runCommand( { splitVector: db.getName() + ".jstests_splitvector" , keyPattern: {x:1} , maxChunkSize: 1 , maxChunkObjects: 500} );
 
     assert.eq( true , res.ok , "6a" );
     assert.eq( 19 , res.splitKeys.length , "6b" );
@@ -184,7 +184,7 @@ var case7 = function() {
         f.save( { x: 2, y: filler } );
     }
     db.getLastError();
-    res = db.runCommand( { splitVector: "test.jstests_splitvector" , keyPattern: {x:1} , maxChunkSize: 1 } );
+    res = db.runCommand( { splitVector: db.getName() + ".jstests_splitvector" , keyPattern: {x:1} , maxChunkSize: 1 } );
 
     assert.eq( true , res.ok , "7a" );
     assert.eq( 2 , res.splitKeys[0].x, "7b");
@@ -216,7 +216,7 @@ var case8 = function() {
     }
 
     db.getLastError();
-    res = db.runCommand( { splitVector: "test.jstests_splitvector" , keyPattern: {x:1} , maxChunkSize: 1 } );
+    res = db.runCommand( { splitVector: db.getName() + ".jstests_splitvector" , keyPattern: {x:1} , maxChunkSize: 1 } );
 
     assert.eq( true , res.ok , "8a" );
     assert.eq( 2 , res.splitKeys.length , "8b" );
@@ -250,7 +250,7 @@ var case9 = function(n) {
     assert.close( n/2 , res.splitKeys[0].x , "9c", -1 );
 
     if ( db.runCommand( "isMaster" ).msg != "isdbgrid" ) {
-        res = db.runCommand( { splitVector: "test.jstests_splitvector" , keyPattern: {x:1} , force : true } );
+        res = db.runCommand( { splitVector: db.getName() + ".jstests_splitvector" , keyPattern: {x:1} , force : true } );
 
         assert.eq( true , res.ok , "9a: " + tojson(res) );
         assert.eq( 1 , res.splitKeys.length , "9b: " + tojson(res) );

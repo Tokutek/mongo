@@ -14,7 +14,7 @@ assert.commandFailed(db.runCommand({ create: 'part_coll_simple', partitioned:1, 
 assert.commandWorked(db.runCommand({ create: 'part_coll_simple', partitioned:1}));
 assert.commandFailed(db.part_coll_simple.renameCollection("abra"));
 admin = db.getMongo().getDB( "admin" );
-assert.commandFailed( admin.runCommand( {renameCollection:"test.part_coll_simple", to:"abra.abra"} ) );
+assert.commandFailed( admin.runCommand( {renameCollection:db.getName() + ".part_coll_simple", to:"abra.abra"} ) );
 // verify that we cannot add an index
 x = t.ensureIndex({a:1});
 assert.eq(x.code, 17238);
