@@ -87,13 +87,6 @@ namespace mongo {
     class ApplyUpdateMessage : public storage::UpdateCallback {
         // @param pkQuery - the pk with field names, for proper default obj construction
         //                  in mods.createNewFromQuery().
-        BSONObj upsert(const BSONObj &pkQuery, const BSONObj &msg) {
-            // Create a new object from the pk and updateobj.
-            ModSet mods(msg);
-            const BSONObj newObj = mods.createNewFromQuery(pkQuery);
-            checkTooLarge(newObj);
-            return newObj;
-        }
         BSONObj applyMods(const BSONObj &oldObj, const BSONObj &msg) {
             try {
                 // The update message is simply an update object, supplied by the user.
@@ -190,10 +183,10 @@ namespace mongo {
         return UpdateResult(0, isOperatorUpdate, 1, newObj);
     }
 
-    UpdateResult updateByPK(const char *ns, Collection *cl,
+    static UpdateResult updateByPK(const char *ns, Collection *cl,
                             const BSONObj &pk, const BSONObj &patternOrig,
                             const BSONObj &updateobj,
-                            const bool upsert, const bool fastupdateOk,
+                            const bool upsert,
                             const bool logop, const bool fromMigrate,
                             uint64_t flags) {
         // Create a mod set for $ style updates.
@@ -201,22 +194,6 @@ namespace mongo {
         const bool isOperatorUpdate = updateobj.firstElementFieldName()[0] == '$';
         if (isOperatorUpdate) {
             mods.reset(new ModSet(updateobj, cl->indexKeys()));
-        }
-
-        if (fastupdateOk && mods && !mods->isIndexed() &&
-            !hasClusteringSecondaryKey(cl)) {
-            // Fast update path that skips the pk query.
-            // We know no indexes need to be updated so we don't read the full object.
-            //
-            // Further, we specifically do _not_ check if upsert is true because it's
-            // implied when using fastupdates.
-            cc().curop()->debug().fastmod = true;
-            cl->updateObjectMods(pk, updateobj, fromMigrate, flags);
-            if (logop) {
-                OpLogHelpers::logUpdateModsWithOnlyPK(ns, pk, updateobj, fromMigrate);
-            }
-            cl->notifyOfWriteOp();
-            return UpdateResult(0, 1, 1, BSONObj());
         }
 
         BSONObj obj;
@@ -241,27 +218,6 @@ namespace mongo {
             updateNoMods(ns, cl, pk, obj, copy, logop, fromMigrate);
         }
         return UpdateResult(1, isOperatorUpdate, 1, BSONObj());
-    }
-
-    // return true if the given updateobj can be 'unapplied'
-    // on a replica set member performing rollback.
-    //
-    // this will be true case for things like $inc X, because
-    // its inverse is $inc -X.
-    // 
-    // it will be false for things like $addToSet(set, X), because
-    // there's no way to know for sure if the right thing to do is
-    // remove X from the set, or keep the set the same (because X
-    // may have already existed prior to the addToSet operation).
-    static bool modsAreInvertible(const BSONObj &updateobj) {
-        for (BSONObjIterator i(updateobj); i.more(); ) {
-            const BSONElement &e = i.next();
-            // For now, only pure $inc updates are considered invertible.
-            if (!str::equals(e.fieldName(), "$inc")) {
-                return false;
-            }
-        }
-        return true;
     }
 
     BSONObj invertUpdateMods(const BSONObj &updateobj) {
@@ -302,13 +258,8 @@ namespace mongo {
         if (!multi && !cl->isCapped()) {
             const BSONObj pk = cl->getSimplePKFromQuery(patternOrig);
             if (!pk.isEmpty()) {
-                // We check here that the fastupdates are okay to do.
-                // - cmdline switch must be enabled
-                // - Collection must ok with it (may not be for some sharded collections)
-                // - modifications to the destination object must be invertible (for repl rollback)
-                const bool fastupdatesOk = cmdLine.fastupdates && cl->fastupdatesOk() && modsAreInvertible(updateobj);
                 return updateByPK(ns, cl, pk, patternOrig, updateobj,
-                                  upsert, fastupdatesOk, logop, fromMigrate);
+                                  upsert, logop, fromMigrate, 0);
             }
         }
 

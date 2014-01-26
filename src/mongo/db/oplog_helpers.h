@@ -39,8 +39,6 @@ namespace mongo {
 
         void logUpdateModsWithRow(const char *ns, const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateobj, bool fromMigrate, const BSONObj &newObj);
 
-        void logUpdateModsWithOnlyPK(const char *ns, const BSONObj &pk, const BSONObj &updateobj, bool fromMigrate);
-
         void logDelete(const char *ns, const BSONObj &row, bool fromMigrate);
 
         void logDeleteForCapped(const char *ns, const BSONObj &pk, const BSONObj &row);

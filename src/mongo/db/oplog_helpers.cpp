@@ -44,7 +44,6 @@ static const char OP_STR_INSERT[] = "i"; // normal insert
 static const char OP_STR_CAPPED_INSERT[] = "ci"; // insert into capped collection
 static const char OP_STR_UPDATE[] = "u"; // normal update with full pre-image and full post-image
 static const char OP_STR_UPDATE_ROW_WITH_MOD[] = "ur"; // update with full pre-image and mods to generate post-image
-static const char OP_STR_UPDATE_PK_WITH_MOD[] = "um"; // update with just PK and mods to generate post-image
 static const char OP_STR_DELETE[] = "d"; // delete with full pre-image
 static const char OP_STR_CAPPED_DELETE[] = "cd"; // delete from capped collection
 static const char OP_STR_COMMENT[] = "n"; // a no-op
@@ -57,8 +56,7 @@ namespace mongo {
             return mongoutils::str::equals(opstr, OP_STR_INSERT) ||
                 mongoutils::str::equals(opstr, OP_STR_DELETE) ||
                 mongoutils::str::equals(opstr, OP_STR_UPDATE) ||
-                mongoutils::str::equals(opstr, OP_STR_UPDATE_ROW_WITH_MOD) ||
-                mongoutils::str::equals(opstr, OP_STR_UPDATE_PK_WITH_MOD);
+                mongoutils::str::equals(opstr, OP_STR_UPDATE_ROW_WITH_MOD);
         }
 
         bool invalidOpForSharding(const char *opstr) {
@@ -178,32 +176,6 @@ namespace mongo {
                 appendMigrate(fromMigrate, &b);
                 b.append(KEY_STR_PK, pk);
                 b.append(KEY_STR_OLD_ROW, oldObj);
-                b.append(KEY_STR_MODS, updateobj);
-                BSONObj logObj = b.obj();
-                if (logTxnOpsForReplication()) {
-                    cc().txn().logOpForReplication(logObj);
-                }
-                if (logForSharding) {
-                    cc().txn().logOpForSharding(logObj);
-                }
-            }
-        }
-
-        void logUpdateModsWithOnlyPK(const char *ns, const BSONObj &pk,
-                           const BSONObj &updateobj,
-                           bool fromMigrate) {
-            bool logForSharding = !fromMigrate &&
-                shouldLogTxnUpdateOpForSharding(OP_STR_UPDATE, ns, pk, pk); // HACK: Faking newObj and oldObj with just PK
-            if (logTxnOpsForReplication() || logForSharding) {
-                BSONObjBuilder b;
-                if (isLocalNs(ns)) {
-                    return;
-                }
-
-                appendOpType(OP_STR_UPDATE_PK_WITH_MOD, &b);
-                appendNsStr(ns, &b);
-                appendMigrate(fromMigrate, &b);
-                b.append(KEY_STR_PK, pk);
                 b.append(KEY_STR_MODS, updateobj);
                 BSONObj logObj = b.obj();
                 if (logTxnOpsForReplication()) {
@@ -574,24 +546,6 @@ namespace mongo {
             }
         }
 
-        static void runUpdateModsWithPKFromOplog(const char *ns, const BSONObj &op, bool isRollback) {
-            LOCK_REASON(lockReason, "repl: applying update with mods");
-            Client::ReadContext ctx(ns, lockReason);
-            Collection *cl = getCollection(ns);
-
-            const char *names[] = { KEY_STR_PK, KEY_STR_MODS };
-            BSONElement fields[2];
-            op.getFields(2, names, fields);
-            const BSONObj pk = fields[0].Obj();
-            const BSONObj updateobj = fields[1].Obj();
-            const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
-            updateByPK(ns, cl, pk, pk /* patternOrig, the "full" query */,
-                       // for rollback, we need to invert the update object to 'roll back' the update.
-                       !isRollback ? updateobj : invertUpdateMods(updateobj),
-                       false, true /* fastupdates always okay on secondary */,
-                       false, false, flags);
-        }
-
         static void runCommandFromOplog(const char *ns, const BSONObj &op) {
             BufBuilder bb;
             BSONObjBuilder ob;
@@ -630,10 +584,6 @@ namespace mongo {
             else if (strcmp(opType, OP_STR_UPDATE_ROW_WITH_MOD) == 0) {
                 opCounters->gotUpdate();
                 runUpdateModsWithRowFromOplog(ns, op, false);
-            }
-            else if (strcmp(opType, OP_STR_UPDATE_PK_WITH_MOD) == 0) {
-                opCounters->gotUpdate();
-                runUpdateModsWithPKFromOplog(ns, op, false);
             }
             else if (strcmp(opType, OP_STR_DELETE) == 0) {
                 opCounters->gotDelete();
@@ -688,9 +638,6 @@ namespace mongo {
             }
             else if (strcmp(opType, OP_STR_UPDATE_ROW_WITH_MOD) == 0) {
                 runUpdateModsWithRowFromOplog(ns, op, true);
-            }
-            else if (strcmp(opType, OP_STR_UPDATE_PK_WITH_MOD) == 0) {
-                runUpdateModsWithPKFromOplog(ns, op, true);
             }
             else if (strcmp(opType, OP_STR_DELETE) == 0) {
                 // the rollback of a delete is to do the insert

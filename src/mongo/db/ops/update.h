@@ -50,13 +50,6 @@ namespace mongo {
                          const bool fromMigrate,
                          uint64_t flags);
 
-    UpdateResult updateByPK(const char *ns, Collection *cl,
-                            const BSONObj &pk, const BSONObj &patternOrig,
-                            const BSONObj &updateobj,
-                            const bool upsert, const bool fastupdateOk,
-                            const bool logop, const bool fromMigrate,
-                            uint64_t flags = 0);
-
     UpdateResult updateObjects(const char *ns,
                                const BSONObj &updateobj, const BSONObj &pattern,
                                const bool upsert, const bool multi,

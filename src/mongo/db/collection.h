@@ -197,9 +197,7 @@ namespace mongo {
                                   const bool fromMigrate,
                                   uint64_t flags, bool* indexBitChanged) = 0;
 
-        // @return true, if fastupdates are ok for this collection.
-        //         fastupdates are not ok for this collection if it's sharded
-        //         and the primary key does not contain the full shard key.
+        // currently an unused function
         virtual bool fastupdatesOk() = 0;
 
         virtual bool updateObjectModsOk() = 0;
@@ -968,11 +966,6 @@ namespace mongo {
 
         bool _indexBuildInProgress;
         int _nIndexes;
-        // State of fastupdates for sharding:
-        // -1 not sure if fastupdates are okay - need to check if pk is in shardkey.
-        // 0 fastupdates are deinitely not okay - sharding is enabled and pk is not in shardkey
-        // 1 fastupdates are definitely okay - either no sharding, or the pk is in shardkey
-        AtomicWord<int> _fastupdatesOkState;
 
         unsigned long long _multiKeyIndexBits;
 

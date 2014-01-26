@@ -87,22 +87,10 @@ namespace mongo {
         static void runUpdateMods(DB *db, const DBT *key, const DBT *old_val, const BSONObj& updateObj,
                                    void (*set_val)(const DBT *new_val, void *set_extra),
                                    void *set_extra) {
-            BSONObj newObj;
-            if (old_val == NULL || old_val->data == NULL) {
-                const DBT *desc = &db->cmp_descriptor->dbt;
-                verify(desc->data != NULL);
-                Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
-            
-                // Old object did not exist - create a new one via upsert.
-                // The stored pk does not have field names, add them here.
-                const Key sPK(key);
-                const BSONObj pkWithFieldNames = descriptor.fillKeyFieldNames(sPK.key());
-                newObj = _updateCallback->upsert(pkWithFieldNames, updateObj);
-            } else {
-                // Apply the update mods
-                const BSONObj oldObj(reinterpret_cast<char *>(old_val->data));
-                newObj = _updateCallback->applyMods(oldObj, updateObj);
-            }
+            uassert(0, "Got an empty old_val or old_val->data in runUpdateMods, should not happen", old_val && old_val->data);
+            // Apply the update mods
+            const BSONObj oldObj(reinterpret_cast<char *>(old_val->data));
+            BSONObj newObj = _updateCallback->applyMods(oldObj, updateObj);
             // Set the new value
             DBT new_val = dbt_make(newObj.objdata(), newObj.objsize());
             set_val(&new_val, set_extra);

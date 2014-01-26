@@ -110,6 +110,7 @@ doTest = function (signal, txnLimit, startPort) {
 
     undo_and_redo_entries(replTest, conns, txnLimit);
 
+/*
     print("updating 30 documents on master with $inc optimization");
 	assert.commandWorked(a.getSisterDB('admin').runCommand({ setParameter: 1, fastupdates: true }))
     for (i=0; i < 30; i++) {
@@ -120,6 +121,7 @@ doTest = function (signal, txnLimit, startPort) {
 	// it should be ok to undo and redo selected entries
 	// because of how $inc operates.
     undo_and_redo_entries(replTest, conns, txnLimit);
+    */
 
     print("updating 30 documents on master");
     for (i=0; i < 30; i++) {

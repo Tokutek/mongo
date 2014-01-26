@@ -346,7 +346,6 @@ namespace mongo {
         CollectionData(ns, pkIndexPattern),
         _indexBuildInProgress(false),
         _nIndexes(0),
-        _fastupdatesOkState(AtomicWord<int>(-1)),
         _multiKeyIndexBits(0) {
 
         TOKULOG(1) << "Creating collection " << ns << endl;
@@ -361,7 +360,6 @@ namespace mongo {
         CollectionData(serialized),
         _indexBuildInProgress(false),
         _nIndexes(serialized["indexes"].Array().size()),
-        _fastupdatesOkState(AtomicWord<int>(-1)),
         _multiKeyIndexBits(static_cast<uint64_t>(serialized["multiKeyIndexBits"].Long())){
 
         bool reserialize = false;
@@ -431,22 +429,7 @@ namespace mongo {
     }
 
     bool CollectionBase::fastupdatesOk() {
-        const int state = _fastupdatesOkState.loadRelaxed();
-        if (state == -1) {
-            // need to determine if fastupdates are ok. any number of threads
-            // can race to do this - thats fine, they'll all get the same result.
-            bool ok = true;
-            if (shardingState.needShardChunkManager(_ns)) {
-                ShardChunkManagerPtr chunkManager = shardingState.getShardChunkManager(_ns);
-                ok = chunkManager == NULL || chunkManager->hasShardKey(_pk);
-            }
-            _fastupdatesOkState.swap(ok ? 1 : 0);
-            return ok;
-        } else {
-            // result already computed, fastupdates are ok if state is > 0
-            dassert(state >= 0);
-            return state > 0;
-        }
+        return false;
     }
 
     BSONObj CollectionBase::getSimplePKFromQuery(const BSONObj &query, const BSONObj& pk) const {

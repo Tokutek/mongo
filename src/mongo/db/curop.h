@@ -69,7 +69,6 @@ namespace mongo {
         long long nupdated; // number of records updated
         long long ninserted;
         long long ndeleted;
-        bool fastmod;
         bool fastmodinsert;  // upsert of an $operation. builds a default object
         bool upsert;         // true if the update actually did an insert
         int keyUpdates;

@@ -219,7 +219,7 @@ doTest = function (signal, txnLimit, startPort) {
         restartSlaveOutOfReplset(replTest);
         assert.eq(1, conns[1].getDB("foo").foo.find({ _id: 7, c: 1 }).count());
         rollbackLastItem(conns, txnLimit);
-        if (fast) {
+        if (false) {
             // fastupdate rolls back to { c: 0 }, even though c did not exist before.
             assert.eq({ _id: 7, c: 0 }, conns[1].getDB("foo").foo.find({ _id: 7, c: 0 }).toArray()[0]);
         } else {
