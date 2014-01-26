@@ -840,9 +840,13 @@ namespace mongo {
                                           const bool fromMigrate,
                                           uint64_t flags) {
         verify(!updateObj.isEmpty());
+        // TODO: anyway to avoid a malloc with this builder?
+        BSONObjBuilder b;
+        b.append("t", "u");
+        b.append("o", updateObj);
 
         IndexDetailsBase &pkIdx = getPKIndexBase();
-        pkIdx.updatePair(pk, NULL, updateObj, flags);
+        pkIdx.updatePair(pk, NULL, b.done(), flags);
     }
 
     // only set indexBitsChanged if true, NEVER set to false

@@ -84,33 +84,42 @@ namespace mongo {
             }
         }
 
+        static void runUpdateMods(DB *db, const DBT *key, const DBT *old_val, const BSONObj& updateObj,
+                                   void (*set_val)(const DBT *new_val, void *set_extra),
+                                   void *set_extra) {
+            BSONObj newObj;
+            if (old_val == NULL || old_val->data == NULL) {
+                const DBT *desc = &db->cmp_descriptor->dbt;
+                verify(desc->data != NULL);
+                Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
+            
+                // Old object did not exist - create a new one via upsert.
+                // The stored pk does not have field names, add them here.
+                const Key sPK(key);
+                const BSONObj pkWithFieldNames = descriptor.fillKeyFieldNames(sPK.key());
+                newObj = _updateCallback->upsert(pkWithFieldNames, updateObj);
+            } else {
+                // Apply the update mods
+                const BSONObj oldObj(reinterpret_cast<char *>(old_val->data));
+                newObj = _updateCallback->applyMods(oldObj, updateObj);
+            }
+            // Set the new value
+            DBT new_val = dbt_make(newObj.objdata(), newObj.objsize());
+            set_val(&new_val, set_extra);
+        }
+
         static int update_callback(DB *db, const DBT *key, const DBT *old_val, const DBT *extra,
                                    void (*set_val)(const DBT *new_val, void *set_extra),
                                    void *set_extra) {
             try {
                 verify(_updateCallback != NULL);
                 verify(key != NULL && extra != NULL && extra->data != NULL);
-
-                BSONObj newObj;
                 const BSONObj msg(static_cast<char *>(extra->data));
-                if (old_val == NULL || old_val->data == NULL) {
-                    const DBT *desc = &db->cmp_descriptor->dbt;
-                    verify(desc->data != NULL);
-                    Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
-
-                    // Old object did not exist - create a new one via upsert.
-                    // The stored pk does not have field names, add them here.
-                    const Key sPK(key);
-                    const BSONObj pkWithFieldNames = descriptor.fillKeyFieldNames(sPK.key());
-                    newObj = _updateCallback->upsert(pkWithFieldNames, msg);
-                } else {
-                    // Apply the update mods
-                    const BSONObj oldObj(reinterpret_cast<char *>(old_val->data));
-                    newObj = _updateCallback->applyMods(oldObj, msg);
-                }
-                // Set the new value
-                DBT new_val = dbt_make(newObj.objdata(), newObj.objsize());
-                set_val(&new_val, set_extra);
+                string type = msg[ "t" ].valuestrsafe();
+                // right now, we only support one type of message, an updateMods
+                uassert(0, "unknown type of update message", strcmp(type.c_str(), "u") == 0);
+                const BSONObj updateObj = msg["o"].Obj();
+                runUpdateMods(db, key, old_val, updateObj, set_val, set_extra);
                 return 0;
             } catch (const std::exception &ex) { 
                 problem() << "Caught exception in ydb update callback, cannot proceed: " 
