@@ -24,13 +24,13 @@ begin();
 t.ensureIndex({ a: 1});
 assert(!db.getLastError());
 assert.eq(3, db.system.namespaces.find({ "name" : { $regex: "rollbackindex" } }).count());
-assert.eq(1, db.system.indexes.find({ "ns" : "test.rollbackindex", "key" : { a : 1 } }).count())
+assert.eq(1, db.system.indexes.find({ "ns" : db.getName() + ".rollbackindex", "key" : { a : 1 } }).count())
 assert.eq("IndexCursor a_1", t.find({ a: 50 }).hint({ a: 1 }).explain().cursor)
 assert.eq(2, t.stats().nindexes)
 rollback();
 assert.eq(100, t.count()) // force the re-open
 assert.eq(2, db.system.namespaces.find({ "name" : { $regex: "rollbackindex" } }).count());
-assert.eq(0, db.system.indexes.find({ "ns" : "test.rollbackindex", "key" : { a : 1 } }).count())
+assert.eq(0, db.system.indexes.find({ "ns" : db.getName() + ".rollbackindex", "key" : { a : 1 } }).count())
 assert.throws(t.find({ a: 50 }).hint({ a: 1 })) // "bad hint"
 assert.eq(1, t.stats().nindexes)
 
@@ -40,11 +40,11 @@ assert.eq(2, db.system.namespaces.find({ "name" : { $regex: "rollbackindex" } })
 t.ensureIndex({ a: 1});
 assert(!db.getLastError());
 assert.eq(3, db.system.namespaces.find({ "name" : { $regex: "rollbackindex" } }).count());
-assert.eq(1, db.system.indexes.find({ "ns" : "test.rollbackindex", "key" : { a : 1 } }).count())
+assert.eq(1, db.system.indexes.find({ "ns" : db.getName() + ".rollbackindex", "key" : { a : 1 } }).count())
 assert.eq(2, t.stats().nindexes)
 assert.eq("IndexCursor a_1", t.find({ a: 50 }).hint({ a: 1 }).explain().cursor)
 commit();
 assert.eq(3, db.system.namespaces.find({ "name" : { $regex: "rollbackindex" } }).count());
-assert.eq(1, db.system.indexes.find({ "ns" : "test.rollbackindex", "key" : { a : 1 } }).count())
+assert.eq(1, db.system.indexes.find({ "ns" : db.getName() + ".rollbackindex", "key" : { a : 1 } }).count())
 assert.eq(2, t.stats().nindexes)
 assert.eq("IndexCursor a_1", t.find({ a: 50 }).hint({ a: 1 }).explain().cursor)
