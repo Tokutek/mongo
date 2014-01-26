@@ -8,8 +8,8 @@ t.ensureIndex( { b: 1 }, true );
 t.ensureIndex( { c: 1 }, [ false, "cIndex" ] );
 
 checkIndexes = function( num ) {
-//    printjson( db.system.indexes.find( { ns: "test.jstests_index8" } ).toArray() );
-    indexes = db.system.indexes.find( { ns: "test.jstests_index8" } ).sort( { key: 1 } ).toArray();
+//    printjson( db.system.indexes.find( { ns: db.getName() + ".jstests_index8" } ).toArray() );
+    indexes = db.system.indexes.find( { ns: db.getName() + ".jstests_index8" } ).sort( { key: 1 } ).toArray();
     var start = 0;
     if ( indexes[0].name == "_id_" )
         start = 1;

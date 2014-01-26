@@ -36,8 +36,8 @@ print()
 // need to wait for read to start
 print("wait have some ops");
 assert.soon( function(){
-    return ops( { "locks.^test": "r", "ns": "test.jstests_currentop" } ).length + 
-        ops({ "locks.^test": "R", "ns": "test.jstests_currentop" }).length >= 1;
+    return ops( { "locks.^" + db.getName(): "r", "ns": db.getName() + ".jstests_currentop" } ).length + 
+        ops({ "locks.^" + db.getName(): "R", "ns": db.getName() + ".jstests_currentop" }).length >= 1;
 }, "have_some_ops");
 print("ok");
     
@@ -50,9 +50,9 @@ function f() {
 
     printjson(o);
 
-    var writes = ops({ "locks.^test": "w", "ns": db.getName() + ".jstests_currentop" }).length;
+    var writes = ops({ "locks.^" + db.getName(): "w", "ns": db.getName() + ".jstests_currentop" }).length;
 
-    var readops = ops({ "locks.^test": "r", "ns": db.getName() + ".jstests_currentop" });
+    var readops = ops({ "locks.^" + db.getName(): "r", "ns": db.getName() + ".jstests_currentop" });
     print("readops:");
     printjson(readops);
     var reads = readops.length;
