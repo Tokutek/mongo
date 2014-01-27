@@ -46,6 +46,8 @@ namespace mongo {
             cint = cY | cdouble,
             cX = 0x20,
             clong = cX | cdouble,
+            cZ = 0x30,
+            cint64 = cZ | cdouble,
             cHASMORE = 0x40,
             cNOTUSED = 0x80 // but see IsBSON sentinel - this bit not usable without great care
         };
@@ -168,11 +170,12 @@ namespace mongo {
                         }
                         if( n >= m || n <= -m ) {
                             // can't represent exactly as a double
-                            traditional(obj);
-                            return;
+                            b.appendUChar(cint64|bits);
+                            b.appendNum(n);
+                        } else {
+                            b.appendUChar(clong|bits);
+                            b.appendNum((double) n);
                         }
-                        b.appendUChar(clong|bits);
-                        b.appendNum((double) n);
                         break;
                     }
                 case NumberDouble:
@@ -262,6 +265,10 @@ namespace mongo {
                         b.append("", static_cast< long long>((reinterpret_cast< const PackedDouble& >(*p)).d));
                         p += sizeof(double);
                         break;
+                    case cint64:
+                        b.append("", *reinterpret_cast<const long long *>(p));
+                        p += sizeof(long long);
+                        break;
                     default:
                         verify(false);
                 }
@@ -272,9 +279,11 @@ namespace mongo {
             return b.done();
         }
 
-        static int compare(const unsigned char *&l, const unsigned char *&r) { 
-            int lt = (*l & cCANONTYPEMASK);
-            int rt = (*r & cCANONTYPEMASK);
+        static int compare(const unsigned char *&l, const unsigned char *&r) {
+            int lt_real = *l;
+            int rt_real = *r;
+            int lt = (lt_real & cCANONTYPEMASK);
+            int rt = (rt_real & cCANONTYPEMASK);
             int x = lt - rt;
             if( x ) 
                 return x;
@@ -285,12 +294,43 @@ namespace mongo {
             switch( lt ) { 
             case cdouble:
                 {
-                    double L = (reinterpret_cast< const PackedDouble* >(l))->d;
-                    double R = (reinterpret_cast< const PackedDouble* >(r))->d;
-                    if( L < R )
-                        return -1;
-                    if( L != R )
-                        return 1;
+                    if (lt_real == cint64 && rt_real == cint64) {
+                        long long L = *reinterpret_cast<const long long *>(l);
+                        long long R = *reinterpret_cast<const long long *>(r);
+                        if (L < R) {
+                            return -1;
+                        }
+                        if (L != R) {
+                            return 1;
+                        }
+                    } else if (rt_real == cint64) {
+                        // We only pack numbers as cint64 if they are larger than the largest thing
+                        // we would store as a double, so if one is a cint64 and the other isn't,
+                        // it's automatically larger or smaller than the other one, based on its
+                        // sign bit.
+                        long long R = *reinterpret_cast<const long long *>(r);
+                        if (R > 0) {
+                            return -1;
+                        } else {
+                            return 1;
+                        }
+                    } else if (lt_real == cint64) {
+                        long long L = *reinterpret_cast<const long long *>(l);
+                        if (L > 0) {
+                            return 1;
+                        } else {
+                            return -1;
+                        }
+                    } else {
+                        double L = (reinterpret_cast<const PackedDouble*>(l))->d;
+                        double R = (reinterpret_cast<const PackedDouble*>(r))->d;
+                        if (L < R) {
+                            return -1;
+                        }
+                        if (L != R) {
+                            return 1;
+                        }
+                    }
                     l += 8; r += 8;
                     break;
                 }
