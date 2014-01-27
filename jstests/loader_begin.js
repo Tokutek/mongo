@@ -1,7 +1,12 @@
 // Test that the beginLoadShouldFail interface validates parameters
 // and enforces the rules of beginning a bulk load.
 
-load("jstests/loader_helpers.js");
+var filename;
+if (TestData.testDir !== undefined) {
+    load(TestData.testDir + "/_loader_helpers.js");
+} else {
+    load('jstests/_loader_helpers.js');
+}
 
 var testNSAlreadyExists = function() {
     t = db.loadnsexists;
