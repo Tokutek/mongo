@@ -220,6 +220,13 @@ namespace mongo {
             return _transactions->hasLiveTxn();
         }
 
+        bool hasMultTxns() const {
+            if (!_transactions) {
+                return false;
+            }
+            return _transactions->numLiveTxns() > 1;
+        }
+
         long long rootTransactionId() const {
             return _rootTransactionId;
         }
