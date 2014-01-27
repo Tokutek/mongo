@@ -87,7 +87,7 @@ namespace mongo {
         static void runUpdateMods(DB *db, const DBT *key, const DBT *old_val, const BSONObj& updateObj,
                                    void (*set_val)(const DBT *new_val, void *set_extra),
                                    void *set_extra) {
-            uassert(0, "Got an empty old_val or old_val->data in runUpdateMods, should not happen", old_val && old_val->data);
+            uassert(17315, "Got an empty old_val or old_val->data in runUpdateMods, should not happen", old_val && old_val->data);
             // Apply the update mods
             const BSONObj oldObj(reinterpret_cast<char *>(old_val->data));
             BSONObj newObj = _updateCallback->applyMods(oldObj, updateObj);
