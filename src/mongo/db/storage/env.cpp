@@ -117,7 +117,7 @@ namespace mongo {
                 const BSONObj msg(static_cast<char *>(extra->data));
                 string type = msg[ "t" ].valuestrsafe();
                 // right now, we only support one type of message, an updateMods
-                uassert(0, "unknown type of update message", strcmp(type.c_str(), "u") == 0);
+                uassert(17313, "unknown type of update message", strcmp(type.c_str(), "u") == 0);
                 const BSONObj updateObj = msg["o"].Obj();
                 runUpdateMods(db, key, old_val, updateObj, set_val, set_extra);
                 return 0;

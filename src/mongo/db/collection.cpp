@@ -2047,7 +2047,7 @@ namespace mongo {
         // updating the system users collection requires calling
         // AuthorizationManager::checkValidPrivilegeDocument. See above.
         // As a result, updateObject should be called
-        msgasserted(0, "bug: cannot (fast) update on the system users collection, "
+        msgasserted(17312, "bug: cannot (fast) update on the system users collection, "
                            " should have been enforced higher in the stack" );
     }
 

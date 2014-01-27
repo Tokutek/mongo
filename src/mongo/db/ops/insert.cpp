@@ -123,7 +123,7 @@ namespace mongo {
             if (nsToCollectionSubstring(ns) == "system.indexes") {
                 BSONObj obj = stripDropDups(objs[0]);
                 StringData collns = obj["ns"].Stringdata();
-                uassert(0, mongoutils::str::stream() << "cannot build index on incorrect ns " << collns
+                uassert(17314, mongoutils::str::stream() << "cannot build index on incorrect ns " << collns
                         << " for current database " << db, nsToDatabaseSubstring(collns) == db);
                 Collection *cl = getOrCreateCollection(collns, logop);
                 bool ok = cl->ensureIndex(obj);
