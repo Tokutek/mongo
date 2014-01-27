@@ -46,6 +46,7 @@
 #include "mongo/db/replutil.h"
 #include "mongo/db/relock.h"
 #include "mongo/db/commands.h"
+#include "mongo/db/command_cursors.h"
 #include "mongo/db/commands/rename_collection.h"
 #include "mongo/db/commands/server_status.h"
 #include "mongo/db/instance.h"

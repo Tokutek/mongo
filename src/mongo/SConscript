@@ -436,6 +436,7 @@ serverOnlyFiles = [ "db/curop.cpp",
 
                     # most commands are only for mongod
                     "db/dbcommands.cpp",
+                    "db/command_cursors.cpp",
                     "db/commands/dbcommands_deprecated.cpp",
                     "db/commands/fsync.cpp",
                     "db/commands/distinct.cpp",

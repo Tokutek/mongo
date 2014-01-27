@@ -27,7 +27,6 @@
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/client_basic.h"
-#include "mongo/db/clientcursor.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/opsettings.h"
 #include "mongo/util/mongoutils/str.h"
@@ -340,9 +339,5 @@ namespace mongo {
     };
 
     bool _runCommands(const char *ns, const BSONObj &cmdObj, BufBuilder &b, BSONObjBuilder& anObjBuilder, bool fromRepl, int queryOptions);
-
-    bool isCursorCommand(BSONObj cmdObj);
-
-    void handleCursorCommand(CursorId id, BSONObj& cmdObj, BSONObjBuilder& result);
 
 } // namespace mongo

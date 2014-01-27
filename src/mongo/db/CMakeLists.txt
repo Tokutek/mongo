@@ -169,6 +169,7 @@ add_library(serveronly STATIC
 
   # most commands are only for mongod
   dbcommands
+  command_cursors
   commands/dbcommands_deprecated
   commands/fsync
   commands/distinct
