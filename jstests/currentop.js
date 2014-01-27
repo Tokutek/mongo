@@ -56,9 +56,15 @@ function f() {
 
     printjson(o);
 
-    var writes = ops({ "locks.^" + db.getName(): "w", "ns": db.getName() + ".jstests_currentop" }).length;
+    var wobj = {};
+    wobj["locks.^" + db.getName()] = "w";
+    wobj["ns"] = db.getName() + ".jstests_currentop";
+    var writes = ops(wobj).length;
 
-    var readops = ops({ "locks.^" + db.getName(): "r", "ns": db.getName() + ".jstests_currentop" });
+    var robj = {};
+    robj["locks.^" + db.getName()] = "r";
+    robj["ns"] = db.getName() + ".jstests_currentop";
+    var readops = ops(robj);
     print("readops:");
     printjson(readops);
     var reads = readops.length;
