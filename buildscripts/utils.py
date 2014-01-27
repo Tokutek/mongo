@@ -24,6 +24,8 @@ def getAllSourceFiles( arr=None , prefix="." ):
     for x in os.listdir( prefix ):
         if x.startswith( "." ) or x.startswith( "pcre-" ) or x.startswith( "32bit" ) or x.startswith( "mongodb-" ) or x.startswith("debian") or x.startswith( "mongo-cxx-driver" ):
             continue
+        if os.path.exists(os.path.join(prefix, x, "CMakeCache.txt")):
+            continue
         full = prefix + "/" + x
         if os.path.isdir( full ) and not os.path.islink( full ):
             getAllSourceFiles( arr , full )
