@@ -842,7 +842,7 @@ namespace mongo {
             *indexBitChanged = false;
             return;
         }
-        uassert(0, "Cannot transition from not multi key to multi key in multi statement transaction", !cc().hasMultTxns());
+        uassert(17317, "Cannot transition from not multi key to multi key in multi statement transaction", !cc().hasMultTxns());
         if (!Lock::isWriteLocked(_ns)) {
             throw RetryWithWriteLock();
         }
