@@ -414,7 +414,8 @@ namespace mongo {
                 bb.append("lastGTID", lastLive.toString());
                 bb.append("lastUnappliedGTID", lastUnapplied.toString());
                 bb.append("minLiveGTID", minLive.toString());
-                bb.append("minUnappliedGTID", minUnapplied.toString());                
+                bb.append("minUnappliedGTID", minUnapplied.toString());
+                bb.append("oplogVersion", ReplSetConfig::OPLOG_VERSION);
             }
 
             int maintenance = _maintenanceMode;
@@ -453,6 +454,7 @@ namespace mongo {
                 bb.append("lastUnappliedGTID", m->hbinfo().lastUnappliedGTID.toString());
                 bb.append("minLiveGTID", m->hbinfo().minLiveGTID.toString());
                 bb.append("minUnappliedGTID", m->hbinfo().minUnappliedGTID.toString());
+                bb.append("oplogVersion", m->hbinfo().oplogVersion);
             }
             bb.appendTimeT("lastHeartbeat", m->hbinfo().lastHeartbeat);
             bb.appendTimeT("lastHeartbeatRecv", m->getLastRecvHeartbeat());

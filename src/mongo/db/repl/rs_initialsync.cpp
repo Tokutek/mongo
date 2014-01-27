@@ -134,7 +134,10 @@ namespace mongo {
 
     bool Member::syncable() const {
         bool buildIndexes = theReplSet ? theReplSet->buildIndexes() : true;
-        return hbinfo().up() && (config().buildIndexes || !buildIndexes) && state().readable();
+        return hbinfo().up() &&
+            (config().buildIndexes || !buildIndexes) &&
+            state().readable() &&
+            (hbinfo().oplogVersion <= ReplSetConfig::OPLOG_VERSION);
     }
 
     const Member* ReplSetImpl::getMemberToSyncTo() {

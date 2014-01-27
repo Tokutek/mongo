@@ -160,6 +160,7 @@ namespace mongo {
                 minUnapplied,
                 result
                 );
+            result.append("oplogVersion", ReplSetConfig::OPLOG_VERSION);
             const Member *syncTarget = BackgroundSync::get()->getSyncTarget();
             if (syncTarget) {
                 result.append("syncingTo", syncTarget->fullName());
@@ -468,6 +469,12 @@ namespace mongo {
             }
             if ( info.hasElement("minUnappliedGTID")) {
                 mem.minUnappliedGTID= getGTIDFromBSON("minUnappliedGTID", info);
+            }
+            if ( info.hasElement("oplogVersion")) {
+                mem.oplogVersion = info["oplogVersion"].numberLong();
+            }
+            else {
+                mem.oplogVersion = 0;
             }
             // see if this member is in the electable set
             if( info["e"].eoo() ) {

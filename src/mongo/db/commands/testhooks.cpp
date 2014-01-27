@@ -24,6 +24,7 @@
 #include "mongo/base/init.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/repl/rs.h"
+#include "mongo/db/repl/rs_config.h"
 
 namespace mongo {
 
@@ -62,6 +63,42 @@ namespace mongo {
         }
         return Status::OK();
     }
+
+    class CmdChangeOplogVersion : public InformationCommand {
+    public:
+        CmdChangeOplogVersion() : InformationCommand("_changeOplogVersion") {};
+        virtual void help( stringstream& help ) const {
+            help << "internal command used for testing";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {}
+
+        bool run(
+            const string& db,
+            BSONObj& cmdObj,
+            int options, string& errmsg,
+            BSONObjBuilder& result,
+            bool fromRepl = false )
+        {
+            if (cmdObj.hasField("reset")) {
+                ReplSetConfig::OPLOG_VERSION = ReplSetConfig::OPLOG_VERSION_CURRENT;
+            }
+            else {
+                ReplSetConfig::OPLOG_VERSION = ReplSetConfig::OPLOG_VERSION_TEST;
+            }
+            return true;
+        }
+    };
+
+    MONGO_INITIALIZER(RegisterChangeOplogVersionCmd)(InitializerContext* context) {
+        if (Command::testCommandsEnabled) {
+            // Leaked intentionally: a Command registers itself when constructed.
+            new CmdChangeOplogVersion();
+        }
+        return Status::OK();
+    }
+
 
     class CmdChangePartitionCreateTime : public InformationCommand {
     public:

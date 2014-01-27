@@ -152,6 +152,13 @@ namespace mongo {
         static const int CURRENT_PROTOCOL_VERSION;
         static const int MAX_SUPPORTED_PROTOCOL_VERSION;
         static const int MIN_SUPPORTED_PROTOCOL_VERSION;
+        enum {
+            OPLOG_VERSION_TEST = 1, // used for testing purposes, should NEVER be set to 1 in production
+            OPLOG_VERSION_2 = 2, // initial version, associated with 1.4
+            OPLOG_VERSION_NEXT,
+            OPLOG_VERSION_CURRENT = OPLOG_VERSION_NEXT - 1
+        };
+        static uint32_t OPLOG_VERSION;
         static bool checkProtocolVersion(int pv, string &errmsg);
         static BSONObj addProtocolVersionIfMissing(const BSONObj &obj);
         int protocolVersion;
