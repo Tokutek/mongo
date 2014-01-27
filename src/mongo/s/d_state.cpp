@@ -34,6 +34,7 @@
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/db/kill_current_op.h"
 #include "mongo/db/replutil.h"
 #include "mongo/client/connpool.h"
 #include "mongo/s/chunk_version.h"
@@ -57,6 +58,15 @@ namespace mongo {
     }
 
     void ShardingState::enable( const string& server ) {
+        // Until sharding is enabled, normal clients will not take the ShardingState rwlock
+        // (ShardedOperationScope) for speed.  So when we want to transition to sharding being
+        // enabled, we have to flush all currently running operations out of the system (that have
+        // not yet taken this lock) before we set the bit.  We also have to kill anything that may
+        // have gotten past the ShardedOperationScope constructor but would be waiting on the DB
+        // lock.  It's unfortunate, but extraordinarily rare.
+        NoteStateTransition nst;
+        LOCK_REASON(lockReason, "sharding: enabling sharding");
+        Lock::GlobalWrite lk(lockReason);
         _enabled = true;
         verify( server.size() );
         if ( _configServer.size() == 0 )
