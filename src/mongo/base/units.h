@@ -118,7 +118,8 @@ namespace mongo {
                     _value = fromString(e.Stringdata());
                 } else {
                     uassert(17015, mongoutils::str::stream() << "element is not a number: " << e.wrap(), e.isNumber());
-                    _value = e.numberInt();
+                    bool ok = e.coerce(&_value);
+                    uassert(17316, mongoutils::str::stream() << "couldn't coerce to a number: " << e.wrap(), ok);
                 }
             }
         }

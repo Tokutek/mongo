@@ -2071,8 +2071,8 @@ namespace mongo {
     }
     CappedCollection::CappedCollection(const BSONObj &serialized) :
         NaturalOrderCollection(serialized),
-        _maxSize(serialized["options"]["size"].numberLong()),
-        _maxObjects(serialized["options"]["max"].numberLong()),
+        _maxSize(BytesQuantity<long long>(serialized["options"]["size"])),
+        _maxObjects(BytesQuantity<long long>(serialized["options"]["max"])),
         _currentObjects(0),
         _currentSize(0),
         _mutex("cappedMutex"),
