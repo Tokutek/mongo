@@ -181,7 +181,7 @@ add_library(serveronly STATIC
   commands/testhooks
   pipeline/pipeline_d
   pipeline/document_source_cursor
-  db/driverHelpers
+  driverHelpers
 
   # Most storage/ files are in coredb, but this is server-only.
   storage/loader
