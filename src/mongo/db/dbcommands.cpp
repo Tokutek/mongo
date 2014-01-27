@@ -498,6 +498,32 @@ namespace mongo {
         }
     } cmdEngineStatus;
 
+    /**
+     * VectorCursor is a Cursor that returns results out of a pre-populated
+     * vector<BSONObj> rather than from a query.  It should be used for
+     * informational data which is usually not too large (since it stays in
+     * memory until exhausted), but which sometimes could be too large for a
+     * BSONArray, and therefore would be better served by having the option of a
+     * cursor.
+     */
+    class VectorCursor : public Cursor {
+        shared_ptr<vector<BSONObj> > _vec;
+        vector<BSONObj>::const_iterator _it;
+
+      public:
+        VectorCursor(const shared_ptr<vector<BSONObj> > &vec) : _vec(vec), _it(_vec->begin()) {}
+        virtual bool ok() { return _it != _vec->end(); }
+        virtual bool advance() { _it++; return ok(); }
+        virtual BSONObj current() { return *_it; }
+        virtual bool shouldDestroyOnNSDeletion() { return false; }
+        virtual bool getsetdup(const BSONObj &pk) { return false; }
+        virtual bool isMultiKey() const { return false; }
+        virtual bool modifiedKeys() const { return false; }
+        virtual string toString() const { return "Vector_Cursor"; }
+        virtual long long nscanned() const { return 0; }
+        virtual void explainDetails(BSONObjBuilder &) const {}
+    };
+
     class CmdShowPendingLockRequests : public WebInformationCommand {
     public:
         CmdShowPendingLockRequests() : WebInformationCommand("showPendingLockRequests") {}
@@ -514,7 +540,35 @@ namespace mongo {
         }
 
         bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
-            storage::get_pending_lock_request_status(result);
+            shared_ptr<vector<BSONObj> > pendingLockRequests(new vector<BSONObj>);
+            storage::get_pending_lock_request_status(*pendingLockRequests);
+
+            if (!isCursorCommand(cmdObj)) {
+                // old api
+                BSONArrayBuilder ab(result.subarrayStart("requests"));
+                for (vector<BSONObj>::const_iterator it = pendingLockRequests->begin(); it != pendingLockRequests->end(); ++it) {
+                    if (ab.len() + it->objsize() > BSONObjMaxUserSize - 1024) {
+                        ab.append("too many results to return");
+                        break;
+                    }
+                    ab.append(*it);
+                }
+                return true;
+            }
+
+            CursorId id;
+            {
+                // Set up cursor
+                LOCK_REASON(lockReason, "showPendingLockRequests: creating cursor");
+                Client::ReadContext ctx(dbname, lockReason);
+                shared_ptr<Cursor> cursor(new VectorCursor(pendingLockRequests));
+                // cc will be owned by cursor manager
+                ClientCursor *cc = new ClientCursor(0, cursor, dbname, cmdObj.getOwned());
+                id = cc->cursorid();
+            }
+
+            handleCursorCommand(id, cmdObj, result);
+
             return true;
         }
     } cmdShowPendingLockRequests;
@@ -535,7 +589,35 @@ namespace mongo {
         }
 
         bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
-            storage::get_live_transaction_status(result);
+            shared_ptr<vector<BSONObj> > liveTransactions(new vector<BSONObj>);
+            storage::get_live_transaction_status(*liveTransactions);
+
+            if (!isCursorCommand(cmdObj)) {
+                // old api
+                BSONArrayBuilder ab(result.subarrayStart("transactions"));
+                for (vector<BSONObj>::const_iterator it = liveTransactions->begin(); it != liveTransactions->end(); ++it) {
+                    if (ab.len() + it->objsize() > BSONObjMaxUserSize - 1024) {
+                        ab.append("too many results to return");
+                        break;
+                    }
+                    ab.append(*it);
+                }
+                return true;
+            }
+
+            CursorId id;
+            {
+                // Set up cursor
+                LOCK_REASON(lockReason, "showLiveTransactions: creating cursor");
+                Client::ReadContext ctx(dbname, lockReason);
+                shared_ptr<Cursor> cursor(new VectorCursor(liveTransactions));
+                // cc will be owned by cursor manager
+                ClientCursor *cc = new ClientCursor(0, cursor, dbname, cmdObj.getOwned());
+                id = cc->cursorid();
+            }
+
+            handleCursorCommand(id, cmdObj, result);
+
             return true;
         }
     } cmdShowLiveTransactions;

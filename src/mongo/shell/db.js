@@ -992,12 +992,24 @@ DB.prototype.rollbackTransaction = function(){
     return this.runCommand('rollbackTransaction');
 }
 
+DB.prototype._runCommandCursor = function(cmd) {
+    if (typeof(cmd) == "string") {
+        var obj = {};
+        obj[cmd] = 1;
+        cmd = obj;
+    }
+    cmd.cursor = cmd.cursor || {};
+    var res = this.runCommand(cmd);
+    assert.commandWorked(res, tojson(cmd) + ' with cursor failed');
+    return new DBCommandCursor(this._mongo, res);
+}
+
 DB.prototype.showLiveTransactions = function(){
-    return this.runCommand('showLiveTransactions');
+    return this._runCommandCursor('showLiveTransactions');
 }
 
 DB.prototype.showPendingLockRequests = function(){
-    return this.runCommand('showPendingLockRequests');
+    return this._runCommandCursor('showPendingLockRequests');
 }
 
 DB.prototype.serverBuildInfo = function(){

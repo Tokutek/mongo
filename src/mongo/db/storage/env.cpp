@@ -869,21 +869,18 @@ namespace mongo {
             }
         }
 
-        void get_pending_lock_request_status(BSONObjBuilder &status) {
+        void get_pending_lock_request_status(vector<BSONObj> &pendingLockRequests) {
             struct iterate_lock_requests : public ExceptionSaver {
-                iterate_lock_requests() { }
+                vector<BSONObj> &_reqs;
+              public:
+                iterate_lock_requests(vector<BSONObj> &reqs) : _reqs(reqs) { }
                 static int callback(DB *db, uint64_t requesting_txnid,
                                     const DBT *left_key, const DBT *right_key,
                                     uint64_t blocking_txnid, uint64_t start_time,
                                     void *extra) {
                     iterate_lock_requests *info = reinterpret_cast<iterate_lock_requests *>(extra);
                     try {
-                        if (info->array.len() + left_key->size + right_key->size > BSONObjMaxUserSize - 1024) {
-                            // We're running out of space, better stop here.
-                            info->array.append("too many results to return");
-                            return ERANGE;
-                        }
-                        BSONObjBuilder status(info->array.subobjStart());
+                        BSONObjBuilder status;
                         status.append("index", get_index_name(db));
                         status.appendNumber("requestingTxnid", requesting_txnid);
                         status.appendNumber("blockingTxnid", blocking_txnid);
@@ -893,26 +890,26 @@ namespace mongo {
                             pretty_bounds(db, left_key, right_key, bounds);
                             bounds.done();
                         }
-                        status.done();
+                        info->_reqs.push_back(status.obj());
                         return 0;
                     } catch (const std::exception &ex) {
                         info->saveException(ex);
                     }
                     return -1;
                 }
-                BSONArrayBuilder array;
-            } e;
+            } e(pendingLockRequests);
             const int r = env->iterate_pending_lock_requests(env, iterate_lock_requests::callback, &e);
-            if (r != 0 && r != ERANGE) {
+            if (r != 0) {
                 e.throwException();
                 handle_ydb_error(r);
             }
-            status.appendArray("requests", e.array.done());
         }
 
-        void get_live_transaction_status(BSONObjBuilder &status) {
-            struct iterate_transactions : public ExceptionSaver {
-                iterate_transactions() { }
+        void get_live_transaction_status(vector<BSONObj> &liveTransactions) {
+            class iterate_transactions : public ExceptionSaver {
+                vector<BSONObj> &_txns;
+              public:
+                iterate_transactions(vector<BSONObj> &txns) : _txns(txns) { }
                 static int callback(uint64_t txnid, uint64_t client_id,
                                     iterate_row_locks_callback iterate_locks,
                                     void *locks_extra, void *extra) {
@@ -920,7 +917,7 @@ namespace mongo {
                     try {
                         // We ignore client_id because txnid is sufficient for finding
                         // the associated operation in db.currentOp()
-                        BSONObjBuilder status(info->array.subobjStart());
+                        BSONObjBuilder status;
                         status.appendNumber("txnid", txnid);
                         BSONArrayBuilder locks(status.subarrayStart("rowLocks"));
                         {
@@ -941,27 +938,19 @@ namespace mongo {
                             }
                             locks.done();
                         }
-                        status.done();
-                        if (info->array.len() > BSONObjMaxUserSize - 1024) {
-                            // We're running out of space, better stop here.
-                            locks.append("too many results to return");
-                            return ERANGE;
-                        }
+                        info->_txns.push_back(status.obj());
                         return 0;
                     } catch (const std::exception &ex) {
                         info->saveException(ex);
                     }
                     return -1;
                 }
-                BSONArrayBuilder array;
-            } e;
+            } e(liveTransactions);
             const int r = env->iterate_live_transactions(env, iterate_transactions::callback, &e);
-            if (r != 0 && r != ERANGE) {
+            if (r != 0) {
                 e.throwException();
                 handle_ydb_error(r);
             }
-            status.appendArray("transactions", e.array.done());
-
         }
 
         void log_flush() {
