@@ -14,7 +14,7 @@ if (BUILD_TESTING)
     )
   add_test(
     NAME mongo/js/check-mongod
-    COMMAND /bin/bash -c "for i in `seq 1 60`; do if $<TARGET_FILE:mongo> --port 27999 --eval 'db.version()'; then break; fi; if [ $i = 60 ]; then exit 1; fi; done"
+    COMMAND /bin/bash -c "for i in `seq 1 180`; do if $<TARGET_FILE:mongo> --port 27999 --eval 'db.version()'; then break; fi; if [ $i = 60 ]; then exit 1; fi; sleep 1; done"
     )
   set_tests_properties(mongo/js/check-mongod PROPERTIES
     DEPENDS mongo/js/start-mongod
