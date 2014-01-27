@@ -2,9 +2,9 @@
 
 var filename;
 if (TestData.testDir !== undefined) {
-    load(TestData.testDir + "/loader_helpers.js");
+    load(TestData.testDir + "/_loader_helpers.js");
 } else {
-    load('jstests/loader_helpers.js');
+    load('jstests/_loader_helpers.js');
 }
 
 var testCommitLoadNoBegin = function() {
