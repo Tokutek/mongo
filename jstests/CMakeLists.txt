@@ -13,6 +13,13 @@ if (BUILD_TESTING)
       --setParameter enableTestCommands=1
     )
   add_test(
+    NAME mongo/js/check-mongod
+    COMMAND /bin/bash -c "for i in `seq 1 60`; do if $<TARGET_FILE:mongo> --port 27999 --eval 'db.version()'; then break; fi; if [ $i = 60 ]; then exit 1; fi; done"
+    )
+  set_tests_properties(mongo/js/check-mongod PROPERTIES
+    DEPENDS mongo/js/start-mongod
+    )
+  add_test(
     NAME mongo/js/stop-mongod
     COMMAND $<TARGET_FILE:mongo>
       --port 27999
@@ -20,7 +27,7 @@ if (BUILD_TESTING)
     )
   set_tests_properties(mongo/js/stop-mongod PROPERTIES
     WILL_FAIL TRUE
-    DEPENDS mongo/js/start-mongod
+    DEPENDS mongo/js/check-mongod
     )
   file(GLOB all_js_tests RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" *.js)
   foreach (jstest ${all_js_tests})
@@ -40,7 +47,7 @@ TestData.testName = '${jstestname}';
 var db = db.getSiblingDB('${jstestname}')"
         )
       set_tests_properties(mongo/js/${jstest} PROPERTIES
-        DEPENDS mongo/js/start-mongod
+        DEPENDS mongo/js/check-mongod
         )
       set_property(TEST mongo/js/stop-mongod APPEND PROPERTY
         DEPENDS mongo/js/${jstest}
