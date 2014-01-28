@@ -21,6 +21,6 @@ assert.eq(null, db.getLastError());
 assert.eq({ a: 1 }, t.getIndexes()[1].key);
 assert.eq(true, t.getIndexes()[1].unique);
 assert.eq(undefined, t.getIndexes()[1].dropDups);
-assert.eq(true, db.system.indexes.find({ ns: 'test.nodropdups', key: { a: 1 } })[0].unique);
-assert.eq(undefined, db.system.indexes.find({ ns: 'test.nodropdups', key: { a: 1 } })[0].dropDups);
+assert.eq(true, db.system.indexes.find({ ns: db.getName() + '.nodropdups', key: { a: 1 } })[0].unique);
+assert.eq(undefined, db.system.indexes.find({ ns: db.getName() + '.nodropdups', key: { a: 1 } })[0].dropDups);
     
