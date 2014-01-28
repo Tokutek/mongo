@@ -4,6 +4,10 @@ if (BUILD_TESTING)
   set(js_logpath "${js_ctest_root}/log")
   file(MAKE_DIRECTORY "${js_dbpath}")
   add_test(
+    NAME mongo/js/clean-mongod-dbpath
+    COMMAND rm -rf "${js_dbpath}/*"
+    )
+  add_test(
     NAME mongo/js/start-mongod
     COMMAND $<TARGET_FILE:mongod>
       --port 27999
@@ -12,9 +16,12 @@ if (BUILD_TESTING)
       --logpath "${js_logpath}"
       --setParameter enableTestCommands=1
     )
+  set_tests_properties(mongo/js/start-mongod PROPERTIES
+    DEPENDS mongo/js/clean-mongod-dbpath
+    )
   add_test(
     NAME mongo/js/check-mongod
-    COMMAND /bin/bash -c "for i in `seq 1 180`; do if $<TARGET_FILE:mongo> --port 27999 --eval 'db.version()'; then break; fi; if [ $i = 60 ]; then exit 1; fi; sleep 1; done"
+    COMMAND /bin/bash -c "for i in `seq 1 180`; do if $<TARGET_FILE:mongo> --port 27999 --eval 'db.version()'; then break; fi; if [ $i = 180 ]; then exit 1; fi; sleep 1; done"
     )
   set_tests_properties(mongo/js/check-mongod PROPERTIES
     DEPENDS mongo/js/start-mongod
