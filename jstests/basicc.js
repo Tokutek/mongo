@@ -6,7 +6,7 @@ t1.drop();
 t2.drop();
 
 var db = db.getSisterDB("test_basicc");
-js = "for (i = 0; i < 20000; i++) { db.jstests_basicc1.save( {} ); }";
+js = "for (i = 0; i < 20000; i++) { db.getSiblingDB('" + db.getName() + "').jstests_basicc1.save( {} ); }";
 pid = startMongoProgramNoConnect( "mongo" , "--eval" , js , db.getMongo().host );
 for( var i = 0; i < 20000; ++i ) {
     t2.save( {} );
