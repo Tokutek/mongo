@@ -54,4 +54,8 @@ var db = db.getSiblingDB('${jstestname}')"
         )
     endif ()
   endforeach ()
+
+  set_tests_properties(mongo/js/queryoptimizer3.js PROPERTIES
+    TIMEOUT 3000
+    )
 endif ()
