@@ -27,6 +27,7 @@
 #include "mongo/db/index_set.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/relock.h"
+#include "mongo/db/server_parameters.h"
 #include "mongo/db/txn_context.h"
 #include "mongo/db/querypattern.h"
 #include "mongo/db/query_optimizer.h"
@@ -556,6 +557,9 @@ namespace mongo {
         return false;
     }
 
+    // Can manually disable all primary key unique checks, if the user knows that it is safe to do so.
+    MONGO_EXPORT_SERVER_PARAMETER(pkUniqueChecks, bool, true);
+
     void CollectionBase::insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags, bool* indexBitChanged) {
         *indexBitChanged = false; // just for initialization
         dassert(!pk.isEmpty());
@@ -575,7 +579,7 @@ namespace mongo {
             const bool isPK = i == 0;
             const bool prelocked = flags & Collection::NO_LOCKTREE;
             const bool doUniqueChecks = !(flags & Collection::NO_UNIQUE_CHECKS) &&
-                                        !(isPK && (flags & Collection::NO_PK_UNIQUE_CHECKS));
+                                        !(isPK && (!pkUniqueChecks || (flags & Collection::NO_PK_UNIQUE_CHECKS)));
 
             IndexDetailsBase &idx = *_indexes[i];
             dbs[i] = idx.db();
