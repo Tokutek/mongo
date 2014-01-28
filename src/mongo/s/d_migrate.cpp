@@ -1978,7 +1978,7 @@ namespace mongo {
     public:
         RecvChunkStartCommand() : ChunkCommandHelper( "_recvChunkStart" ) {}
 
-        virtual LockType locktype() const { return WRITE; }  // this is so don't have to do locking internally
+        virtual LockType locktype() const { return OPLOCK; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {
@@ -1986,7 +1986,7 @@ namespace mongo {
             actions.addAction(ActionType::_recvChunkStart);
             out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
         }
-        bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
+        bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
 
             if ( migrateStatus.getActive() ) {
                 errmsg = "migrate already in progress";
@@ -1995,6 +1995,12 @@ namespace mongo {
             
             if ( ! configServer.ok() )
                 ShardingState::initialize(cmdObj["configServer"].String());
+
+            // This used to be over the entire _recvChunkStart command, but
+            // ShardingState::initialize will take a GlobalWrite lock in order to enable sharding,
+            // so we can't take the lock until after that.
+            LOCK_REASON(lockReason, "sharding: _recvChunkStart");
+            Lock::DBWrite lk(dbname, lockReason);
 
             migrateStatus.prepare();
 
