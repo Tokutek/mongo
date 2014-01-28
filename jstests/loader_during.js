@@ -25,7 +25,7 @@ var testTypicalLoadWithIndex = function() {
     t = db.loadertypical;
     t.drop();
     begin();
-    beginLoad('loadertypical', [ { key: { a: 1 }, ns: 'test.loadertypical', name: 'a_1' } ], { });
+    beginLoad('loadertypical', [ { key: { a: 1 }, ns: db.getName() + '.loadertypical', name: 'a_1' } ], { });
     for (i = 0; i < 1000; i++) {
         t.insert({ _id: i, a: 1 });
     }
