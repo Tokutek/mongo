@@ -2,7 +2,7 @@
  *   Tests for the db object enhancement
  */
 
-assert( "test" == db, "wrong database currently not test" );
+assert( db.getName() == db, "wrong database currently not " + db.getName() );
 
 dd = function( x ){
     //print( x );
