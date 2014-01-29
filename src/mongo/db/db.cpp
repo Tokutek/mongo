@@ -25,11 +25,13 @@
 
 #include "mongo/base/initializer.h"
 #include "mongo/db/collection.h"
+#include "mongo/db/collection_map.h"
 #include "mongo/db/client.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/d_globals.h"
+#include "mongo/db/database.h"
 #include "mongo/db/dbmessage.h"
 #include "mongo/db/dbwebserver.h"
 #include "mongo/db/initialize_server_global_state.h"
@@ -38,6 +40,7 @@
 #include "mongo/db/json.h"
 #include "mongo/db/kill_current_op.h"
 #include "mongo/db/module.h"
+#include "mongo/db/ops/update.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/restapi.h"
@@ -294,6 +297,154 @@ namespace mongo {
         return cc().curop()->opNum();
     }
 
+    class DiskFormatVersion {
+      public:
+        enum VersionID {
+            DISK_VERSION_INVALID = 0,
+            DISK_VERSION_1 = 1,  // < 1.4
+            DISK_VERSION_2 = 2,  // 1.4.0: changed how ints with abs value larger than 2^52 are packed (#820)
+            DISK_VERSION_NEXT,
+            DISK_VERSION_CURRENT = DISK_VERSION_NEXT - 1,
+            MIN_SUPPORTED_VERSION = 1,
+            MAX_SUPPORTED_VERSION = DISK_VERSION_CURRENT,
+            FIRST_SERIALIZED_VERSION = DISK_VERSION_2,
+        };
+
+      private:
+        VersionID _startupVersion;
+        VersionID _currentVersion;
+
+        static const string versionNs;
+        static const BSONFieldValue<string> versionIdValue;
+        static const BSONField<int> valueField;
+
+        Status upgradeToVersion(VersionID targetVersion) {
+            if (_currentVersion + 1 != targetVersion) {
+                return Status(ErrorCodes::BadValue, "bad version in upgrade");
+            }
+
+            log() << "Running upgrade of disk format version " << static_cast<int>(_currentVersion) <<
+                    " to " << static_cast<int>(targetVersion) << "." << startupWarningsLog;
+
+            switch (targetVersion) {
+                case DISK_VERSION_INVALID:
+                case DISK_VERSION_1:
+                case DISK_VERSION_NEXT: {
+                    warning() << "should not be trying to upgrade to " << static_cast<int>(targetVersion) << startupWarningsLog;
+                    return Status(ErrorCodes::BadValue, "bad version in upgrade");
+                }
+
+                case DISK_VERSION_2: {
+                    // Due to #879, we need to look at each existing database and remove
+                    // entries from the collection map which were dropped but their entries
+                    // weren't removed.
+                    verify(Lock::isW());
+                    verify(cc().hasTxn());
+                    vector<string> dbnames;
+                    getDatabaseNames(dbnames);
+
+                    for (vector<string>::const_iterator it = dbnames.begin(); it != dbnames.end(); ++it) {
+                        const string &dbname = *it;
+                        Client::Context ctx(dbname);
+                        CollectionMap *cm = collectionMap(dbname);
+                        if (!cm) {
+                            return Status(ErrorCodes::InternalError, mongoutils::str::stream() << "did not find collection map for database " << dbname);
+                        }
+                        list<string> collNses;
+                        cm->getNamespaces(collNses);
+                        for (list<string>::const_iterator cit = collNses.begin(); cit != collNses.end(); ++cit) {
+                            const string &collNs = *cit;
+                            Collection *c = getCollection(collNs);
+                            if (c == NULL) {
+                                LOG(1) << "collection " << collNs << " was dropped but had a zombie entry in the collection map" << startupWarningsLog;
+                                cm->kill_ns(collNs);
+                            }
+                        }
+                        string dbpath = cc().database()->path();
+                        Database::closeDatabase(dbname, dbpath);
+                    }
+                    break;
+                }
+            }
+
+            verify(Lock::isW());
+            verify(cc().hasTxn());
+            Client::Context lctx(versionNs);
+            updateObjects(versionNs.c_str(),
+                          BSON(versionIdValue << valueField(targetVersion)),
+                          BSON(versionIdValue),
+                          true,    // upsert
+                          false,   // multi
+                          false);  // logop
+
+            _currentVersion = targetVersion;
+            return Status::OK();
+        }
+
+      public:
+        DiskFormatVersion()
+                : _startupVersion(DISK_VERSION_INVALID),
+                  _currentVersion(DISK_VERSION_INVALID) {}
+
+        Status initialize() {
+            verify(Lock::isW());
+            verify(cc().hasTxn());
+
+            Client::Context ctx(versionNs);
+
+            Collection *c = getCollection(versionNs);
+            if (c == NULL) {
+                _startupVersion = DISK_VERSION_1;
+            } else {
+                BSONObj versionObj;
+                bool ok = c->findOne(versionNs, BSON(versionIdValue), versionObj);
+                if (!ok) {
+                    warning() << "found local.system.version collection but query " << BSON(versionIdValue) << " found nothing" << startupWarningsLog;
+                    _startupVersion = DISK_VERSION_1;
+                } else {
+                    BSONElement versionElt = versionObj[valueField()];
+                    massert(0, mongoutils::str::stream() << "found malformed version object " << versionObj, versionElt.isNumber());
+                    _startupVersion = static_cast<VersionID>(versionElt.numberLong());
+                }
+            }
+
+            if (_startupVersion < MIN_SUPPORTED_VERSION) {
+                warning() << "Found unsupported disk format version: " << static_cast<int>(_startupVersion) << "." << startupWarningsLog;
+                warning() << "The minimum supported disk format version by TokuMX " << tokumxVersionString
+                          << " is " << static_cast<int>(MIN_SUPPORTED_VERSION) << "." << startupWarningsLog;
+                warning() << "Please upgrade to an earlier version of TokuMX before upgrading to this version." << startupWarningsLog;
+                return Status(ErrorCodes::UnsupportedFormat, "version on disk too low");
+            }
+
+            if (_startupVersion > MAX_SUPPORTED_VERSION) {
+                warning() << "Found unsupported disk format version: " << static_cast<int>(_startupVersion) << "." << startupWarningsLog;
+                warning() << "The maximum supported disk format version by TokuMX " << tokumxVersionString
+                          << " is " << static_cast<int>(MAX_SUPPORTED_VERSION) << "." << startupWarningsLog;
+                warning() << "Please upgrade to a later version of TokuMX to use the data on disk." << startupWarningsLog;
+                return Status(ErrorCodes::UnsupportedFormat, "version on disk too high");
+            }
+
+            _currentVersion = _startupVersion;
+
+            return Status::OK();
+        }
+
+        Status upgradeToCurrent() {
+            Status s = Status::OK();
+            while (_currentVersion < DISK_VERSION_CURRENT) {
+                s = upgradeToVersion(static_cast<VersionID>(static_cast<int>(_currentVersion) + 1));
+                if (!s.isOK()) {
+                    break;
+                }
+            }
+            return s;
+        }
+    };
+
+    const string DiskFormatVersion::versionNs("local.system.version");
+    const BSONFieldValue<string> DiskFormatVersion::versionIdValue("_id", "diskFormatVersion");
+    const BSONField<int> DiskFormatVersion::valueField("value");
+
     void _initAndListen(int listenPort ) {
 
         Client::initThread("initandlisten");
@@ -334,6 +485,24 @@ namespace mongo {
 
         extern storage::UpdateCallback _storageUpdateCallback;
         storage::startup(&_txnCompleteHooks, &_storageUpdateCallback);
+
+        {
+            LOCK_REASON(lockReason, "startup: running upgrade hooks");
+            Lock::GlobalWrite lk(lockReason);
+            Client::Transaction txn(DB_SERIALIZABLE);
+            DiskFormatVersion formatVersion;
+            Status s = formatVersion.initialize();
+            if (!s.isOK()) {
+                warning() << "Error while fetching disk format version: " << s << "." << startupWarningsLog;
+                exitCleanly(EXIT_NEED_UPGRADE);
+            }
+            s = formatVersion.upgradeToCurrent();
+            if (!s.isOK()) {
+                warning() << "Error while upgrading disk format version: " << s << "." << startupWarningsLog;
+                exitCleanly(EXIT_NEED_UPGRADE);
+            }
+            txn.commit();
+        }
 
         unsigned long long missingRepl = checkIfReplMissingFromCommandLine();
         if (missingRepl) {

@@ -33,7 +33,7 @@ namespace mongo {
 
     /* CollectionMap maps namespace string to collection.
      * If a collection is not found, it may exist, but not be open.
-     * If a collectoin is found, it definately exists, and it's open.
+     * If a collection is found, it definitely exists, and it's open.
      */
     class CollectionMap {
     public:

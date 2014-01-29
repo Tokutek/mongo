@@ -1609,6 +1609,10 @@ namespace mongo {
             return true;
         }
 
+        if (ns == "local.system.version") {
+            return true;
+        }
+
         return false;
     }
 
