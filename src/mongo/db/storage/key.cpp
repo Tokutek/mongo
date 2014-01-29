@@ -294,7 +294,7 @@ namespace mongo {
             switch( lt ) { 
             case cdouble:
                 {
-                    if (lt_real == cint64 && rt_real == cint64) {
+                    if (unlikely(lt_real == cint64 && rt_real == cint64)) {
                         long long L = *reinterpret_cast<const long long *>(l);
                         long long R = *reinterpret_cast<const long long *>(r);
                         if (L < R) {
@@ -303,27 +303,18 @@ namespace mongo {
                         if (L != R) {
                             return 1;
                         }
-                    } else if (rt_real == cint64) {
-                        // We only pack numbers as cint64 if they are larger than the largest thing
-                        // we would store as a double, so if one is a cint64 and the other isn't,
-                        // it's automatically larger or smaller than the other one, based on its
-                        // sign bit.
-                        long long R = *reinterpret_cast<const long long *>(r);
-                        if (R > 0) {
-                            return -1;
-                        } else {
-                            return 1;
-                        }
-                    } else if (lt_real == cint64) {
-                        long long L = *reinterpret_cast<const long long *>(l);
-                        if (L > 0) {
-                            return 1;
-                        } else {
-                            return -1;
-                        }
                     } else {
-                        double L = (reinterpret_cast<const PackedDouble*>(l))->d;
-                        double R = (reinterpret_cast<const PackedDouble*>(r))->d;
+                        // We only pack numbers as cint64 if they are larger than the largest thing
+                        // we would store as a double.  However, user inputted doubles can be larger
+                        // than 2^52 and just be packed as doubles because they came that way, so we
+                        // need to actually do the comparison, not just take the one that's packed
+                        // as an int to be greater or lesser.
+                        double L = (unlikely(lt_real == cint64)
+                                    ? double(*reinterpret_cast<const long long *>(l))
+                                    : (reinterpret_cast<const PackedDouble *>(l))->d);
+                        double R = (unlikely(rt_real == cint64)
+                                    ? double(*reinterpret_cast<const long long *>(r))
+                                    : (reinterpret_cast<const PackedDouble *>(r))->d);
                         if (L < R) {
                             return -1;
                         }
