@@ -22,6 +22,7 @@
 #include "mongo/bson/util/builder.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/storage/key.h"
+#include "mongo/server.h"
 
 namespace mongo {
 
