@@ -126,7 +126,7 @@ files.forEach(function(x) {
 	    'ops_after_close|' +
 	    'collections_exist_cmd|' +
             'update_fast|' +
-            'update_fasterrors'
+            'update_fasterrors' +
         ')\.js$');
 
     if (failsInShardingPattern.test(x.name)) {
