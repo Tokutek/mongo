@@ -148,6 +148,7 @@ if (BUILD_TESTING)
       )
     target_link_whole_libraries(${test}
       mongoscore
+      authservercommon
       coreshard
       coreserver
       coredb

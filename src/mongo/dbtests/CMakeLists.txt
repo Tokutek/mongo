@@ -30,6 +30,7 @@ endif ()
 target_link_whole_libraries(smokeTest
   mongocommon
   serveronly
+  authservercommon
   coreserver
   coredb
   )

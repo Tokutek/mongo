@@ -96,6 +96,7 @@ if (BUILD_TESTING)
       mongocommon
       mongodandmongos
       mongoscore
+      authservercommon
       base
       )
     target_link_libraries(${test}

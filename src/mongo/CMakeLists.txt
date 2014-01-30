@@ -126,6 +126,7 @@ target_link_whole_libraries(mongod
   coreserver
   mongodandmongos
   serveronly
+  authservercommon
   base
   )
 target_link_libraries(mongod
@@ -153,6 +154,7 @@ foreach (tool
   endif ()
   target_link_whole_libraries(mongo${tool}
     alltools
+    authservercommon
     base
     )
   target_link_libraries(mongo${tool}
@@ -188,6 +190,7 @@ foreach (tool
   endif ()
   target_link_whole_libraries(${tool}
     alltools
+    authservercommon
     base
     )
   target_link_libraries(${tool}
@@ -210,6 +213,7 @@ if (NOT APPLE)
 endif ()
 target_link_whole_libraries(mongos
   mongoscore
+  authservercommon
   coreserver
   coredb
   mongocommon
@@ -238,6 +242,7 @@ if (APPLE OR PCAP_FOUND)
   target_link_whole_libraries(mongosniff
     gridfs
     serveronly
+    authservercommon
     coreserver
     coredb
     notmongodormongos
