@@ -832,6 +832,8 @@ namespace mongo {
         pkIdx.updatePair(pk, NULL, b.done(), flags);
     }
 
+    bool CollectionBase::_allowSetMultiKeyInMSTForTests = false;
+
     // only set indexBitsChanged if true, NEVER set to false
     void CollectionBase::setIndexIsMultikey(const int idxNum, bool* indexBitChanged) {
         // Under no circumstasnces should the primary key become multikey.
@@ -842,7 +844,7 @@ namespace mongo {
             *indexBitChanged = false;
             return;
         }
-        if (!bulkLoading()) {
+        if (!bulkLoading() && !_allowSetMultiKeyInMSTForTests) {
             uassert(17317, "Cannot transition from not multi key to multi key in multi statement transaction", !cc().hasMultTxns());
         }
         if (!Lock::isWriteLocked(_ns)) {

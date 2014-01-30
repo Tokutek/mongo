@@ -969,6 +969,16 @@ namespace mongo {
 
         unsigned long long _multiKeyIndexBits;
 
+        static bool _allowSetMultiKeyInMSTForTests;
+    public:
+        // INTERNAL ONLY
+        // The dbtests like to use long-lived transactions to get out of having to specify transactions for each little thing.
+        // Some dbtests need to set the multikey bit.
+        // This flag, if on, skips the check that prevents users from setting the multiKey bit in an MST, which lets some dbtests pass.
+        // This should NEVER be true in production.
+        static void turnOnAllowSetMultiKeyInMSTForTests() {
+            _allowSetMultiKeyInMSTForTests = true;
+        }
 
     private:
         struct findByPKCallbackExtra {
