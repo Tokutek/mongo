@@ -57,7 +57,7 @@
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/delete.h"
-#include "mongo/db/server_parameter.h"
+#include "mongo/db/server_parameters.h"
 
 #include "mongo/client/connpool.h"
 #include "mongo/client/distlock.h"
