@@ -29,12 +29,20 @@ Highlights
     - In TokuMX 1.3 and earlier, updates were represented in the storage
       layer, and in the oplog, by their pre- and post-images, which could
       be quite large compared to the actual change that occurred in the
-      document (consider incrementing an integer in a large document).  In
-      TokuMX 1.4, many types of operator updates represent their updates
+      document (consider incrementing an integer in a large document).
+      For replication, this ensures that secondaries use significantly
+      less I/O for many update workloads, but costs a lot of space in the
+      oplog and over the network.
+
+      In TokuMX 1.4, updates to unindexed fields represent their updates
       on disk with the update modifier object itself, which can
       significantly reduce the amount of cache memory used by internal
-      node buffers in the Fractal Tree indexing structure, and the amount
-      of space and network bandwidth used by the oplog.  (#511)
+      node buffers in the Fractal Tree indexing structure.
+
+      Most updates (including to indexed fields) are represented in the
+      oplog by the pre-image and the update object, which can reduce, by
+      up to half, the amount of space and network bandwidth used by the
+      oplog.  (#511)
 
     - It is now possible to define a "primary key" for a collection.  A
       primary index for a collection is defined by the primary key, is an
@@ -108,7 +116,7 @@ New features and improvements
       of the state of the system.  (#606)
 
     - The `count()` operation has been further optimized for simple
-      interval count operations.  (#725)
+      interval count operations, by up to 4x in some workloads.  (#725)
 
     - Exhaustive scans are no longer ever chosen when a useful index
       exists for a query.  The query optimizer is a sample-based optimizer
