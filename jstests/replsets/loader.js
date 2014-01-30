@@ -1,6 +1,11 @@
 // Test a bulk load
 
-load("jstests/loader_helpers.js");
+var filename;
+if (TestData.testDir !== undefined) {
+    load(TestData.testDir + "../_loader_helpers.js");
+} else {
+    load('jstests/_loader_helpers.js');
+}
 
 var replTest = new ReplSetTest({ name: 'bulkload', nodes: 3 });
 var nodes = replTest.nodeList();
