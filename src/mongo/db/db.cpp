@@ -403,7 +403,9 @@ namespace mongo {
                     _startupVersion = DISK_VERSION_1;
                 } else {
                     BSONElement versionElt = versionObj[valueField()];
-                    massert(0, mongoutils::str::stream() << "found malformed version object " << versionObj, versionElt.isNumber());
+                    if (!versionElt.isNumber()) {
+                        return Status(ErrorCodes::BadValue, mongoutils::str::stream() << "found malformed version object " << versionObj);
+                    }
                     _startupVersion = static_cast<VersionID>(versionElt.numberLong());
                 }
             }
