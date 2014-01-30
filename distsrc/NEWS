@@ -1,6 +1,254 @@
 tokumx news
 ===========
 
+tokumx 1.4.0
+------------
+Release date: TBD
+
+General
+~~~~~~~
+
+    - This release is focused on making the TokuMX cluster experience
+      smoother.  The major improvements are in eliminating stalls that
+      could appear in replica sets and sharded clusters.
+
+
+Highlights
+~~~~~~~~~~
+
+    The list of minor new features and bugfixes in this release is large.
+    The most prominent of them appear here:
+
+    - Chunk migrations in sharding have been greatly simplified and
+      optimized.  They no longer take as many locks, particularly
+      database- and server-wide locks, which could previously cause stalls
+      and pileups.  Additionally, the data transfer between shards has
+      been simplified and optimized and is significantly faster and more
+      reliable.  (#214, #746, #823, #824)
+
+    - In TokuMX 1.3 and earlier, updates were represented in the storage
+      layer, and in the oplog, by their pre- and post-images, which could
+      be quite large compared to the actual change that occurred in the
+      document (consider incrementing an integer in a large document).  In
+      TokuMX 1.4, many types of operator updates represent their updates
+      on disk with the update modifier object itself, which can
+      significantly reduce the amount of cache memory used by internal
+      node buffers in the Fractal Tree indexing structure, and the amount
+      of space and network bandwidth used by the oplog.  (#511)
+
+    - It is now possible to define a "primary key" for a collection.  A
+      primary index for a collection is defined by the primary key, is an
+      index which is unique and clustering, and is the index that is used
+      by all non-clustering secondary indexes to find the full document.
+      The primary key for each document is therefore embedded in every
+      secondary index.  The key must end in `{_id: 1}` to ensure
+      uniqueness, and it is a good idea to let the `_id` be
+      auto-generated.
+
+      In some cases, if a clustering secondary index is desired, a primary
+      key can be defined instead, which removes the need for a clustering
+      `_id` index, which therefore can reduce storage costs even further
+      for such a use case.  (#684)
+
+    - This primary key concept is prominently featured in sharding.  Newly
+      sharded, nonexistent collections with a shard key other than just
+      the `_id` will be created using a primary key of the shard key
+      concatenated with `{_id: 1}`.  In TokuMX 1.3 and earlier, to
+      facilitate fast migrations and range queries, it was strongly
+      encouraged to make the shard key clustering, but this had the
+      drawback that there were automatically two clustering indexes (the
+      `_id` index and the shard key).  Now, sharded collections can have a
+      clustered shard key without paying the extra storage cost, and this
+      behavior is the default.  (#740)
+
+    - In TokuMX 1.3 and earlier, the oplog was a single collection that
+      was trimmed by a background task, to maintain a specific amount of
+      history, specified in days (`expireOplogDays`).  This background
+      thread could sometimes fail to reclaim space aggressively enough, so
+      in TokuMX 1.4, the oplog is instead partitioned into a set of N
+      collections, one per day, and each day, the oldest partition is
+      dropped according to `expireOplogDays`, which reclaims space
+      immediately.  This should make the oplog occupy a smaller disk
+      footprint overall, and should alleviate some locking problems that
+      used to be caused by the background trimming task.
+
+      So-called "partitioned collections" (of which the oplog is now one)
+      are a generally-available feature, but they currently have
+      significant limitations, including that they do not permit secondary
+      indexes.  See the user's guide for more details.  (#762)
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - The `listDatabases` command now computes a size estimate for each
+      db, which also means that `show dbs` in the shell will report the
+      size of each database (compressed and uncompressed), rather than
+      showing "(empty)" for everything regardless of contents.  (#57)
+
+    - Provided new implementations for `db.getReplicationInfo()`,
+      `db.printReplicationInfo()`, and `db.printSlaveReplicationInfo()`,
+      including compressed and uncompressed sizes.  (#223)
+
+    - The `compression`, `pageSize`, and `readPageSize` attributes of an
+      index can now be changed online.  The `db.collection.reIndex()`
+      shell function now takes a second parameter, which if specified is
+      an object describing the options to set.  These options take effect
+      immediately for all data written after the command runs, but will
+      not rewrite existing data.  To force existing data to be rewritten
+      with the new options, run a `reIndex` command without specifying
+      options, to rewrite all the data for that index, forcing the
+      conversion.  See the user's guide for full usage details.  (#389)
+
+    - The diagnostic tools `db.showPendingLockRequests()` and
+      `db.showLiveTransactions()` now use cursors to return results, which
+      means that in extreme cases, the results will no longer be truncated
+      due to the maximum size of a BSON object, instead the results will
+      be paginated.  This doesn't change the fact that they are a snapshot
+      of the state of the system.  (#606)
+
+    - The `count()` operation has been further optimized for simple
+      interval count operations.  (#725)
+
+    - Exhaustive scans are no longer ever chosen when a useful index
+      exists for a query.  The query optimizer is a sample-based optimizer
+      which would periodically retry all possible plans, including an
+      exhaustive scan.  For certain update workloads, this could cause a
+      major 99th percentile latency problem, and concurrency bottleneck,
+      so this change alleviates that problem.  (#796)
+
+    - The sharding subsystem used to use database- and system-wide locking
+      to protect metadata and sharding-only state.  That usage of those
+      locks has been refined to avoid stalls caused by long-running DML
+      operations combined with unrelated administrative operations.
+      (#797)
+
+    - Added the `$allMatching` flag to `db.currentOp()` to aid in
+      finding background tasks.  (#814)
+
+    - The storage format for integers with absolute value greater than
+      2^52 has been optimized to reduce the CPU cost of operations on such
+      values.  This is of particular importance to users of hashed keys
+      (e.g. hashed shard keys), because hash values are pseudorandom bit
+      patterns and are therefore almost always larger than 2^52.  In some
+      tests, up to a 20% speed improvement has been measured for CPU-bound
+      workloads.  (#820)
+
+    - Added the `compression`, `pageSize`, and `readPageSize` parameters
+      to the `db.createCollection()` shell function, so the following is
+      now valid:
+
+          db.createCollection('foo',
+                              {compression: 'lzma'
+                               pageSize: '8MB'})
+
+      Also, shell functions were added to wrap the `getParameter` and
+      `setParameter` commands.  See `db.help()` for more.  (#854)
+
+    - Added a server option `loaderCompressTmp` that, if on, causes the
+      bulk loader (used by `mongorestore` and `mongoimport` and
+      non-background index builds) to compress intermediate files before
+      writing them to disk, thus using less disk space during the index
+      build.  This can also be set with the `setParameter` command.
+      (#858)
+
+    - TokuMX is now built with CMake.  Therefore, the binary tarball names
+      have changed slightly, though they will unpack to a similar location
+      to previous tarballs.  (#869)
+
+    - When a document-level lock request times out (the `lockTimeout`
+      parameter), some debugging information is printed to the server's
+      log, including a transaction identifier for the operation which was
+      holding the lock that the current operation failed to acquire.  Now,
+      that blocking transaction's information (the same information
+      printed in `db.currentOp()` is also printed to the log, which should
+      help in debugging lock timeouts in applications.  (#876)
+
+    - Improved the latency of short range query operations.  (#882)
+
+    - Improved the performance of workloads with high concurrency.  (#904)
+
+    - Added information about the following to `db.serverStatus()`:
+
+      * Cache misses of the "partial fetch" type.
+      * Cache evictions.
+      * Number of pending document-level lock requests.
+
+      See the user's guide for a full description.  (#905, #906, #907)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - The `fsync` command, which has always been useless in TokuMX (its
+      functionality is available with other commands: `getLastError` with
+      `j` or `fsync` set to 1 flushes the transaction log, and
+      `checkpoint` forces data pages to be written), has finally been
+      deprecated, and is now completely a no-op.  (#180)
+
+    - Updates with `upsert` can no longer allow bad values for the `_id`
+      field (`Array`, `RegEx`, or `undefined`).  (#736)
+
+    - Inserts into capped collections within a multi-statement transaction
+      have been disabled, because they could not properly maintain the
+      size of the collection.  (#852)
+
+    - Replication initial sync no longer fails when a profile collection
+      exists.  (#862)
+
+    - All relevant bugfixes from MongoDB 2.4.9 have been incorporated.
+      (#868)
+
+      This includes:
+
+      * http://jira.mongodb.org/browse/SERVER-5625[SERVER-5625]
+      * http://jira.mongodb.org/browse/SERVER-7246[SERVER-7246]
+      * http://jira.mongodb.org/browse/SERVER-9238[SERVER-9238]
+      * http://jira.mongodb.org/browse/SERVER-10538[SERVER-10538]
+      * http://jira.mongodb.org/browse/SERVER-10919[SERVER-10919]
+      * http://jira.mongodb.org/browse/SERVER-11099[SERVER-11099]
+      * http://jira.mongodb.org/browse/SERVER-11194[SERVER-11194]
+      * http://jira.mongodb.org/browse/SERVER-11502[SERVER-11502]
+      * http://jira.mongodb.org/browse/SERVER-11731[SERVER-11731]
+      * http://jira.mongodb.org/browse/SERVER-11971[SERVER-11971]
+      * http://jira.mongodb.org/browse/SERVER-11977[SERVER-11977]
+      * http://jira.mongodb.org/browse/SERVER-12041[SERVER-12041]
+      * http://jira.mongodb.org/browse/SERVER-12092[SERVER-12092]
+      * http://jira.mongodb.org/browse/SERVER-12094[SERVER-12094]
+      * http://jira.mongodb.org/browse/SERVER-12146[SERVER-12146]
+
+    - An index can no longer become a "multi-key" index inside a
+      multi-statement transaction.  An index becomes multi-key when a
+      document is inserted such that the key generated for that index
+      contains an array in the document, and therefore generates multiple
+      keys (this is useful information for the query optimizer), but this
+      only happens when the first such document is inserted.  This
+      transition cannot be safely maintained if done in a multi-statement
+      transaction, so it will throw an error if done.
+
+      If you intend to use documents with array-valued key fields, as well
+      as multi-statement transactions, you may wish to prepare the
+      collection by inserting one such document so that the index becomes
+      multi-key, then removing that document, all outside of a
+      multi-statement transaction.  (#872)
+
+    - Fixed a bug where a dropped collection could leave behind a piece of
+      zombie metadata that would prevent future collections from being
+      created with the same name.  If this has happened already, upgrading
+      to 1.4 will clean out any such zombie metadata.  (#879, #937)
+
+    - Fixed two bugs related to setting the size of a capped collection:
+
+      * When setting a capped collection size to an integer larger than
+        2GB, no longer reject all insertions until the server is
+        restarted.
+      * When setting a capped collection size to a string to be
+        interpreted with a SI suffix (K, M, G), no longer reject all
+        insertions after the server is restarted.
+
+      (#934)
+
+
 tokumx 1.3.3
 ------------
 Release date: 2013-12-16
