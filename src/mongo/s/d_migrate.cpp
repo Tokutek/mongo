@@ -57,6 +57,7 @@
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/delete.h"
+#include "mongo/db/server_parameter.h"
 
 #include "mongo/client/connpool.h"
 #include "mongo/client/distlock.h"
@@ -86,15 +87,7 @@ using namespace std;
 
 namespace mongo {
 
-    bool migrateUniqueChecks = true;
-
-    namespace {
-        ExportedServerParameter<bool> migrateUniqueChecksParameter(ServerParameterSet::getGlobal(),
-                                                                   "migrateUniqueChecks",
-                                                                   &migrateUniqueChecks,
-                                                                   true,
-                                                                   true);
-    }
+    MONGO_EXPORT_SERVER_PARAMETER(migrateUniqueChecks, bool, true);
 
     bool findShardKeyIndexPattern_locked( const string& ns,
                                           const BSONObj& shardKeyPattern,
