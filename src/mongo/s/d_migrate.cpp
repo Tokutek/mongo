@@ -1669,7 +1669,7 @@ namespace mongo {
                         Client::ReadContext ctx(ns, lockReason);
                         Client::Transaction txn(DB_SERIALIZABLE);
                         Collection *cl = getCollection(ns);
-                        massert(17315, "collection must exist during migration", cl);
+                        massert(17318, "collection must exist during migration", cl);
                         for (BSONObjIterator it(cursorObj["firstBatch"].Obj()); it.more(); ++it) {
                             BSONObj obj = (*it).Obj();
                             insertOneObject(cl, obj, insertFlags);
@@ -1685,7 +1685,7 @@ namespace mongo {
                         Client::ReadContext ctx(ns, lockReason);
                         Client::Transaction txn(DB_SERIALIZABLE);
                         Collection *cl = getCollection(ns);
-                        massert(17316, "collection must exist during migration", cl);
+                        massert(17319, "collection must exist during migration", cl);
                         while (cursor.moreInCurrentBatch()) {
                             BSONObj obj = cursor.nextSafe();
                             insertOneObject(cl, obj, insertFlags);
