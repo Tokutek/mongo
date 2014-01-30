@@ -551,8 +551,23 @@ namespace mongo {
         }
 
 
-        if ( ! lockNotGrantedInfo.isEmpty() ) {
-            s << " lockNotGranted: " << lockNotGrantedInfo;
+        if (!lockNotGrantedInfo.isEmpty()) {
+            BSONObjBuilder expandedLockNotGrantedInfoBuilder;
+            expandedLockNotGrantedInfoBuilder.appendElements(lockNotGrantedInfo);
+            verify(lockNotGrantedInfo["blockingTxnid"].isNumber());
+            long long blockingTxnid = lockNotGrantedInfo["blockingTxnid"].numberLong();
+            {
+                scoped_lock bl(Client::clientsMutex);
+                for (set<Client*>::iterator i = Client::clients.begin(); i != Client::clients.end(); i++) {
+                    Client *c = *i;
+                    verify(c);
+                    if (c->rootTransactionId() == blockingTxnid && c->curop() != NULL) {
+                        expandedLockNotGrantedInfoBuilder.append("blockingOp", c->curop()->info());
+                        break;
+                    }
+                }
+            }
+            s << " lockNotGranted: " << expandedLockNotGrantedInfoBuilder.done();
         }
 
         s << " ";
