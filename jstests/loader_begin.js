@@ -45,8 +45,8 @@ var testNSProvisionallyDropped = function() {
     sleep(500);
     beginLoadShouldFail('loadnsprovdropped', [ ], { });
     commit();
-    assert.eq(1, t.count({ prov : 1 }));
     s();
+    assert.eq(1, t.count({ prov : 1 }));
 }();
 
 var testBadIndexes = function() {
