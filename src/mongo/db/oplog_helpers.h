@@ -31,7 +31,7 @@ namespace mongo {
 
         void logComment(const BSONObj &comment);
 
-        void logInsert(const char *ns, const BSONObj &row);    
+        void logInsert(const char *ns, const BSONObj &row, bool fromMigrate);
 
         void logInsertForCapped(const char *ns, const BSONObj &pk, const BSONObj &row);
 

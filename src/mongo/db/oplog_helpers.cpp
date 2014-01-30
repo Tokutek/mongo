@@ -89,8 +89,9 @@ namespace mongo {
             }
         }
         
-        void logInsert(const char *ns, const BSONObj &row) {
-            bool logForSharding = shouldLogTxnOpForSharding(OP_STR_INSERT, ns, row);
+        void logInsert(const char *ns, const BSONObj &row, bool fromMigrate) {
+            bool logForSharding = !fromMigrate &&
+                                  shouldLogTxnOpForSharding(OP_STR_INSERT, ns, row);
             if (logTxnOpsForReplication() || logForSharding) {
                 BSONObjBuilder b;
                 if (isLocalNs(ns)) {

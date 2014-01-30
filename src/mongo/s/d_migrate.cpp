@@ -86,6 +86,16 @@ using namespace std;
 
 namespace mongo {
 
+    bool migrateUniqueChecks = true;
+
+    namespace {
+        ExportedServerParameter<bool> migrateUniqueChecksParameter(ServerParameterSet::getGlobal(),
+                                                                   "migrateUniqueChecks",
+                                                                   &migrateUniqueChecks,
+                                                                   true,
+                                                                   true);
+    }
+
     bool findShardKeyIndexPattern_locked( const string& ns,
                                           const BSONObj& shardKeyPattern,
                                           BSONObj* indexPattern ) {
@@ -1656,17 +1666,21 @@ namespace mongo {
                     massert(17225, mongoutils::str::stream() << "expected cursor ns " << ns << ", got " << cursorObj["ns"].Stringdata(),
                             cursorObj["ns"].Stringdata() == ns);
 
+                    uint64_t insertFlags = Collection::NO_LOCKTREE;
+                    if (!migrateUniqueChecks) {
+                        insertFlags |= Collection::NO_UNIQUE_CHECKS;
+                    }
+
                     LOCK_REASON(lockReason, "sharding: cloning documents on recipient for migrate");
                     {
                         Client::ReadContext ctx(ns, lockReason);
                         Client::Transaction txn(DB_SERIALIZABLE);
+                        Collection *cl = getCollection(ns);
+                        massert(17315, "collection must exist during migration", cl);
                         for (BSONObjIterator it(cursorObj["firstBatch"].Obj()); it.more(); ++it) {
                             BSONObj obj = (*it).Obj();
-                            updateObjects(ns.c_str(), obj, obj["_id"].wrap(),
-                                          true,   // upsert
-                                          false,  // multi
-                                          true,   // logop
-                                          true);  // fromMigrate
+                            insertOneObject(cl, obj, insertFlags);
+                            OpLogHelpers::logInsert(ns.c_str(), obj, true);
                             numCloned++;
                             clonedBytes += obj.objsize();
                         }
@@ -1677,13 +1691,12 @@ namespace mongo {
                          cursor.more(); ) {
                         Client::ReadContext ctx(ns, lockReason);
                         Client::Transaction txn(DB_SERIALIZABLE);
+                        Collection *cl = getCollection(ns);
+                        massert(17316, "collection must exist during migration", cl);
                         while (cursor.moreInCurrentBatch()) {
                             BSONObj obj = cursor.nextSafe();
-                            updateObjects(ns.c_str(), obj, obj["_id"].wrap(),
-                                          true,   // upsert
-                                          false,  // multi
-                                          true,   // logop
-                                          true);  // fromMigrate
+                            insertOneObject(cl, obj, insertFlags);
+                            OpLogHelpers::logInsert(ns.c_str(), obj, true);
                             numCloned++;
                             clonedBytes += obj.objsize();
                         }

@@ -55,7 +55,7 @@ namespace mongo {
     }
 
     // Does not check magic system collection inserts.
-    void _insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags, bool logop ) {
+    void _insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags, bool logop, bool fromMigrate ) {
         Collection *cl = getOrCreateCollection(ns, logop);
         for (size_t i = 0; i < objs.size(); i++) {
             const BSONObj &obj = objs[i];
@@ -86,7 +86,7 @@ namespace mongo {
                 else {
                     insertOneObject(cl, objModified, flags); // may add _id field
                     if (logop) {
-                        OpLogHelpers::logInsert(ns, objModified);
+                        OpLogHelpers::logInsert(ns, objModified, fromMigrate);
                     }
                 }
             } catch (const UserException &) {
@@ -111,7 +111,7 @@ namespace mongo {
         return b.obj();
     }
 
-    void insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags, bool logop ) {
+    void insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags, bool logop, bool fromMigrate) {
         StringData _ns(ns);
         if (NamespaceString::isSystem(_ns)) {
             StringData db = nsToDatabaseSubstring(_ns);
@@ -136,19 +136,19 @@ namespace mongo {
                 // modified it with stripDropDups.
                 vector<BSONObj> newObjs;
                 newObjs.push_back(obj);
-                _insertObjects(ns, newObjs, keepGoing, flags, logop);
+                _insertObjects(ns, newObjs, keepGoing, flags, logop, fromMigrate);
                 return;
             } else if (!legalClientSystemNS(ns, true)) {
                 uasserted(16459, str::stream() << "attempt to insert in system namespace '" << ns << "'");
             }
         }
-        _insertObjects(ns, objs, keepGoing, flags, logop);
+        _insertObjects(ns, objs, keepGoing, flags, logop, fromMigrate);
     }
 
-    void insertObject(const char *ns, const BSONObj &obj, uint64_t flags, bool logop) {
+    void insertObject(const char *ns, const BSONObj &obj, uint64_t flags, bool logop, bool fromMigrate) {
         vector<BSONObj> objs(1);
         objs[0] = obj;
-        insertObjects(ns, objs, false, flags, logop);
+        insertObjects(ns, objs, false, flags, logop, fromMigrate);
     }
 
 } // namespace mongo

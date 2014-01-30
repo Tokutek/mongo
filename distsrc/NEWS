@@ -176,6 +176,37 @@ New features and improvements
 
       See the user's guide for a full description.  (#905, #906, #907)
 
+    - Added a server parameter for `mongod`, `migrateUniqueChecks`.  If
+      this setting is on, then during a migration, TokuMX will perform
+      unique checks for all data in the chunk being migrated.  That is the
+      default.
+
+      These unique checks exist to prevent users from inserting different
+      documents that initially are inserted to different shards, but which
+      have the same `_id`, from causing issues if those documents are
+      migrated to the same server.
+
+      With this setting turned on, such a migration would fail, but the
+      documents would be preserved.
+
+      If this setting is turned off, such a migration would succeed, and
+      silently overwrite the document that was there before, just in the
+      `_id` index.  This would effectively overwrite that document, and
+      for any secondary indexes, the newly migrated document would appear
+      twice.  This can only happen when using an `_id` index as the
+      primary key (the old behavior, see above), but when also using a
+      shard key other than the `_id`, and simultaneously generating
+      inappropriate (non-unique) values for the `_id` in the application.
+
+      For the best performance, use the default behavior of
+      `shardCollection` which will create a primary key containing the
+      shard key, allow TokuMX to generate `_id` values on your
+      application's behalf (use a different field for an application-level
+      ID if needed), and turn _off_ `migrateUniqueChecks`.  If these
+      recommendations are followed, this setting is safe and will not lead
+      to corruption or data loss.  However, to be careful, the default is
+      to do the unique checks, which is slower.  (#941)
+
 
 Bug fixes
 ~~~~~~~~~

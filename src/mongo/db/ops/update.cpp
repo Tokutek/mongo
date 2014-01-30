@@ -162,7 +162,7 @@ namespace mongo {
 
     static UpdateResult upsertAndLog(Collection *cl, const BSONObj &patternOrig,
                                      const BSONObj &updateobj, const bool isOperatorUpdate,
-                                     ModSet *mods, const bool logop) {
+                                     ModSet *mods, const bool logop, bool fromMigrate) {
         const string &ns = cl->ns();
         uassert(16893, str::stream() << "Cannot upsert a collection under-going bulk load: " << ns,
                        ns != cc().bulkLoadNS());
@@ -178,7 +178,7 @@ namespace mongo {
         checkNoMods(newObj);
         insertOneObject(cl, newObj);
         if (logop) {
-            OpLogHelpers::logInsert(ns.c_str(), newObj);
+            OpLogHelpers::logInsert(ns.c_str(), newObj, fromMigrate);
         }
         return UpdateResult(0, isOperatorUpdate, 1, newObj);
     }
@@ -207,7 +207,7 @@ namespace mongo {
             if (!upsert) {
                 return UpdateResult(0, 0, 0, BSONObj());
             }
-            return upsertAndLog(cl, patternOrig, updateobj, isOperatorUpdate, mods.get(), logop);
+            return upsertAndLog(cl, patternOrig, updateobj, isOperatorUpdate, mods.get(), logop, fromMigrate);
         }
 
         if (isOperatorUpdate) {
@@ -340,7 +340,7 @@ namespace mongo {
             uassert(10159, "multi update only works with $ operators", !multi);
         }
         // Upsert a new object
-        return upsertAndLog(cl, patternOrig, updateobj, isOperatorUpdate, mods.get(), logop);
+        return upsertAndLog(cl, patternOrig, updateobj, isOperatorUpdate, mods.get(), logop, fromMigrate);
     }
 
     UpdateResult updateObjects(const char *ns,
