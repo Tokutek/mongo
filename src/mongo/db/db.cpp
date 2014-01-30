@@ -324,7 +324,7 @@ namespace mongo {
             }
 
             log() << "Running upgrade of disk format version " << static_cast<int>(_currentVersion) <<
-                    " to " << static_cast<int>(targetVersion) << "." << startupWarningsLog;
+                    " to " << static_cast<int>(targetVersion) << "." << endl;
 
             switch (targetVersion) {
                 case DISK_VERSION_INVALID:
