@@ -489,6 +489,7 @@ namespace mongo {
         {
             LOCK_REASON(lockReason, "startup: running upgrade hooks");
             Lock::GlobalWrite lk(lockReason);
+            Client::UpgradingDiskFormatVersionScope udfvs;
             Client::Transaction txn(DB_SERIALIZABLE);
             DiskFormatVersion formatVersion;
             Status s = formatVersion.initialize();

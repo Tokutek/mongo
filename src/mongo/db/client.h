@@ -352,6 +352,7 @@ namespace mongo {
         bool _god;
         StringData _creatingSystemUsers;
         bool _upgradingSystemUsers;
+        bool _upgradingDiskFormatVersion;
         GTID _lastGTID;
         BSONObj _handshake;
         BSONObj _remoteId;
@@ -387,6 +388,15 @@ namespace mongo {
             ~UpgradingSystemUsersScope();
         };
         bool upgradingSystemUsers() const { return _upgradingSystemUsers; }
+
+        /* declare that we're upgrading the disk format version
+           therefore we should have permission to create an index (the _id index) on local.system.version */
+        class UpgradingDiskFormatVersionScope : boost::noncopyable {
+          public:
+            UpgradingDiskFormatVersionScope();
+            ~UpgradingDiskFormatVersionScope();
+        };
+        bool upgradingDiskFormatVersion() const { return _upgradingDiskFormatVersion; }
 
         /* set _god=true temporarily, safely */
         class GodScope {

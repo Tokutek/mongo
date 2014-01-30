@@ -87,6 +87,13 @@ namespace mongo {
         cc()._upgradingSystemUsers = false;
     }
 
+    Client::UpgradingDiskFormatVersionScope::UpgradingDiskFormatVersionScope() {
+        cc()._upgradingDiskFormatVersion = true;
+    }
+    Client::UpgradingDiskFormatVersionScope::~UpgradingDiskFormatVersionScope() {
+        cc()._upgradingDiskFormatVersion = false;
+    }
+
     /* each thread which does db operations has a Client object in TLS.
        call this when your thread starts.
     */
@@ -108,6 +115,7 @@ namespace mongo {
         _god(0),
         _creatingSystemUsers(""),
         _upgradingSystemUsers(false),
+        _upgradingDiskFormatVersion(false),
         _globallyUninterruptible(false)
     {
         _connectionId = p ? p->connectionId() : 0;

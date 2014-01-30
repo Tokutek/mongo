@@ -34,7 +34,8 @@ namespace mongo {
 
     CollectionBase::IndexerBase::IndexerBase(CollectionBase *cl, const BSONObj &info) :
         _cl(cl), _info(info), _isSecondaryIndex(_cl->_nIndexes > 0) {
-        if (!cc().creatingSystemUsers()) {
+        if (!cc().creatingSystemUsers() &&
+            !cc().upgradingDiskFormatVersion()) {
             std::string sourceNS = info["ns"].String();
             uassert(16548,
                     mongoutils::str::stream() << "not authorized to create index on " << sourceNS,
