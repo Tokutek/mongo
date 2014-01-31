@@ -756,11 +756,6 @@ namespace mongo {
         if (!rsOplogRefsDetails->isPartitioned()) {
             log() << "Oplog.refs was not partitioned, converting it to a partitioned collection" << rsLog;
             convertToPartitionedCollection(rsOplogRefs);
-            Collection* coll = getCollection(rsOplogRefs);
-            // add maxRefGTID
-            PartitionedCollection* pc = coll->as<PartitionedCollection>();
-            BSONObj refMeta = pc->getPartitionMetadata(0);
-            updateMaxRefGTID(refMeta, 0, pc, gtid);
         }
         //
         // if we converted the oplog from partitioned to non-partitioned,
