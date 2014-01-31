@@ -34,7 +34,7 @@ doTest = function (signal, startPort, txnLimit) {
     if (multiMachines) {
         var r = replTest.initiate({ "_id": "unicomplex",
                                   "members": [
-                                              { "_id": 0, "host": nodes[0], priority:10 },
+                                              { "_id": 0, "host": nodes[0] },
                                               { "_id": 1, "host": nodes[1] },
                                               { "_id": 2, "host": nodes[2], arbiterOnly: true}]
                               });
@@ -46,11 +46,12 @@ doTest = function (signal, startPort, txnLimit) {
                                   });
     }
 
-    conns[0].getDB("foo").foo.insert({});
-    conns[0].getDB("foo").foo.insert({});
-    conns[0].getDB("foo").foo.insert({});
-    conns[0].getDB("foo").getLastError();
-    pivot = conns[0].getDB("local").oplog.rs.find().sort({_id:-1}).next()._id;
+    var m = replTest.getMaster();
+    m.getDB("foo").foo.insert({});
+    m.getDB("foo").foo.insert({});
+    m.getDB("foo").foo.insert({});
+    m.getDB("foo").getLastError();
+    pivot = m.getDB("local").oplog.rs.find().sort({_id:-1}).next()._id;
     print(pivot);
     refsPivot = pivot;
     if (txnLimit < 15) {
@@ -124,6 +125,7 @@ doTest = function (signal, startPort, txnLimit) {
 
     var master = replTest.getMaster();
     master.getDB("foo").foo.insert({});
+    master.getDB("foo").getLastError();
     replTest.awaitReplication();
     insertedGTID = conns[0].getDB("local").oplog.rs.find().sort({_id:-1}).next()._id;
 
