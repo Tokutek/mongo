@@ -127,7 +127,8 @@ files.forEach(function(x) {
 	    'collections_exist_cmd|' +
             'update_fast|' +
             'update_fasterrors|' +
-            'partition_mst_886' +
+            'partition_mst_886|' +
+            'multi_key_mst_872' +
         ')\.js$');
 
     if (failsInShardingPattern.test(x.name)) {
