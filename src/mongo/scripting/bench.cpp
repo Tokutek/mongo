@@ -497,7 +497,7 @@ namespace mongo {
                     }
                     else if( op == "insert" ) {
                         bool safe = e["safe"].trueValue();
-                        int batchSize = e.numberInt();
+                        int batchSize = e["batchSize"].numberInt();
                         if (batchSize < 1) {
                             batchSize = 1;
                         }
