@@ -586,12 +586,6 @@ namespace mutablebson {
 
         Status setValue(Element::RepIdx newValueIdx);
 
-        template<typename Builder>
-        inline void writeElement(Builder* builder, const StringData* fieldName = NULL) const;
-
-        template<typename Builder>
-        inline void writeChildren(Builder* builder) const;
-
         Document* _doc;
         RepIdx _repIdx;
     };
