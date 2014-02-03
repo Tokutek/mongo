@@ -497,10 +497,18 @@ namespace mongo {
                     }
                     else if( op == "insert" ) {
                         bool safe = e["safe"].trueValue();
+                        int batchSize = e.numberInt();
+                        if (batchSize < 1) {
+                            batchSize = 1;
+                        }
                         BSONObj result;
                         {
                             BenchRunEventTrace _bret(&_stats.insertCounter);
-                            conn->insert( ns, fixQuery( e["doc"].Obj(), bsonTemplateEvaluator ) );
+                            vector<BSONObj> insertBatch(batchSize);
+                            for (int i = 0; i < batchSize; i++) {
+                                insertBatch[i] = fixQuery( e["doc"].Obj(), bsonTemplateEvaluator );
+                            }
+                            conn->insert( ns, insertBatch );
                             if (safe)
                                 result = conn->getLastErrorDetailed();
                         }
