@@ -1409,20 +1409,7 @@ namespace mongo {
             _partitions[whichPartition]->updateObjectMods(pk, updateObj, fromMigrate, flags);
         }
 
-        virtual bool rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &result) {
-            uasserted(17240, "cannot do rebuildIndex on a partitioned collection");
-            // have a uassert above until we figure out the TODO below
-            for (IndexCollVector::const_iterator it = _partitions.begin(); 
-                 it != _partitions.end(); 
-                 ++it)
-            {
-                CollectionData *currColl = it->get();
-                // TODO: we may not want to keep
-                // passing in result for every partition here.
-                // Investigate this later
-                currColl->rebuildIndex(i, options, result);
-            }
-        }
+        virtual bool rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &result);
 
         virtual void dropIndexDetails(int idxNum, bool noteNs) {
             // get rid of the index details            

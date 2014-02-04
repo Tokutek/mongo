@@ -3158,6 +3158,21 @@ namespace mongo {
         return ss.str();
     }
     
+    bool PartitionedCollection::rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &result) {
+        bool changed = false;
+        for (IndexCollVector::const_iterator it = _partitions.begin(); it != _partitions.end(); ++it) {
+            CollectionData *currColl = it->get();
+            BSONObjBuilder fakeBuilder;
+            if (currColl->rebuildIndex(i, options,
+                                       (it == _partitions.begin()
+                                        ? result
+                                        : fakeBuilder))) {
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
     void PartitionedCollection::updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj,
                                              const bool fromMigrate,
                                              uint64_t flags, bool* indexBitChanged) {
