@@ -232,6 +232,37 @@ namespace mongo {
         // the value returned here
         virtual bool getMaxPKForPartitionCap(BSONObj &result) const = 0;
 
+        // struct for storing the accumulated states of a Collection
+        // all values, except for nIndexes, are estimates
+        // note that the id index is used as the main store.
+        struct Stats {
+            uint64_t count; // number of rows in id index
+            uint64_t size; // size of main store, which is the id index
+            uint64_t storageSize; // size on disk of id index
+            uint64_t nIndexes; // number of indexes, including id index
+            uint64_t indexSize; // size of secondary indexes, NOT including id index
+            uint64_t indexStorageSize; // size on disk for secondary indexes, NOT including id index
+
+            Stats() : count(0),
+                      size(0),
+                      storageSize(0),
+                      nIndexes(0),
+                      indexSize(0),
+                      indexStorageSize(0) {}
+            Stats& operator+=(const Stats &o) {
+                count += o.count;
+                size += o.size;
+                storageSize += o.storageSize;
+                nIndexes += o.nIndexes;
+                indexSize += o.indexSize;
+                indexStorageSize += o.indexStorageSize;
+                return *this;
+            }
+            void appendInfo(BSONObjBuilder &b, int scale) const;
+        };
+
+        void fillCollectionStats(Stats &aggStats, BSONObjBuilder *result, int scale) const;
+
         // optional to implement, populate the obj builder with collection specific stats
         virtual void fillSpecificStats(BSONObjBuilder &result, int scale) const = 0;
 
@@ -382,40 +413,9 @@ namespace mongo {
 
         void noteMultiKeyChanged();
 
-        // 
-        // Stats
-        //
-
-        // struct for storing the accumulated states of a Collection
-        // all values, except for nIndexes, are estimates
-        // note that the id index is used as the main store.
-        struct Stats {
-            uint64_t count; // number of rows in id index
-            uint64_t size; // size of main store, which is the id index
-            uint64_t storageSize; // size on disk of id index
-            uint64_t nIndexes; // number of indexes, including id index
-            uint64_t indexSize; // size of secondary indexes, NOT including id index
-            uint64_t indexStorageSize; // size on disk for secondary indexes, NOT including id index
-
-            Stats() : count(0),
-                      size(0),
-                      storageSize(0),
-                      nIndexes(0),
-                      indexSize(0),
-                      indexStorageSize(0) {}
-            Stats& operator+=(const Stats &o) {
-                count += o.count;
-                size += o.size;
-                storageSize += o.storageSize;
-                nIndexes += o.nIndexes;
-                indexSize += o.indexSize;
-                indexStorageSize += o.indexStorageSize;
-                return *this;
-            }
-            void appendInfo(BSONObjBuilder &b, int scale) const;
-        };
-
-        void fillCollectionStats(Stats &aggStats, BSONObjBuilder *result, int scale) const;
+        void fillCollectionStats(CollectionData::Stats &aggStats, BSONObjBuilder *result, int scale) const {
+            _cd->fillCollectionStats(aggStats, result, scale);
+        }
 
         void noteIndexBuilt();
 
@@ -1409,20 +1409,7 @@ namespace mongo {
             _partitions[whichPartition]->updateObjectMods(pk, updateObj, fromMigrate, flags);
         }
 
-        virtual bool rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &result) {
-            uasserted(17240, "cannot do rebuildIndex on a partitioned collection");
-            // have a uassert above until we figure out the TODO below
-            for (IndexCollVector::const_iterator it = _partitions.begin(); 
-                 it != _partitions.end(); 
-                 ++it)
-            {
-                CollectionData *currColl = it->get();
-                // TODO: we may not want to keep
-                // passing in result for every partition here.
-                // Investigate this later
-                currColl->rebuildIndex(i, options, result);
-            }
-        }
+        virtual bool rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &result);
 
         virtual void dropIndexDetails(int idxNum, bool noteNs) {
             // get rid of the index details            
@@ -1470,9 +1457,7 @@ namespace mongo {
             msgasserted(17311, "should not call getMaxPKForPartitionCap on a partitioned collection");
         }
 
-        virtual void fillSpecificStats(BSONObjBuilder &result, int scale) const {
-            // empty for now
-        }
+        virtual void fillSpecificStats(BSONObjBuilder &result, int scale) const;
 
         virtual shared_ptr<CollectionIndexer> newIndexer(const BSONObj &info, const bool background) {
             uasserted(17242, "Cannot create a hot index on a partitioned collection");

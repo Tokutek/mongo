@@ -1434,7 +1434,7 @@ namespace mongo {
                 return false;
             }
 
-            Collection::Stats aggStats;
+            CollectionData::Stats aggStats;
             cl->fillCollectionStats(aggStats, &result, scale);
 
             return true;
@@ -1477,7 +1477,7 @@ namespace mongo {
             }
 
             uint64_t ncollections = 0;
-            Collection::Stats aggStats;
+            CollectionData::Stats aggStats;
 
             for (list<string>::const_iterator it = collections.begin(); it != collections.end(); ++it) {
                 const string ns = *it;

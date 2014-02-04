@@ -79,7 +79,7 @@ namespace mongo {
     void Database::diskSize(size_t &uncompressedSize, size_t &compressedSize) {
         list<string> colls;
         _collectionMap.getNamespaces(colls);
-        Collection::Stats dbstats;
+        CollectionData::Stats dbstats;
         for (list<string>::const_iterator it = colls.begin(); it != colls.end(); ++it) {
             Collection *c = getCollection(*it);
             if (c == NULL) {
