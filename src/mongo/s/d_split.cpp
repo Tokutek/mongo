@@ -503,7 +503,7 @@ namespace mongo {
                 finder.find(maxChunkSize, maxSplitPoints);
             } else {
                 // Haven't implemented a better version using get_key_after_bytes yet, do the slow thing
-                Collection::Stats stats;
+                CollectionData::Stats stats;
                 cl->fillCollectionStats(stats, NULL, 1);
                 const long long recCount = stats.count;
                 const long long dataSize = stats.size;

@@ -1157,12 +1157,12 @@ namespace mongo {
         }
     }
 
-    void Collection::fillCollectionStats(
+    void CollectionData::fillCollectionStats(
         Stats &aggStats,
         BSONObjBuilder *result,
         int scale) const
     {
-        Stats stats;
+        CollectionData::Stats stats;
         stats.nIndexes += nIndexes();
         // also sum up some stats of secondary indexes,
         // calculate their total data size and storage size
@@ -1208,7 +1208,7 @@ namespace mongo {
         resetTransient();
     }
 
-    void Collection::Stats::appendInfo(BSONObjBuilder &b, int scale) const {
+    void CollectionData::Stats::appendInfo(BSONObjBuilder &b, int scale) const {
         b.appendNumber("objects", (long long) count);
         b.appendNumber("avgObjSize", count == 0 ? 0.0 : double(size) / double(count));
         b.appendNumber("dataSize", (long long) size / scale);
@@ -3171,6 +3171,19 @@ namespace mongo {
             }
         }
         return changed;
+    }
+
+    void PartitionedCollection:: fillSpecificStats(BSONObjBuilder &result, int scale) const {
+        result.appendBool("partitioned", true);
+        BSONArrayBuilder ab(result.subarrayStart("partitions"));
+        for (IndexCollVector::const_iterator it = _partitions.begin(); it != _partitions.end(); ++it) {
+            CollectionData::Stats unusedStats;
+            CollectionData *cd = it->get();
+            BSONObjBuilder b(ab.subobjStart());
+            cd->fillCollectionStats(unusedStats, &b, scale);
+            b.doneFast();
+        }
+        ab.doneFast();
     }
 
     void PartitionedCollection::updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj,
