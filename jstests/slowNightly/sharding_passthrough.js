@@ -128,7 +128,8 @@ files.forEach(function(x) {
             'update_fast|' +
             'update_fasterrors|' +
             'partition_mst_886|' +
-            'multi_key_mst_872' +
+            'multi_key_mst_872|' +
+            'partition_add' +
         ')\.js$');
 
     if (failsInShardingPattern.test(x.name)) {
