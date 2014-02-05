@@ -106,12 +106,6 @@ namespace mongo {
             return false;
         }
 
-        if ( _rhs.type() == Array ) {
-            if ( matchType() != EQ ) {
-                return false;
-            }
-        }
-
         int x = compareElementValues( e, _rhs );
 
         //log() << "\t\t" << x << endl;
