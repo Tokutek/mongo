@@ -1,4 +1,4 @@
-// Test that simple operations on a partitioned collection work
+7// Test that simple operations on a partitioned collection work
 // This verifies that a partitioned collection with just a single partition
 // works as expected
 
@@ -24,7 +24,7 @@ assert.eq(x.code, 17242);
 // verify that we can drop and recreate
 t.drop();
 assert.commandWorked(db.runCommand({ create: 'part_coll_simple', partitioned:1}));
-assert.commandFailed(t.reIndex());
+assert.commandWorked(t.reIndex());
 
 function doWritesTest() {
     // insert some data
