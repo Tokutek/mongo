@@ -133,7 +133,7 @@ namespace {
         dbAdminRoleActions.addAction(ActionType::collStats);
         dbAdminRoleActions.addAction(ActionType::compact);
         dbAdminRoleActions.addAction(ActionType::convertToCapped);
-        readWriteRoleActions.addAction(ActionType::convertToPartitioned);
+        dbAdminRoleActions.addAction(ActionType::convertToPartitioned);
         dbAdminRoleActions.addAction(ActionType::createCollection); // read_write gets this also
         dbAdminRoleActions.addAction(ActionType::dbStats);
         dbAdminRoleActions.addAction(ActionType::dropCollection);
