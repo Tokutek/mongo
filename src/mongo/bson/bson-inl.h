@@ -1111,5 +1111,51 @@ dodouble:
         return Obj().coerceVector<std::string>( out );
     }
 
+    void cloneBSONWithFieldChanged(BSONObjBuilder &b, const BSONObj &orig, const BSONElement &newElement, bool appendIfMissing) {
+        StringData fieldName = newElement.fieldName();
+        bool replaced = false;
+        for (BSONObjIterator it(orig); it.more(); ) {
+            BSONElement e = it.next();
+            if (fieldName == e.fieldName()) {
+                b.append(newElement);
+                replaced = true;
+            } else {
+                b.append(e);
+            }
+        }
+        if (!replaced && appendIfMissing) {
+            b.append(newElement);
+        }
+    }
+
+    BSONObj cloneBSONWithFieldChanged(const BSONObj &orig, const BSONElement &newElement, bool appendIfMissing) {
+        BSONObjBuilder b(orig.objsize());
+        cloneBSONWithFieldChanged(b, orig, newElement, appendIfMissing);
+        return b.obj();
+    }
+
+    template<typename T>
+    void cloneBSONWithFieldChanged(BSONObjBuilder &b, const BSONObj &orig, const StringData &fieldName, const T &newValue, bool appendIfMissing) {
+        bool replaced = false;
+        for (BSONObjIterator it(orig); it.more(); ) {
+            BSONElement e = it.next();
+            if (fieldName == e.fieldName()) {
+                b.append(fieldName, newValue);
+                replaced = true;
+            } else {
+                b.append(e);
+            }
+        }
+        if (!replaced && appendIfMissing) {
+            b.append(fieldName, newValue);
+        }
+    }
+
+    template<typename T>
+    BSONObj cloneBSONWithFieldChanged(const BSONObj &orig, const StringData &fieldName, const T &newValue, bool appendIfMissing) {
+        BSONObjBuilder b(orig.objsize());
+        cloneBSONWithFieldChanged(b, orig, fieldName, newValue, appendIfMissing);
+        return b.obj();
+    }
 
 }
