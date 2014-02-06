@@ -132,17 +132,7 @@ namespace mongo {
             uint64_t index = cmdObj["index"].numberLong();            
             BSONObj refMeta = pc->getPartitionMetadata(index);
             BSONObjBuilder bbb;
-            BSONObjIterator ii( refMeta );
-            while ( ii.more() ) {
-                BSONElement e = ii.next();
-                if ( strcmp( e.fieldName(), "createTime" ) != 0 ) {
-                    bbb.append( e );
-                }
-                else {
-                    verify(cmdObj["createTime"].ok());
-                    bbb.append( cmdObj["createTime"]);
-                }
-            }
+            cloneBSONWithFieldChanged(bbb, refMeta, cmdObj["createTime"]);
             pc->updatePartitionMetadata(index, bbb.done(), false);
             transaction.commit();
             return true;
