@@ -127,8 +127,13 @@ namespace mongo {
         BSONObj o = b.obj();
         if( !o.isEmpty() ) 
             res.append("locks", o);
-        if (_context) {
-            res.append("context", *_context);
+        // this may be a racy read, but that is ok
+        // we use a local parameter so we don't
+        // need to worry about _context becoming NULL
+        // in between the if check and the append
+        const string* c = _context;
+        if (c) {
+            res.append("context", *c);
         }
         res.append("waitingForLock", _lockPending);
     }
