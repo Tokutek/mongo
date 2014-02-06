@@ -1211,6 +1211,8 @@ def main():
                       action="store", help='Set the "builder name" for buildlogger')
     parser.add_option('--buildlogger-buildnum', dest='buildlogger_buildnum', default=None,
                       action="store", help='Set the "build number" for buildlogger')
+    parser.add_option('--buildlogger-url', dest='buildlogger_url', default=None,
+                      action="store", help='Set the url root for the buildlogger service')
     parser.add_option('--buildlogger-credentials', dest='buildlogger_credentials', default=None,
                       action="store", help='Path to Python file containing buildlogger credentials')
     parser.add_option('--buildlogger-phase', dest='buildlogger_phase', default=None,
@@ -1236,6 +1238,9 @@ def main():
     elif any(buildlogger_opts):
         # some but not all of the required options were sete
         raise Exception("you must set all of --buildlogger-builder, --buildlogger-buildnum, --buildlogger-credentials")
+
+    if options.buildlogger_url: #optional; if None, defaults to const in buildlogger.py
+        os.environ['BUILDLOGGER_URL'] = options.buildlogger_url
 
     if options.File:
         if options.File == '-':
