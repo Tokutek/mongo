@@ -1757,7 +1757,7 @@ namespace mongo {
             string ns = dbname + "." + coll;
             BSONElement force = cmdObj["force"];
             bool isOplogNS = (strcmp(ns.c_str(), rsoplog) == 0) || (strcmp(ns.c_str(), rsOplogRefs) == 0);
-            uassert( 17300, "cannot manually drop partition on oplog or oplog.refs", force.ok() || !isOplogNS);
+            uassert( 17300, "cannot manually drop partition on oplog or oplog.refs", force.trueValue() || !isOplogNS);
             Collection *cl = getCollection( ns );
             OpLogHelpers::logUnsupportedOperation(ns.c_str());
             uassert( 17301, "dropPartition no such collection", cl );
@@ -1796,7 +1796,7 @@ namespace mongo {
             string ns = dbname + "." + coll;
             BSONElement force = cmdObj["force"];
             bool isOplogNS = (strcmp(ns.c_str(), rsoplog) == 0) || (strcmp(ns.c_str(), rsOplogRefs) == 0);
-            uassert( 17305, "cannot manually add partition on oplog or oplog.refs", force.ok() || !isOplogNS);
+            uassert( 17305, "cannot manually add partition on oplog or oplog.refs", force.trueValue() || !isOplogNS);
             Collection *cl = getCollection( ns );
             uassert( 17306, "addPartition no such collection", cl );
             uassert( 17307, "collection must be partitioned", cl->isPartitioned() );
