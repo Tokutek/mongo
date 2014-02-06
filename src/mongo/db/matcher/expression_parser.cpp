@@ -321,7 +321,7 @@ namespace mongo {
                 continue;
             }
 
-            if ( _isExpressionDocument( e ) ) {
+            if ( _isExpressionDocument( e, false ) ) {
                 Status s = _parseSub( e.fieldName(), e.Obj(), root.get() );
                 if ( !s.isOK() )
                     return StatusWithMatchExpression( s );
@@ -371,7 +371,8 @@ namespace mongo {
         return Status::OK();
     }
 
-    bool MatchExpressionParser::_isExpressionDocument( const BSONElement& e ) {
+    bool MatchExpressionParser::_isExpressionDocument( const BSONElement& e,
+                                                       bool allowIncompleteDBRef ) {
         if ( e.type() != Object )
             return false;
 
@@ -383,7 +384,7 @@ namespace mongo {
         if ( name[0] != '$' )
             return false;
 
-        if ( _isDBRefDocument( o ) ) {
+        if ( _isDBRefDocument( o, allowIncompleteDBRef ) ) {
             return false;
         }
 
@@ -394,12 +395,17 @@ namespace mongo {
      * DBRef fields are ordered in the collection.
      * In the query, we consider an embedded object a query on
      * a DBRef as long as it contains $ref and $id.
-     * Required fields: $ref and $id/
+     * Required fields: $ref and $id (if incomplete DBRefs are not allowed)
+     *
+     * If incomplete DBRefs are allowed, we accept the BSON object as long as it
+     * contains $ref, $id or $db.
+     *
      * Field names are checked but not field types.
      */
-    bool MatchExpressionParser::_isDBRefDocument( const BSONObj& obj ) {
+    bool MatchExpressionParser::_isDBRefDocument( const BSONObj& obj, bool allowIncompleteDBRef ) {
         bool hasRef = false;
         bool hasID = false;
+        bool hasDB = false;
 
         BSONObjIterator i( obj );
         while ( i.more() && !( hasRef && hasID ) ) {
@@ -413,6 +419,14 @@ namespace mongo {
             else if ( !hasID && mongoutils::str::equals( "$id", fieldName ) ) {
                 hasID = true;
             }
+            // $db
+            else if ( !hasDB && mongoutils::str::equals( "$db", fieldName ) ) {
+                hasDB = true;
+            }
+        }
+
+        if (allowIncompleteDBRef) {
+            return hasRef || hasID || hasDB;
         }
 
         return hasRef && hasID;
@@ -511,7 +525,7 @@ namespace mongo {
             BSONElement e = i.next();
 
             // allow DBRefs but reject all fields with names starting wiht $
-            if ( _isExpressionDocument( e ) ) {
+            if ( _isExpressionDocument( e, false ) ) {
                 return Status( ErrorCodes::BadValue, "cannot nest $ under $in" );
             }
 
@@ -540,7 +554,7 @@ namespace mongo {
             return StatusWithMatchExpression( ErrorCodes::BadValue, "$elemMatch needs an Object" );
 
         BSONObj obj = e.Obj();
-        if ( _isExpressionDocument( e ) ) {
+        if ( _isExpressionDocument( e, true ) ) {
             // value case
 
             AndMatchExpression theAnd;
