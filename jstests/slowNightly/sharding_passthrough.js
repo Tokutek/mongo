@@ -129,7 +129,8 @@ files.forEach(function(x) {
             'update_fasterrors|' +
             'partition_mst_886|' +
             'multi_key_mst_872|' +
-            'partition_add' +
+            'partition_add|' +
+            'partition_stats' +
         ')\.js$');
 
     if (failsInShardingPattern.test(x.name)) {
