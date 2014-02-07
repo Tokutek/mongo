@@ -128,7 +128,7 @@ namespace mongo {
 
             // change the create time for a partition at a certain index
             PartitionedCollection* pc = cl->as<PartitionedCollection>();
-            uint64_t index = cmdObj["index"].numberLong();            
+            uint64_t index = cmdObj["index"].numberLong();
             BSONObj refMeta = pc->getPartitionMetadata(index);
             BSONObjBuilder bbb;
             cloneBSONWithFieldChanged(bbb, refMeta, cmdObj["createTime"]);
