@@ -2646,13 +2646,6 @@ namespace mongo {
         for (shared_ptr<Cursor> c( Cursor::make(_metaCollection.get(), 1, false) ); c->ok() ; c->advance()) {
             BSONObj curr = c->current();
             TOKULOG(1) << "found" << curr.str() << " in meta collection" << endl;
-            // All ids that are numbers in the metadata collection correspond to numbers
-            // otherwise, they may be something else (anything else, as who knows what
-            // the future holds). So, if we see an id that is not a number, we continue
-            if (!curr["_id"].isNumber()) {
-                TOKULOG(1) << "continuing on " << curr.str() << endl;
-                continue;
-            }
             // make the collection
             uint64_t currID = curr["_id"].numberLong();
             BSONObj currCollSerialized = makePartitionedSerialized(
@@ -2769,12 +2762,6 @@ namespace mongo {
         uint64_t currIdx = 0;
         for (shared_ptr<Cursor> c( Cursor::make(_metaCollection.get(), 1, false) ); c->ok() ; c->advance()) {
             BSONObj curr = c->current();
-            // All ids that are numbers in the metadata collection correspond to numbers
-            // otherwise, they may be something else (anything else, as who knows what
-            // the future holds). So, if we see an id that is not a number, we continue
-            if (!curr["_id"].isNumber()) {
-                continue;
-            }
             // make the collection
             uint64_t currID = curr["_id"].numberLong();
             verify(currID == _partitionIDs[currIdx]);
@@ -2810,7 +2797,7 @@ namespace mongo {
 
     // case where user manually passes is what they want the capped value
     // to be
-    void PartitionedCollection::manuallyCapLastPartition(BSONObj newPivot) {
+    void PartitionedCollection::manuallyCapLastPartition(const BSONObj& newPivot) {
         // first, make sure pivot we want to add must be greater
         // than its last pivot
         if (_numPartitions > 1) {
@@ -2822,7 +2809,6 @@ namespace mongo {
                 );
         }
         // in the last partition, look up the max value,
-        // make a reverse cursor on the last partition
         BSONObj currPK;
         bool foundLast = _partitions[_numPartitions-1]->getMaxPKForPartitionCap(currPK);
         if (foundLast) {
@@ -2838,7 +2824,7 @@ namespace mongo {
     // for pivot associated with ith partition (note, not the id),
     // replace the pivot with newPivot, both in _metaCollection
     // and in _partitionPivots
-    void PartitionedCollection::overwritePivot(uint64_t i, BSONObj newPivot) {
+    void PartitionedCollection::overwritePivot(uint64_t i, const BSONObj& newPivot) {
         uint64_t id = _partitionIDs[i];
         BSONObj result;
         bool idExists = _metaCollection->findByPK(BSON("" << id), result);
@@ -2857,7 +2843,7 @@ namespace mongo {
         }
         bool indexBitChanged = false;
         BSONObj pk = _metaCollection->getValidatedPKFromObject(result);
-        BSONObj newObj = b.done().copy();
+        BSONObj newObj = b.done();
         _metaCollection->updateObject(pk, result, newObj,
                                             false,
                                             0, &indexBitChanged);
@@ -2865,7 +2851,7 @@ namespace mongo {
 
         // at this point, _metaCollection should be updated, now update
         // in memory stuff
-        _partitionPivots[i] = newPivot.copy();
+        _partitionPivots[i] = newPivot.getOwned();
     }
 
     void PartitionedCollection::appendPartition(BSONObj partitionInfo) {
@@ -2910,7 +2896,7 @@ namespace mongo {
     }
 
     // create partitions from the cloner
-    void PartitionedCollection::addClonedPartitionInfo(vector<BSONElement> partitionInfo) {
+    void PartitionedCollection::addClonedPartitionInfo(const vector<BSONElement> &partitionInfo) {
         uassert(17279, "Called addClonedPartitionInfo with more than one current partition", (_numPartitions == 1));
         // Note that the caller of this function needs to be REALLY careful
         // we don't do a lot of sanity checks that we theoretically could do,
@@ -2934,11 +2920,10 @@ namespace mongo {
         
         BSONObjBuilder b(64);
         b.append("", _partitionIDs[index]);
-        BSONObj pk = b.done();
         BSONObj result;
         bool idExists = _metaCollection->findByPK(b.done(), result);
         uassert(17282, str::stream() << "could not find partition " << _partitionIDs[index] << " of ns " << _ns, idExists);
-        return result.copy();
+        return result;
     }
 
     void PartitionedCollection::updatePartitionMetadata(uint64_t index, BSONObj newMetadata, bool checkCreateTime) {
@@ -2948,12 +2933,11 @@ namespace mongo {
         b.append("", _partitionIDs[index]);
         BSONObj pk = b.done();
         BSONObj oldMetadata;
-        bool idExists = _metaCollection->findByPK(b.done(), oldMetadata);
+        bool idExists = _metaCollection->findByPK(pk, oldMetadata);
         massert(17284, str::stream() << "could not find partition " << _partitionIDs[index] << " of ns " << _ns, idExists);
 
         // first do some sanity checks
         // verify that id, createTime, and max are the same
-        dassert(newMetadata["_id"] == oldMetadata["_id"]);
         massert(17285, str::stream() << "bad _id to updatePartitionMetadata" << newMetadata["_id"] << " " << oldMetadata["_id"], newMetadata["_id"] == oldMetadata["_id"]);
         if (checkCreateTime) {
             massert(17286, "bad createTime to updatePartitionMetadata", newMetadata["createTime"] == oldMetadata["createTime"]);
@@ -2988,7 +2972,7 @@ namespace mongo {
         sanityCheck();
     }
 
-    void PartitionedCollection::manuallyAddPartition(BSONObj newPivot) {
+    void PartitionedCollection::manuallyAddPartition(const BSONObj& newPivot) {
         Lock::assertWriteLocked(_ns);
         sanityCheck();
 
@@ -3008,18 +2992,12 @@ namespace mongo {
         sanityCheck();
     }
 
-    void PartitionedCollection::getPartitionInfo(uint64_t* numPartitions, BSONArray &partitionArray) {
+    void PartitionedCollection::getPartitionInfo(uint64_t* numPartitions, BSONArray* partitionArray) {
         BSONArrayBuilder b;
         // for sanity checking
         uint64_t numPartitionsFoundInMeta = 0;
         for (shared_ptr<Cursor> c( Cursor::make(_metaCollection.get(), 1, false) ); c->ok() ; c->advance()) {
             BSONObj curr = c->current();
-            // All ids that are numbers in the metadata collection correspond to numbers
-            // otherwise, they may be something else (anything else, as who knows what
-            // the future holds). So, if we see an id that is not a number, we continue
-            if (!curr["_id"].isNumber()) {
-                continue;
-            }
             b.append(curr);
             numPartitionsFoundInMeta++;
         }
@@ -3028,7 +3006,7 @@ namespace mongo {
         // It is possible that the transaction is reading a snapshot
         // that no longer reflects _numPartitions
         *numPartitions = numPartitionsFoundInMeta;
-        partitionArray = b.arr();
+        *partitionArray = b.arr();
     }
 
     uint64_t PartitionedCollection::findInMemoryPartition(uint64_t id) {
@@ -3071,7 +3049,7 @@ namespace mongo {
         b.append("", id);
         BSONObj pk = b.done();
         BSONObj result;
-        bool idExists = _metaCollection->findByPK(b.done(), result);
+        bool idExists = _metaCollection->findByPK(pk, result);
         uassert(17253, str::stream() << "could not find partition " << id << " of ns " << _ns, idExists);
 
         // first delete entry from _metaCollection

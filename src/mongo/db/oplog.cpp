@@ -156,14 +156,15 @@ namespace mongo {
             {
                 BSONObjBuilder b;            
                 // build the _id
-                BSONObjBuilder b_id;
+                BSONObjBuilder b_id( b.subobjStart( "" ) );
                 b_id.append("oid", oid);
                 // probably not necessary to increment _seq, but safe to do
                 b_id.append("seq", 0);
+                b_id.done();
                 b.append("", b_id.obj());
                 minPartitionInserted = pc->partitionWithPK(b.done());
             }
-            // only update metadata is there are insertions that happened
+            // only update metadata if there are insertions that happened
             // in partitions OTHER than the last partition ( < numRef-1)
             if (minPartitionInserted < numRef - 1) {
                 // use an alternate transaction stack,

@@ -1143,7 +1143,7 @@ namespace mongo {
                     log() << "replSet caught oplog partition thread (when dropping): " << e.what() << rsLog;
                 }
                 catch (...) {
-                    log() << "exception cought in oplog partition thread (when dropping): " << rsLog;
+                    log() << "exception caught in oplog partition thread (when dropping): " << rsLog;
                 }
             }
 

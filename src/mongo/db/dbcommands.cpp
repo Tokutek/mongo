@@ -1682,7 +1682,7 @@ namespace mongo {
         virtual bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             string coll = cmdObj[ "emptycapped" ].valuestrsafe();
             uassert( 13428, "emptycapped must specify a collection", !coll.empty() );
-            string ns = dbname + "." + coll;
+            string ns = getSisterNS(dbname, coll);
             Collection *cl = getCollection( ns );
             massert( 13429, "emptycapped no such collection", cl );
             massert( 13424, "collection must be capped", cl->isCapped() );
@@ -1727,7 +1727,7 @@ namespace mongo {
             PartitionedCollection *pc = cl->as<PartitionedCollection>();
             uint64_t numPartitions = 0;
             BSONArray arr;
-            pc->getPartitionInfo(&numPartitions, arr);
+            pc->getPartitionInfo(&numPartitions, &arr);
             anObjBuilder.append("numPartitions", (long long)numPartitions);
             anObjBuilder.append("partitions", arr);
             return true;
@@ -1805,9 +1805,9 @@ namespace mongo {
             BSONElement e = cmdObj["newPivot"];            
             PartitionedCollection *pc = cl->as<PartitionedCollection>();
             if (e.ok()) {
-                e.embeddedObjectUserCheck();
-                validateInsert(e.embeddedObject());
-                pc->manuallyAddPartition(e.embeddedObject());
+                BSONObj pivot = e.embeddedObjectUserCheck();
+                validateInsert(pivot);
+                pc->manuallyAddPartition(pivot);
             }
             else {
                 pc->addPartition();
@@ -1820,7 +1820,6 @@ namespace mongo {
     public:
         CmdConvertToPartitioned() : FileopsCommand("convertToPartitioned") { }
         virtual bool logTheOp() { return false; }
-        // TODO: maybe slaveOk should be true?
         virtual bool slaveOk() const { return true; }
         virtual void help( stringstream& help ) const {
             help << "convert a normal collection to a partitioned collection\n" <<

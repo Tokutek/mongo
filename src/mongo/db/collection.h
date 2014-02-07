@@ -1509,9 +1509,9 @@ namespace mongo {
         // functions for adding/dropping partitions
         void dropPartition(uint64_t id);
         void addPartition();
-        void manuallyAddPartition(BSONObj newPivot);
-        void getPartitionInfo(uint64_t* numPartitions, BSONArray &partitionArray);
-        void addClonedPartitionInfo(vector<BSONElement> partitionInfo);
+        void manuallyAddPartition(const BSONObj& newPivot);
+        void getPartitionInfo(uint64_t* numPartitions, BSONArray* partitionArray);
+        void addClonedPartitionInfo(const vector<BSONElement> &partitionInfo);
         BSONObj getPartitionMetadata(uint64_t index);
         void updatePartitionMetadata(uint64_t index, BSONObj newMetadata, bool checkCreateTime = true);
 
@@ -1566,11 +1566,11 @@ namespace mongo {
         // for pivot associated with ith partition (note, not the id),
         // replace the pivot with newPivot, both in _metaCollection
         // and in _partitionPivots
-        void overwritePivot(uint64_t i, BSONObj newPivot);
+        void overwritePivot(uint64_t i, const BSONObj& newPivot);
         // these next two functions cap the last partition with a pivot
         // that is something other than MaxKey
         void capLastPartition();
-        void manuallyCapLastPartition(BSONObj newPivot);
+        void manuallyCapLastPartition(const BSONObj& newPivot);
         // finds the index into our vectors that has stuff (collection, pivot, etc...)
         // according to this id
         uint64_t findInMemoryPartition(uint64_t id);

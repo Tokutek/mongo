@@ -109,6 +109,8 @@ namespace mongo {
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {}
+        virtual LockType locktype() const { return READ; }
+        virtual bool needsTxn() const { return true; }
 
         bool run(
             const string& db,
@@ -117,9 +119,6 @@ namespace mongo {
             BSONObjBuilder& result,
             bool fromRepl = false )
         {
-            LOCK_REASON(lockReason, "changing create time of a partition in test hook");
-            Client::ReadContext ctx(db, lockReason);
-            Client::Transaction transaction(DB_SERIALIZABLE);
             string coll = cmdObj[ "_changePartitionCreateTime" ].valuestrsafe();
             uassert( 17263, "_changePartitionCreateTime must specify a collection", !coll.empty() );
             string ns = db + "." + coll;
@@ -134,7 +133,6 @@ namespace mongo {
             BSONObjBuilder bbb;
             cloneBSONWithFieldChanged(bbb, refMeta, cmdObj["createTime"]);
             pc->updatePartitionMetadata(index, bbb.done(), false);
-            transaction.commit();
             return true;
         }
     };
