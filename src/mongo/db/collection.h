@@ -1516,8 +1516,8 @@ namespace mongo {
         void updatePartitionMetadata(uint64_t index, BSONObj newMetadata, bool checkCreateTime = true);
 
         // helper functions
-        uint64_t numPartitions() {
-            return _numPartitions;
+        uint64_t numPartitions() const{
+            return _partitions.size();;
         }
 
         // return the partition at offset index, note this is NOT the partition ID

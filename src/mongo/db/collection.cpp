@@ -2534,8 +2534,7 @@ namespace mongo {
     PartitionedCollection::PartitionedCollection(const StringData &ns, const BSONObj &options) :
         CollectionData(ns, BSON("_id" << 1)), // the pk MUST be _id:1, we verify below
         _options(options.copy()),
-        _ordering(Ordering::make(BSONObj())), // dummy for now, we create it properly below
-        _numPartitions(0)
+        _ordering(Ordering::make(BSONObj())) // dummy for now, we create it properly below
     {
         // MUST CALL initialize directly after this.
         // We can't call initialize here because it depends on virtual functions
@@ -2552,7 +2551,7 @@ namespace mongo {
         appendNewPartition();
 
         // some sanity checks
-        verify(_numPartitions == 1);
+        verify(numPartitions() == 1);
         verify(_partitions[0]->nIndexes() == 1);
 
         // create the index details
@@ -2582,8 +2581,7 @@ namespace mongo {
         ) :
            CollectionData(serialized),
            _options(serialized["options"].Obj().copy()),
-           _ordering(Ordering::make(BSONObj())), // dummy for now, we create it properly below
-           _numPartitions(0)
+           _ordering(Ordering::make(BSONObj())) // dummy for now, we create it properly below
     {
     }
 
@@ -2598,7 +2596,7 @@ namespace mongo {
         // TODO: check that we have only one index
         
         initialize(_ns, _options);
-        verify(_numPartitions == 1);
+        verify(numPartitions() == 1);
         verify(_partitionIDs[0] == 0);
         // now we need to swap out partitions[0]
         // with what existing collection
@@ -2629,8 +2627,7 @@ namespace mongo {
     PartitionedCollection::PartitionedCollection(const BSONObj &serialized) :
         CollectionData(serialized),
         _options(serialized["options"].Obj().copy()),
-        _ordering(Ordering::make(BSONObj())), // dummy for now, we create it properly below
-        _numPartitions(0)
+        _ordering(Ordering::make(BSONObj())) // dummy for now, we create it properly below
     {
         // MUST CALL initialize directly after this.
         // We can't call initialize here because it depends on virtual functions
@@ -2656,8 +2653,6 @@ namespace mongo {
             // extract the pivot
             _partitionPivots.push_back(curr["max"].Obj().copy());
             _partitionIDs.push_back(currID);
-            
-            _numPartitions++;
         }
         // create the index details
         createIndexDetails();
@@ -2747,13 +2742,12 @@ namespace mongo {
     }
 
     void PartitionedCollection::sanityCheck() {
-        verify(_numPartitions == _partitions.size());
-        verify(_numPartitions == _partitionPivots.size());
-        verify(_numPartitions == _partitionIDs.size());
+        verify(numPartitions() == _partitionPivots.size());
+        verify(numPartitions() == _partitionIDs.size());
         // verify that the last pivot is maxKey
-        verify( _partitionPivots[_numPartitions - 1][""].type() == MaxKey );
+        verify( _partitionPivots[numPartitions() - 1][""].type() == MaxKey );
         // verify that pivots are increasing in order
-        for (uint64_t i = 1; i < _numPartitions; i++) {
+        for (uint64_t i = 1; i < numPartitions(); i++) {
             BSONObj bigger = _partitionPivots[i];
             BSONObj smaller = _partitionPivots[i-1];
             verify(bigger.woCompare(smaller, _ordering) > 0);
@@ -2790,9 +2784,9 @@ namespace mongo {
     // helper function for add partition
     void PartitionedCollection::capLastPartition() {
         BSONObj currPK;
-        bool foundLast = _partitions[_numPartitions-1]->getMaxPKForPartitionCap(currPK);
+        bool foundLast = _partitions[numPartitions()-1]->getMaxPKForPartitionCap(currPK);
         uassert(storage::ASSERT_IDS::CapPartitionFailed, "can only cap a partition with no pivot if it is non-empty", foundLast);
-        overwritePivot(_numPartitions-1, currPK);
+        overwritePivot(numPartitions()-1, currPK);
     }
 
     // case where user manually passes is what they want the capped value
@@ -2800,17 +2794,17 @@ namespace mongo {
     void PartitionedCollection::manuallyCapLastPartition(const BSONObj& newPivot) {
         // first, make sure pivot we want to add must be greater
         // than its last pivot
-        if (_numPartitions > 1) {
+        if (numPartitions() > 1) {
             uassert(
                 17249, 
                 str::stream() <<"new pivot must be greater than last pivot, newPivot: " << newPivot.str() << 
-                " lastPivot: " <<_partitionPivots[_numPartitions-2].str(), 
-                newPivot.woCompare(_partitionPivots[_numPartitions-2], _ordering) > 0
+                " lastPivot: " <<_partitionPivots[numPartitions()-2].str(), 
+                newPivot.woCompare(_partitionPivots[numPartitions()-2], _ordering) > 0
                 );
         }
         // in the last partition, look up the max value,
         BSONObj currPK;
-        bool foundLast = _partitions[_numPartitions-1]->getMaxPKForPartitionCap(currPK);
+        bool foundLast = _partitions[numPartitions()-1]->getMaxPKForPartitionCap(currPK);
         if (foundLast) {
             uassert(
                 17250, 
@@ -2818,7 +2812,7 @@ namespace mongo {
                 newPivot.str() << " max element: " << currPK.str(), 
                 newPivot.woCompare(currPK, _ordering) > 0);
         }
-        overwritePivot(_numPartitions-1, newPivot);
+        overwritePivot(numPartitions()-1, newPivot);
     }
 
     // for pivot associated with ith partition (note, not the id),
@@ -2868,16 +2862,14 @@ namespace mongo {
         // add data to internal vectors
         _partitionPivots.push_back(partitionInfo["max"].Obj().copy());
         _partitionIDs.push_back(id);
-        _numPartitions++;
 
         // some sanity checks
-        verify(_partitions.size() == _numPartitions);
-        verify(_partitions[_numPartitions-1].get() == newPartition.get());    
+        verify(_partitions[numPartitions()-1].get() == newPartition.get());    
     }
     
     void PartitionedCollection::appendNewPartition() {
         Lock::assertWriteLocked(_ns);
-        uint64_t id = (_numPartitions == 0) ? 0 : _partitionIDs[_numPartitions-1] + 1;
+        uint64_t id = (numPartitions() == 0) ? 0 : _partitionIDs[numPartitions()-1] + 1;
 
         // make entry for metadata collection
         // the pivot
@@ -2897,7 +2889,7 @@ namespace mongo {
 
     // create partitions from the cloner
     void PartitionedCollection::addClonedPartitionInfo(const vector<BSONElement> &partitionInfo) {
-        uassert(17279, "Called addClonedPartitionInfo with more than one current partition", (_numPartitions == 1));
+        uassert(17279, "Called addClonedPartitionInfo with more than one current partition", (numPartitions() == 1));
         // Note that the caller of this function needs to be REALLY careful
         // we don't do a lot of sanity checks that we theoretically could do,
         // such as "the collection has one partition and is empty"
@@ -2916,7 +2908,7 @@ namespace mongo {
     }
 
     BSONObj PartitionedCollection::getPartitionMetadata(uint64_t index) {
-        massert(17281, str::stream() << "invalid index passed into getPartitionMetadata: " << index, index < _numPartitions);
+        massert(17281, str::stream() << "invalid index passed into getPartitionMetadata: " << index, index < numPartitions());
         
         BSONObjBuilder b(64);
         b.append("", _partitionIDs[index]);
@@ -2927,7 +2919,7 @@ namespace mongo {
     }
 
     void PartitionedCollection::updatePartitionMetadata(uint64_t index, BSONObj newMetadata, bool checkCreateTime) {
-        massert(17283, "bad index to updatePartitionMetadata", index < _numPartitions);
+        massert(17283, "bad index to updatePartitionMetadata", index < numPartitions());
 
         BSONObjBuilder b(64);
         b.append("", _partitionIDs[index]);
@@ -3001,10 +2993,10 @@ namespace mongo {
             b.append(curr);
             numPartitionsFoundInMeta++;
         }
-        // note that we cannot just return _numPartitions for this
+        // note that we cannot just return numPartitions() for this
         // command, because this is done in the context of a transaction
         // It is possible that the transaction is reading a snapshot
-        // that no longer reflects _numPartitions
+        // that no longer reflects numPartitions()
         *numPartitions = numPartitionsFoundInMeta;
         *partitionArray = b.arr();
     }
@@ -3012,7 +3004,7 @@ namespace mongo {
     uint64_t PartitionedCollection::findInMemoryPartition(uint64_t id) {
         // now find the index of the in-memory vectors associated with this
         // item
-        uint64_t high = _numPartitions - 1;
+        uint64_t high = numPartitions() - 1;
         uint64_t low = 0;
         while (low < high) {
             uint64_t mid = (high + low) / 2;
@@ -3071,37 +3063,35 @@ namespace mongo {
         
         // special case for dropping last partition, we have to fix up
         // the last pivot
-        // note that _numPartitions may be 1 if called by addClonedPartitionInfo
+        // note that numPartitions() may be 1 if called by addClonedPartitionInfo
         // in that case, we don't want to do this
-        if ((index == _numPartitions - 1) && _numPartitions > 1) {
+        if ((index == numPartitions() - 1) && numPartitions() > 1) {
             BSONObjBuilder c(64);
             c.appendMaxKey("");
-            overwritePivot(_numPartitions - 2, c.done());
+            overwritePivot(numPartitions() - 2, c.done());
         }
-
-        _numPartitions--;
     }
 
     // this is called by the user
     void PartitionedCollection::dropPartition(uint64_t id) {
         sanityCheck();        
-        uassert(17252, "cannot drop partition if only one exists", _numPartitions > 1);
+        uassert(17252, "cannot drop partition if only one exists", numPartitions() > 1);
         dropPartitionInternal(id);
         sanityCheck();
     }
     
     int PartitionedCollection::partitionWithPK(const BSONObj& pk) const {
         // if there is one partition, then the answer is easy
-        if (_numPartitions == 1) {
+        if (numPartitions() == 1) {
             return 0;
         }
         // first check the last partition, as we expect many inserts and
         //queries to go there
-        if (pk.woCompare(_partitionPivots[_numPartitions-2], _ordering) > 0) {
-            return _numPartitions - 1;
+        if (pk.woCompare(_partitionPivots[numPartitions()-2], _ordering) > 0) {
+            return numPartitions() - 1;
         }
         // It is not in the last partition, now we must do a binary search
-        uint64_t high = _numPartitions - 2;
+        uint64_t high = numPartitions() - 2;
         uint64_t low = 0;
         while (low < high) {
             uint64_t mid = (high + low) / 2;
