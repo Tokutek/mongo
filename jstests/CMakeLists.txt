@@ -109,6 +109,9 @@ TestData.testName = '${jstestname}'"
       set_tests_properties(mongo/js/${jstest} PROPERTIES
         DEPENDS mongo/js/check-mongod
         )
+      set_property(TEST mongo/js/${jstest} APPEND PROPERTY
+        ENVIRONMENT "PATH=${CMAKE_BINARY_DIR}/src/mongo"
+        )
       set_property(TEST mongo/js/stop-mongod APPEND PROPERTY
         DEPENDS mongo/js/${jstest}
         )
@@ -129,6 +132,9 @@ jsTest.authenticate(db.getMongo())"
         )
       set_tests_properties(mongo/js-auth/${jstest} PROPERTIES
         DEPENDS mongo/js-auth/add-admin-user
+        )
+      set_property(TEST mongo/js-auth/${jstest} APPEND PROPERTY
+        ENVIRONMENT "PATH=${CMAKE_BINARY_DIR}/src/mongo"
         )
       set_property(TEST mongo/js-auth/stop-mongod APPEND PROPERTY
         DEPENDS mongo/js-auth/${jstest}
