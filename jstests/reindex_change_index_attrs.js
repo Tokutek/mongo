@@ -16,8 +16,19 @@ var test_id = function(idx) {
     var oldStats = idxStats(t.stats(), '_id_');
     var res = t.reIndex(idx, {compression: 'lzma', readPageSize: '32k'});
     assert.commandWorked(res);
-    assert.eq(res.was.compression, oldStats.compression);
-    assert.eq(res.was.readPageSize, oldStats.readPageSize);
+    printjson(oldStats);
+    printjson(res);
+    var checkWas = function(was) {
+        assert.eq(was.compression, oldStats.compression);
+        assert.eq(was.readPageSize, oldStats.readPageSize);
+    };
+    if (res.raw !== undefined) {
+        for (var k in res.raw) {
+            checkWas(res.raw[k].was);
+        }
+    } else {
+        checkWas(res.was);
+    }
     var newStats = idxStats(t.stats(), '_id_');
     assert.eq(newStats.compression, 'lzma');
     assert.eq(newStats.readPageSize, 32 * 1024);
@@ -34,10 +45,19 @@ assert.eq(idxStats(oldStats, '_id_').compression, 'quicklz');
 assert.eq(idxStats(oldStats, 'i_1').compression, 'lzma');
 var res = t.reIndex('*', {compression: 'zlib', pageSize: '8MB'});
 assert.commandWorked(res);
-for (var i = 0; i < res.was.length; ++i) {
-    assert.eq(res.was[i].name, oldStats.indexDetails[i].name);
-    assert.eq(res.was[i].compression, oldStats.indexDetails[i].compression);
-    assert.eq(res.was[i].pageSize, oldStats.indexDetails[i].pageSize);
+var checkWas = function(was) {
+    for (var i = 0; i < was.length; ++i) {
+        assert.eq(was[i].name, oldStats.indexDetails[i].name);
+        assert.eq(was[i].compression, oldStats.indexDetails[i].compression);
+        assert.eq(was[i].pageSize, oldStats.indexDetails[i].pageSize);
+    }
+};
+if (res.raw !== undefined) {
+    for (var k in res.raw) {
+        checkWas(res.raw[k].was);
+    }
+} else {
+    checkWas(res.was);
 }
 var newStats = t.stats();
 for (var i = 0; i < newStats.indexDetails.length; ++i) {
