@@ -97,14 +97,14 @@ if (BUILD_TESTING)
       add_test(
         NAME mongo/js/${jstest}
         COMMAND $<TARGET_FILE:mongo>
+          ${jstestname}
           --port 27999
           "${CMAKE_CURRENT_SOURCE_DIR}/${jstest}"
           --eval "TestData = new Object();
 TestData.testDir = '${CMAKE_CURRENT_SOURCE_DIR}';
 TestData.testPath = '${CMAKE_CURRENT_SOURCE_DIR}/${jstest}';
 TestData.testFile = '${jstest}';
-TestData.testName = '${jstestname}';
-var db = db.getSiblingDB('${jstestname}')"
+TestData.testName = '${jstestname}'"
         )
       set_tests_properties(mongo/js/${jstest} PROPERTIES
         DEPENDS mongo/js/check-mongod
@@ -116,6 +116,7 @@ var db = db.getSiblingDB('${jstestname}')"
       add_test(
         NAME mongo/js-auth/${jstest}
         COMMAND $<TARGET_FILE:mongo>
+          ${jstestname}
           --port 27999
           "${CMAKE_CURRENT_SOURCE_DIR}/${jstest}"
           --eval "TestData = new Object();
@@ -124,8 +125,7 @@ TestData.testPath = '${CMAKE_CURRENT_SOURCE_DIR}/${jstest}';
 TestData.testFile = '${jstest}';
 TestData.testName = '${jstestname}';
 TestData.auth = true;
-jsTest.authenticate(db.getMongo());
-var db = db.getSiblingDB('${jstestname}')"
+jsTest.authenticate(db.getMongo())"
         )
       set_tests_properties(mongo/js-auth/${jstest} PROPERTIES
         DEPENDS mongo/js-auth/add-admin-user
