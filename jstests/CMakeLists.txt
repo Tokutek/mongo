@@ -4,11 +4,11 @@ if (BUILD_TESTING)
   set(js_logpath "${js_ctest_root}/log")
   file(MAKE_DIRECTORY "${js_dbpath}")
   add_test(
-    NAME mongo/server/clean-mongod-dbpath
+    NAME mongo/js/clean-mongod-dbpath
     COMMAND rm -rf "${js_dbpath}/*"
     )
   add_test(
-    NAME mongo/server/start-mongod
+    NAME mongo/js/start-mongod
     COMMAND $<TARGET_FILE:mongod>
       --port 27999
       --dbpath "${js_dbpath}"
@@ -16,40 +16,40 @@ if (BUILD_TESTING)
       --logpath "${js_logpath}"
       --setParameter enableTestCommands=1
     )
-  set_tests_properties(mongo/server/start-mongod PROPERTIES
-    DEPENDS mongo/server/clean-mongod-dbpath
+  set_tests_properties(mongo/js/start-mongod PROPERTIES
+    DEPENDS mongo/js/clean-mongod-dbpath
     )
   add_test(
-    NAME mongo/server/check-mongod
+    NAME mongo/js/check-mongod
     COMMAND /bin/bash -c "for i in `seq 1 180`; do if $<TARGET_FILE:mongo> --port 27999 --eval 'db.version()'; then break; fi; if [ $i = 180 ]; then exit 1; fi; sleep 1; done"
     )
-  set_tests_properties(mongo/server/check-mongod PROPERTIES
-    DEPENDS mongo/server/start-mongod
+  set_tests_properties(mongo/js/check-mongod PROPERTIES
+    DEPENDS mongo/js/start-mongod
     )
   add_test(
-    NAME mongo/server/stop-mongod
+    NAME mongo/js/stop-mongod
     COMMAND $<TARGET_FILE:mongo>
       --port 27999
       --eval "db.adminCommand({shutdown: 1, force: true})"
     )
-  set_tests_properties(mongo/server/stop-mongod PROPERTIES
+  set_tests_properties(mongo/js/stop-mongod PROPERTIES
     WILL_FAIL TRUE
-    DEPENDS mongo/server/check-mongod
+    DEPENDS mongo/js/check-mongod
     )
 
-  set(js_ctest_root "${CMAKE_BINARY_DIR}/ctest/mongo/js-auth")
-  set(js_dbpath "${js_auth_ctest_root}/db")
-  set(js_logpath "${js_auth_ctest_root}/log")
+  set(js_auth_ctest_root "${CMAKE_BINARY_DIR}/ctest/mongo/js-auth")
+  set(js_auth_dbpath "${js_auth_ctest_root}/db")
+  set(js_auth_logpath "${js_auth_ctest_root}/log")
   file(MAKE_DIRECTORY "${js_auth_dbpath}")
   add_test(
-    NAME mongo/server-auth/clean-mongod-dbpath
+    NAME mongo/js-auth/clean-mongod-dbpath
     COMMAND rm -rf "${js_auth_dbpath}/*"
     )
-  set_tests_properties(mongo/server-auth/clean-mongod-dbpath PROPERTIES
-    DEPENDS mongo/server/stop-mongod
+  set_tests_properties(mongo/js-auth/clean-mongod-dbpath PROPERTIES
+    DEPENDS mongo/js/stop-mongod
     )
   add_test(
-    NAME mongo/server-auth/start-mongod
+    NAME mongo/js-auth/start-mongod
     COMMAND $<TARGET_FILE:mongod>
       --port 27999
       --dbpath "${js_auth_dbpath}"
@@ -58,35 +58,35 @@ if (BUILD_TESTING)
       --setParameter enableTestCommands=1
       --auth
     )
-  set_tests_properties(mongo/server-auth/start-mongod PROPERTIES
-    DEPENDS mongo/server-auth/clean-mongod-dbpath
+  set_tests_properties(mongo/js-auth/start-mongod PROPERTIES
+    DEPENDS mongo/js-auth/clean-mongod-dbpath
     )
   add_test(
-    NAME mongo/server-auth/check-mongod
+    NAME mongo/js-auth/check-mongod
     COMMAND /bin/bash -c "for i in `seq 1 180`; do if $<TARGET_FILE:mongo> --port 27999 --eval 'db.version()'; then break; fi; if [ $i = 180 ]; then exit 1; fi; sleep 1; done"
     )
-  set_tests_properties(mongo/server-auth/check-mongod PROPERTIES
-    DEPENDS mongo/server-auth/start-mongod
+  set_tests_properties(mongo/js-auth/check-mongod PROPERTIES
+    DEPENDS mongo/js-auth/start-mongod
     )
   add_test(
-    NAME mongo/server-auth/add-admin-user
+    NAME mongo/js-auth/add-admin-user
     COMMAND $<TARGET_FILE:mongo>
       admin
       --port 27999
       --eval "if (!db.auth('admin', 'password')) { db.addUser('admin', 'password'); }"
     )
-  set_tests_properties(mongo/server-auth/add-admin-user PROPERTIES
-    DEPENDS mongo/server-auth/check-mongod
+  set_tests_properties(mongo/js-auth/add-admin-user PROPERTIES
+    DEPENDS mongo/js-auth/check-mongod
     )
   add_test(
-    NAME mongo/server-auth/stop-mongod
+    NAME mongo/js-auth/stop-mongod
     COMMAND $<TARGET_FILE:mongo>
       --port 27999
       --eval "db.adminCommand({shutdown: 1, force: true})"
     )
-  set_tests_properties(mongo/server-auth/stop-mongod PROPERTIES
+  set_tests_properties(mongo/js-auth/stop-mongod PROPERTIES
     WILL_FAIL TRUE
-    DEPENDS mongo/server-auth/add-admin-user
+    DEPENDS mongo/js-auth/add-admin-user
     )
 
   file(GLOB all_js_tests RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" *.js)
@@ -107,9 +107,9 @@ TestData.testName = '${jstestname}';
 var db = db.getSiblingDB('${jstestname}')"
         )
       set_tests_properties(mongo/js/${jstest} PROPERTIES
-        DEPENDS mongo/server/check-mongod
+        DEPENDS mongo/js/check-mongod
         )
-      set_property(TEST mongo/server/stop-mongod APPEND PROPERTY
+      set_property(TEST mongo/js/stop-mongod APPEND PROPERTY
         DEPENDS mongo/js/${jstest}
         )
 
@@ -128,9 +128,9 @@ jsTest.authenticate(db.getMongo());
 var db = db.getSiblingDB('${jstestname}')"
         )
       set_tests_properties(mongo/js-auth/${jstest} PROPERTIES
-        DEPENDS mongo/server-auth/add-admin-user
+        DEPENDS mongo/js-auth/add-admin-user
         )
-      set_property(TEST mongo/server-auth/stop-mongod APPEND PROPERTY
+      set_property(TEST mongo/js-auth/stop-mongod APPEND PROPERTY
         DEPENDS mongo/js-auth/${jstest}
         )
     endif ()
