@@ -85,7 +85,6 @@ if (BUILD_TESTING)
       base
       ${TOKUMX_SSL_LIBRARIES}
       )
-    add_test(mongo/db/auth/${test} ${test})
   endforeach ()
 endif ()
 
