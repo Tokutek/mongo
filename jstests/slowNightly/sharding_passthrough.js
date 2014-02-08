@@ -130,7 +130,11 @@ files.forEach(function(x) {
             'partition_mst_886|' +
             'multi_key_mst_872|' +
             'partition_add|' +
-            'partition_stats' +
+            'partition_stats|' +
+            'part_convert|' +
+            'part_coll_simple|' +
+            'partition_ops_multithread|' +
+            'pk_unique_check_param' +
         ')\.js$');
 
     if (failsInShardingPattern.test(x.name)) {
