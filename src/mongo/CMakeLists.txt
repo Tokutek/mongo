@@ -293,8 +293,8 @@ install_executables(tokumx_server
   )
 
 if (BUILD_TESTING)
-  add_test(mongo/shell/test_shell
-    "${PYTHON2}"
+  add_test(NAME mongo/shell/test_shell
+    COMMAND "${PYTHON2}"
       "${CMAKE_CURRENT_SOURCE_DIR}/../../buildscripts/test_shell.py"
       "$<TARGET_FILE:mongo>"
     )
@@ -535,4 +535,178 @@ if (NOT STDCXX_LIBRARY MATCHES NOTFOUND)
     DESTINATION ${INSTALL_LIBDIR}
     COMPONENT tokumx_libs_extra
     )
+endif ()
+
+if (BUILD_TESTING)
+  set(js_cxx_ctest_root "${CMAKE_BINARY_DIR}/ctest/mongo/cxx")
+  set(js_cxx_dbpath "${js_cxx_ctest_root}/db")
+  set(js_cxx_logpath "${js_cxx_ctest_root}/log")
+  file(MAKE_DIRECTORY "${js_cxx_dbpath}")
+  add_test(
+    NAME mongo/cxx/clean-mongod-dbpath
+    COMMAND rm -rf "${js_cxx_dbpath}/*"
+    )
+  add_test(
+    NAME mongo/cxx/start-mongod
+    COMMAND $<TARGET_FILE:mongod>
+    --dbpath "${js_cxx_dbpath}"
+    --fork
+    --logpath "${js_cxx_logpath}"
+    --setParameter enableTestCommands=1
+    )
+  set_tests_properties(mongo/cxx/start-mongod PROPERTIES
+    DEPENDS mongo/cxx/clean-mongod-dbpath
+    )
+  add_test(
+    NAME mongo/cxx/check-mongod
+    COMMAND /bin/bash -c "for i in `seq 1 180`; do if $<TARGET_FILE:mongo> --eval 'db.version()'; then break; fi; if [ $i = 180 ]; then exit 1; fi; sleep 1; done"
+    )
+  set_tests_properties(mongo/cxx/check-mongod PROPERTIES
+    DEPENDS mongo/cxx/start-mongod
+    )
+  add_test(
+    NAME mongo/cxx/stop-mongod
+    COMMAND $<TARGET_FILE:mongo>
+    --eval "db.adminCommand({shutdown: 1, force: true})"
+    )
+  set_tests_properties(mongo/cxx/stop-mongod PROPERTIES
+    WILL_FAIL TRUE
+    DEPENDS mongo/cxx/check-mongod
+    )
+
+  function (add_mongo_test section name)
+    add_test(
+      NAME mongo/cxx/${section}/${name}
+      COMMAND ${ARGN}
+      )
+    set_tests_properties(mongo/cxx/${section}/${name} PROPERTIES
+      DEPENDS mongo/cxx/check-mongod
+      )
+    set_property(TEST mongo/cxx/stop-mongod APPEND PROPERTY
+      DEPENDS mongo/cxx/${section}/${name}
+      )
+  endfunction ()
+
+  foreach (test
+      configuration_variable_manager_test
+      initializer_dependency_graph_test
+      initializer_test
+      owned_pointer_vector_test
+      owned_pointer_map_test
+      parse_number_test
+      status_test
+      string_data_test
+      units_test
+      )
+    add_mongo_test(base ${test} ${test})
+  endforeach ()
+
+  foreach (test
+      builder_test
+      bson_extract_test
+      mutable_bson_test
+      mutable_bson_heap_test
+      mutable_bson_builder_test
+      mutable_bson_algo_test
+      bson_field_test
+      bson_validate_test
+      )
+    add_mongo_test(bson ${test} ${test})
+  endforeach ()
+
+  foreach (test
+      atomic_word_test
+      bits_test
+      random_test
+      )
+    add_mongo_test(platform ${test} ${test})
+  endforeach ()
+
+  foreach (test
+      balancer_policy_tests
+      chunk_diff_test
+      chunk_version_test
+      collection_manager_test
+      field_parser_test
+      metadata_loader_test
+      mongo_version_range_test
+      shard_conn_test
+      shard_test
+      type_changelog_test
+      type_chunk_test
+      type_collection_test
+      type_config_version_test
+      type_database_test
+      type_lockpings_test
+      type_locks_test
+      type_mongos_test
+      type_settings_test
+      type_shard_test
+      type_tags_test
+      )
+    add_mongo_test(s ${test} ${test})
+  endforeach ()
+
+  foreach (test
+      partitioned_counter_test
+      descriptive_stats_test
+      fail_point_test
+      md5_test
+      processinfo_test
+      safe_num_test
+      sock_test
+      string_map_test
+      stringutils_test
+      text_test
+      )
+    add_mongo_test(util ${test} ${test})
+  endforeach ()
+
+  foreach (test
+      action_set_test
+      principal_set_test
+      privilege_set_test
+      authorization_manager_test
+      )
+    add_mongo_test(db/auth ${test} ${test})
+  endforeach ()
+
+  foreach (test
+      cmdline_test
+      field_ref_test
+      index_set_test
+      server_parameters_test
+      )
+    add_mongo_test(db ${test} ${test})
+  endforeach ()
+
+  foreach (test
+      unittest_test
+      fixture_test
+      )
+    add_mongo_test(unittest ${test} ${test})
+  endforeach ()
+
+  foreach (test
+      authTest
+      clientTest
+      dbclient_rs_test
+      firstExample
+      httpClientTest
+      scoped_db_conn_test
+      secondExample
+      tutorial
+      whereExample
+      )
+    add_mongo_test(client ${test} ${test})
+  endforeach ()
+
+  foreach (test
+      bson_template_evaluator_test
+      v8_deadline_monitor_test
+      )
+    add_mongo_test(scripting ${test} ${test})
+  endforeach ()
+
+  add_mongo_test(dbtests smokeTest smokeTest)
 endif ()

@@ -136,7 +136,6 @@ if (BUILD_TESTING)
       base
       ${TOKUMX_SSL_LIBRARIES}
       )
-    add_test(mongo/util/${test} ${test})
   endforeach ()
 
   target_link_libraries(descriptive_stats_test bson)
@@ -158,7 +157,6 @@ if (BUILD_TESTING)
     base
     ${TOKUMX_SSL_LIBRARIES}
     )
-  add_test(mongo/util/sock_test sock_test)
 
   add_executable(md5_test md5_test md5main)
   add_dependencies(md5_test generate_error_codes generate_action_types)
@@ -170,5 +168,4 @@ if (BUILD_TESTING)
     base
     ${TOKUMX_SSL_LIBRARIES}
     )
-  add_test(mongo/util/md5_test md5_test)
 endif ()

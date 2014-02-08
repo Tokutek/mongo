@@ -103,7 +103,6 @@ if (BUILD_TESTING)
       ${TokuKV_LIBRARIES}
       ${TOKUMX_SSL_LIBRARIES}
       )
-    add_test(mongo/client/${test} ${test})
   endforeach ()
   target_link_libraries(dbclient_rs_test
     mocklib

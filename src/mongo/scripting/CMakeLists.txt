@@ -41,7 +41,6 @@ if (BUILD_TESTING)
       unittest_crutch
       ${TOKUMX_SSL_LIBRARIES}
       )
-    add_test(mongo/scripting/${test} ${test})
   endforeach ()
   
   target_link_libraries(bson_template_evaluator_test bson_template_evaluator)

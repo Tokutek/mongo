@@ -250,7 +250,6 @@ if (BUILD_TESTING)
       base
       ${TOKUMX_SSL_LIBRARIES}
       )
-    add_test(mongo/db/${test} ${test})
   endforeach ()
 
   target_link_libraries(cmdline_test dbcmdline)

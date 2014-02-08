@@ -40,7 +40,6 @@ if (BUILD_TESTING)
       base
       ${TOKUMX_SSL_LIBRARIES}
       )
-    add_test(mongo/bson/${test} ${test})
   endforeach ()
 endif ()
 
