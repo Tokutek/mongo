@@ -47,6 +47,16 @@ function doIt( ev, wait, where ) {
 
     db.killOp( o );
 
+    assert.soon(function() {
+        var o = op(ev, where);
+        if (o == -1) {
+            return true;
+        } else {
+            db.killOp(o);
+            return false;
+        }
+    });
+
     debug( "sent kill" );
 
     s();
