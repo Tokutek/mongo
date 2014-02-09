@@ -544,7 +544,7 @@ if (BUILD_TESTING)
   file(MAKE_DIRECTORY "${js_cxx_dbpath}")
   add_test(
     NAME mongo/cxx/clean-mongod-dbpath
-    COMMAND rm -rf "${js_cxx_dbpath}/*"
+    COMMAND bash -c "rm -rf ${js_cxx_dbpath}/*"
     )
   add_test(
     NAME mongo/cxx/start-mongod
