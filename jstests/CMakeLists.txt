@@ -5,7 +5,7 @@ if (BUILD_TESTING)
   file(MAKE_DIRECTORY "${js_dbpath}")
   add_test(
     NAME mongo/js/clean-mongod-dbpath
-    COMMAND rm -rf "${js_dbpath}/*"
+    COMMAND bash -c "rm -rf ${js_dbpath}/*"
     )
   add_test(
     NAME mongo/js/start-mongod
@@ -43,7 +43,7 @@ if (BUILD_TESTING)
   file(MAKE_DIRECTORY "${js_auth_dbpath}")
   add_test(
     NAME mongo/js-auth/clean-mongod-dbpath
-    COMMAND rm -rf "${js_auth_dbpath}/*"
+    COMMAND bash -c "rm -rf ${js_auth_dbpath}/*"
     )
   set_tests_properties(mongo/js-auth/clean-mongod-dbpath PROPERTIES
     DEPENDS mongo/js/stop-mongod
@@ -73,7 +73,19 @@ if (BUILD_TESTING)
     COMMAND $<TARGET_FILE:mongo>
       admin
       --port 27999
-      --eval "if (!db.auth('admin', 'password')) { db.addUser('admin', 'password'); }"
+      --eval "
+db.addUser('admin', 'password');
+assert.soon(function() {
+    var ret = db.auth('admin', 'password');
+    if (ret) {
+        if (db.system.users.find({user: 'admin'}).count() == 1) {
+            return true;
+        }
+    }
+    db.addUser('admin', 'password');
+    return false;
+});
+"
     )
   set_tests_properties(mongo/js-auth/add-admin-user PROPERTIES
     DEPENDS mongo/js-auth/check-mongod
