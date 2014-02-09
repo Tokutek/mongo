@@ -5,7 +5,7 @@ if (BUILD_TESTING)
   file(MAKE_DIRECTORY "${js_dbpath}")
   add_test(
     NAME mongo/js/clean-mongod-dbpath
-    COMMAND bash -c "rm -rf ${js_dbpath}/*"
+    COMMAND bash -c "ls ${js_dbpath}/* | xargs rm -rf"
     )
   add_test(
     NAME mongo/js/start-mongod
@@ -43,7 +43,7 @@ if (BUILD_TESTING)
   file(MAKE_DIRECTORY "${js_auth_dbpath}")
   add_test(
     NAME mongo/js-auth/clean-mongod-dbpath
-    COMMAND bash -c "rm -rf ${js_auth_dbpath}/*"
+    COMMAND bash -c "ls ${js_auth_dbpath}/* | xargs rm -rf"
     )
   set_tests_properties(mongo/js-auth/clean-mongod-dbpath PROPERTIES
     DEPENDS mongo/js/stop-mongod
