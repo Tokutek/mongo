@@ -93,8 +93,9 @@ assert.soon(function() {
   add_test(
     NAME mongo/js-auth/stop-mongod
     COMMAND $<TARGET_FILE:mongo>
+      admin
       --port 27999
-      --eval "db.adminCommand({shutdown: 1, force: true})"
+      --eval "db.auth('admin', 'password'); db.runCommand({shutdown: 1, force: true})"
     )
   set_tests_properties(mongo/js-auth/stop-mongod PROPERTIES
     WILL_FAIL TRUE
