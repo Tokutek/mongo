@@ -142,7 +142,7 @@ namespace mongo {
                 OplogHelpers::logUpdate(ns, pk, obj, newObj, fromMigrate);
             }
             else {
-                OplogHelpers::logUpdateModsWithRow(ns, pk, obj, updateobj, fromMigrate, newObj);
+                OplogHelpers::logUpdateModsWithRow(ns, pk, obj, updateobj, fromMigrate);
             }
         }
     }

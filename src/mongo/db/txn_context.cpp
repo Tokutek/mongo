@@ -43,7 +43,7 @@ namespace mongo {
     static void (*_logTxnOpsRef)(GTID gtid, uint64_t timestamp, uint64_t hash, OID& oid) = NULL;
     static void (*_logOpsToOplogRef)(BSONObj o) = NULL;
     static bool (*_shouldLogOpForSharding)(const char *, const char *, const BSONObj &) = NULL;
-    static bool (*_shouldLogUpdateOpForSharding)(const char *, const char *, const BSONObj &, const BSONObj &) = NULL;
+    static bool (*_shouldLogUpdateOpForSharding)(const char *, const char *, const BSONObj &) = NULL;
     static void (*_startObjForMigrateLog)(BSONObjBuilder &b) = NULL;
     static void (*_writeObjToMigrateLog)(BSONObj &) = NULL;
     static void (*_writeObjToMigrateLogRef)(BSONObj &) = NULL;
@@ -88,7 +88,7 @@ namespace mongo {
     }
 
     void enableLogTxnOpsForSharding(bool (*shouldLogOp)(const char *, const char *, const BSONObj &),
-                                    bool (*shouldLogUpdateOp)(const char *, const char *, const BSONObj &, const BSONObj &),
+                                    bool (*shouldLogUpdateOp)(const char *, const char *, const BSONObj &),
                                     void (*startObj)(BSONObjBuilder &b),
                                     void (*writeObj)(BSONObj &),
                                     void (*writeObjToRef)(BSONObj &)) {
@@ -121,12 +121,12 @@ namespace mongo {
         return _shouldLogOpForSharding(opstr, ns, row);
     }
 
-    bool shouldLogTxnUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj, const BSONObj &newObj) {
+    bool shouldLogTxnUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj) {
         if (!logTxnOpsForSharding()) {
             return false;
         }
         dassert(_shouldLogUpdateOpForSharding != NULL);
-        return _shouldLogUpdateOpForSharding(opstr, ns, oldObj, newObj);
+        return _shouldLogUpdateOpForSharding(opstr, ns, oldObj);
     }
 
     TxnContext::TxnContext(TxnContext *parent, int txnFlags)

@@ -348,18 +348,11 @@ namespace mongo {
             return false;
         }
 
-        bool shouldLogUpdateOp(const char *opstr, const char *ns, const BSONObj &oldObj, const BSONObj &newObj) {
+        bool shouldLogUpdateOp(const char *opstr, const char *ns, const BSONObj &oldObj) {
             // Just a sanity check.  ShardStrategy::_prepareUpdate() appears to prevent you from updating a document such that the shard key changes.
             // We just verify that old and new have the same shard key, and pass to the normal case.
             // But we call shouldLogOp first to avoid doing the comparison if, say, we're in the wrong ns and we can stop early.
-            bool should = shouldLogOp(opstr, ns, oldObj);
-            if (should) {
-                ShardKeyPattern shardKey(_shardKeyPattern);
-                BSONObj oldKey = shardKey.extractKey(oldObj);
-                BSONObj newKey = shardKey.extractKey(newObj);
-                verify(oldKey.equal(newKey));
-            }
-            return should;
+            return shouldLogOp(opstr, ns, oldObj);
         }
 
         void startObjForMigrateLog(BSONObjBuilder &b) {
@@ -648,8 +641,8 @@ namespace mongo {
         return migrateFromStatus.shouldLogOp(opstr, ns, obj);
     }
 
-    bool shouldLogUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj, const BSONObj &newObj) {
-        return migrateFromStatus.shouldLogUpdateOp(opstr, ns, oldObj, newObj);
+    bool shouldLogUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj) {
+        return migrateFromStatus.shouldLogUpdateOp(opstr, ns, oldObj);
     }
 
     void startObjForMigrateLog(BSONObjBuilder &b) {
