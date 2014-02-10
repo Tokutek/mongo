@@ -139,10 +139,10 @@ namespace mongo {
         // must happen after updateOneObject
         if (logop) {
             if (forceFullUpdate) {
-                OpLogHelpers::logUpdate(ns, pk, obj, newObj, fromMigrate);
+                OplogHelpers::logUpdate(ns, pk, obj, newObj, fromMigrate);
             }
             else {
-                OpLogHelpers::logUpdateModsWithRow(ns, pk, obj, updateobj, fromMigrate, newObj);
+                OplogHelpers::logUpdateModsWithRow(ns, pk, obj, updateobj, fromMigrate, newObj);
             }
         }
     }
@@ -156,7 +156,7 @@ namespace mongo {
         updateOneObject(cl, pk, obj, updateobj, BSONObj(), fromMigrate, 0);
         // must happen after updateOneObject
         if (logop) {
-            OpLogHelpers::logUpdate(ns, pk, obj, updateobj, fromMigrate);
+            OplogHelpers::logUpdate(ns, pk, obj, updateobj, fromMigrate);
         }
     }
 
@@ -178,7 +178,7 @@ namespace mongo {
         checkNoMods(newObj);
         insertOneObject(cl, newObj);
         if (logop) {
-            OpLogHelpers::logInsert(ns.c_str(), newObj, fromMigrate);
+            OplogHelpers::logInsert(ns.c_str(), newObj, fromMigrate);
         }
         return UpdateResult(0, isOperatorUpdate, 1, newObj);
     }

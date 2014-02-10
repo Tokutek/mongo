@@ -51,7 +51,7 @@ static const char OP_STR_COMMAND[] = "c"; // command
 
 namespace mongo {
 
-    namespace OpLogHelpers {
+    namespace OplogHelpers {
         bool shouldLogOpForSharding(const char *opstr) {
             return mongoutils::str::equals(opstr, OP_STR_INSERT) ||
                 mongoutils::str::equals(opstr, OP_STR_DELETE) ||
@@ -661,6 +661,6 @@ namespace mongo {
             }
         }
 
-    } // namespace OpLogHelpers
+    } // namespace OplogHelpers
 
 } // namespace mongo

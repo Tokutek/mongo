@@ -76,7 +76,7 @@ namespace mongo {
             }
             updateObjects(rsConfigNs.c_str(), asBson(), BSONObj(), true, false, true);
             if( !comment.isEmpty() && (!theReplSet || theReplSet->isPrimary()) ) {
-                OpLogHelpers::logComment(comment);
+                OplogHelpers::logComment(comment);
             }
             transaction.commit(0);
         }

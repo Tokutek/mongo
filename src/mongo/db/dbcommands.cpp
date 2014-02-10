@@ -1759,7 +1759,7 @@ namespace mongo {
             bool isOplogNS = (strcmp(ns.c_str(), rsoplog) == 0) || (strcmp(ns.c_str(), rsOplogRefs) == 0);
             uassert( 17300, "cannot manually drop partition on oplog or oplog.refs", force.trueValue() || !isOplogNS);
             Collection *cl = getCollection( ns );
-            OpLogHelpers::logUnsupportedOperation(ns.c_str());
+            OplogHelpers::logUnsupportedOperation(ns.c_str());
             uassert( 17301, "dropPartition no such collection", cl );
             uassert( 17302, "collection must be partitioned", cl->isPartitioned() );
 
@@ -1800,7 +1800,7 @@ namespace mongo {
             Collection *cl = getCollection( ns );
             uassert( 17306, "addPartition no such collection", cl );
             uassert( 17307, "collection must be partitioned", cl->isPartitioned() );
-            OpLogHelpers::logUnsupportedOperation(ns.c_str());
+            OplogHelpers::logUnsupportedOperation(ns.c_str());
 
             BSONElement e = cmdObj["newPivot"];            
             PartitionedCollection *pc = cl->as<PartitionedCollection>();
@@ -1836,7 +1836,7 @@ namespace mongo {
             string coll = cmdObj[ "convertToPartitioned" ].valuestrsafe();
             uassert( 17308, "convertToPartitioned must specify a collection", !coll.empty() );
             string ns = dbname + "." + coll;
-            OpLogHelpers::logUnsupportedOperation(ns.c_str());
+            OplogHelpers::logUnsupportedOperation(ns.c_str());
             convertToPartitionedCollection(ns);
             return true;
         }
@@ -2059,7 +2059,7 @@ namespace mongo {
             retval = _execCommand(c, dbname, cmdObj, queryOptions, errmsg, result, fromRepl);
 
             if ( retval && c->logTheOp() && ! fromRepl ) {
-                OpLogHelpers::logCommand(cmdns, cmdObj);
+                OplogHelpers::logCommand(cmdns, cmdObj);
             }
 
             if (retval && txn) {
@@ -2093,7 +2093,7 @@ namespace mongo {
             client.curop()->ensureStarted();
             retval = _execCommand(c, dbname, cmdObj, queryOptions, errmsg, result, fromRepl);
             if ( retval && c->logTheOp() && ! fromRepl ) {
-                OpLogHelpers::logCommand(cmdns, cmdObj);
+                OplogHelpers::logCommand(cmdns, cmdObj);
             }
 
             if (retval && transaction) {

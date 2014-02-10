@@ -1285,7 +1285,7 @@ namespace mongo {
                 options = b.obj();
             }
             string logNs = cl.toString() + ".$cmd";
-            OpLogHelpers::logCommand(logNs.c_str(), options);
+            OplogHelpers::logCommand(logNs.c_str(), options);
         }
         return true;
     }
@@ -2154,7 +2154,7 @@ namespace mongo {
 
         const BSONObj pk = getNextPK();
         checkUniqueAndInsert(pk, objWithId, flags | Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE, false, indexBitChanged);
-        OpLogHelpers::logInsertForCapped(_ns.c_str(), pk, objWithId);
+        OplogHelpers::logInsertForCapped(_ns.c_str(), pk, objWithId);
         checkGorged(obj, true);
     }
 
@@ -2343,7 +2343,7 @@ namespace mongo {
                 trimmedBytes += oldestPK.objsize();
                 
                 if (logop) {
-                    OpLogHelpers::logDeleteForCapped(_ns.c_str(), oldestPK, oldestObj);
+                    OplogHelpers::logDeleteForCapped(_ns.c_str(), oldestPK, oldestObj);
                 }
                 
                 // Delete the object, reload the current objects/size

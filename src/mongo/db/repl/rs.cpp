@@ -1070,7 +1070,7 @@ namespace mongo {
             RWLockRecursive::Shared lk(operationLock);
             if (_replBackgroundShouldRun && _isMaster() && GTID::cmp(curr, lastSeenGTID) == 0) {
                 Client::Transaction txn (DB_SERIALIZABLE);
-                OpLogHelpers::logComment(BSON("comment" << "keepOplogAlive"));
+                OplogHelpers::logComment(BSON("comment" << "keepOplogAlive"));
                 txn.commit(DB_TXN_NOSYNC);
                 lastSeenGTID = gtidManager->getLiveState();
             }

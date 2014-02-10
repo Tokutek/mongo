@@ -336,13 +336,13 @@ namespace mongo {
                     << "a capped collection is being sharded, this should not happen"
                     << " ns: " << ns
                     << " opstr: " << opstr,
-                    !OpLogHelpers::invalidOpForSharding(opstr));
+                    !OplogHelpers::invalidOpForSharding(opstr));
 
             if (!_snapshotTaken) {
                 return false;
             }
 
-            if (OpLogHelpers::shouldLogOpForSharding(opstr)) {
+            if (OplogHelpers::shouldLogOpForSharding(opstr)) {
                 return isInRange(obj, _min, _max, _shardKeyPattern);
             }
             return false;
@@ -1482,7 +1482,7 @@ namespace mongo {
                         }
                         SpillableVectorIterator it(op, conn.conn(), MigrateFromStatus::MIGRATE_LOG_REF_NS);
                         while (it.more()) {
-                            OpLogHelpers::applyOperationFromOplog(it.next());
+                            OplogHelpers::applyOperationFromOplog(it.next());
                             if (state == CATCHUP) {
                                 numCatchup++;
                             } else {
@@ -1501,7 +1501,7 @@ namespace mongo {
                             Client::ReadContext ctx(ns, lockReasonInner);
                             Client::Transaction txn(DB_SERIALIZABLE);
                             while (it.moreInCurrentBatch()) {
-                                OpLogHelpers::applyOperationFromOplog(it.next());
+                                OplogHelpers::applyOperationFromOplog(it.next());
                                 if (state == CATCHUP) {
                                     numCatchup++;
                                 } else {
@@ -1673,7 +1673,7 @@ namespace mongo {
                         for (BSONObjIterator it(cursorObj["firstBatch"].Obj()); it.more(); ++it) {
                             BSONObj obj = (*it).Obj();
                             insertOneObject(cl, obj, insertFlags);
-                            OpLogHelpers::logInsert(ns.c_str(), obj, true);
+                            OplogHelpers::logInsert(ns.c_str(), obj, true);
                             numCloned++;
                             clonedBytes += obj.objsize();
                         }
@@ -1689,7 +1689,7 @@ namespace mongo {
                         while (cursor.moreInCurrentBatch()) {
                             BSONObj obj = cursor.nextSafe();
                             insertOneObject(cl, obj, insertFlags);
-                            OpLogHelpers::logInsert(ns.c_str(), obj, true);
+                            OplogHelpers::logInsert(ns.c_str(), obj, true);
                             numCloned++;
                             clonedBytes += obj.objsize();
                         }
@@ -1885,7 +1885,7 @@ namespace mongo {
                 BSONObj mod = it->Obj();
                 vector<BSONElement> logObjElts = mod["a"].Array();
                 for (vector<BSONElement>::const_iterator lit = logObjElts.begin(); lit != logObjElts.end(); ++lit) {
-                    OpLogHelpers::applyOperationFromOplog(lit->Obj());
+                    OplogHelpers::applyOperationFromOplog(lit->Obj());
                 }
             }
 

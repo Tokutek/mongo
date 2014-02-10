@@ -21,7 +21,7 @@
 
 namespace mongo {
 
-    namespace OpLogHelpers {
+    namespace OplogHelpers {
 
         // helper functions for sharding
         bool shouldLogOpForSharding(const char *opstr);
