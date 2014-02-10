@@ -53,6 +53,6 @@ namespace mongo {
     UpdateResult updateObjects(const char *ns,
                                const BSONObj &updateobj, const BSONObj &pattern,
                                const bool upsert, const bool multi,
-                               const bool logop, const bool fromMigrate = false);
+                               const bool fromMigrate = false);
 
 }  // namespace mongo

@@ -119,7 +119,7 @@ namespace mongo {
 
     static void updateUsingMods(const char *ns, Collection *cl, const BSONObj &pk, const BSONObj &obj,
                                 const BSONObj &updateobj, shared_ptr<ModSet> mods, MatchDetails* details,
-                                const bool logop, const bool fromMigrate) {
+                                const bool fromMigrate) {
         ModSet *useMods = mods.get();
         auto_ptr<ModSet> mymodset;
         bool hasDynamicArray = mods->hasDynamicArray();
@@ -137,32 +137,28 @@ namespace mongo {
             fromMigrate, modsAreIndexed ? 0 : Collection::KEYS_UNAFFECTED_HINT);
 
         // must happen after updateOneObject
-        if (logop) {
-            if (forceFullUpdate) {
-                OplogHelpers::logUpdate(ns, pk, obj, newObj, fromMigrate);
-            }
-            else {
-                OplogHelpers::logUpdateModsWithRow(ns, pk, obj, updateobj, fromMigrate);
-            }
+        if (forceFullUpdate) {
+            OplogHelpers::logUpdate(ns, pk, obj, newObj, fromMigrate);
+        }
+        else {
+            OplogHelpers::logUpdateModsWithRow(ns, pk, obj, updateobj, fromMigrate);
         }
     }
 
     static void updateNoMods(const char *ns, Collection *cl, const BSONObj &pk, const BSONObj &obj, BSONObj &updateobj,
-                             const bool logop, const bool fromMigrate) {
+                             const bool fromMigrate) {
         // This is incredibly un-intiutive, but it takes a const BSONObj
         // and modifies it in-place if a timestamp needs to be set.
         BSONElementManipulator::lookForTimestamps(updateobj);
         checkNoMods(updateobj);
         updateOneObject(cl, pk, obj, updateobj, BSONObj(), fromMigrate, 0);
         // must happen after updateOneObject
-        if (logop) {
-            OplogHelpers::logUpdate(ns, pk, obj, updateobj, fromMigrate);
-        }
+        OplogHelpers::logUpdate(ns, pk, obj, updateobj, fromMigrate);
     }
 
     static UpdateResult upsertAndLog(Collection *cl, const BSONObj &patternOrig,
                                      const BSONObj &updateobj, const bool isOperatorUpdate,
-                                     ModSet *mods, const bool logop, bool fromMigrate) {
+                                     ModSet *mods, bool fromMigrate) {
         const string &ns = cl->ns();
         uassert(16893, str::stream() << "Cannot upsert a collection under-going bulk load: " << ns,
                        ns != cc().bulkLoadNS());
@@ -177,9 +173,7 @@ namespace mongo {
 
         checkNoMods(newObj);
         insertOneObject(cl, newObj);
-        if (logop) {
-            OplogHelpers::logInsert(ns.c_str(), newObj, fromMigrate);
-        }
+        OplogHelpers::logInsert(ns.c_str(), newObj, fromMigrate);
         return UpdateResult(0, isOperatorUpdate, 1, newObj);
     }
 
@@ -187,7 +181,7 @@ namespace mongo {
                             const BSONObj &pk, const BSONObj &patternOrig,
                             const BSONObj &updateobj,
                             const bool upsert,
-                            const bool logop, const bool fromMigrate,
+                            const bool fromMigrate,
                             uint64_t flags) {
         // Create a mod set for $ style updates.
         shared_ptr<ModSet> mods;
@@ -207,15 +201,15 @@ namespace mongo {
             if (!upsert) {
                 return UpdateResult(0, 0, 0, BSONObj());
             }
-            return upsertAndLog(cl, patternOrig, updateobj, isOperatorUpdate, mods.get(), logop, fromMigrate);
+            return upsertAndLog(cl, patternOrig, updateobj, isOperatorUpdate, mods.get(), fromMigrate);
         }
 
         if (isOperatorUpdate) {
-            updateUsingMods(ns, cl, pk, obj, updateobj, mods, &queryResult.matchDetails, logop, fromMigrate);
+            updateUsingMods(ns, cl, pk, obj, updateobj, mods, &queryResult.matchDetails, fromMigrate);
         } else {
             // replace-style update
             BSONObj copy = updateobj.copy();
-            updateNoMods(ns, cl, pk, obj, copy, logop, fromMigrate);
+            updateNoMods(ns, cl, pk, obj, copy, fromMigrate);
         }
         return UpdateResult(1, isOperatorUpdate, 1, BSONObj());
     }
@@ -241,13 +235,13 @@ namespace mongo {
                                        const BSONObj &updateobj,
                                        const BSONObj &patternOrig,
                                        const bool upsert, const bool multi,
-                                       const bool logop, const bool fromMigrate) {
+                                       const bool fromMigrate) {
         TOKULOG(2) << "update: " << ns
                    << " update: " << updateobj
                    << " query: " << patternOrig
                    << " upsert: " << upsert << " multi: " << multi << endl;
 
-        Collection *cl = getOrCreateCollection(ns, logop);
+        Collection *cl = getOrCreateCollection(ns, true);
 
         // Fast-path for simple primary key updates.
         //
@@ -259,7 +253,7 @@ namespace mongo {
             const BSONObj pk = cl->getSimplePKFromQuery(patternOrig);
             if (!pk.isEmpty()) {
                 return updateByPK(ns, cl, pk, patternOrig, updateobj,
-                                  upsert, logop, fromMigrate, 0);
+                                  upsert, fromMigrate, 0);
             }
         }
 
@@ -296,7 +290,7 @@ namespace mongo {
                 // replace-style update only affects a single matching document
                 uassert(10158, "multi update only works with $ operators", !multi);
                 BSONObj copy = updateobj.copy();
-                updateNoMods(ns, cl, currPK, currentObj, copy, logop, fromMigrate);
+                updateNoMods(ns, cl, currPK, currentObj, copy, fromMigrate);
                 return UpdateResult(1, 0, 1, BSONObj());
             }
 
@@ -319,7 +313,7 @@ namespace mongo {
                 }
             }
 
-            updateUsingMods(ns, cl, currPK, currentObj, updateobj, mods, &details, logop, fromMigrate);
+            updateUsingMods(ns, cl, currPK, currentObj, updateobj, mods, &details, fromMigrate);
             numModded++;
 
             if (!multi) {
@@ -340,13 +334,13 @@ namespace mongo {
             uassert(10159, "multi update only works with $ operators", !multi);
         }
         // Upsert a new object
-        return upsertAndLog(cl, patternOrig, updateobj, isOperatorUpdate, mods.get(), logop, fromMigrate);
+        return upsertAndLog(cl, patternOrig, updateobj, isOperatorUpdate, mods.get(), fromMigrate);
     }
 
     UpdateResult updateObjects(const char *ns,
                                const BSONObj &updateobj, const BSONObj &patternOrig,
                                const bool upsert, const bool multi,
-                               const bool logop, const bool fromMigrate) {
+                               const bool fromMigrate) {
         uassert(10155, "cannot update reserved $ collection", NamespaceString::normal(ns));
         if (NamespaceString::isSystem(ns)) {
             uassert(10156, str::stream() << "cannot update system collection: " << ns <<
@@ -355,7 +349,7 @@ namespace mongo {
         }
 
         UpdateResult ur = _updateObjects(ns, updateobj, patternOrig,
-                                         upsert, multi, logop, fromMigrate);
+                                         upsert, multi, fromMigrate);
 
         cc().curop()->debug().nupdated = ur.num;
         return ur;

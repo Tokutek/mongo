@@ -99,7 +99,7 @@ namespace mongo {
             b.appendOID( "_id" , 0 , true );
             b.append( "host", myname );
             me = b.obj();
-            updateObjects("local.me", me, BSONObj(), true, false, true);
+            updateObjects("local.me", me, BSONObj(), true, false);
         }
         transaction.commit(0);
     }

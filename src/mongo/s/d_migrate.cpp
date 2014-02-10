@@ -1720,7 +1720,6 @@ namespace mongo {
                                           id,
                                           true,  // upsert
                                           false, // multi
-                                          true,  // logop
                                           true   // fromMigrate
                                           );
 

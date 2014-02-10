@@ -74,7 +74,7 @@ namespace mongo {
             if (onInitiate) {
                 cc().txn().txnIntiatingRs();
             }
-            updateObjects(rsConfigNs.c_str(), asBson(), BSONObj(), true, false, true);
+            updateObjects(rsConfigNs.c_str(), asBson(), BSONObj(), true, false);
             if( !comment.isEmpty() && (!theReplSet || theReplSet->isPrimary()) ) {
                 OplogHelpers::logComment(comment);
             }
