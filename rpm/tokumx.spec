@@ -187,7 +187,7 @@ mv %{buildroot}%{_prefix}/GNU-AGPL-3.0        %{buildroot}%{_docdir}/%{product_n
 mv %{buildroot}%{_prefix}/README-TOKUKV       %{buildroot}%{_docdir}/%{product_name}/licenses
 mv %{buildroot}%{_prefix}/THIRD-PARTY-NOTICES %{buildroot}%{_docdir}/%{product_name}/licenses
 mv %{buildroot}%{_prefix}/NEWS                %{buildroot}%{_docdir}/%{product_name}
-mv %{buildroot}%{_prefix}/README              %{buildroot}%{_docdir}/%{product_name}
+mv %{buildroot}%{_prefix}/README.md           %{buildroot}%{_docdir}/%{product_name}
 
 install -p -Dm755 %{buildroot}%{_prefix}/scripts/tokumxstat.py %{buildroot}%{_datadir}/%{product_name}/scripts/tokumxstat.py
 rm -rf %{buildroot}%{_prefix}/scripts
@@ -322,7 +322,7 @@ fi
 %doc %{_docdir}/%{product_name}/licenses/GNU-AGPL-3.0
 %doc %{_docdir}/%{product_name}/licenses/README-TOKUKV
 %doc %{_docdir}/%{product_name}/licenses/THIRD-PARTY-NOTICES
-%doc %{_docdir}/%{product_name}/README
+%doc %{_docdir}/%{product_name}/README.md
 %doc %{_docdir}/%{product_name}/NEWS
 
 %{_libdir}/%{product_name}/libHotBackup.so
