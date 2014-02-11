@@ -87,7 +87,7 @@ install: build
 	rmdir $(CURDIR)/debian/$(PRODUCT)-dev/usr/lib/tokumx
 
 	echo 'distsrc/GNU-AGPL-3.0'         > $(CURDIR)/debian/$(PRODUCT)-common.docs
-	echo 'distsrc/README'              >> $(CURDIR)/debian/$(PRODUCT)-common.docs
+	echo 'distsrc/README.md'           >> $(CURDIR)/debian/$(PRODUCT)-common.docs
 	echo 'distsrc/THIRD-PARTY-NOTICES' >> $(CURDIR)/debian/$(PRODUCT)-common.docs
 
 # Build architecture-independent files here.
