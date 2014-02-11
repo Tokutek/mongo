@@ -519,6 +519,14 @@ namespace mongo {
                             }
                         }
                         break;
+                    case DOUBLE:
+                        {
+                            double v = row->value.dnum;
+                            if (ifZero || v != 0) {
+                                result.appendNumber(field, v);
+                            }
+                        }
+                        break;
                     default:
                         {
                             StringBuilder s;
@@ -557,6 +565,7 @@ namespace mongo {
                             return row->value.num;
                         case PARCOUNT:
                             return read_partitioned_counter(row->value.parcount);
+                        case DOUBLE:
                         case CHARSTR:
                         case UNIXTIME:
                         case TOKUTIME:
@@ -574,6 +583,7 @@ namespace mongo {
                         switch (row->type) {
                         case TOKUTIME:
                             return tokutime_to_seconds(row->value.num);
+                        case DOUBLE:
                         case CHARSTR:
                         case UNIXTIME:
                         case FS_STATE:
