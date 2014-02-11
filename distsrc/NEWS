@@ -13,6 +13,29 @@ General
       could appear in replica sets and sharded clusters.
 
 
+Upgrade notice
+~~~~~~~~~~~~~~
+
+Existing TokuMX users running with replication, please read before
+upgrading:
+
+    - Due to some new oplog entry types, servers running earlier versions
+      of TokuMX cannot replicate from a primary running TokuMX version
+      1.4.0 or greater.  Therefore, when upgrading a replica set, be sure
+      to upgrade all secondaries first.  Only then should you upgrade the
+      primary.
+
+      If failover happens during this period, make sure it is a 1.3
+      machine that steps up to primary.  You can set the servers'
+      `priority` to ensure this.  If a 1.4 machine becomes primary, it may
+      begin to log operations that a 1.3 machine will not replicate, which
+      would halt replication for those 1.3 secondaries.  Once a majority
+      of machines have been upgraded to 1.4, it is safe to allow them to
+      step up, but at this point any remaining 1.3 machines may start to
+      experience replication lag, so only allow this if your cluster has
+      enough capacity to serve requests only from the 1.4 machines.
+
+
 Highlights
 ~~~~~~~~~~
 
