@@ -452,6 +452,7 @@ namespace mongo {
 
                     if (!ret) {
                         veto(source->fullName(), 600);
+                        cloneTransaction.abort();
                         sleepsecs(300);
                         return false;
                     }
