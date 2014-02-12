@@ -79,6 +79,7 @@ check( {i:{$not:{$elemMatch:{j:"f"}}}}, [{j:"a"}], 2 );
 doTest();
 t.ensureIndex( {i:1} );
 doTest();
+<<<<<<< HEAD
 
 t.drop();
 t.save( {i:"a"} );
@@ -139,3 +140,5 @@ indexed( {i:{$elemMatch:{j:1}}}, 1, 1 );
 //indexed( {i:{$not:{$elemMatch:{j:1}}}}, {$minElement:1}, {$maxElement:1} );
 not( {i:{$not:{$elemMatch:{j:1}}}} );
 not( {i:{$not:{$elemMatch:{j:{$ne:1}}}}}, 1, 1 );
+=======
+>>>>>>> b855e3e... SERVER-12532 negated predicates can use an index
