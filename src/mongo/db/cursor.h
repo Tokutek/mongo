@@ -689,6 +689,7 @@ namespace mongo {
                           const bool countCursor);
 
         void makeSubCursor(uint64_t partitionIndex);
+        void getNextSubCursor();
         void initializeSubCursor();
 
         PartitionedCollection* _pc; // collection we are running cursor over

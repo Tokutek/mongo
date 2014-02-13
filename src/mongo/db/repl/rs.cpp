@@ -1070,7 +1070,7 @@ namespace mongo {
             RWLockRecursive::Shared lk(operationLock);
             if (_replBackgroundShouldRun && _isMaster() && GTID::cmp(curr, lastSeenGTID) == 0) {
                 Client::Transaction txn (DB_SERIALIZABLE);
-                OpLogHelpers::logComment(BSON("comment" << "keepOplogAlive"));
+                OplogHelpers::logComment(BSON("comment" << "keepOplogAlive"));
                 txn.commit(DB_TXN_NOSYNC);
                 lastSeenGTID = gtidManager->getLiveState();
             }
@@ -1143,7 +1143,7 @@ namespace mongo {
                     log() << "replSet caught oplog partition thread (when dropping): " << e.what() << rsLog;
                 }
                 catch (...) {
-                    log() << "exception cought in oplog partition thread (when dropping): " << rsLog;
+                    log() << "exception caught in oplog partition thread (when dropping): " << rsLog;
                 }
             }
 

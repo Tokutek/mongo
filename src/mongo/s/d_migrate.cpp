@@ -336,30 +336,23 @@ namespace mongo {
                     << "a capped collection is being sharded, this should not happen"
                     << " ns: " << ns
                     << " opstr: " << opstr,
-                    !OpLogHelpers::invalidOpForSharding(opstr));
+                    !OplogHelpers::invalidOpForSharding(opstr));
 
             if (!_snapshotTaken) {
                 return false;
             }
 
-            if (OpLogHelpers::shouldLogOpForSharding(opstr)) {
+            if (OplogHelpers::shouldLogOpForSharding(opstr)) {
                 return isInRange(obj, _min, _max, _shardKeyPattern);
             }
             return false;
         }
 
-        bool shouldLogUpdateOp(const char *opstr, const char *ns, const BSONObj &oldObj, const BSONObj &newObj) {
+        bool shouldLogUpdateOp(const char *opstr, const char *ns, const BSONObj &oldObj) {
             // Just a sanity check.  ShardStrategy::_prepareUpdate() appears to prevent you from updating a document such that the shard key changes.
             // We just verify that old and new have the same shard key, and pass to the normal case.
             // But we call shouldLogOp first to avoid doing the comparison if, say, we're in the wrong ns and we can stop early.
-            bool should = shouldLogOp(opstr, ns, oldObj);
-            if (should) {
-                ShardKeyPattern shardKey(_shardKeyPattern);
-                BSONObj oldKey = shardKey.extractKey(oldObj);
-                BSONObj newKey = shardKey.extractKey(newObj);
-                verify(oldKey.equal(newKey));
-            }
-            return should;
+            return shouldLogOp(opstr, ns, oldObj);
         }
 
         void startObjForMigrateLog(BSONObjBuilder &b) {
@@ -648,8 +641,8 @@ namespace mongo {
         return migrateFromStatus.shouldLogOp(opstr, ns, obj);
     }
 
-    bool shouldLogUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj, const BSONObj &newObj) {
-        return migrateFromStatus.shouldLogUpdateOp(opstr, ns, oldObj, newObj);
+    bool shouldLogUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj) {
+        return migrateFromStatus.shouldLogUpdateOp(opstr, ns, oldObj);
     }
 
     void startObjForMigrateLog(BSONObjBuilder &b) {
@@ -1482,7 +1475,7 @@ namespace mongo {
                         }
                         SpillableVectorIterator it(op, conn.conn(), MigrateFromStatus::MIGRATE_LOG_REF_NS);
                         while (it.more()) {
-                            OpLogHelpers::applyOperationFromOplog(it.next());
+                            OplogHelpers::applyOperationFromOplog(it.next());
                             if (state == CATCHUP) {
                                 numCatchup++;
                             } else {
@@ -1501,7 +1494,7 @@ namespace mongo {
                             Client::ReadContext ctx(ns, lockReasonInner);
                             Client::Transaction txn(DB_SERIALIZABLE);
                             while (it.moreInCurrentBatch()) {
-                                OpLogHelpers::applyOperationFromOplog(it.next());
+                                OplogHelpers::applyOperationFromOplog(it.next());
                                 if (state == CATCHUP) {
                                     numCatchup++;
                                 } else {
@@ -1673,7 +1666,7 @@ namespace mongo {
                         for (BSONObjIterator it(cursorObj["firstBatch"].Obj()); it.more(); ++it) {
                             BSONObj obj = (*it).Obj();
                             insertOneObject(cl, obj, insertFlags);
-                            OpLogHelpers::logInsert(ns.c_str(), obj, true);
+                            OplogHelpers::logInsert(ns.c_str(), obj, true);
                             numCloned++;
                             clonedBytes += obj.objsize();
                         }
@@ -1689,7 +1682,7 @@ namespace mongo {
                         while (cursor.moreInCurrentBatch()) {
                             BSONObj obj = cursor.nextSafe();
                             insertOneObject(cl, obj, insertFlags);
-                            OpLogHelpers::logInsert(ns.c_str(), obj, true);
+                            OplogHelpers::logInsert(ns.c_str(), obj, true);
                             numCloned++;
                             clonedBytes += obj.objsize();
                         }
@@ -1727,7 +1720,6 @@ namespace mongo {
                                           id,
                                           true,  // upsert
                                           false, // multi
-                                          true,  // logop
                                           true   // fromMigrate
                                           );
 
@@ -1885,7 +1877,7 @@ namespace mongo {
                 BSONObj mod = it->Obj();
                 vector<BSONElement> logObjElts = mod["a"].Array();
                 for (vector<BSONElement>::const_iterator lit = logObjElts.begin(); lit != logObjElts.end(); ++lit) {
-                    OpLogHelpers::applyOperationFromOplog(lit->Obj());
+                    OplogHelpers::applyOperationFromOplog(lit->Obj());
                 }
             }
 

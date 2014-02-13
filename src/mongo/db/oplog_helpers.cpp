@@ -51,7 +51,7 @@ static const char OP_STR_COMMAND[] = "c"; // command
 
 namespace mongo {
 
-    namespace OpLogHelpers {
+    namespace OplogHelpers {
         bool shouldLogOpForSharding(const char *opstr) {
             return mongoutils::str::equals(opstr, OP_STR_INSERT) ||
                 mongoutils::str::equals(opstr, OP_STR_DELETE) ||
@@ -130,7 +130,7 @@ namespace mongo {
                        const BSONObj &oldObj, const BSONObj &newObj,
                        bool fromMigrate) {
             bool logForSharding = !fromMigrate &&
-                shouldLogTxnUpdateOpForSharding(OP_STR_UPDATE, ns, oldObj, newObj);
+                shouldLogTxnUpdateOpForSharding(OP_STR_UPDATE, ns, oldObj);
             if (logTxnOpsForReplication() || logForSharding) {
                 BSONObjBuilder b;
                 if (isLocalNs(ns)) {
@@ -160,12 +160,11 @@ namespace mongo {
             const BSONObj &pk,
             const BSONObj &oldObj,
             const BSONObj &updateobj,
-            bool fromMigrate,
-            const BSONObj &newObj // this is not needed and is not logged, just used for a sanity check in shouldLogTxnUpdateOpForSharding
+            bool fromMigrate
             ) 
         {
             bool logForSharding = !fromMigrate &&
-                shouldLogTxnUpdateOpForSharding(OP_STR_UPDATE, ns, oldObj, newObj);
+                shouldLogTxnUpdateOpForSharding(OP_STR_UPDATE, ns, oldObj);
             if (logTxnOpsForReplication() || logForSharding) {
                 BSONObjBuilder b;
                 if (isLocalNs(ns)) {
@@ -661,6 +660,6 @@ namespace mongo {
             }
         }
 
-    } // namespace OpLogHelpers
+    } // namespace OplogHelpers
 
 } // namespace mongo

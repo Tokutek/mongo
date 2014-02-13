@@ -374,8 +374,8 @@ namespace mongo {
                           BSON(versionIdValue << valueField(targetVersion)),
                           BSON(versionIdValue),
                           true,    // upsert
-                          false,   // multi
-                          false);  // logop
+                          false   // multi
+                          );  // logop
 
             _currentVersion = targetVersion;
             return Status::OK();
