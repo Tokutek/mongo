@@ -111,6 +111,7 @@ namespace mongo {
                                            std::vector<Privilege>* out) {}
         virtual LockType locktype() const { return READ; }
         virtual bool needsTxn() const { return true; }
+        virtual int txnFlags() const { return DB_SERIALIZABLE; }
 
         bool run(
             const string& db,
