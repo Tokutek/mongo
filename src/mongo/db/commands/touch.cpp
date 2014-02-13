@@ -103,8 +103,11 @@ namespace mongo {
             for (int i = 0; i < cl->nIndexes(); i++) {
                 IndexDetails &idx = cl->idx(i);
                 if ((cl->isPKIndex(idx) && touch_data) || (!cl->isPKIndex(idx) && touch_indexes)) {
-                    for (shared_ptr<Cursor> c(Cursor::make(cl, idx, minKey, maxKey, true, 1)); c->ok(); c->advance()) {
-                        c->current();
+                    // use a count cursor to bring data into memory
+                    // count cursors are sufficient and significantly faster
+                    shared_ptr<Cursor> c(Cursor::make(cl, idx, minKey, maxKey, true, 1, 0 , true));
+                    while (c->ok()) {
+                        c->advance();
                     }
                 }
             }
