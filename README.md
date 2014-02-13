@@ -68,7 +68,7 @@ Migrating from MongoDB
 
 TokuMX stores data on disk completely differently from MongoDB.  Therefore
 it is necessary to export any existing data from MongoDB and import it
-into TokuDB.  Depending on your existing MongoDB database and your
+into TokuMX.  Depending on your existing MongoDB database and your
 application's availability requirements, you can choose from a number of
 strategies for converting your data set to TokuMX.
 
