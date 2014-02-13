@@ -1,0 +1,10 @@
+#!/bin/sh
+# postinst script for tokumx-common
+
+# Source debconf library.
+. /usr/share/debconf/confmodule
+
+db_get tokumx-common/email_address
+if [ x"$RET" != x"" ]; then
+    /usr/bin/curl -X POST --data-urlencode "email=$RET" http://www.tokutek.com/simple_create_account.php
+fi
