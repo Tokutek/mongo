@@ -161,7 +161,6 @@ namespace mongo {
                 // probably not necessary to increment _seq, but safe to do
                 b_id.append("seq", 0);
                 b_id.done();
-                b.append("", b_id.obj());
                 minPartitionInserted = pc->partitionWithPK(b.done());
             }
             // only update metadata if there are insertions that happened

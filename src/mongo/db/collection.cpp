@@ -3063,7 +3063,6 @@ namespace mongo {
         for (int i = 0; i < nIndexes(); i++) {
             _partitions[index]->dropIndexDetails(i, false);
         }
-        _partitions.erase(_partitions.begin() + index);
         
         // special case for dropping last partition, we have to fix up
         // the last pivot
@@ -3074,6 +3073,7 @@ namespace mongo {
             c.appendMaxKey("");
             overwritePivot(numPartitions() - 2, c.done());
         }
+        _partitions.erase(_partitions.begin() + index);
     }
 
     // this is called by the user
