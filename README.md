@@ -55,8 +55,12 @@ Community downloads can be found [here][community].
 Enterprise downloads, including the hot backup utility, can be found
 [here][enterprise] and come with 30 days of free support for evaluation.
 
+Installation instructions for Linux distributions and OSX can be found
+[here][install-docs].
+
 [community]: http://www.tokutek.com/products/downloads/tokumx-ce-downloads/
 [enterprise]: http://www.tokutek.com/products/downloads/tokumx-ee-downloads/
+[install-docs]: https://github.com/Tokutek/mongo/wiki/Installing-TokuMX
 
 
 Migrating from MongoDB
@@ -82,7 +86,7 @@ strategies for converting your data set to TokuMX.
 For details of how to perform these types of data migrations, see the
 [documentation][migrating-docs].
 
-[migrating-docs]: http://www.tokutek.com/resources/product-docs/
+[migrating-docs]: https://github.com/Tokutek/mongo/wiki/Migrating-from-MongoDB
 
 
 Building TokuMX
