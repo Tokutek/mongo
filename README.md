@@ -74,14 +74,12 @@ strategies for converting your data set to TokuMX.
 
  * Single server
  * Replica set
-   - Offline with downtime
-   - Online with no downtime
+   - Offline (with downtime)
+   - Online (with no downtime)
  * Sharded cluster
-   - Offline with same chunk distribution
-   - Offline with fresh import, optionally different chunk distribution
-   - Online with no downtime
-   - To a TokuMX replica set, offline with downtime
-   - To a TokuMX replica set, online with no downtime
+   - Offline, individual shards
+   - Offline, all data at once
+   - Online
 
 For details of how to perform these types of data migrations, see the
 [documentation][migrating-docs].
