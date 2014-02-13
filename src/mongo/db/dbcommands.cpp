@@ -1682,7 +1682,7 @@ namespace mongo {
         virtual bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             string coll = cmdObj[ "emptycapped" ].valuestrsafe();
             uassert( 13428, "emptycapped must specify a collection", !coll.empty() );
-            string ns = dbname + "." + coll;
+            string ns = getSisterNS(dbname, coll);
             Collection *cl = getCollection( ns );
             massert( 13429, "emptycapped no such collection", cl );
             massert( 13424, "collection must be capped", cl->isCapped() );
@@ -1727,7 +1727,7 @@ namespace mongo {
             PartitionedCollection *pc = cl->as<PartitionedCollection>();
             uint64_t numPartitions = 0;
             BSONArray arr;
-            pc->getPartitionInfo(&numPartitions, arr);
+            pc->getPartitionInfo(&numPartitions, &arr);
             anObjBuilder.append("numPartitions", (long long)numPartitions);
             anObjBuilder.append("partitions", arr);
             return true;
@@ -1759,7 +1759,7 @@ namespace mongo {
             bool isOplogNS = (strcmp(ns.c_str(), rsoplog) == 0) || (strcmp(ns.c_str(), rsOplogRefs) == 0);
             uassert( 17300, "cannot manually drop partition on oplog or oplog.refs", force.trueValue() || !isOplogNS);
             Collection *cl = getCollection( ns );
-            OpLogHelpers::logUnsupportedOperation(ns.c_str());
+            OplogHelpers::logUnsupportedOperation(ns.c_str());
             uassert( 17301, "dropPartition no such collection", cl );
             uassert( 17302, "collection must be partitioned", cl->isPartitioned() );
 
@@ -1800,14 +1800,14 @@ namespace mongo {
             Collection *cl = getCollection( ns );
             uassert( 17306, "addPartition no such collection", cl );
             uassert( 17307, "collection must be partitioned", cl->isPartitioned() );
-            OpLogHelpers::logUnsupportedOperation(ns.c_str());
+            OplogHelpers::logUnsupportedOperation(ns.c_str());
 
             BSONElement e = cmdObj["newPivot"];            
             PartitionedCollection *pc = cl->as<PartitionedCollection>();
             if (e.ok()) {
-                e.embeddedObjectUserCheck();
-                validateInsert(e.embeddedObject());
-                pc->manuallyAddPartition(e.embeddedObject());
+                BSONObj pivot = e.embeddedObjectUserCheck();
+                validateInsert(pivot);
+                pc->manuallyAddPartition(pivot);
             }
             else {
                 pc->addPartition();
@@ -1820,7 +1820,6 @@ namespace mongo {
     public:
         CmdConvertToPartitioned() : FileopsCommand("convertToPartitioned") { }
         virtual bool logTheOp() { return false; }
-        // TODO: maybe slaveOk should be true?
         virtual bool slaveOk() const { return true; }
         virtual void help( stringstream& help ) const {
             help << "convert a normal collection to a partitioned collection\n" <<
@@ -1837,7 +1836,7 @@ namespace mongo {
             string coll = cmdObj[ "convertToPartitioned" ].valuestrsafe();
             uassert( 17308, "convertToPartitioned must specify a collection", !coll.empty() );
             string ns = dbname + "." + coll;
-            OpLogHelpers::logUnsupportedOperation(ns.c_str());
+            OplogHelpers::logUnsupportedOperation(ns.c_str());
             convertToPartitionedCollection(ns);
             return true;
         }
@@ -2060,7 +2059,7 @@ namespace mongo {
             retval = _execCommand(c, dbname, cmdObj, queryOptions, errmsg, result, fromRepl);
 
             if ( retval && c->logTheOp() && ! fromRepl ) {
-                OpLogHelpers::logCommand(cmdns, cmdObj);
+                OplogHelpers::logCommand(cmdns, cmdObj);
             }
 
             if (retval && txn) {
@@ -2094,7 +2093,7 @@ namespace mongo {
             client.curop()->ensureStarted();
             retval = _execCommand(c, dbname, cmdObj, queryOptions, errmsg, result, fromRepl);
             if ( retval && c->logTheOp() && ! fromRepl ) {
-                OpLogHelpers::logCommand(cmdns, cmdObj);
+                OplogHelpers::logCommand(cmdns, cmdObj);
             }
 
             if (retval && transaction) {

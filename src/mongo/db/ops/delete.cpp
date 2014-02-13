@@ -61,7 +61,7 @@ namespace mongo {
              c->ok(); c->advance()) {
             const BSONObj pk = c->currPK();
             const BSONObj obj = c->current();
-            OpLogHelpers::logDelete(ns.c_str(), obj, fromMigrate);
+            OplogHelpers::logDelete(ns.c_str(), obj, fromMigrate);
             deleteOneObject(cl, pk, obj);
             nDeleted++;
         }
@@ -83,7 +83,7 @@ namespace mongo {
         if (!pk.isEmpty()) {
             if (queryByPKHack(cl, pk, pattern, obj)) {
                 if (logop) {
-                    OpLogHelpers::logDelete(ns, obj, false);
+                    OplogHelpers::logDelete(ns, obj, false);
                 }
                 deleteOneObject(cl, pk, obj);
                 return 1;
@@ -121,7 +121,7 @@ namespace mongo {
             }
 
             if (logop) {
-                OpLogHelpers::logDelete(ns, obj, false);
+                OplogHelpers::logDelete(ns, obj, false);
             }
             deleteOneObject(cl, pk, obj);
             nDeleted++;

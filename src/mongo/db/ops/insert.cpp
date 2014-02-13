@@ -86,7 +86,7 @@ namespace mongo {
                 else {
                     insertOneObject(cl, objModified, flags); // may add _id field
                     if (logop) {
-                        OpLogHelpers::logInsert(ns, objModified, fromMigrate);
+                        OplogHelpers::logInsert(ns, objModified, fromMigrate);
                     }
                 }
             } catch (const UserException &) {

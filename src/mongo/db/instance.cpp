@@ -524,7 +524,7 @@ namespace mongo {
         Client::Context ctx(ns);
         scoped_ptr<Client::AlternateTransactionStack> altStack(opNeedsAltTxn(ns) ? new Client::AlternateTransactionStack : NULL);
         Client::Transaction transaction(DB_SERIALIZABLE);
-        UpdateResult res = updateObjects(ns, updateobj, query, upsert, multi, true);
+        UpdateResult res = updateObjects(ns, updateobj, query, upsert, multi);
         transaction.commit();
         lastError.getSafe()->recordUpdate( res.existing , res.num , res.upserted ); // for getlasterror
     }

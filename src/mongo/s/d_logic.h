@@ -355,7 +355,7 @@ namespace mongo {
     }
 
     bool shouldLogOpForSharding(const char *opstr, const char *ns, const BSONObj &obj);
-    bool shouldLogUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj, const BSONObj &newObj);
+    bool shouldLogUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj);
     void startObjForMigrateLog(BSONObjBuilder &b);
     void writeObjToMigrateLog(BSONObj &obj);
     void writeObjToMigrateLogRef(BSONObj &obj);

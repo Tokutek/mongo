@@ -37,13 +37,13 @@ namespace mongo {
     void setLogTxnOpsForReplication(bool val);
     bool logTxnOpsForReplication();
     void enableLogTxnOpsForSharding(bool (*shouldLogOp)(const char *, const char *, const BSONObj &),
-                                    bool (*shouldLogUpdateOp)(const char *, const char *, const BSONObj &, const BSONObj &),
+                                    bool (*shouldLogUpdateOp)(const char *, const char *, const BSONObj &),
                                     void (*startObj)(BSONObjBuilder &),
                                     void (*writeObj)(BSONObj &),
                                     void (*writeObjToRef)(BSONObj &));
     void disableLogTxnOpsForSharding(void);
     bool shouldLogTxnOpForSharding(const char *opstr, const char *ns, const BSONObj &obj);
-    bool shouldLogTxnUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj, const BSONObj &newObj);
+    bool shouldLogTxnUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj);
     void setLogTxnToOplog(void (*)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo));
     void setLogTxnRefToOplog(void (*f)(GTID gtid, uint64_t timestamp, uint64_t hash, OID& oid));
     void setLogOpsToOplogRef(void (*f)(BSONObj o));

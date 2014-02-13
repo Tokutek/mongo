@@ -312,25 +312,29 @@ namespace mongo {
         
     }
 
+    void PartitionedCursor::getNextSubCursor() {
+        if (_direction > 0) {
+            _currPartition++;
+        }
+        else {
+            _currPartition--;
+        }
+        shared_ptr<Cursor> oldCursor = _currentCursor;
+        makeSubCursor(_currPartition);
+        if (oldCursor) {
+            if (_matcher) {
+                _currentCursor->setMatcher(_matcher);
+            }
+            _prevNScanned += oldCursor->nscanned();
+            _currentCursor->setKeyFieldsOnly(_keyFieldsOnly);
+        }
+    }
+
     void PartitionedCursor::initializeSubCursor() {
         _currPartition = _startPartition;
         makeSubCursor(_currPartition);
         while (!_currentCursor->ok() && _currPartition != _endPartition) {
-            if (_direction > 0) {
-                _currPartition++;
-            }
-            else {
-                _currPartition--;
-            }
-            shared_ptr<Cursor> oldCursor = _currentCursor;
-            makeSubCursor(_currPartition);
-            if (oldCursor) {
-                if (_matcher) {
-                    _currentCursor->setMatcher(_matcher);
-                }
-                _prevNScanned += oldCursor->nscanned();
-                _currentCursor->setKeyFieldsOnly(_keyFieldsOnly);
-            }
+            getNextSubCursor();
             // because we are called from a constructor,
             // we don't need to check to see if we are tailable
         }
@@ -340,21 +344,7 @@ namespace mongo {
         bool ret = _currentCursor->advance();
         while (!_currentCursor->ok() && _currPartition != _endPartition) {
             dassert(!ret);
-            // current cursor is no longer ok,
-            // need to move on to next one
-            if (_direction > 0) {
-                _currPartition++;
-            }
-            else {
-                _currPartition--;
-            }
-            shared_ptr<Cursor> oldCursor = _currentCursor;
-            makeSubCursor(_currPartition);
-            if (_matcher) {
-                _currentCursor->setMatcher(_matcher);
-            }
-            _prevNScanned += oldCursor->nscanned();
-            _currentCursor->setKeyFieldsOnly(_keyFieldsOnly);
+            getNextSubCursor();
             // if we are iterating over the last partition and we are tailable,
             // we set tailable on the current cursor. addPartition and dropPartition
             // invalidate cursors, so we don't need to worry about

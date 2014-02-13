@@ -21,7 +21,7 @@
 
 namespace mongo {
 
-    namespace OpLogHelpers {
+    namespace OplogHelpers {
 
         // helper functions for sharding
         bool shouldLogOpForSharding(const char *opstr);
@@ -37,7 +37,7 @@ namespace mongo {
 
         void logUpdate(const char *ns, const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj, bool fromMigrate);
 
-        void logUpdateModsWithRow(const char *ns, const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateobj, bool fromMigrate, const BSONObj &newObj);
+        void logUpdateModsWithRow(const char *ns, const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateobj, bool fromMigrate);
 
         void logDelete(const char *ns, const BSONObj &row, bool fromMigrate);
 

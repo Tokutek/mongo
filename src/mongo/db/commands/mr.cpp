@@ -506,7 +506,6 @@ namespace mongo {
                           /*pattern=*/ o["_id"].wrap(),
                           /*upsert=*/ true,
                           /*multi=*/ false,
-                          /*logtheop=*/ true,
                           fromMigrate);
         }
 
