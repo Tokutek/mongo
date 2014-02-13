@@ -3002,24 +3002,7 @@ namespace mongo {
     }
 
     uint64_t PartitionedCollection::findInMemoryPartition(uint64_t id) {
-        // now find the index of the in-memory vectors associated with this
-        // item
-        uint64_t high = numPartitions() - 1;
-        uint64_t low = 0;
-        while (low < high) {
-            uint64_t mid = (high + low) / 2;
-            uint64_t currID = _partitionIDs[mid];
-            if (currID == id) {
-                return mid;
-            }
-            else if (currID < id) {
-                low = mid+1;
-            }
-            else {
-                high = mid;
-            }
-        }
-        return low;
+        return std::find(_partitionIDs.begin(), _partitionIDs.end(), id) - _partitionIDs.begin();
     }
 
     void PartitionedCollection::dropPartitionInternal(uint64_t id) {
@@ -3049,6 +3032,7 @@ namespace mongo {
         uint64_t index = findInMemoryPartition(id);
         // something very wrong if this is false, but sanity check
         // done at top should ensure this never happens
+        verify(index >= 0 && index < numPartitions());
         verify(_partitionIDs[index] == id);
 
         // now that we have index, clean up in-memory data structures
