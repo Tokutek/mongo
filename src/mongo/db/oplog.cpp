@@ -111,21 +111,12 @@ namespace mongo {
 
     static void updateMaxRefGTID(BSONObj refMeta, uint64_t i, PartitionedCollection* pc, GTID gtid) {
         BSONObjBuilder bbb;
-        BSONObjIterator ii( refMeta );
-        while ( ii.more() ) {
-            BSONElement e = ii.next();
-            if ( strcmp( e.fieldName(), "maxRefGTID" ) != 0 ) {
-                bbb.append( e );
-            }
-            else {
-                addGTIDToBSON("maxRefGTID", gtid, bbb);
-            }
-        }
+        cloneBSONWithFieldChanged(bbb, refMeta, "maxRefGTID", gtid);
         BSONElement gtidElement = refMeta["maxRefGTID"];
         if (!gtidElement.ok()) {
             log() << "maxRefGTID expected, but not found in partition " << 
                 i << ". Unless this is an upgrade, this is unexpected." << endl;
-            addGTIDToBSON("maxRefGTID", gtid, bbb);
+            bbb.append("maxRefGTID", gtid);
         }
         pc->updatePartitionMetadata(i, bbb.done());
     }
@@ -554,11 +545,7 @@ namespace mongo {
         BSONObj refMeta = pc->getPartitionMetadata(refNum-2);
 
         BSONObjBuilder b;
-        BSONObjIterator i( refMeta );
-        while ( i.more() ) {
-            BSONElement e = i.next();
-            b.append( e );
-        }
+        b.appendElements(refMeta);
         addGTIDToBSON("maxRefGTID", pivot, b);
         pc->updatePartitionMetadata(refNum-2, b.done());
     }

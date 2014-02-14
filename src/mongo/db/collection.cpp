@@ -2826,15 +2826,7 @@ namespace mongo {
 
         // now we need to replace the max entry with newPivot
         BSONObjBuilder b;
-        BSONObjIterator ii( result );
-        while ( ii.more() ) {
-            BSONElement e = ii.next();
-            if ( strcmp( e.fieldName(), "max" ) != 0 ) {
-                b.append( e );
-            } else {
-                b.append("max", newPivot);
-            }
-        }
+        cloneBSONWithFieldChanged(b, result, "max", newPivot);
         bool indexBitChanged = false;
         BSONObj pk = _metaCollection->getValidatedPKFromObject(result);
         BSONObj newObj = b.done();
