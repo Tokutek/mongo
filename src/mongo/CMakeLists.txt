@@ -144,7 +144,6 @@ set(client_sources
   logger/rotatable_file_writer.cpp
   pch.cpp
   platform/backtrace.cpp
-  platform/posix_fadvise.cpp
   platform/process_id.cpp
   platform/random.cpp
   util/assert_util.cpp
@@ -177,9 +176,6 @@ set(client_sources
   util/net/sock.cpp
   util/net/ssl_manager.cpp
   util/password.cpp
-  util/paths.cpp
-  util/processinfo.cpp
-  util/processinfo_${system_suffix}.cpp
   util/signal_handlers.cpp
   util/stringutils.cpp
   util/text.cpp

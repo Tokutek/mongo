@@ -18,8 +18,12 @@
 
 #include <iomanip>
 
-#include "pch.h"
-#include "goodies.h"
+#include "mongo/pch.h"
+
+#include "mongo/platform/atomic_word.h"
+#include "mongo/util/concurrency/mutex.h"
+#include "mongo/util/goodies.h"
+#include "mongo/util/mongoutils/str.h"
 #include "mongo/util/stacktrace.h"
 #include "mongo/util/startup_test.h"
 #include "optime.h"
