@@ -112,7 +112,7 @@ binary-arch: build install
 	    for suffix in config postinst; do \
 	        mv debian/tokumx-common.$$suffix debian/$(PRODUCT)-common.$$suffix; \
 	    done; \
-	    sed -e -i'' '/exit here for community/d' debian/$(PRODUCT)-common.$$suffix; \
+	    sed -i'' -e '/exit here for community/d' debian/$(PRODUCT)-common.$$suffix; \
 	fi
 
 	dh_installdocs
