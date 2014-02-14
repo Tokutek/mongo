@@ -92,7 +92,7 @@ Description: object/document-oriented database (server package)
 Package: tokumx-common
 Architecture: amd64
 Depends: ${shlibs:Depends}, ${misc:Depends}, zlib1g
-Pre-Depends: debconf, curl
+Pre-Depends: debconf, curl, dialog
 Description: object/document-oriented database (common package)
  TokuMX is a high-performance version of MongoDB using Fractal
  Tree indexes to store indexes and data.  TokuMX is
