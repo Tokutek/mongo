@@ -109,7 +109,7 @@ binary-arch: build install
 	    for suffix in preinst postinst prerm postrm; do \
 	        mv debian/tokumx-server.$$suffix debian/$(PRODUCT)-server.$$suffix; \
 	    done; \
-	    for suffix in config postinst; do \
+	    for suffix in config postinst templates; do \
 	        mv debian/tokumx-common.$$suffix debian/$(PRODUCT)-common.$$suffix; \
 	    done; \
 	fi
