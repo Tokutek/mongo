@@ -109,10 +109,9 @@ binary-arch: build install
 	    for suffix in preinst postinst prerm postrm; do \
 	        mv debian/tokumx-server.$$suffix debian/$(PRODUCT)-server.$$suffix; \
 	    done; \
-	    for suffix in config postinst; do \
+	    for suffix in config postinst templates; do \
 	        mv debian/tokumx-common.$$suffix debian/$(PRODUCT)-common.$$suffix; \
 	    done; \
-	    sed -i'' -e '/exit here for community/d' debian/$(PRODUCT)-common.$$suffix; \
 	fi
 
 	dh_installdocs
