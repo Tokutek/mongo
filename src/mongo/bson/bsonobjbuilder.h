@@ -33,6 +33,7 @@
 #include "mongo/bson/bsonmisc.h"
 #include "mongo/bson/bson_builder_base.h"
 #include "mongo/bson/bson_field.h"
+#include "mongo/db/gtid.h"
 
 #if defined(_DEBUG) && defined(MONGO_EXPOSE_MACROS)
 #include "mongo/util/assert_util.h"
@@ -103,6 +104,14 @@ namespace mongo {
             _b.appendStr(fieldName);
             _b.appendBuf((void *) subObj.objdata(), subObj.objsize());
             return *this;
+        }
+
+        /** add a subobject as a member */
+        BSONObjBuilder& append(const StringData& fieldName, const GTID& gtid) {
+            uint32_t sizeofGTID = GTID::GTIDBinarySize();
+            char idData[sizeofGTID];
+            gtid.serializeBinaryData(idData);
+            return appendBinData(fieldName, sizeofGTID, BinDataGeneral, idData);
         }
 
         /** add a subobject as a member */
