@@ -17,11 +17,12 @@
 #pragma once
 
 #include "mongo/pch.h"
-#include "mongo/db/jsobj.h"
+//#include "mongo/db/jsobj.h"
 #include <limits>
 
 namespace mongo {
 
+    class BSONObjBuilder;
 
     class GTID {
         uint64_t _primarySeqNo;
@@ -36,7 +37,7 @@ namespace mongo {
         }
         GTID(const char* binData);
         ~GTID(){};
-        void serializeBinaryData(char* binData);
+        void serializeBinaryData(char* binData) const;
         void inc();
         void inc_primary();        
         string toString() const;
@@ -158,8 +159,5 @@ namespace mongo {
         friend class GTIDManagerTest; // for testing
         
     };
-    void addGTIDToBSON(const char* keyName, GTID gtid, BSONObjBuilder& result);
-    GTID getGTIDFromBSON(const char* keyName, const BSONObj& obj);
-    bool isValidGTID(BSONElement e);
 
 } // namespace mongo

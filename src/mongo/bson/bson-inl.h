@@ -32,6 +32,29 @@
 
 namespace mongo {
 
+    inline void addGTIDToBSON(const char* keyName, GTID gtid, BSONObjBuilder& result) {
+        result.append(keyName, gtid);
+    }
+
+    inline GTID getGTIDFromBSON(const char* keyName, const BSONObj& obj) {
+        int len;
+        GTID ret(obj[keyName].binData(len));
+        dassert((uint32_t)len == GTID::GTIDBinarySize());
+        return ret;
+    }
+
+    inline bool isValidGTID(BSONElement e) {
+        if (e.type() != mongo::BinData) {
+            return false;
+        }
+        int len;
+        e.binData(len);
+        if ((uint32_t)len != GTID::GTIDBinarySize()) {
+            return false;
+        }
+        return true;
+    }
+
     /* must be same type when called, unless both sides are #s 
        this large function is in header to facilitate inline-only use of bson
     */

@@ -60,7 +60,7 @@ namespace mongo {
         _GTSeqNo = SWAP64(swappedSec);
     }
 
-    void GTID::serializeBinaryData(char* binData) {
+    void GTID::serializeBinaryData(char* binData) const {
         char* pos = binData;
         uint64_t prim =  SWAP64(_primarySeqNo);
         memcpy(pos, &prim, sizeof(uint64_t));
@@ -362,31 +362,5 @@ namespace mongo {
         return !((GTID::cmp(last, _lastLiveGTID) == 0) && 
                  lastTime == _lastTimestamp && 
                  lastHash == _lastHash);
-    }
-
-    void addGTIDToBSON(const char* keyName, GTID gtid, BSONObjBuilder& result) {
-        uint32_t sizeofGTID = GTID::GTIDBinarySize();
-        char idData[sizeofGTID];
-        gtid.serializeBinaryData(idData);
-        result.appendBinData(keyName, sizeofGTID, BinDataGeneral, idData);
-    }
-
-    GTID getGTIDFromBSON(const char* keyName, const BSONObj& obj) {
-        int len;
-        GTID ret(obj[keyName].binData(len));
-        dassert((uint32_t)len == GTID::GTIDBinarySize());
-        return ret;
-    }
-
-    bool isValidGTID(BSONElement e) {
-        if (e.type() != mongo::BinData) {
-            return false;
-        }
-        int len;
-        e.binData(len);
-        if ((uint32_t)len != GTID::GTIDBinarySize()) {
-            return false;
-        }
-        return true;
     }
 } // namespace mongo
