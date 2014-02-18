@@ -24,7 +24,7 @@
 
 namespace mongo {
 
-    extern const BSONObj reverseNaturalObj;
+    extern const BSONObj reverseIDObj;
 
     /* started abstracting out the querying of the primary/master's oplog
        still fairly awkward but a start.
@@ -46,7 +46,7 @@ namespace mongo {
         shared_ptr<DBClientConnection> conn_shared() { return _conn; }
         DBClientConnection* conn() { return _conn.get(); }
         BSONObj getLastOp(const char *ns) {
-            return conn()->findOne(ns, Query().sort(reverseNaturalObj), 0, QueryOption_SlaveOk);
+            return conn()->findOne(ns, Query().sort(reverseIDObj), 0, QueryOption_SlaveOk);
         }
 
         /* ok to call if already connected */
