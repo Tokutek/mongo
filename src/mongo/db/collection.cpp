@@ -106,9 +106,9 @@ namespace mongo {
 
     /* ------------------------------------------------------------------------- */
 
-    BSONObj CollectionBase::indexInfo(const BSONObj &keyPattern, bool unique, bool clustering, BSONObj options) const {
+    static BSONObj indexInfo(const string& ns, const BSONObj &keyPattern, bool unique, bool clustering, BSONObj options) {
         BSONObjBuilder b;
-        b.append("ns", _ns);
+        b.append("ns", ns);
         b.append("key", keyPattern);
         if (keyPattern == BSON("_id" << 1)) {
             b.append("name", "_id_");
@@ -357,7 +357,7 @@ namespace mongo {
         TOKULOG(1) << "Creating collection " << ns << endl;
 
         // Create the primary key index, generating the info from the pk pattern and options.
-        BSONObj info = indexInfo(pkIndexPattern, true, true, options);
+        BSONObj info = indexInfo(_ns, pkIndexPattern, true, true, options);
         createIndex(info);
     }
 
@@ -1751,7 +1751,7 @@ namespace mongo {
         const int idxNo = findIndexByKeyPattern(BSON("_id" << 1));
         if (idxNo < 0) {
             // create a unique, non-clustering _id index here.
-            BSONObj info = indexInfo(BSON("_id" << 1), true, false, options);
+            BSONObj info = indexInfo(_ns, BSON("_id" << 1), true, false, options);
             createIndex(info);
         }
         verify(_idPrimaryKey == idx(findIndexByKeyPattern(BSON("_id" << 1))).clustering());
@@ -2092,7 +2092,7 @@ namespace mongo {
         if (mayIndexId) {
             const BSONElement e = options["autoIndexId"];
             if (!e.ok() || e.trueValue()) {
-                BSONObj info = indexInfo(BSON("_id" << 1), true, false, options);
+                BSONObj info = indexInfo(_ns, BSON("_id" << 1), true, false, options);
                 createIndex(info);
             }
         }
@@ -2548,6 +2548,16 @@ namespace mongo {
                                                           serialized["multiKeyIndexBits"].Long(),
                                                           newIndexesArray.arr());
     }
+    // make the serialized BSON for the meta partition
+    static BSONObj makeMetaPartitionedSerialized(string newNS) {
+        BSONArrayBuilder newIndexesArray;
+        // append a single BSONObj
+        newIndexesArray.append(indexInfo(newNS, BSON("_id" << 1), true, true,BSONObj()));
+        return Collection::serialize(newNS, BSONObj(), BSON("_id" << 1),
+                                                          0, //multiKeyIndexBits is 0
+                                                          newIndexesArray.arr());
+    }
+
 
     //
     // constructor and methods that create a PartitionedCollection
@@ -2566,7 +2576,8 @@ namespace mongo {
         uassert(17245, str::stream() << "Partitioned Collection cannot have a defined primary key: " << ns, !options["primaryKey"].ok());
 
         // create the meta collection
-        _metaCollection.reset(new IndexedCollection(getMetaCollectionName(ns), options));
+        // note that we create it with empty options
+        _metaCollection.reset(new IndexedCollection(getMetaCollectionName(ns), BSONObj()));
 
         // add the first partition
         appendNewPartition();
@@ -2663,7 +2674,7 @@ namespace mongo {
         // verify that there is no defined primary key
         uassert(17246, str::stream() << "Partitioned Collection cannot have a defined primary key: " << _ns, !_options["primaryKey"].ok());
         // open the metadata collection
-        BSONObj metaSerialized = makePartitionedSerialized(serialized, getMetaCollectionName(_ns));
+        BSONObj metaSerialized = makeMetaPartitionedSerialized(getMetaCollectionName(_ns));
         _metaCollection.reset(new IndexedCollection(metaSerialized));
         // now we need to query _metaCollection to get partition information
         for (shared_ptr<Cursor> c( Cursor::make(_metaCollection.get(), 1, false) ); c->ok() ; c->advance()) {

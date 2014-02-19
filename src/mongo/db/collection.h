@@ -950,11 +950,6 @@ namespace mongo {
         CollectionBase(const StringData& ns, const BSONObj &pkIndexPattern, const BSONObj &options);
         explicit CollectionBase(const BSONObj &serialized, bool* reserializeNeeded = NULL);
 
-
-        // create a new index with the given info for this namespace.
-        // generate an index info BSON for this namespace, with the same options
-        BSONObj indexInfo(const BSONObj &keyPattern, bool unique, bool clustering, BSONObj options) const;
-
         virtual void createIndex(const BSONObj &info);
         void checkIndexUniqueness(const IndexDetailsBase &idx);
 
