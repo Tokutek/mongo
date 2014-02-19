@@ -447,6 +447,7 @@ namespace mongo {
         bool ensureIndex(const BSONObj &info) {
             bool ret = _cd->ensureIndex(info);
             if (ret) {
+                addToNamespacesCatalog(IndexDetails::indexNamespace(_ns, info["name"].String()));
                 noteIndexBuilt();
             }
             return ret;
