@@ -268,7 +268,7 @@ namespace mongo {
         // optional to implement, populate the obj builder with collection specific stats
         virtual void fillSpecificStats(BSONObjBuilder &result, int scale) const = 0;
 
-        virtual shared_ptr<CollectionIndexer> newIndexer(const BSONObj &info, const bool background) = 0;
+        virtual shared_ptr<CollectionIndexer> newHotIndexer(const BSONObj &info) = 0;
 
         virtual unsigned long long getMultiKeyIndexBits() const = 0;
 
@@ -447,6 +447,12 @@ namespace mongo {
         // @param info is the index spec (ie: { ns: "test.foo", key: { a: 1 }, name: "a_1", clustering: true })
         // @return whether or the the index was just built.
         bool ensureIndex(const BSONObj &info) {
+            checkAddIndexOK(info);
+            // Note this ns in the rollback so if this transaction aborts, we'll
+            // close this ns, forcing the next user to reload in-memory metadata.
+            CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
+            rollback.noteNs(_ns);
+            
             bool ret = _cd->ensureIndex(info);
             if (ret) {
                 addToNamespacesCatalog(IndexDetails::indexNamespace(_ns, info["name"].String()));
@@ -614,8 +620,14 @@ namespace mongo {
             _cd->fillSpecificStats(result, scale);
         }
 
-        shared_ptr<CollectionIndexer> newIndexer(const BSONObj &info, const bool background) {
-            return _cd->newIndexer(info, background);
+        shared_ptr<CollectionIndexer> newHotIndexer(const BSONObj &info) {
+            checkAddIndexOK(info);
+            // Note this ns in the rollback so if this transaction aborts, we'll
+            // close this ns, forcing the next user to reload in-memory metadata.
+            CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
+            rollback.noteNs(_ns);
+            
+            return _cd->newHotIndexer(info);
         }
 
         //
@@ -651,6 +663,8 @@ namespace mongo {
         // Every index has an IndexDetails that describes it.
         IndexPathSet _indexedPaths;
         void resetTransient();
+        
+        void checkAddIndexOK(const BSONObj &info);
 
         /* query cache (for query optimizer) */
         QueryCache _queryCache;
@@ -872,6 +886,7 @@ namespace mongo {
         };
 
         shared_ptr<CollectionIndexer> newIndexer(const BSONObj &info, const bool background);
+        virtual shared_ptr<CollectionIndexer> newHotIndexer(const BSONObj &info);
 
         // optional to implement, populate the obj builder with collection specific stats
         virtual void fillSpecificStats(BSONObjBuilder &result, int scale) const {
@@ -1303,9 +1318,12 @@ namespace mongo {
             if (i >= 0) {
                 return false;
             }
-            // now that we know it does not exist and we are ACTUALLY
-            // adding an index, uassert
-            uasserted(17238, "cannot add an index to a partitioned collection");
+            for (uint64_t i = 0; i < numPartitions(); i++) {
+                if (!_partitions[i]->ensureIndex(info)) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         virtual int nIndexesBeingBuilt() const {
@@ -1456,20 +1474,14 @@ namespace mongo {
 
         virtual void fillSpecificStats(BSONObjBuilder &result, int scale) const;
 
-        virtual shared_ptr<CollectionIndexer> newIndexer(const BSONObj &info, const bool background) {
+        virtual shared_ptr<CollectionIndexer> newHotIndexer(const BSONObj &info) {
             uasserted(17242, "Cannot create a hot index on a partitioned collection");
         }
 
-        virtual unsigned long long getMultiKeyIndexBits() const {
-            // no secondary indexes, so no multi keys
-            return 0;
-        }
+        virtual unsigned long long getMultiKeyIndexBits() const;
 
         // for now, no multikey indexes on partitioned collections
-        virtual bool isMultiKey(int i) const {
-            return false;
-        }
-
+        virtual bool isMultiKey(int i) const;
         
         // table scan
         virtual shared_ptr<Cursor> makeCursor(const int direction, const bool countCursor);
@@ -1477,12 +1489,7 @@ namespace mongo {
         // index-scan
         virtual shared_ptr<Cursor> makeCursor(const IndexDetails &idx,
                                         const int direction, 
-                                        const bool countCursor) {
-            // as of now, no secondary indexes, so this should
-            // just be a table scan
-            verify(idxNo(idx) == 0);
-            return makeCursor(direction, countCursor);
-        }
+                                        const bool countCursor);
 
         // index range scan between start/end
         virtual shared_ptr<Cursor> makeCursor(const IndexDetails &idx,

@@ -319,6 +319,34 @@ namespace mongo {
         computeIndexKeys();
     }
 
+    
+    void Collection::checkAddIndexOK(const BSONObj &info) {
+        Lock::assertWriteLocked(_ns);
+
+        const StringData &name = info["name"].Stringdata();
+        const BSONObj &keyPattern = info["key"].Obj();
+
+        massert(16922, "dropDups is not supported, we should have stripped it out earlier",
+                       !info["dropDups"].trueValue());
+
+        uassert(12588, "cannot add index with a hot index build in progress",
+                       nIndexesBeingBuilt() > nIndexes());
+
+        uassert(12523, "no index name specified",
+                        info["name"].ok());
+
+        uassert(16753, str::stream() << "index with name " << name << " already exists",
+                       _cd->findIndexByName(name) < 0);
+
+        uassert(16754, str::stream() << "index already exists with diff name " <<
+                       name << " " << keyPattern.toString(),
+                       findIndexByKeyPattern(keyPattern) < 0);
+
+        uassert(12505, str::stream() << "add index fails, too many indexes for " <<
+                       name << " key:" << keyPattern.toString(),
+                       nIndexes() < Collection::NIndexesMax);
+    }
+
     void Collection::computeIndexKeys() {
         _indexedPaths.clear();
 
@@ -1252,7 +1280,12 @@ namespace mongo {
         return true;
     }
 
+    shared_ptr<CollectionIndexer> CollectionBase::newHotIndexer(const BSONObj &info) {
+        return newIndexer(info, true);
+    }
+    
     // Get an indexer over this collection. Implemented in indexer.cpp
+    // This is just a helper function for createIndex and newHotIndexer
     shared_ptr<CollectionIndexer> CollectionBase::newIndexer(const BSONObj &info,
                                                                const bool background) {
         if (background) {
@@ -2728,15 +2761,43 @@ namespace mongo {
         return ret;
     }
 
+    unsigned long long PartitionedCollection::getMultiKeyIndexBits() const {
+        // no secondary indexes, so no multi keys
+        uint64_t retval = 0;
+        for (uint64_t i = 0; i < numPartitions(); i++) {
+            retval |= _partitions[i]->getMultiKeyIndexBits();
+        }
+        return retval;
+    }
+
+    bool PartitionedCollection::isMultiKey(int idx) const {
+        for (uint64_t i = 0; i < numPartitions(); i++) {
+            if (_partitions[i]->isMultiKey(idx)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     shared_ptr<Cursor> PartitionedCollection::makeCursor(
         const int direction, 
         const bool countCursor
         )
     {
-        shared_ptr<Cursor> ret(new PartitionedCursor(this, direction, countCursor));
+        // pass in an idxNo of 0, because we are assuming 0 is the pk
+        shared_ptr<Cursor> ret(new PartitionedCursor(this, 0, direction, countCursor));
         return ret;
     }
     
+    shared_ptr<Cursor> PartitionedCollection::makeCursor(const IndexDetails &idx,
+                                    const int direction, 
+                                    const bool countCursor) {
+        // as of now, no secondary indexes, so this should
+        // just be a table scan
+        shared_ptr<Cursor> ret(new PartitionedCursor(this, idxNo(idx), direction, countCursor));
+        return ret;
+    }
+
     // index range scan between start/end
     shared_ptr<Cursor> PartitionedCollection::makeCursor(const IndexDetails &idx,
                                    const BSONObj &startKey, const BSONObj &endKey,
@@ -2745,10 +2806,10 @@ namespace mongo {
                                    const bool countCursor)
     {
         // as of now, no secondary indexes
-        verify(idxNo(idx) == 0);
         shared_ptr<Cursor> ret(
             new PartitionedCursor(
                 this,
+                idxNo(idx),
                 startKey,
                 endKey,
                 endKeyInclusive,
@@ -2768,10 +2829,10 @@ namespace mongo {
                                    const bool countCursor)
     {
         // as of now, no secondary indexes
-        verify(idxNo(idx) == 0);
         shared_ptr<Cursor> ret(
             new PartitionedCursor (
                 this,
+                idxNo(idx),
                 bounds,
                 singleIntervalLimit,
                 direction,
@@ -2808,18 +2869,20 @@ namespace mongo {
     // called by constructors during initialization. Must be done
     // after meta collection and partitions instantiated
     void PartitionedCollection::createIndexDetails() {
-        shared_ptr<PartitionedIndexDetails> details;
-        BSONObj info = _partitions[0]->idx(0).info();
-        details.reset(
-            new PartitionedIndexDetails(
-                replaceNSField(info, _ns),
-                this,
-                0
-                )
-            );
-        _indexDetails.push_back(details);
+        for (int i = 0; i < nIndexes(); i++) {
+            shared_ptr<PartitionedIndexDetails> details;
+            BSONObj info = _partitions[0]->idx(i).info();
+            details.reset(
+                new PartitionedIndexDetails(
+                    replaceNSField(info, _ns),
+                    this,
+                    i
+                    )
+                );
+            _indexDetails.push_back(details);
+        }
         // initialize _ordering
-        _ordering = Ordering::make(details->keyPattern());
+        _ordering = Ordering::make(_indexDetails[0]->keyPattern());
     }
 
     // helper function for add partition
@@ -2890,6 +2953,23 @@ namespace mongo {
         // add new collection to vector of partitions
         shared_ptr<CollectionData> newPartition;
         newPartition = makeNewPartition(getPartitionName(id), _options);
+        if (numPartitions() > 0) {
+            // if this is not the first partition, we need to make sure the
+            // secondary indexes match
+            for (int i = 0; i < _partitions[0]->nIndexes(); i++) {
+                BSONObj currInfo = _partitions[0]->idx(i).info();                
+                const BSONObj keyPattern = currInfo["key"].Obj();
+                // it's possible the index already exists (e.g. _id index or the pk)
+                const int index = findIndexByKeyPattern(keyPattern);
+                if (index >= 0) {
+                    continue;
+                }
+                // we want to make sure any other secondary index actually works
+                bool ret = newPartition->ensureIndex(currInfo);
+                massert(0, str::stream() << "could not add index " << currInfo, ret);
+            }
+            massert(0, "could not add proper indexes", newPartition->nIndexes() == _partitions[0]->nIndexes());
+        }
         _partitions.push_back(newPartition);
 
         // add data to internal vectors

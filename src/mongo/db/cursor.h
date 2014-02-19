@@ -672,12 +672,13 @@ namespace mongo {
     private:
         // used for table scans
         // all of these assume to be running over the primary key
-        PartitionedCursor(PartitionedCollection* pc, const int direction, const bool countCursor);
-        PartitionedCursor(PartitionedCollection* pc, const BSONObj &startKey, const BSONObj &endKey,
+        PartitionedCursor(PartitionedCollection* pc, const int idxNo, const int direction, const bool countCursor);
+        PartitionedCursor(PartitionedCollection* pc, const int idxNo, const BSONObj &startKey, const BSONObj &endKey,
                           const bool endKeyInclusive,
                           const int direction, const int numWanted,
                           const bool countCursor);        
-        PartitionedCursor(PartitionedCollection* pc, const shared_ptr<FieldRangeVector> &bounds,
+        PartitionedCursor(PartitionedCollection* pc, const int idxNo,
+                          const shared_ptr<FieldRangeVector> &bounds,
                           const int singleIntervalLimit,
                           const int direction, const int numWanted,
                           const bool countCursor);
@@ -685,8 +686,12 @@ namespace mongo {
         void makeSubCursor(uint64_t partitionIndex);
         void getNextSubCursor();
         void initializeSubCursor();
+        bool cursorOverPartitionKey() {
+            return (_idxNo == 0);
+        }
 
         PartitionedCollection* _pc; // collection we are running cursor over
+        int _idxNo;
         // cursor currently being used to retrieve documents
         shared_ptr<Cursor> _currentCursor;
         // number of documents scanned
