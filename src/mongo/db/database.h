@@ -54,7 +54,7 @@ namespace mongo {
 
         const string &path() const { return _path; }
 
-        void diskSize(size_t &uncompressedSize, size_t &compressedSize);
+        void diskSize(intmax_t &uncompressedSize, intmax_t &compressedSize);
 
         /**
          * @return true if success.  false if bad level or error creating profile ns

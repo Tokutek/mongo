@@ -1141,8 +1141,8 @@ namespace mongo {
             vector< BSONObj > dbInfos;
 
             set<string> seen;
-            size_t totalUncompressedSize = 0;
-            size_t totalCompressedSize = 0;
+            intmax_t totalUncompressedSize = 0;
+            intmax_t totalCompressedSize = 0;
             for ( vector< string >::iterator i = dbNames.begin(); i != dbNames.end(); ++i ) {
                 BSONObjBuilder b;
                 b.append( "name", *i );
@@ -1150,8 +1150,8 @@ namespace mongo {
                 if (!getenv("TOKUMX_SHOW_NO_SIZES")){
                     LOCK_REASON(lockReason, "listDatabases: getting db size");
                     Client::ReadContext rc( getSisterNS(*i, "system.namespaces"), lockReason );
-                    size_t uncompressedSize = 0;
-                    size_t compressedSize = 0;
+                    intmax_t uncompressedSize = 0;
+                    intmax_t compressedSize = 0;
                     rc.ctx().db()->diskSize(uncompressedSize, compressedSize);
                     b.append( "size", (double) uncompressedSize );
                     b.append( "sizeOnDisk", (double) compressedSize );

@@ -77,7 +77,7 @@ namespace mongo {
         }
     }
 
-    void Database::diskSize(size_t &uncompressedSize, size_t &compressedSize) {
+    void Database::diskSize(intmax_t &uncompressedSize, intmax_t &compressedSize) {
         list<string> colls;
         _collectionMap.getNamespaces(colls);
         CollectionData::Stats dbstats;
