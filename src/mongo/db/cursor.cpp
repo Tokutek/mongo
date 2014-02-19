@@ -234,8 +234,9 @@ namespace mongo {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // Partitioned Cursors (over the _id index)
-    PartitionedCursor::PartitionedCursor(PartitionedCollection* pc, const int direction, const bool countCursor):
+    PartitionedCursor::PartitionedCursor(PartitionedCollection* pc, const int idxNo, const int direction, const bool countCursor):
         _pc(pc),
+        _idxNo(idxNo),
         _prevNScanned(0),
         _currPartition(0),
         _cursorType(PC_TABLE_SCAN),
@@ -253,11 +254,13 @@ namespace mongo {
     }
 
     PartitionedCursor::PartitionedCursor(PartitionedCollection* pc,
+                      const int idxNo,
                       const BSONObj &startKey, const BSONObj &endKey,
                       const bool endKeyInclusive,
                       const int direction, const int numWanted,
                       const bool countCursor) :
         _pc(pc),
+        _idxNo(idxNo),
         _prevNScanned(0),
         _currPartition(0),
         _cursorType(PC_RANGE_SCAN),
@@ -270,8 +273,14 @@ namespace mongo {
         _singleIntervalLimit(0), // dummy assignment, not needed
         _tailable(false)
     {
-        _startPartition = pc->partitionWithPK(startKey);
-        _endPartition = pc->partitionWithPK(endKey);
+        if (cursorOverPartitionKey()) {
+            _startPartition = pc->partitionWithPK(startKey);
+            _endPartition = pc->partitionWithPK(endKey);
+        }
+        else {
+            _startPartition = direction > 0 ? 0 : pc->numPartitions() - 1;
+            _endPartition = direction > 0 ? pc->numPartitions() - 1 : 0;
+        }
         // sanity check
         if (direction > 0) {
             verify(_endPartition >= _startPartition);
@@ -283,11 +292,13 @@ namespace mongo {
     }
 
     PartitionedCursor::PartitionedCursor(PartitionedCollection* pc,
+                      const int idxNo,
                       const shared_ptr<FieldRangeVector> &bounds,
                       const int singleIntervalLimit,
                       const int direction, const int numWanted,
                       const bool countCursor) :
         _pc(pc),
+        _idxNo(idxNo),
         _prevNScanned(0),
         _currPartition(0),
         _cursorType(PC_BOUNDS_SCAN),
@@ -299,8 +310,14 @@ namespace mongo {
         _singleIntervalLimit(singleIntervalLimit),
         _tailable(false)
     {
-        _startPartition = pc->partitionWithPK(bounds->startKey());
-        _endPartition = pc->partitionWithPK(bounds->endKey());
+        if (cursorOverPartitionKey()) {
+            _startPartition = pc->partitionWithPK(bounds->startKey());
+            _endPartition = pc->partitionWithPK(bounds->endKey());
+        }
+        else {
+            _startPartition = direction > 0 ? 0 : pc->numPartitions() - 1;
+            _endPartition = direction > 0 ? pc->numPartitions() - 1 : 0;
+        }
         // sanity check
         if (direction > 0) {
             verify(_endPartition >= _startPartition);
@@ -361,11 +378,21 @@ namespace mongo {
     void PartitionedCursor::makeSubCursor(uint64_t partitionIndex) {
         shared_ptr<CollectionData> currColl = _pc->getPartition(partitionIndex);
         if (_cursorType == PC_TABLE_SCAN) {
-            _currentCursor = Cursor::make(
-                currColl.get(),
-                _direction,
-                _countCursor
-                );
+            if (cursorOverPartitionKey()) {
+                _currentCursor = Cursor::make(
+                    currColl.get(),
+                    _direction,
+                    _countCursor
+                    );
+            }
+            else {
+                _currentCursor = Cursor::make(
+                    currColl.get(),
+                    currColl->idx(_idxNo),
+                    _direction,
+                    _countCursor
+                    );
+            }
         }
         else if (_cursorType == PC_RANGE_SCAN) {
             // an optimization for a future day may be
@@ -373,7 +400,7 @@ namespace mongo {
             // and endKey, then we can use  a table scan cursor
             _currentCursor = Cursor::make(
                 currColl.get(),
-                currColl->idx(0),
+                currColl->idx(_idxNo),
                 _startKey,
                 _endKey,
                 _endKeyInclusive,
@@ -389,7 +416,7 @@ namespace mongo {
             // code
             _currentCursor = Cursor::make(
                 currColl.get(),
-                currColl->idx(0),
+                currColl->idx(_idxNo),
                 _bounds,
                 _singleIntervalLimit,
                 _direction,

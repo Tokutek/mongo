@@ -293,7 +293,7 @@ namespace mongo {
                 }
                 BSONObj obj = row;
                 insertOneObject(sysCl, obj, Collection::NO_UNIQUE_CHECKS);
-                indexer = cl->newIndexer(row, true);
+                indexer = cl->newHotIndexer(row);
                 indexer->prepare();
                 addToNamespacesCatalog(IndexDetails::indexNamespace(coll, row["name"].String()));
             }
