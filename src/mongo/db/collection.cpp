@@ -198,6 +198,9 @@ namespace mongo {
         _pk = _cd->pkPattern().copy();
         collectionMap(_ns)->update_ns(_ns, serialize(true), true);
         try {
+            for (int i = 0; i < nIndexes(); i++) {
+                addToNamespacesCatalog(idx(i).indexNamespace());                
+            }
             // If this throws, it's safe to call close() because we just created the index.
             // Therefore we have a write lock, and nobody else could have any uncommitted
             // modifications to this index, so close() should succeed, and #29 is irrelevant.
