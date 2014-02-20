@@ -43,7 +43,8 @@ namespace mongo {
                                const BSONObj &max, 
                                const BSONObj &keyPattern,
                                const bool maxInclusive = false, 
-                               const bool fromMigrate = false);
+                               const bool fromMigrate = false,
+                               uint64_t flags = 0);
 
     // System-y version of deleteObjects that allows you to delete from the system collections, used to be god = true.
     long long _deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop);

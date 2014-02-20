@@ -755,7 +755,8 @@ namespace mongo {
                                      max,
                                      indexKeyPattern,
                                      false, /*maxInclusive*/
-                                     true); /*fromMigrate*/
+                                     true,  /*fromMigrate*/
+                                     Collection::NO_LOCKTREE);
             txn.commit();
 
             LOG(0) << "moveChunk deleted " << numDeleted << " documents for "
