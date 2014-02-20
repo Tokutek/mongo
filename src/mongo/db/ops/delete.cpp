@@ -42,7 +42,8 @@ namespace mongo {
                                const BSONObj &max,
                                const BSONObj &keyPattern,
                                const bool maxInclusive,
-                               const bool fromMigrate) {
+                               const bool fromMigrate,
+                               uint64_t flags) {
         Collection *cl = getCollection(ns);
         if (cl == NULL) {
             return 0;
@@ -62,7 +63,7 @@ namespace mongo {
             const BSONObj pk = c->currPK();
             const BSONObj obj = c->current();
             OplogHelpers::logDelete(ns.c_str(), obj, fromMigrate);
-            deleteOneObject(cl, pk, obj);
+            deleteOneObject(cl, pk, obj, flags);
             nDeleted++;
         }
         return nDeleted;
