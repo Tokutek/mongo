@@ -114,7 +114,6 @@ namespace mongo {
         _cl->_indexes.push_back(_idx);
         _cl->_indexBuildInProgress = true;
 
-        //addToNamespacesCatalog(_idx->indexNamespace());
         _prepare();
     }
 
