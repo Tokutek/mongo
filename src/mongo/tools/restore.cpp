@@ -52,6 +52,8 @@ public:
     string _curdb;
     string _curcoll;
     set<string> _users; // For restoring users with --drop
+    int _loadConcurrency;
+    int _indexConcurrency;
 
     Restore() : BSONTool( "restore" ),
         _drop(false), _restoreOptions(false), _restoreIndexes(false),
@@ -66,6 +68,8 @@ public:
         ("noOptionsRestore" , "don't restore collection options")
         ("noIndexRestore" , "don't restore indexes")
         ("w" , po::value<int>()->default_value(0) , "minimum number of replicas per write. WARNING, setting w > 1 prevents the bulk load optimization." )
+        ("loadConcurrency", po::value<int>(&_loadConcurrency)->default_value(4), "number of threads used to load BSON data when not using the bulk loader")
+        ("indexConcurrency", po::value<int>(&_indexConcurrency)->default_value(4), "number of threads used to build indexes when not using the bulk loader")
         ;
         add_hidden_options()
         ("dir", po::value<string>()->default_value("dump"), "directory to restore from")
@@ -286,10 +290,13 @@ public:
                 createCollectionWithOptions(options);
             }
             // Build indexes last - it's a little faster.
-            processFile( root );
+            processFileInParts(root, _loadConcurrency);
+
+            ThreadPool pool(_indexConcurrency);
             for (vector<BSONObj>::iterator it = indexes.begin(); it != indexes.end(); ++it) {
-                createIndex(*it);
+                pool.schedule(boost::mem_fn(&Restore::createIndex), this, *it);
             }
+            pool.join();
         }
 
         if (_drop && root.leaf() == "system.users.bson") {

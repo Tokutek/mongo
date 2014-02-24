@@ -160,6 +160,7 @@ namespace mongo {
 
         long long processFile( const boost::filesystem::path& file );
 
+        long long processFileInParts(const boost::filesystem::path& root, size_t nthreads);
     };
 
 }

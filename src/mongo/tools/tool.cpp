@@ -20,6 +20,7 @@
 #include "mongo/tools/tool.h"
 
 #include <boost/filesystem/operations.hpp>
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 
@@ -32,6 +33,7 @@
 #include "mongo/db/txn_complete_hooks.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/platform/posix_fadvise.h"
+#include "mongo/util/background.h"
 #include "mongo/util/password.h"
 #include "mongo/util/version.h"
 
@@ -541,6 +543,190 @@ namespace mongo {
         if ( _matcher.get() )
             (_usesstdout ? cout : cerr ) << processed << " objects processed" << endl;
         return processed;
+    }
+
+    class FileProcessor : public BackgroundJob {
+        BSONTool &_tool;
+        const Matcher *_matcher;
+        const int _tidx;
+        const char *_filename;
+        const off_t _startOffset;
+        const size_t _sizeToProcess;
+        const bool _objcheck;
+        FILE *_fp;
+        ProgressMeter _m;
+        boost::scoped_array<char> _buf_holder;
+        size_t _processed;
+        static const int BUF_SIZE;
+
+      protected:
+        virtual std::string name() const { return "FileProcessor"; }
+        virtual void run() {
+            char *buf = buf_holder.get();
+            FILE *fp = fopen(_filename, "rb");
+            if (!fp) {
+                log() << "error opening file: " << _filename << " " << errnoWithDescription() << endl;
+                return;
+            }
+#ifdef POSIX_FADV_SEQUENTIAL
+            posix_fadvise(fileno(fp), _startOffset, _sizeToProcess, POSIX_FADV_SEQUENTIAL);
+#endif
+            _fp = fp;
+
+            int ret = fseek(_fp, _startOffset, SEEK_SET);
+            if (ret) {
+                log() << "Error seeking in file " << _filename << " " << errnoWithDescription() << endl;
+                return;
+            }
+
+            size_t read = 0;
+            size_t num = 0;
+            while (read < _sizeToProcess) {
+                size_t amt = fread(buf, 1, 4, _fp);
+                verify(amt == 4);
+
+                int size = ((int *) buf)[0];
+                uassert(17320, str::stream() << "invalid object size: " << size, size < BUF_SIZE);
+
+                amt = fread(buf + 4, 1, size - 4, _fp);
+                verify(amt == (size_t) (size - 4));
+                BSONObj o(buf);
+                if (_objcheck && ! o.valid()) {
+                    cerr << "INVALID OBJECT - going try and print out " << endl;
+                    cerr << "size: " << size << endl;
+                    BSONObjIterator i(o);
+                    while (i.more()) {
+                        BSONElement e = i.next();
+                        try {
+                            e.validate();
+                        }
+                        catch (...) {
+                            cerr << "\t\t NEXT ONE IS INVALID" << endl;
+                        }
+                        cerr << "\t name : " << e.fieldName() << " " << e.type() << endl;
+                        cerr << "\t " << e << endl;
+                    }
+                }
+
+                if (_matcher && _matcher->matches(o)) {
+                    _tool.gotObject(o);
+                    _processed++;
+                }
+
+                read += o.objsize();
+                num++;
+                _m.hit(o.objsize());
+            }
+
+            uassert(17321, "counts don't match", m.done() == _sizeToProcess);
+            (_usesstdout ? cout : cerr) << m.hits() << " objects found (Thread " << _tidx << ")" << endl;
+            if (_matcher) {
+                (_usesstdout ? cout : cerr) << _processed << " objects processed (Thread " << _tidx << ")" << endl;
+            }
+        }
+
+      public:
+        FileProcessor(BSONTool &tool, const Matcher *matcher, const char *filename, off_t startOffset, size_t sizeToProcess, bool objcheck)
+                : BackgroundJob(false),
+                  _tool(tool),
+                  _matcher(matcher),
+                  _filename(filename),
+                  _startOffset(startOffset),
+                  _sizeToProcess(sizeToProcess),
+                  _fp(NULL),
+                  _m(sizeToProcess),
+                  _objcheck(objcheck),
+                  _buf_holder(new char[BUF_SIZE]),
+                  _processed(0) {
+            static AtomicInt32 threadIndices(0);
+            _tidx = threadIndicies.fetchAndAdd(1);
+            _m.setName(std::string("Loading (Thread ") + _tidx + ")");
+            _m.setUnits("bytes");
+        }
+
+        ~FileProcessor() {
+            if (_fp) {
+                fclose(_fp);
+            }
+        }
+
+        size_t processed() const { return _processed; }
+    };
+    static const int FileProcessor::BUF_SIZE = BSONObjMaxUserSize + ( 1024 * 1024 );
+
+    long long BSONTool::processFileInParts(const boost::filesystem::path& root, size_t nthreads) {
+        _fileName = root.string();
+        size_t fileLength = file_size(root);
+        if (fileLength == 0) {
+            out() << "file " << _fileName << " empty, skipping" << endl;
+            return 0;
+        }
+
+        off_t startOffsets[nthreads];
+        std::fill_n(startOffsets, nthreads, 0);
+
+        {
+            FILE *file = fopen(_fileName.c_str(), "rb");
+            if (!file) {
+                log() << "error opening file: " << _fileName << " " << errnoWithDescription() << endl;
+                return 0;
+            }
+
+#ifdef POSIX_FADV_SEQUENTIAL
+            posix_fadvise(fileno(file), 0, fileLength, POSIX_FADV_SEQUENTIAL);
+#endif
+
+            LOG(1) << "\t file size: " << fileLength << endl;
+
+            ProgressMeter m(fileLength);
+            m.setName("Preprocessing");
+            m.setUnits("bytes");
+
+            size_t offsetToFind = 1;
+            size_t read = 0;
+            const int BUF_SIZE = BSONObjMaxUserSize + ( 1024 * 1024 );
+            boost::scoped_array<char> buf_holder(new char[BUF_SIZE]);
+            char * buf = buf_holder.get();
+
+            while (read < fileLength && offsetToFind < nthreads) {
+                size_t amt = fread(buf, 1, 4, file);
+                verify(amt == 4);
+                int size = ((int *) buf)[0];
+            
+                uassert(17322, str::stream() << "invalid object size: " << size, size < BUF_SIZE);
+
+                int ret = fseek(file, size - 4, SEEK_CUR);
+                verify(ret == 0);
+
+                read += size;
+                m.hit(size);
+
+                if (read >= fileLength * offsetToFind / nthreads) {
+                    startOffsets[offsetToFind++] = read;
+                }
+            }
+
+            fclose(file);
+        }
+
+        vector<boost::shared_ptr<FileProcessor> > fileProcessors(nthreads);
+        for (size_t i = 0; i < nthreads; ++i) {
+            fileProcessors[i].reset(new FileProcessor(*this, _matcher.get(), _fileName.c_str(),
+                                                      startOffsets[i],
+                                                      ((i == nthreads - 1)
+                                                       ? (fileLength - startOffsets[i])
+                                                       : (startOffsets[i + 1] - startOffsets[i])),
+                                                      _objcheck));
+            fileProcessors[i]->go();
+        }
+        size_t totalProcessed = 0;
+        for (size_t i = 0; i < nthreads; ++i) {
+            while (!fileProcessors[i]->wait()) {
+                LOG(1) << "Still waiting for thread " << i << endl;
+            }
+            totalProcessed += fileProcessors[i]->processed();
+        }
+        return totalProcessed;
     }
 
 }
