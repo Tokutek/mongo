@@ -253,7 +253,7 @@ class mongod(object):
         if self.kwargs.get('small_oplog_rs'):
             argv += ["--replSet", "foo", "--oplogSize", "511"]
         if self.slave:
-            argv += ['--slave', '--autoresync', '--source', 'localhost:' + str(srcport)]
+            argv += ['--slave', '--source', 'localhost:' + str(srcport)]
         if self.kwargs.get('no_journal'):
             argv += ['--nojournal']
         if self.kwargs.get('no_preallocj'):
@@ -442,7 +442,7 @@ def skipTest(path):
     parentPath = os.path.dirname(path)
     parentDir = os.path.basename(parentPath)
     if small_oplog: # For tests running in parallel
-        if basename in ["cursor8.js", "indexh.js", "dropdb.js", "connections_opened.js", "opcounters.js"]:
+        if basename in ["cursor8.js", "indexh.js", "dropdb.js", "connections_opened.js", "opcounters.js", "dbadmin.js"]:
             return True
     if auth or keyFile: # For tests running with auth
         # Skip any tests that run with auth explicitly
