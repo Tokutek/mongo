@@ -32,6 +32,7 @@
 #include "mongo/db/namespacestring.h"
 #include "mongo/tools/tool.h"
 #include "mongo/util/stringutils.h"
+#include "mongo/util/concurrency/thread_pool.h"
 #include "mongo/db/json.h"
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/client/remote_loader.h"
@@ -294,7 +295,7 @@ public:
 
             ThreadPool pool(_indexConcurrency);
             for (vector<BSONObj>::iterator it = indexes.begin(); it != indexes.end(); ++it) {
-                pool.schedule(boost::mem_fn(&Restore::createIndex), this, *it);
+                pool.schedule(boost::mem_fn(&Restore::createIndexOnThread), this, *it);
             }
             pool.join();
         }
@@ -431,6 +432,12 @@ private:
             }
         }
         return bo.obj();
+    }
+
+    void createIndexOnThread(BSONObj indexObj) {
+        Client::initThread("IndexBuilder");
+        createIndex(indexObj);
+        cc().shutdown();
     }
 
     /* We must handle if the dbname or collection name is different at restore time than what was dumped.

@@ -553,8 +553,9 @@ namespace mongo {
         const off_t _startOffset;
         const size_t _sizeToProcess;
         const bool _objcheck;
-        FILE *_fp;
+        const bool _usesstdout;
         ProgressMeter _m;
+        FILE *_fp;
         boost::scoped_array<char> _buf_holder;
         size_t _processed;
         static const int BUF_SIZE;
@@ -562,7 +563,7 @@ namespace mongo {
       protected:
         virtual std::string name() const { return "FileProcessor"; }
         virtual void run() {
-            char *buf = buf_holder.get();
+            char *buf = _buf_holder.get();
             FILE *fp = fopen(_filename, "rb");
             if (!fp) {
                 log() << "error opening file: " << _filename << " " << errnoWithDescription() << endl;
@@ -618,29 +619,30 @@ namespace mongo {
                 _m.hit(o.objsize());
             }
 
-            uassert(17321, "counts don't match", m.done() == _sizeToProcess);
-            (_usesstdout ? cout : cerr) << m.hits() << " objects found (Thread " << _tidx << ")" << endl;
+            uassert(17321, "counts don't match", _m.done() == _sizeToProcess);
+            (_usesstdout ? cout : cerr) << _m.hits() << " objects found (Thread " << _tidx << ")" << endl;
             if (_matcher) {
                 (_usesstdout ? cout : cerr) << _processed << " objects processed (Thread " << _tidx << ")" << endl;
             }
         }
 
       public:
-        FileProcessor(BSONTool &tool, const Matcher *matcher, const char *filename, off_t startOffset, size_t sizeToProcess, bool objcheck)
+        FileProcessor(BSONTool &tool, const Matcher *matcher, size_t tidx, const char *filename,
+                      off_t startOffset, size_t sizeToProcess, bool objcheck, bool usesstdout)
                 : BackgroundJob(false),
                   _tool(tool),
                   _matcher(matcher),
+                  _tidx(tidx),
                   _filename(filename),
                   _startOffset(startOffset),
                   _sizeToProcess(sizeToProcess),
-                  _fp(NULL),
-                  _m(sizeToProcess),
                   _objcheck(objcheck),
+                  _usesstdout(usesstdout),
+                  _m(sizeToProcess),
+                  _fp(NULL),
                   _buf_holder(new char[BUF_SIZE]),
                   _processed(0) {
-            static AtomicInt32 threadIndices(0);
-            _tidx = threadIndicies.fetchAndAdd(1);
-            _m.setName(std::string("Loading (Thread ") + _tidx + ")");
+            _m.setName(mongoutils::str::stream() << "Loading (Thread " << _tidx << ")");
             _m.setUnits("bytes");
         }
 
@@ -652,7 +654,7 @@ namespace mongo {
 
         size_t processed() const { return _processed; }
     };
-    static const int FileProcessor::BUF_SIZE = BSONObjMaxUserSize + ( 1024 * 1024 );
+    const int FileProcessor::BUF_SIZE = BSONObjMaxUserSize + ( 1024 * 1024 );
 
     long long BSONTool::processFileInParts(const boost::filesystem::path& root, size_t nthreads) {
         _fileName = root.string();
@@ -711,12 +713,12 @@ namespace mongo {
 
         vector<boost::shared_ptr<FileProcessor> > fileProcessors(nthreads);
         for (size_t i = 0; i < nthreads; ++i) {
-            fileProcessors[i].reset(new FileProcessor(*this, _matcher.get(), _fileName.c_str(),
+            fileProcessors[i].reset(new FileProcessor(*this, _matcher.get(), i, _fileName.c_str(),
                                                       startOffsets[i],
                                                       ((i == nthreads - 1)
                                                        ? (fileLength - startOffsets[i])
                                                        : (startOffsets[i + 1] - startOffsets[i])),
-                                                      _objcheck));
+                                                      _objcheck, _usesstdout));
             fileProcessors[i]->go();
         }
         size_t totalProcessed = 0;
