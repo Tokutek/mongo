@@ -32,6 +32,8 @@
 #include "mongo/db/namespacestring.h"
 #include "mongo/tools/tool.h"
 #include "mongo/util/stringutils.h"
+#include "mongo/util/concurrency/tsqueue.h"
+#include "mongo/util/concurrency/thread_pool.h"
 #include "mongo/db/json.h"
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/client/remote_loader.h"
@@ -39,6 +41,73 @@
 using namespace mongo;
 
 namespace po = boost::program_options;
+
+namespace restore_threaded {
+
+    class InsertBatch {
+        string _curns;
+        string _curdb;
+        std::vector<BSONObj> _objs;
+        size_t _objsize;
+
+      public:
+        InsertBatch(const string &curns, const string &curdb)
+                : _curns(curns),
+                  _curdb(curdb),
+                  _objs(),
+                  _objsize(0) {}
+
+        void push_back(const BSONObj &obj) {
+            _objs.push_back(obj);
+            _objsize += obj.objsize();
+        }
+
+        const string &curns() const { return _curns; }
+        const string &curdb() const { return _curdb; }
+        const std::vector<BSONObj> &objs() const { return _objs; }
+        size_t objsize() const { return _objsize; }
+    };
+
+    typedef boost::shared_ptr<InsertBatch> InsertBatchPtr;
+
+    class BatchInserter : public BackgroundJob {
+        ThreadedToolConnection _ttc;
+        TSQueue<InsertBatchPtr> &_queue;
+        const int _w;
+
+      public:
+        BatchInserter(bool useDirectClient, ConnectionString *cs, TSQueue<InsertBatchPtr> &queue, int w)
+                : BackgroundJob(false),
+                  _ttc(useDirectClient, cs),
+                  _queue(queue),
+                  _w(w)
+        {}
+
+        std::string name() const { return "BatchInserter"; }
+
+        void run() {
+            _ttc.init();
+            try {
+                while (true) {
+                    InsertBatchPtr ibp = _queue.pop();
+                    _ttc.conn().insert(ibp->curns(), ibp->objs());
+
+                    if (_w > 0) {
+                        string err = _ttc.conn().getLastError(ibp->curdb(), false, false, _w);
+                        if (!err.empty()) {
+                            error() << err;
+                        }
+                    }
+                }
+            } catch (TSQueue<InsertBatchPtr>::Empty) {
+                return;
+            }
+        }
+    };
+
+    typedef boost::shared_ptr<BatchInserter> BatchInserterPtr;
+
+} // namespace restore_threaded
 
 class Restore : public BSONTool {
 public:
@@ -52,10 +121,14 @@ public:
     string _curdb;
     string _curcoll;
     set<string> _users; // For restoring users with --drop
+    size_t _threads;
+    std::vector<restore_threaded::BatchInserterPtr> _inserterThreads;
+    TSQueue<restore_threaded::InsertBatchPtr> _insertBatchQueue;
+    restore_threaded::InsertBatchPtr _curInsertBatch;
 
     Restore() : BSONTool( "restore" ),
         _drop(false), _restoreOptions(false), _restoreIndexes(false),
-        _w(0), _doBulkLoad(false) {
+        _w(0), _doBulkLoad(false), _insertBatchQueue(16) {
         // Default values set here will show up in help text, but will supercede any default value
         // used when calling getParam below.
         add_options()
@@ -66,6 +139,7 @@ public:
         ("noOptionsRestore" , "don't restore collection options")
         ("noIndexRestore" , "don't restore indexes")
         ("w" , po::value<int>()->default_value(0) , "minimum number of replicas per write. WARNING, setting w > 1 prevents the bulk load optimization." )
+        ("threads", po::value(&_threads)->default_value(4), "number of threads to use when not using the bulk loader")
         ;
         add_hidden_options()
         ("dir", po::value<string>()->default_value("dump"), "directory to restore from")
@@ -110,6 +184,26 @@ public:
         }
         if (hasParam( "oplogLimit" )) {
             log() << "warning: --oplogLimit is deprecated in TokuMX" << endl;
+        }
+
+        if (!_doBulkLoad) {
+            bool useDirectClient = hasParam("dbpath");
+            if (useDirectClient) {
+                string errmsg;
+                ConnectionString cs = ConnectionString::parse(_host, errmsg);
+                verify(cs.isValid());
+                for (size_t i = 0; i < _threads; ++i) {
+                    restore_threaded::BatchInserterPtr ptr(
+                        new restore_threaded::BatchInserter(false, &cs, _insertBatchQueue, _w));
+                    _inserterThreads.push_back(ptr);
+                }
+            } else {
+                for (size_t i = 0; i < _threads; ++i) {
+                    restore_threaded::BatchInserterPtr ptr(
+                        new restore_threaded::BatchInserter(true, NULL, _insertBatchQueue, _w));
+                    _inserterThreads.push_back(ptr);
+                }
+            }
         }
 
         /* If _db is not "" then the user specified a db name to restore as.
@@ -285,8 +379,23 @@ public:
             if (!options.isEmpty()) {
                 createCollectionWithOptions(options);
             }
+
+            _curInsertBatch.reset(new restore_threaded::InsertBatch(_curns, _curdb));
+            _insertBatchQueue.reset();
+            for (std::vector<restore_threaded::BatchInserterPtr>::iterator it = _inserterThreads.begin(); it != _inserterThreads.end(); ++it) {
+                (*it)->wait();
+            }
+
             // Build indexes last - it's a little faster.
             processFile( root );
+
+            _insertBatchQueue.push(_curInsertBatch);
+            _curInsertBatch.reset();
+            _insertBatchQueue.flush();
+            for (std::vector<restore_threaded::BatchInserterPtr>::iterator it = _inserterThreads.begin(); it != _inserterThreads.end(); ++it) {
+                (*it)->wait();
+            }
+
             for (vector<BSONObj>::iterator it = indexes.begin(); it != indexes.end(); ++it) {
                 createIndex(*it);
             }
@@ -313,16 +422,11 @@ public:
             conn().update(_curns, Query(userMatch), obj);
             _users.erase(obj["user"].String());
         } else {
-            conn().insert( _curns , obj );
-
-            // wait for insert to propagate to "w" nodes (doesn't warn if w used without replset)
-            if ( _w > 0 ) {
-                verify( !_doBulkLoad );
-                string err = conn().getLastError(_curdb, false, false, _w);
-                if (!err.empty()) {
-                    error() << err;
-                }
+            if ((_curInsertBatch->objsize() + obj.objsize()) > (BSONObjMaxUserSize - (1 << 20))) {
+                _insertBatchQueue.push(_curInsertBatch);
+                _curInsertBatch.reset(new restore_threaded::InsertBatch(_curns, _curdb));
             }
+            _curInsertBatch->push_back(obj.getOwned());
         }
     }
 

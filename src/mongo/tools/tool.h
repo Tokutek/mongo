@@ -26,9 +26,10 @@
 #include <io.h>
 #endif
 
-#include "db/instance.h"
-#include "db/matcher.h"
-#include "client/remote_transaction.h"
+#include "mongo/client/connpool.h"
+#include "mongo/client/remote_transaction.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/matcher.h"
 
 using std::string;
 
@@ -160,6 +161,38 @@ namespace mongo {
 
         long long processFile( const boost::filesystem::path& file );
 
+    };
+
+    class ThreadedToolConnection : boost::noncopyable {
+        scoped_ptr<ScopedDbConnection> _scopedConn;
+        scoped_ptr<DBDirectClient> _directClient;
+
+      public:
+        ThreadedToolConnection(bool useDirectClient, ConnectionString *cs) {
+            if (!useDirectClient) {
+                verify(cs);
+                _scopedConn.reset(ScopedDbConnection::getScopedDbConnection(*cs));
+            }
+        }
+
+        void init() {
+            if (_scopedConn) {
+                return;
+            }
+            if (!_directClient) {
+                Client::initThread("tools");
+                _directClient.reset(new DBDirectClient);
+            }
+        }
+
+        DBClientBase &conn() {
+            if (_scopedConn) {
+                return _scopedConn->conn();
+            } else {
+                verify(_directClient);
+                return *_directClient;
+            }
+        }
     };
 
 }
