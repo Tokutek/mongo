@@ -258,6 +258,9 @@ namespace mongo {
 
         MessageServer * server = createServer( options , new MyMessageHandler() );
         server->setAsTimeTracker();
+        // we must setupSockets prior to logStartup() to avoid getting too high
+        // a file descriptor for our calls to select()
+        server->setupSockets();
 
         logStartup();
         startReplication();
@@ -303,6 +306,7 @@ namespace mongo {
             DISK_VERSION_INVALID = 0,
             DISK_VERSION_1 = 1,  // < 1.4
             DISK_VERSION_2 = 2,  // 1.4.0: changed how ints with abs value larger than 2^52 are packed (#820)
+            DISK_VERSION_3 = 3,  // 1.4.1: moved upgrade of system.users collections into DiskFormatVersion framework (#978)
             DISK_VERSION_NEXT,
             DISK_VERSION_CURRENT = DISK_VERSION_NEXT - 1,
             MIN_SUPPORTED_VERSION = 1,
@@ -317,6 +321,39 @@ namespace mongo {
         static const string versionNs;
         static const BSONFieldValue<string> versionIdValue;
         static const BSONField<int> valueField;
+
+        static Status removeZombieNamespaces(const StringData &dbname) {
+            Client::Context ctx(dbname);
+            CollectionMap *cm = collectionMap(dbname);
+            if (!cm) {
+                return Status(ErrorCodes::InternalError, mongoutils::str::stream() << "did not find collection map for database " << dbname);
+            }
+            list<string> collNses;
+            cm->getNamespaces(collNses);
+            for (list<string>::const_iterator cit = collNses.begin(); cit != collNses.end(); ++cit) {
+                const string &collNs = *cit;
+                Collection *c = getCollection(collNs);
+                if (c == NULL) {
+                    LOG(1) << "collection " << collNs << " was dropped but had a zombie entry in the collection map" << startupWarningsLog;
+                    cm->kill_ns(collNs);
+                }
+            }
+            string dbpath = cc().database()->path();
+            Database::closeDatabase(dbname, dbpath);
+            return Status::OK();
+        }
+
+        static Status upgradeSystemUsersCollection(const StringData &dbname) {
+            Client::UpgradingSystemUsersScope usus;
+            string ns = getSisterNS(dbname, "system.users");
+            Client::Context ctx(ns);
+            // Just by calling getCollection, if a collection that needed upgrade is opened, it'll
+            // get upgraded.  This fixes #674.
+            getCollection(ns);
+            string dbpath = cc().database()->path();
+            Database::closeDatabase(dbname, dbpath);
+            return Status::OK();
+        }
 
         Status upgradeToVersion(VersionID targetVersion) {
             if (_currentVersion + 1 != targetVersion) {
@@ -340,29 +377,28 @@ namespace mongo {
                     // weren't removed.
                     verify(Lock::isW());
                     verify(cc().hasTxn());
-                    vector<string> dbnames;
-                    getDatabaseNames(dbnames);
 
-                    for (vector<string>::const_iterator it = dbnames.begin(); it != dbnames.end(); ++it) {
-                        const string &dbname = *it;
-                        Client::Context ctx(dbname);
-                        CollectionMap *cm = collectionMap(dbname);
-                        if (!cm) {
-                            return Status(ErrorCodes::InternalError, mongoutils::str::stream() << "did not find collection map for database " << dbname);
-                        }
-                        list<string> collNses;
-                        cm->getNamespaces(collNses);
-                        for (list<string>::const_iterator cit = collNses.begin(); cit != collNses.end(); ++cit) {
-                            const string &collNs = *cit;
-                            Collection *c = getCollection(collNs);
-                            if (c == NULL) {
-                                LOG(1) << "collection " << collNs << " was dropped but had a zombie entry in the collection map" << startupWarningsLog;
-                                cm->kill_ns(collNs);
-                            }
-                        }
-                        string dbpath = cc().database()->path();
-                        Database::closeDatabase(dbname, dbpath);
+                    Status s = applyToDatabaseNames(&DiskFormatVersion::removeZombieNamespaces);
+                    if (!s.isOK()) {
+                        return s;
                     }
+
+                    break;
+                }
+
+                case DISK_VERSION_3: {
+                    // We used to do this (force upgrade of system.users collections in a write
+                    // lock) in initAndListen but it should really be in the upgrade path, and this
+                    // way we won't do it on every startup, just one more time on upgrade to version
+                    // 3.
+                    verify(Lock::isW());
+                    verify(cc().hasTxn());
+
+                    Status s = applyToDatabaseNames(&DiskFormatVersion::upgradeSystemUsersCollection);
+                    if (!s.isOK()) {
+                        return s;
+                    }
+
                     break;
                 }
             }
@@ -554,25 +590,6 @@ namespace mongo {
             // resolve this.
             LOCK_REASON(lockReason, "startup: opening admin db");
             Client::WriteContext c("admin", lockReason);
-        }
-
-        {
-            // Upgrade any system.users collections if they need it.
-            LOCK_REASON(lockReason, "startup: upgrading system.users collections");
-            Lock::GlobalWrite lk(lockReason);
-            Client::UpgradingSystemUsersScope usus;
-            Client::Transaction txn(DB_SERIALIZABLE);
-
-            vector<string> databases;
-            getDatabaseNames(databases);
-            for (vector<string>::const_iterator it = databases.begin(); it != databases.end(); ++it) {
-                string ns = getSisterNS(*it, "system.users");
-                Client::Context ctx(ns);
-                // Just by calling getCollection, if a collection that needed upgrade is opened, it'll
-                // get upgraded.  This fixes #674.
-                getCollection(ns);
-            }
-            txn.commit();
         }
 
         listen(listenPort);
