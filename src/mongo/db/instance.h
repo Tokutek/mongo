@@ -20,11 +20,16 @@
 
 #pragma once
 
+#include "mongo/pch.h"
 
-#include "curop.h"
-#include "cmdline.h"
-#include "client.h"
+#include <boost/function.hpp>
+
+#include "mongo/base/status.h"
+#include "mongo/base/string_data.h"
 #include "mongo/client/dbclientinterface.h"
+#include "mongo/db/client.h"
+#include "mongo/db/cmdline.h"
+#include "mongo/db/curop.h"
 
 namespace mongo {
 
@@ -73,6 +78,8 @@ namespace mongo {
     void assembleResponse( Message &m, DbResponse &dbresponse, const HostAndPort &client );
 
     void getDatabaseNames( vector< string > &names);
+
+    Status applyToDatabaseNames(boost::function<Status (const StringData &)> f);
 
     /* returns true if there is no data on this server.  useful when starting replication.
        local database does NOT count.
