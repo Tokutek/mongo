@@ -154,6 +154,9 @@ foreach (tool
   endif ()
   target_link_whole_libraries(mongo${tool}
     alltools
+    serveronly
+    coreserver
+    coredb
     authservercommon
     base
     )
@@ -190,6 +193,9 @@ foreach (tool
   endif ()
   target_link_whole_libraries(${tool}
     alltools
+    serveronly
+    coreserver
+    coredb
     authservercommon
     base
     )
