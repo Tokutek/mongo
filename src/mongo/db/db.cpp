@@ -306,6 +306,7 @@ namespace mongo {
             DISK_VERSION_INVALID = 0,
             DISK_VERSION_1 = 1,  // < 1.4
             DISK_VERSION_2 = 2,  // 1.4.0: changed how ints with abs value larger than 2^52 are packed (#820)
+            DISK_VERSION_3 = 3,  // 1.4.1: moved upgrade of system.users collections into DiskFormatVersion framework (#978)
             DISK_VERSION_NEXT,
             DISK_VERSION_CURRENT = DISK_VERSION_NEXT - 1,
             MIN_SUPPORTED_VERSION = 1,
@@ -365,6 +366,27 @@ namespace mongo {
                         }
                         string dbpath = cc().database()->path();
                         Database::closeDatabase(dbname, dbpath);
+                    }
+                    break;
+                }
+
+                case DISK_VERSION_3: {
+                    // We used to do this (force upgrade of system.users collections in a write
+                    // lock) in initAndListen but it should really be in the upgrade path, and this
+                    // way we won't do it on every startup, just one more time on upgrade to version
+                    // 3.
+                    verify(Lock::isW());
+                    verify(cc().hasTxn());
+                    Client::UpgradingSystemUsersScope usus;
+                    vector<string> databases;
+                    getDatabaseNames(databases);
+                    for (vector<string>::const_iterator it = databases.begin(); it != databases.end(); ++it) {
+                        string ns = getSisterNS(*it, "system.users");
+                        Client::Context ctx(ns);
+                        // Just by calling getCollection, if a collection that needed upgrade is opened, it'll
+                        // get upgraded.  This fixes #674.
+                        getCollection(ns);
+                        Database::closeDatabase(*it, dbpath);
                     }
                     break;
                 }
@@ -557,25 +579,6 @@ namespace mongo {
             // resolve this.
             LOCK_REASON(lockReason, "startup: opening admin db");
             Client::WriteContext c("admin", lockReason);
-        }
-
-        {
-            // Upgrade any system.users collections if they need it.
-            LOCK_REASON(lockReason, "startup: upgrading system.users collections");
-            Lock::GlobalWrite lk(lockReason);
-            Client::UpgradingSystemUsersScope usus;
-            Client::Transaction txn(DB_SERIALIZABLE);
-
-            vector<string> databases;
-            getDatabaseNames(databases);
-            for (vector<string>::const_iterator it = databases.begin(); it != databases.end(); ++it) {
-                string ns = getSisterNS(*it, "system.users");
-                Client::Context ctx(ns);
-                // Just by calling getCollection, if a collection that needed upgrade is opened, it'll
-                // get upgraded.  This fixes #674.
-                getCollection(ns);
-            }
-            txn.commit();
         }
 
         listen(listenPort);
