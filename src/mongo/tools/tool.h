@@ -174,6 +174,11 @@ namespace mongo {
                 _scopedConn.reset(ScopedDbConnection::getScopedDbConnection(*cs));
             }
         }
+        ~ThreadedToolConnection() {
+            if (_scopedConn) {
+                _scopedConn->done();
+            }
+        }
 
         void init() {
             if (_scopedConn) {
