@@ -188,7 +188,7 @@ public:
 
         if (!_doBulkLoad) {
             bool useDirectClient = hasParam("dbpath");
-            if (useDirectClient) {
+            if (!useDirectClient) {
                 string errmsg;
                 ConnectionString cs = ConnectionString::parse(_host, errmsg);
                 verify(cs.isValid());
@@ -370,9 +370,15 @@ public:
         const BSONObj options = _restoreOptions && metadataObject.hasField("options") ?
                                 metadataObject["options"].Obj() : BSONObj();
 
+        _curInsertBatch.reset(new restore_threaded::InsertBatch(_curns, _curdb));
+
         if (_doBulkLoad) {
             RemoteLoader loader(conn(), _curdb, _curcoll, indexes, options);
             processFile( root );
+            if (_curInsertBatch->objsize() > 0) {
+                conn().insert(_curns, _curInsertBatch->objs());
+            }
+            _curInsertBatch.reset();
             loader.commit();
         } else {
             // No bulk load. Create collection and indexes manually.
@@ -380,16 +386,17 @@ public:
                 createCollectionWithOptions(options);
             }
 
-            _curInsertBatch.reset(new restore_threaded::InsertBatch(_curns, _curdb));
             _insertBatchQueue.reset();
             for (std::vector<restore_threaded::BatchInserterPtr>::iterator it = _inserterThreads.begin(); it != _inserterThreads.end(); ++it) {
-                (*it)->wait();
+                (*it)->go();
             }
 
             // Build indexes last - it's a little faster.
             processFile( root );
 
-            _insertBatchQueue.push(_curInsertBatch);
+            if (_curInsertBatch->objsize()) {
+                _insertBatchQueue.push(_curInsertBatch);
+            }
             _curInsertBatch.reset();
             _insertBatchQueue.flush();
             for (std::vector<restore_threaded::BatchInserterPtr>::iterator it = _inserterThreads.begin(); it != _inserterThreads.end(); ++it) {
@@ -422,8 +429,13 @@ public:
             conn().update(_curns, Query(userMatch), obj);
             _users.erase(obj["user"].String());
         } else {
-            if ((_curInsertBatch->objsize() + obj.objsize()) > (BSONObjMaxUserSize - (1 << 20))) {
-                _insertBatchQueue.push(_curInsertBatch);
+            if (_curInsertBatch->objsize() > 0 &&
+                ((_curInsertBatch->objsize() + obj.objsize()) > (BSONObjMaxUserSize - (1 << 20))) {
+                if (_doBulkLoad) {
+                    conn().insert(_curns, _curInsertBatch->objs());
+                } else {
+                    _insertBatchQueue.push(_curInsertBatch);
+                }
                 _curInsertBatch.reset(new restore_threaded::InsertBatch(_curns, _curdb));
             }
             _curInsertBatch->push_back(obj.getOwned());
