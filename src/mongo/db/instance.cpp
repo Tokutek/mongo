@@ -24,11 +24,13 @@
 #include <sys/file.h>
 #endif
 
+#include <boost/function.hpp>
 #include <boost/thread/thread.hpp>
 #include <boost/filesystem/operations.hpp>
 
 #include "mongo/util/time_support.h"
 #include "mongo/base/status.h"
+#include "mongo/base/string_data.h"
 
 #include "mongo/bson/util/atomic_int.h"
 
@@ -963,6 +965,56 @@ namespace mongo {
             if (r != 0 && r != DB_NOTFOUND)
                 storage::handle_ydb_error(r);
         }
+    }
+
+    class ApplyToDatabaseNamesWrapper {
+        boost::function<Status (const StringData &)> &_f;
+        Status _s;
+
+        int cb(const DBT *key, const DBT *val) {
+            size_t length = key->size;
+            if (length > 0) {
+                char *cp = (char *) key->data + length - 1;
+                if (*cp == 0) {
+                    length -= 1;
+                }
+                StringData dbname(cp, length);
+                if (dbname.endsWith(".ns")) {
+                    Status s = _f(dbname);
+                    if (!s.isOK()) {
+                        _s = s;
+                        return 1;
+                    }
+                }
+            }
+            return 0;
+        }
+
+      public:
+        ApplyToDatabaseNamesWrapper(boost::function<Status (const StringData &)> &f)
+                : _f(f), _s(Status::OK()) {}
+
+        static int callback(const DBT *key, const DBT *val, void *extra) {
+            ApplyToDatabaseNamesWrapper *e = static_cast<ApplyToDatabaseNamesWrapper *>(extra);
+            return e->cb(key, val);
+        }
+
+        Status status() const { return _s; }
+    };
+
+    Status applyToDatabaseNames(boost::function<Status (const StringData &)> f) {
+        verify(Lock::isRW());
+        verify(cc().hasTxn());
+        storage::DirectoryCursor c(storage::env, cc().txn().db_txn());
+        ApplyToDatabaseNamesWrapper wrapper(f);
+        int r = 0;
+        while (r == 0) {
+            r = c.dbc()->c_getf_next(c.dbc(), 0, &ApplyToDatabaseNamesWrapper::callback, &wrapper);
+            if (r != 0 && r != DB_NOTFOUND && r != 1) {
+                storage::handle_ydb_error(r);
+            }
+        }
+        return wrapper.status();
     }
 
     /* returns true if there is data on this server.  useful when starting replication.

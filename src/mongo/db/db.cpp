@@ -322,6 +322,39 @@ namespace mongo {
         static const BSONFieldValue<string> versionIdValue;
         static const BSONField<int> valueField;
 
+        static Status removeZombieNamespaces(const StringData &dbname) {
+            Client::Context ctx(dbname);
+            CollectionMap *cm = collectionMap(dbname);
+            if (!cm) {
+                return Status(ErrorCodes::InternalError, mongoutils::str::stream() << "did not find collection map for database " << dbname);
+            }
+            list<string> collNses;
+            cm->getNamespaces(collNses);
+            for (list<string>::const_iterator cit = collNses.begin(); cit != collNses.end(); ++cit) {
+                const string &collNs = *cit;
+                Collection *c = getCollection(collNs);
+                if (c == NULL) {
+                    LOG(1) << "collection " << collNs << " was dropped but had a zombie entry in the collection map" << startupWarningsLog;
+                    cm->kill_ns(collNs);
+                }
+            }
+            string dbpath = cc().database()->path();
+            Database::closeDatabase(dbname, dbpath);
+            return Status::OK();
+        }
+
+        static Status upgradeSystemUsersCollection(const StringData &dbname) {
+            Client::UpgradingSystemUsersScope usus;
+            string ns = getSisterNS(dbname, "system.users");
+            Client::Context ctx(ns);
+            // Just by calling getCollection, if a collection that needed upgrade is opened, it'll
+            // get upgraded.  This fixes #674.
+            getCollection(ns);
+            string dbpath = cc().database()->path();
+            Database::closeDatabase(dbname, dbpath);
+            return Status::OK();
+        }
+
         Status upgradeToVersion(VersionID targetVersion) {
             if (_currentVersion + 1 != targetVersion) {
                 return Status(ErrorCodes::BadValue, "bad version in upgrade");
@@ -344,29 +377,12 @@ namespace mongo {
                     // weren't removed.
                     verify(Lock::isW());
                     verify(cc().hasTxn());
-                    vector<string> dbnames;
-                    getDatabaseNames(dbnames);
 
-                    for (vector<string>::const_iterator it = dbnames.begin(); it != dbnames.end(); ++it) {
-                        const string &dbname = *it;
-                        Client::Context ctx(dbname);
-                        CollectionMap *cm = collectionMap(dbname);
-                        if (!cm) {
-                            return Status(ErrorCodes::InternalError, mongoutils::str::stream() << "did not find collection map for database " << dbname);
-                        }
-                        list<string> collNses;
-                        cm->getNamespaces(collNses);
-                        for (list<string>::const_iterator cit = collNses.begin(); cit != collNses.end(); ++cit) {
-                            const string &collNs = *cit;
-                            Collection *c = getCollection(collNs);
-                            if (c == NULL) {
-                                LOG(1) << "collection " << collNs << " was dropped but had a zombie entry in the collection map" << startupWarningsLog;
-                                cm->kill_ns(collNs);
-                            }
-                        }
-                        string dbpath = cc().database()->path();
-                        Database::closeDatabase(dbname, dbpath);
+                    Status s = applyToDatabaseNames(&DiskFormatVersion::removeZombieNamespaces);
+                    if (!s.isOK()) {
+                        return s;
                     }
+
                     break;
                 }
 
@@ -377,17 +393,12 @@ namespace mongo {
                     // 3.
                     verify(Lock::isW());
                     verify(cc().hasTxn());
-                    Client::UpgradingSystemUsersScope usus;
-                    vector<string> databases;
-                    getDatabaseNames(databases);
-                    for (vector<string>::const_iterator it = databases.begin(); it != databases.end(); ++it) {
-                        string ns = getSisterNS(*it, "system.users");
-                        Client::Context ctx(ns);
-                        // Just by calling getCollection, if a collection that needed upgrade is opened, it'll
-                        // get upgraded.  This fixes #674.
-                        getCollection(ns);
-                        Database::closeDatabase(*it, dbpath);
+
+                    Status s = applyToDatabaseNames(&DiskFormatVersion::upgradeSystemUsersCollection);
+                    if (!s.isOK()) {
+                        return s;
                     }
+
                     break;
                 }
             }
