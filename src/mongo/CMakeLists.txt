@@ -123,6 +123,7 @@ if (NOT APPLE)
 endif ()
 target_link_whole_libraries(mongod
   coredb
+  plugins
   coreserver
   mongodandmongos
   serveronly
@@ -222,6 +223,7 @@ target_link_whole_libraries(mongos
   authservercommon
   coreserver
   coredb
+  plugins
   mongocommon
   coreshard
   dbcmdline
