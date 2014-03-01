@@ -78,7 +78,7 @@ def main(argv):
         pool.map(parse_file, imap(lambda f: (os.path.join(root, f), all_command_names), cpp_files))
 
     names = sorted(all_command_names.keys())
-    for name in names():
+    for name in names:
         print name
 
 if __name__ == '__main__':
