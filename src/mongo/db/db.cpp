@@ -23,6 +23,8 @@
 #include <boost/filesystem/operations.hpp>
 #include <fstream>
 
+#include <db.h>
+
 #include "mongo/base/initializer.h"
 #include "mongo/db/collection.h"
 #include "mongo/db/collection_map.h"
@@ -1274,6 +1276,8 @@ namespace mongo {
         printStackTrace( oss );
         rawOut( oss.str() );
 
+        db_env_do_backtrace();
+
         // Try to get even more information if gdbPath was set to a gdb executable.
         if (cmdLine.gdbPath != "") {
             db_env_try_gdb_stack_trace(cmdLine.gdbPath.c_str());
@@ -1325,6 +1329,7 @@ namespace mongo {
     void myterminate() {
         rawOut( "terminate() called, printing stack (if implemented for platform):" );
         printStackTrace();
+        db_env_do_backtrace();
         ::abort();
     }
 
@@ -1332,6 +1337,7 @@ namespace mongo {
     void my_new_handler() {
         rawOut( "out of memory, printing stack and exiting:" );
         printStackTrace();
+        db_env_do_backtrace();
         ::_exit(EXIT_ABRUPT);
     }
 
