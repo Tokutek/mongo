@@ -28,6 +28,8 @@
 #include <boost/thread/thread.hpp>
 #include <boost/filesystem/operations.hpp>
 
+#include <db.h>
+
 #include "mongo/util/time_support.h"
 #include "mongo/base/status.h"
 #include "mongo/base/string_data.h"
@@ -299,6 +301,7 @@ namespace mongo {
         if( reportEventToSystem ) 
             reportEventToSystem(msg);
         rawOut(msg);
+        db_env_do_backtrace();
         ::abort();
     }
 
