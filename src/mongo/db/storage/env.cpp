@@ -793,6 +793,13 @@ namespace mongo {
                     }
                     b.doneFast();
                 }
+                {
+                    BSONObjBuilder b(result.subobjStart("compressionRatio"));
+                    status.appendInfo(b, "leaf", "FT_DISK_FLUSH_LEAF_COMPRESSION_RATIO", true);
+                    status.appendInfo(b, "nonleaf", "FT_DISK_FLUSH_NONLEAF_COMPRESSION_RATIO", true);
+                    status.appendInfo(b, "overall", "FT_DISK_FLUSH_OVERALL_COMPRESSION_RATIO", true);
+                    b.doneFast();
+                }
 
                 return result.obj();
             }
