@@ -32,7 +32,7 @@ add_library(base STATIC
   string_data
   )
 add_dependencies(base generate_error_codes generate_action_types)
-target_link_libraries(base LINK_PRIVATE
+target_link_libraries(base LINK_PUBLIC
   murmurhash3
   )
 

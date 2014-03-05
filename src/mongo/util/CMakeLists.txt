@@ -17,7 +17,7 @@ add_library(foundation STATIC
   timer
   )
 add_dependencies(foundation generate_error_codes generate_action_types)
-target_link_libraries(foundation LINK_PRIVATE
+target_link_libraries(foundation LINK_PUBLIC
   stacktrace
   base
   platform
@@ -50,7 +50,7 @@ add_library(mongocommon_util STATIC
   version
   )
 add_dependencies(mongocommon_util generate_error_codes generate_action_types)
-target_link_libraries(mongocommon_util LINK_PRIVATE
+target_link_libraries(mongocommon_util LINK_PUBLIC
   bson
   foundation
   mongohasher
@@ -81,7 +81,7 @@ add_library(processinfo STATIC
   processinfo_${system_suffix}
   )
 add_dependencies(processinfo generate_error_codes generate_action_types)
-target_link_libraries(processinfo LINK_PRIVATE
+target_link_libraries(processinfo LINK_PUBLIC
   foundation
   bson
   )
@@ -108,7 +108,7 @@ add_library(fail_point STATIC
   fail_point_service
   )
 add_dependencies(fail_point generate_error_codes generate_action_types install_tdb_h)
-target_link_libraries(fail_point LINK_PRIVATE
+target_link_libraries(fail_point LINK_PUBLIC
   foundation
   bson
   )

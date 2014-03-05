@@ -19,7 +19,10 @@ if (NOT (JS_ENGINE STREQUAL v8 OR
   message(FATAL_ERROR "invalid JS_ENGINE ${JS_ENGINE}, options are sm or v8")
 endif ()
 
-set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+set(CMAKE_MODULE_PATH
+  "${CMAKE_CURRENT_SOURCE_DIR}/cmake"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/ft-index/cmake_modules"
+  )
 
 set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS
   MONGO_EXPOSE_MACROS
@@ -153,10 +156,11 @@ function (install_executables component)
                 $<TARGET_FILE:${target}>
         )
       install(FILES
-        ${CMAKE_CURRENT_BINARY_DIR}/${target}.dbg
+        "${CMAKE_CURRENT_BINARY_DIR}/${target}.dbg"
         COMPONENT tokumx_debuginfo
         DESTINATION bin
         )
+      set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/${target}.dbg")
     endif ()
     install(TARGETS
       ${target}
@@ -172,8 +176,36 @@ function(target_link_whole_libraries target)
       target_link_libraries(${target} -Wl,-force_load ${lib})
     endforeach ()
   else ()
-    target_link_libraries(${target} -Wl,-whole-archive ${ARGN} -Wl,-no-whole-archive)
+    target_link_libraries(${target} -Wl,--start-group -Wl,-whole-archive ${ARGN} -Wl,-no-whole-archive -Wl,--end-group)
   endif ()
+endfunction()
+
+set(TOKU_CMAKE_SCRIPT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/ft-index/cmake")
+include(TokuMergeLibs)
+
+function(link_recursive_deps bin)
+  set(_all_libs ${ARGN})
+  list(LENGTH _all_libs _cur_num_libs)
+  set(_last_num_libs 0)
+  while (_cur_num_libs GREATER _last_num_libs)
+    set(_new_libs)
+    foreach (_lib ${_all_libs})
+      get_target_property(_loc ${_lib} LOCATION)
+      if (_loc)
+        get_property(_libdeps
+          TARGET ${_lib}
+          PROPERTY LINK_INTERFACE_LIBRARIES
+          )
+        list(APPEND _new_libs ${_libdeps})
+      endif ()
+    endforeach ()
+    list(APPEND _all_libs ${_new_libs})
+    list(REMOVE_DUPLICATES _all_libs)
+    set(_last_num_libs ${_cur_num_libs})
+    list(LENGTH _all_libs _cur_num_libs)
+  endwhile ()
+  toku_merge_static_libs(all_${bin}_libs all_${bin}_libs "${_all_libs}")
+  target_link_whole_libraries(${bin} all_${bin}_libs)
 endfunction()
 
 if (CMAKE_SIZEOF_VOID_P EQUAL 8)

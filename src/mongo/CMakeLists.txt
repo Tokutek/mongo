@@ -97,7 +97,7 @@ add_library(mongocommon STATIC
   db/dbmessage
   )
 add_dependencies(mongocommon generate_mongo_cpp generate_action_types)
-target_link_libraries(mongocommon LINK_PRIVATE
+target_link_libraries(mongocommon LINK_PUBLIC
   mongocommon_client
   mongocommon_util
   bson
@@ -121,17 +121,13 @@ if (NOT APPLE)
     jemalloc
     )
 endif ()
-target_link_whole_libraries(mongod
+link_recursive_deps(mongod
   coredb
-  plugins
   coreserver
   mongodandmongos
   serveronly
-  authservercommon
-  base
   )
 target_link_libraries(mongod
-  ${TokuKV_LIBRARIES}
   ${TOKUMX_SSL_LIBRARIES}
   )
 
@@ -147,22 +143,30 @@ foreach (tool
     bridge
     )
   add_executable(mongo${tool} tools/${tool})
-  add_dependencies(mongo${tool} generate_error_codes generate_action_types install_tdb_h)
+endforeach ()
+add_executable(bsondump tools/bsondump)
+foreach (tool
+    mongodump
+    mongorestore
+    mongoexport
+    mongoimport
+    mongostat
+    mongotop
+    mongo2toku
+    mongofiles
+    mongobridge
+    bsondump
+    )
+  add_dependencies(${tool} generate_error_codes generate_action_types install_tdb_h)
   if (NOT APPLE)
-    target_link_whole_libraries(mongo${tool}
+    target_link_whole_libraries(${tool}
       jemalloc
       )
   endif ()
-  target_link_whole_libraries(mongo${tool}
+  link_recursive_deps(${tool}
     alltools
-    serveronly
-    coreserver
-    coredb
-    authservercommon
-    base
     )
-  target_link_libraries(mongo${tool}
-    ${TokuKV_LIBRARIES}
+  target_link_libraries(${tool}
     ${TOKUMX_SSL_LIBRARIES}
     )
 endforeach ()
@@ -175,16 +179,15 @@ install_executables(tokumx_tools
   mongotop
   mongo2toku
   mongofiles
+  bsondump
   )
 target_link_libraries(mongofiles gridfs)
 
 add_executable(docgen tools/docgeneratormain)
 add_executable(loadgen tools/loadgenerator)
-add_executable(bsondump tools/bsondump)
 foreach (tool
     docgen
     loadgen
-    bsondump
     )
   add_dependencies(${tool} generate_error_codes generate_action_types)
   if (NOT APPLE)
@@ -192,22 +195,14 @@ foreach (tool
       jemalloc
       )
   endif ()
-  target_link_whole_libraries(${tool}
+  link_recursive_deps(${tool}
     alltools
-    serveronly
-    coreserver
-    coredb
-    authservercommon
-    base
+    docgenerator
     )
   target_link_libraries(${tool}
-    ${TokuKV_LIBRARIES}
     ${TOKUMX_SSL_LIBRARIES}
     )
 endforeach ()
-install_executables(tokumx_tools bsondump)
-target_link_libraries(docgen docgenerator)
-target_link_libraries(loadgen docgenerator)
 
 add_executable(mongos
   s/server
@@ -218,21 +213,17 @@ if (NOT APPLE)
     jemalloc
     )
 endif ()
-target_link_whole_libraries(mongos
+link_recursive_deps(mongos
   mongoscore
-  authservercommon
   coreserver
   coredb
-  plugins
   mongocommon
   coreshard
   dbcmdline
   mongodandmongos
   s_upgrade
-  base
   )
 target_link_libraries(mongos
-  ${TokuKV_LIBRARIES}
   ${TOKUMX_SSL_LIBRARIES}
   )
 
@@ -247,18 +238,15 @@ if (APPLE OR PCAP_FOUND)
       jemalloc
       )
   endif ()
-  target_link_whole_libraries(mongosniff
+  link_recursive_deps(mongosniff
     gridfs
     serveronly
-    authservercommon
     coreserver
     coredb
     notmongodormongos
-    base
     )
   target_link_libraries(mongosniff
     ${PCAP_LIBRARIES}
-    ${TokuKV_LIBRARIES}
     ${TOKUMX_SSL_LIBRARIES}
     )
   install_executables(tokumx_tools
@@ -280,13 +268,10 @@ add_executable(mongo
   shell/mk_wcwidth
   )
 add_dependencies(mongo generate_mongo_server_cpp generate_error_codes generate_action_types)
-target_link_whole_libraries(mongo
+link_recursive_deps(mongo
   clientandshell
   mongocommon
-  mongocommon_client
   scripting
-  notmongodormongos
-  base
   )
 target_link_libraries(mongo
   ${PCRE_LIBRARIES}
@@ -417,12 +402,12 @@ else ()
     "${CMAKE_CURRENT_BINARY_DIR}/buildinfo.cpp"
     ${client_sources}
     )
-  target_link_libraries(mongoclient LINK_PRIVATE
+  target_link_libraries(mongoclient LINK_PUBLIC
     ${Boost_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
     )
   if (USE_SASL_CLIENT)
-    target_link_libraries(mongoclient LINK_PRIVATE
+    target_link_libraries(mongoclient LINK_PUBLIC
       ${SASL_LIBRARIES}
       )
   endif ()

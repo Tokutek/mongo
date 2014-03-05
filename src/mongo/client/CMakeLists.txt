@@ -15,14 +15,14 @@ if (USE_SASL_CLIENT)
     sasl_client_session
     )
   add_dependencies(sasl_client_session generate_error_codes generate_action_types)
-  target_link_libraries(sasl_client_session LINK_PRIVATE
+  target_link_libraries(sasl_client_session LINK_PUBLIC
     foundation
     ${SASL_LIBRARIES}
     )
 endif ()
 add_library(mongocommon_client STATIC ${common_files})
 add_dependencies(mongocommon_client generate_error_codes generate_action_types)
-target_link_libraries(mongocommon_client LINK_PRIVATE
+target_link_libraries(mongocommon_client LINK_PUBLIC
   bson
   foundation
   mongohasher
@@ -36,7 +36,7 @@ target_link_libraries(mongocommon_client LINK_PRIVATE
   ${Boost_LIBRARIES}
   )
 if (USE_SASL_CLIENT)
-  target_link_libraries(mongocommon_client LINK_PRIVATE
+  target_link_libraries(mongocommon_client LINK_PUBLIC
     sasl_client_session
     )
 endif ()
@@ -60,7 +60,7 @@ add_library(clientandshell STATIC
   clientAndShell
   )
 add_dependencies(clientandshell generate_error_codes generate_action_types)
-target_link_libraries(clientandshell LINK_PRIVATE
+target_link_libraries(clientandshell LINK_PUBLIC
   mongocommon
   defaultversion
   gridfs
@@ -71,7 +71,7 @@ add_library(allclient STATIC
   clientOnly
   )
 add_dependencies(allclient generate_error_codes generate_action_types)
-target_link_libraries(allclient LINK_PRIVATE
+target_link_libraries(allclient LINK_PUBLIC
   clientandshell
   )
 

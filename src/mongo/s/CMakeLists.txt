@@ -14,7 +14,7 @@ add_library(s_base STATIC
   type_tags
   )
 add_dependencies(s_base generate_error_codes generate_action_types)
-target_link_libraries(s_base LINK_PRIVATE
+target_link_libraries(s_base LINK_PUBLIC
   base
   bson
   )
@@ -27,7 +27,7 @@ add_library(s_upgrade STATIC
   config_upgrade_v3_to_v4
   )
 add_dependencies(s_upgrade generate_error_codes generate_action_types)
-target_link_libraries(s_upgrade LINK_PRIVATE
+target_link_libraries(s_upgrade LINK_PUBLIC
   s_base
   mongocommon
   )
@@ -37,7 +37,7 @@ add_library(s_metadata STATIC
   metadata_loader
   )
 add_dependencies(s_metadata generate_error_codes generate_action_types)
-target_link_libraries(s_metadata LINK_PRIVATE
+target_link_libraries(s_metadata LINK_PUBLIC
   s_base
   clientandshell
   base
@@ -58,7 +58,7 @@ add_library(coreshard STATIC
   shardkey
   )
 add_dependencies(coreshard generate_error_codes generate_action_types)
-target_link_libraries(coreshard LINK_PRIVATE
+target_link_libraries(coreshard LINK_PUBLIC
   s_base
   )
 
@@ -81,7 +81,7 @@ add_library(mongoscore STATIC
   version_manager
   )
 add_dependencies(mongoscore generate_error_codes generate_action_types)
-target_link_libraries(mongoscore LINK_PRIVATE
+target_link_libraries(mongoscore LINK_PUBLIC
   authmongos
   client_parallel
   )

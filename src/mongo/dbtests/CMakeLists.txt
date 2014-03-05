@@ -2,7 +2,7 @@ add_library(testframework STATIC
   framework
   )
 add_dependencies(testframework generate_error_codes generate_action_types)
-target_link_libraries(testframework LINK_PRIVATE
+target_link_libraries(testframework LINK_PUBLIC
   unittest
   )
 
@@ -14,7 +14,7 @@ add_library(mocklib STATIC
   mock/mock_replica_set
   )
 add_dependencies(mocklib generate_error_codes generate_action_types)
-target_link_libraries(mocklib LINK_PRIVATE
+target_link_libraries(mocklib LINK_PUBLIC
   mongocommon
   )
 

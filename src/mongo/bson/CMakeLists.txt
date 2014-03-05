@@ -11,7 +11,7 @@ add_library(bson STATIC
   ../db/json
   )
 add_dependencies(bson generate_error_codes generate_action_types)
-target_link_libraries(bson LINK_PRIVATE
+target_link_libraries(bson LINK_PUBLIC
   base
   md5
   stringutils

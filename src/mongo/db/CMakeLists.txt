@@ -19,7 +19,7 @@ add_dependencies(index_set generate_error_codes generate_action_types)
 add_library(dbcmdline STATIC
   cmdline
   )
-target_link_libraries(dbcmdline LINK_PRIVATE
+target_link_libraries(dbcmdline LINK_PUBLIC
   bson
   server_parameters
   )
@@ -27,7 +27,7 @@ target_link_libraries(dbcmdline LINK_PRIVATE
 add_library(db_common STATIC
   field_ref
   )
-target_link_libraries(db_common LINK_PRIVATE
+target_link_libraries(db_common LINK_PUBLIC
   bson
   foundation
   )
@@ -98,7 +98,7 @@ add_library(coredb STATIC
   ../s/shardconnection
   )
 add_dependencies(coredb generate_error_codes generate_action_types install_tdb_h)
-target_link_libraries(coredb LINK_PRIVATE
+target_link_libraries(coredb LINK_PUBLIC
   serverauth
   db_common
   mongocommon
@@ -200,13 +200,12 @@ add_library(serveronly STATIC
   module
   )
 add_dependencies(serveronly generate_error_codes generate_action_types install_tdb_h)
-target_link_libraries(serveronly LINK_PRIVATE
+target_link_libraries(serveronly LINK_PUBLIC
   client_parallel
-  coredb
-  mongodandmongos
   coreshard
   authmongod
   db_common
+  dbcmdline
   defaultversion
   index_set
   ${TokuKV_LIBRARIES}
@@ -228,7 +227,7 @@ add_library(coreserver STATIC
   stats/service_stats
   )
 add_dependencies(coreserver generate_error_codes generate_action_types)
-target_link_libraries(coreserver LINK_PRIVATE
+target_link_libraries(coreserver LINK_PUBLIC
   mongocommon
   scripting
   systeminfo
