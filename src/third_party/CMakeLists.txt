@@ -57,10 +57,9 @@ install(
 set(TokuKV_FOUND TRUE CACHE BOOL "TokuKV found" FORCE)
 set(TokuKV_INCLUDE_DIRS
   "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR}/ft-index/buildheader"
-  "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR}/ft-index/toku_include"
+  "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR}/ft-index/portability"
   "${CMAKE_CURRENT_SOURCE_DIR}/ft-index/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/ft-index/portability"
-  "${CMAKE_CURRENT_SOURCE_DIR}/ft-index/toku_include"
   "${CMAKE_CURRENT_SOURCE_DIR}/ft-index/util"
   CACHE STRING "TokuKV include dirs" FORCE)
 set(TokuKV_LIBRARIES
