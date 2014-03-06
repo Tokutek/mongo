@@ -5,7 +5,14 @@ if (BUILD_TESTING)
   file(MAKE_DIRECTORY "${js_dbpath}")
   add_test(
     NAME mongo/js/clean-mongod-dbpath
-    COMMAND bash -c "ls ${js_dbpath}/* | xargs rm -rf"
+    COMMAND rm -rf "${js_dbpath}"
+    )
+  add_test(
+    NAME mongo/js/recreate-mongod-dbpath
+    COMMAND mkdir -p "${js_dbpath}"
+    )
+  set_tests_properties(mongo/js/recreate-mongod-dbpath PROPERTIES
+    DEPENDS mongo/js/clean-mongod-dbpath
     )
   add_test(
     NAME mongo/js/start-mongod
@@ -17,7 +24,7 @@ if (BUILD_TESTING)
       --setParameter enableTestCommands=1
     )
   set_tests_properties(mongo/js/start-mongod PROPERTIES
-    DEPENDS mongo/js/clean-mongod-dbpath
+    DEPENDS mongo/js/recreate-mongod-dbpath
     )
   add_test(
     NAME mongo/js/check-mongod
@@ -43,10 +50,17 @@ if (BUILD_TESTING)
   file(MAKE_DIRECTORY "${js_auth_dbpath}")
   add_test(
     NAME mongo/js-auth/clean-mongod-dbpath
-    COMMAND bash -c "ls ${js_auth_dbpath}/* | xargs rm -rf"
+    COMMAND rm -rf "${js_auth_dbpath}"
     )
   set_tests_properties(mongo/js-auth/clean-mongod-dbpath PROPERTIES
     DEPENDS mongo/js/stop-mongod
+    )
+  add_test(
+    NAME mongo/js-auth/recreate-mongod-dbpath
+    COMMAND mkdir -p "${js_auth_dbpath}"
+    )
+  set_tests_properties(mongo/js-auth/recreate-mongod-dbpath PROPERTIES
+    DEPENDS mongo/js-auth/clean-mongod-dbpath
     )
   add_test(
     NAME mongo/js-auth/start-mongod
@@ -59,7 +73,7 @@ if (BUILD_TESTING)
       --auth
     )
   set_tests_properties(mongo/js-auth/start-mongod PROPERTIES
-    DEPENDS mongo/js-auth/clean-mongod-dbpath
+    DEPENDS mongo/js-auth/recreate-mongod-dbpath
     )
   add_test(
     NAME mongo/js-auth/check-mongod
