@@ -17,7 +17,7 @@ add_library(foundation STATIC
   timer
   )
 add_dependencies(foundation generate_error_codes generate_action_types)
-target_link_libraries(foundation LINK_PRIVATE
+target_link_libraries(foundation LINK_PUBLIC
   stacktrace
   base
   platform
@@ -50,7 +50,7 @@ add_library(mongocommon_util STATIC
   version
   )
 add_dependencies(mongocommon_util generate_error_codes generate_action_types)
-target_link_libraries(mongocommon_util LINK_PRIVATE
+target_link_libraries(mongocommon_util LINK_PUBLIC
   bson
   foundation
   mongohasher
@@ -81,7 +81,7 @@ add_library(processinfo STATIC
   processinfo_${system_suffix}
   )
 add_dependencies(processinfo generate_error_codes generate_action_types)
-target_link_libraries(processinfo LINK_PRIVATE
+target_link_libraries(processinfo LINK_PUBLIC
   foundation
   bson
   )
@@ -108,64 +108,9 @@ add_library(fail_point STATIC
   fail_point_service
   )
 add_dependencies(fail_point generate_error_codes generate_action_types install_tdb_h)
-target_link_libraries(fail_point LINK_PRIVATE
+target_link_libraries(fail_point LINK_PUBLIC
   foundation
   bson
   )
 
 # WONTFIX: ntservice, ntservice_test
-
-if (BUILD_TESTING)
-  foreach (test_source
-      concurrency/partitioned_counter_test
-      descriptive_stats_test
-      fail_point_test
-      processinfo_test
-      safe_num_test
-      string_map_test
-      stringutils_test
-      text_test
-      )
-    string(REGEX REPLACE "^.*/" "" test ${test_source})
-    add_executable(${test} ${test_source})
-    add_dependencies(${test} generate_error_codes generate_action_types)
-    target_link_whole_libraries(${test}
-      unittest_main
-      foundation
-      unittest_crutch
-      base
-      ${TOKUMX_SSL_LIBRARIES}
-      )
-  endforeach ()
-
-  target_link_libraries(descriptive_stats_test bson)
-  target_link_libraries(fail_point_test fail_point)
-  target_link_libraries(processinfo_test processinfo)
-  target_link_libraries(safe_num_test bson)
-  target_link_libraries(string_map_test bson)
-  target_link_libraries(stringutils_test stringutils)
-
-  # no crutch
-  add_executable(sock_test net/sock_test)
-  add_dependencies(sock_test generate_error_codes generate_action_types)
-  target_link_libraries(sock_test
-    unittest_main
-    foundation
-    )
-  target_link_whole_libraries(sock_test
-    mongocommon
-    base
-    ${TOKUMX_SSL_LIBRARIES}
-    )
-
-  add_executable(md5_test md5_test md5main)
-  add_dependencies(md5_test generate_error_codes generate_action_types)
-  target_link_whole_libraries(md5_test
-    md5
-    unittest_main
-    foundation
-    unittest_crutch
-    base
-    ${TOKUMX_SSL_LIBRARIES}
-    )
-endif ()
