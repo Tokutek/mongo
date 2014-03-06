@@ -194,7 +194,7 @@ function(link_recursive_deps bin)
       if (_loc)
         get_property(_libdeps
           TARGET ${_lib}
-          PROPERTY LINK_INTERFACE_LIBRARIES
+          PROPERTY INTERFACE_LINK_LIBRARIES
           )
         list(APPEND _new_libs ${_libdeps})
       endif ()
