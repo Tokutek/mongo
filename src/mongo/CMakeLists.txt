@@ -100,6 +100,211 @@ add_subdirectory(scripting)
 add_subdirectory(shell)
 add_subdirectory(tools)
 add_subdirectory(util)
+
+set(client_sources
+  base/configuration_variable_manager.cpp
+  base/global_initializer.cpp
+  base/global_initializer_registerer.cpp
+  base/init.cpp
+  base/initializer.cpp
+  base/initializer_context.cpp
+  base/initializer_dependency_graph.cpp
+  base/make_string_vector.cpp
+  base/parse_number.cpp
+  base/status.cpp
+  base/string_data.cpp
+  bson/bson_validate.cpp
+  bson/oid.cpp
+  bson/util/bson_extract.cpp
+  client/clientAndShell.cpp
+  client/clientOnly.cpp
+  client/connection_factory.cpp
+  client/connpool.cpp
+  client/dbclient.cpp
+  client/dbclient_rs.cpp
+  client/dbclientcursor.cpp
+  client/gridfs.cpp
+  client/model.cpp
+  client/remote_loader.cpp
+  client/remote_transaction.cpp
+  client/sasl_client_authenticate.cpp
+  client/syncclusterconnection.cpp
+  db/jsobj.cpp
+  db/json.cpp
+  db/lasterror.cpp
+  db/dbmessage.cpp
+  pch.cpp
+  platform/backtrace.cpp
+  platform/posix_fadvise.cpp
+  platform/random.cpp
+  util/assert_util.cpp
+  util/background.cpp
+  util/base64.cpp
+  util/concurrency/rwlockimpl.cpp
+  util/concurrency/spin_lock.cpp
+  util/concurrency/synchronization.cpp
+  util/concurrency/task.cpp
+  util/concurrency/thread_pool.cpp
+  util/concurrency/mutexdebugger.cpp
+  util/debug_util.cpp
+  util/stacktrace.cpp
+  util/fail_point.cpp
+  util/fail_point_registry.cpp
+  util/fail_point_service.cpp
+  util/file.cpp
+  util/histogram.cpp
+  util/intrusive_counter.cpp
+  util/log.cpp
+  util/md5.cpp
+  util/md5main.cpp
+  util/net/httpclient.cpp
+  util/net/listen.cpp
+  util/net/message.cpp
+  util/net/message_port.cpp
+  util/net/sock.cpp
+  util/net/ssl_manager.cpp
+  util/password.cpp
+  util/processinfo.cpp
+  util/processinfo_${system_suffix}.cpp
+  util/ramlog.cpp
+  util/signal_handlers.cpp
+  util/stringutils.cpp
+  util/text.cpp
+  util/time_support.cpp
+  util/timer.cpp
+  util/trace.cpp
+  util/util.cpp
+  util/version.cpp
+  ../third_party/murmurhash3/MurmurHash3.cpp
+  )
+
+if (USE_SASL_CLIENT)
+  list(APPEND client_sources
+    client/sasl_client_authenticate_impl.cpp
+    client/sasl_client_session.cpp
+    )
+endif ()
+if (TOKUMX_CLIENT_LIB_SHARED)
+  add_library(mongoclient SHARED
+    "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/buildinfo.cpp"
+    ${client_sources}
+    )
+  target_link_libraries(mongoclient
+    ${Boost_LIBRARIES}
+    ${CMAKE_THREAD_LIBS_INIT}
+    )
+  if (USE_SASL_CLIENT)
+    target_link_libraries(mongoclient
+      ${SASL_LIBRARIES}
+      )
+  endif ()
+  if (CMAKE_SYSTEM_NAME STREQUAL Linux)
+    set_target_properties(mongoclient PROPERTIES
+      LINK_FLAGS "-Wl,--as-needed -Wl,-zdefs"
+      )
+  endif ()
+else ()
+  add_library(mongoclient STATIC
+    "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/buildinfo.cpp"
+    ${client_sources}
+    )
+  target_link_libraries(mongoclient LINK_PUBLIC
+    ${Boost_LIBRARIES}
+    ${CMAKE_THREAD_LIBS_INIT}
+    )
+  if (USE_SASL_CLIENT)
+    target_link_libraries(mongoclient LINK_PUBLIC
+      ${SASL_LIBRARIES}
+      )
+  endif ()
+endif ()
+add_dependencies(mongoclient generate_error_codes generate_action_types install_tdb_h)
+install(TARGETS mongoclient
+  DESTINATION ${INSTALL_LIBDIR}
+  COMPONENT tokumx_client_libs
+  )
+
+foreach (src
+    ${client_sources}
+    bson/bsondemo/bsondemo.cpp
+    )
+  get_filename_component(dir ${src} PATH)
+  install(FILES ${src}
+    DESTINATION src/mongo/${dir}
+    COMPONENT tokumx_client_sources
+    )
+endforeach ()
+if (NOT USE_SASL_CLIENT)
+  # install sources anyway
+  install(FILES
+    client/sasl_client_authenticate_impl.cpp
+    client/sasl_client_session.cpp
+    DESTINATION src/mongo/client
+    COMPONENT tokumx_client_sources
+    )
+endif ()
+install(FILES
+  "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.h"
+  DESTINATION include/mongo/base
+  COMPONENT tokumx_client_headers
+  )
+install(FILES
+  "${CMAKE_CURRENT_BINARY_DIR}/db/auth/action_type.h"
+  DESTINATION include/mongo/db/auth
+  COMPONENT tokumx_client_headers
+  )
+install(FILES
+  "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.cpp"
+  base/generate_error_codes.py
+  base/error_codes.err
+  DESTINATION src/mongo/base
+  COMPONENT tokumx_client_sources
+  )
+install(FILES
+  db/auth/generate_action_types.py
+  db/auth/action_types.txt
+  DESTINATION src/mongo/db/auth
+  COMPONENT tokumx_client_sources
+  )
+install(FILES
+  "${CMAKE_CURRENT_BINARY_DIR}/buildinfo.cpp"
+  DESTINATION src/mongo
+  COMPONENT tokumx_client_sources
+  )
+
+foreach (client_header_dir
+    base
+    bson
+    bson/util
+    client
+    db
+    db/auth
+    db/stats
+    db/repl
+    db/ops
+    db/storage
+    platform
+    s
+    scripting
+    shell
+    util
+    util/concurrency
+    util/mongoutils
+    util/net
+    .
+    )
+  file(GLOB headers
+    ${client_header_dir}/*.h
+    ${client_header_dir}/*.hpp
+    )
+  install(FILES ${headers}
+    DESTINATION include/mongo/${client_header_dir}
+    COMPONENT tokumx_client_headers
+    )
+endforeach ()
+
 add_subdirectory(client)
 
 if (BUILD_TESTING)
@@ -527,210 +732,6 @@ if (BUILD_TESTING)
       "$<TARGET_FILE:mongo>"
     )
 endif ()
-
-set(client_sources
-  base/configuration_variable_manager.cpp
-  base/global_initializer.cpp
-  base/global_initializer_registerer.cpp
-  base/init.cpp
-  base/initializer.cpp
-  base/initializer_context.cpp
-  base/initializer_dependency_graph.cpp
-  base/make_string_vector.cpp
-  base/parse_number.cpp
-  base/status.cpp
-  base/string_data.cpp
-  bson/bson_validate.cpp
-  bson/oid.cpp
-  bson/util/bson_extract.cpp
-  client/clientAndShell.cpp
-  client/clientOnly.cpp
-  client/connection_factory.cpp
-  client/connpool.cpp
-  client/dbclient.cpp
-  client/dbclient_rs.cpp
-  client/dbclientcursor.cpp
-  client/gridfs.cpp
-  client/model.cpp
-  client/remote_loader.cpp
-  client/remote_transaction.cpp
-  client/sasl_client_authenticate.cpp
-  client/syncclusterconnection.cpp
-  db/jsobj.cpp
-  db/json.cpp
-  db/lasterror.cpp
-  db/dbmessage.cpp
-  pch.cpp
-  platform/backtrace.cpp
-  platform/posix_fadvise.cpp
-  platform/random.cpp
-  util/assert_util.cpp
-  util/background.cpp
-  util/base64.cpp
-  util/concurrency/rwlockimpl.cpp
-  util/concurrency/spin_lock.cpp
-  util/concurrency/synchronization.cpp
-  util/concurrency/task.cpp
-  util/concurrency/thread_pool.cpp
-  util/concurrency/mutexdebugger.cpp
-  util/debug_util.cpp
-  util/stacktrace.cpp
-  util/fail_point.cpp
-  util/fail_point_registry.cpp
-  util/fail_point_service.cpp
-  util/file.cpp
-  util/histogram.cpp
-  util/intrusive_counter.cpp
-  util/log.cpp
-  util/md5.cpp
-  util/md5main.cpp
-  util/net/httpclient.cpp
-  util/net/listen.cpp
-  util/net/message.cpp
-  util/net/message_port.cpp
-  util/net/sock.cpp
-  util/net/ssl_manager.cpp
-  util/password.cpp
-  util/processinfo.cpp
-  util/processinfo_${system_suffix}.cpp
-  util/ramlog.cpp
-  util/signal_handlers.cpp
-  util/stringutils.cpp
-  util/text.cpp
-  util/time_support.cpp
-  util/timer.cpp
-  util/trace.cpp
-  util/util.cpp
-  util/version.cpp
-  ../third_party/murmurhash3/MurmurHash3.cpp
-  )
-
-if (USE_SASL_CLIENT)
-  list(APPEND client_sources
-    client/sasl_client_authenticate_impl.cpp
-    client/sasl_client_session.cpp
-    )
-endif ()
-if (TOKUMX_CLIENT_LIB_SHARED)
-  add_library(mongoclient SHARED
-    "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.cpp"
-    "${CMAKE_CURRENT_BINARY_DIR}/buildinfo.cpp"
-    ${client_sources}
-    )
-  target_link_libraries(mongoclient
-    ${Boost_LIBRARIES}
-    ${CMAKE_THREAD_LIBS_INIT}
-    )
-  if (USE_SASL_CLIENT)
-    target_link_libraries(mongoclient
-      ${SASL_LIBRARIES}
-      )
-  endif ()
-  if (CMAKE_SYSTEM_NAME STREQUAL Linux)
-    set_target_properties(mongoclient PROPERTIES
-      LINK_FLAGS "-Wl,--as-needed -Wl,-zdefs"
-      )
-  endif ()
-else ()
-  add_library(mongoclient STATIC
-    "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.cpp"
-    "${CMAKE_CURRENT_BINARY_DIR}/buildinfo.cpp"
-    ${client_sources}
-    )
-  target_link_libraries(mongoclient LINK_PUBLIC
-    ${Boost_LIBRARIES}
-    ${CMAKE_THREAD_LIBS_INIT}
-    )
-  if (USE_SASL_CLIENT)
-    target_link_libraries(mongoclient LINK_PUBLIC
-      ${SASL_LIBRARIES}
-      )
-  endif ()
-endif ()
-add_dependencies(mongoclient generate_error_codes generate_action_types install_tdb_h)
-install(TARGETS mongoclient
-  DESTINATION ${INSTALL_LIBDIR}
-  COMPONENT tokumx_client_libs
-  )
-
-foreach (src
-    ${client_sources}
-    bson/bsondemo/bsondemo.cpp
-    )
-  get_filename_component(dir ${src} PATH)
-  install(FILES ${src}
-    DESTINATION src/mongo/${dir}
-    COMPONENT tokumx_client_sources
-    )
-endforeach ()
-if (NOT USE_SASL_CLIENT)
-  # install sources anyway
-  install(FILES
-    client/sasl_client_authenticate_impl.cpp
-    client/sasl_client_session.cpp
-    DESTINATION src/mongo/client
-    COMPONENT tokumx_client_sources
-    )
-endif ()
-install(FILES
-  "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.h"
-  DESTINATION include/mongo/base
-  COMPONENT tokumx_client_headers
-  )
-install(FILES
-  "${CMAKE_CURRENT_BINARY_DIR}/db/auth/action_type.h"
-  DESTINATION include/mongo/db/auth
-  COMPONENT tokumx_client_headers
-  )
-install(FILES
-  "${CMAKE_CURRENT_BINARY_DIR}/base/error_codes.cpp"
-  base/generate_error_codes.py
-  base/error_codes.err
-  DESTINATION src/mongo/base
-  COMPONENT tokumx_client_sources
-  )
-install(FILES
-  db/auth/generate_action_types.py
-  db/auth/action_types.txt
-  DESTINATION src/mongo/db/auth
-  COMPONENT tokumx_client_sources
-  )
-install(FILES
-  "${CMAKE_CURRENT_BINARY_DIR}/buildinfo.cpp"
-  DESTINATION src/mongo
-  COMPONENT tokumx_client_sources
-  )
-
-foreach (client_header_dir
-    base
-    bson
-    bson/util
-    client
-    db
-    db/auth
-    db/stats
-    db/repl
-    db/ops
-    db/storage
-    platform
-    s
-    scripting
-    shell
-    util
-    util/concurrency
-    util/mongoutils
-    util/net
-    .
-    )
-  file(GLOB headers
-    ${client_header_dir}/*.h
-    ${client_header_dir}/*.hpp
-    )
-  install(FILES ${headers}
-    DESTINATION include/mongo/${client_header_dir}
-    COMPONENT tokumx_client_headers
-    )
-endforeach ()
 
 find_library(GCC_S_LIBRARY NAMES gcc_s PATHS
   /lib64
