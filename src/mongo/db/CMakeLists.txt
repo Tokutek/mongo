@@ -232,27 +232,3 @@ target_link_libraries(coreserver LINK_PUBLIC
   scripting
   systeminfo
   )
-
-if (BUILD_TESTING)
-  foreach (test
-      cmdline_test
-      field_ref_test
-      index_set_test
-      server_parameters_test
-      )
-    add_executable(${test} ${test})
-    add_dependencies(${test} generate_error_codes generate_action_types)
-    target_link_whole_libraries(${test}
-      unittest_main
-      foundation
-      unittest_crutch
-      base
-      ${TOKUMX_SSL_LIBRARIES}
-      )
-  endforeach ()
-
-  target_link_libraries(cmdline_test dbcmdline)
-  target_link_libraries(field_ref_test db_common)
-  target_link_libraries(index_set_test bson index_set)
-  target_link_libraries(server_parameters_test server_parameters)
-endif ()

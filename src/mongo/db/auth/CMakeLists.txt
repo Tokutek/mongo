@@ -77,12 +77,11 @@ if (BUILD_TESTING)
       )
     add_executable(${test} ${test})
     add_dependencies(${test} generate_error_codes generate_action_types)
-    target_link_whole_libraries(${test}
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME auth_unittest_deps
       authcore
       unittest_main
-      foundation
       unittest_crutch
-      base
       ${TOKUMX_SSL_LIBRARIES}
       )
   endforeach ()

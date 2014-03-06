@@ -36,30 +36,6 @@ target_link_libraries(base LINK_PUBLIC
   murmurhash3
   )
 
-if (BUILD_TESTING)
-  foreach (test
-      configuration_variable_manager_test
-      initializer_dependency_graph_test
-      initializer_test
-      owned_pointer_vector_test
-      owned_pointer_map_test
-      parse_number_test
-      status_test
-      string_data_test
-      units_test
-      )
-    add_executable(${test} ${test})
-    add_dependencies(${test} generate_error_codes generate_action_types)
-    target_link_whole_libraries(${test}
-      unittest_main
-      foundation
-      unittest_crutch
-      base
-      ${TOKUMX_SSL_LIBRARIES}
-      )
-  endforeach ()
-endif ()
-
 install(FILES generate_error_codes.py error_codes.err
   DESTINATION src/mongo/base
   COMPONENT tokumx_client_sources

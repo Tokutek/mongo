@@ -29,20 +29,16 @@ foreach (src ${abnormal_srcs})
   add_executable(${src}Example ${src})
 endforeach ()
 
-foreach (bin ${normal_bins} ${abnormal_bins})
+add_executable(bsondemo ../../bson/bsondemo/bsondemo)
+
+foreach (bin ${normal_bins} ${abnormal_bins} bsondemo)
   add_dependencies(${bin} generate_error_codes generate_action_types)
-  target_link_libraries(${bin}
+  link_recursive_deps(${bin}
+    COMBINED_LIBNAME client_example_deps
     mongoclient
     ${TOKUMX_SSL_LIBRARIES}
     )
 endforeach ()
-
-add_executable(bsondemo ../../bson/bsondemo/bsondemo)
-add_dependencies(bsondemo generate_error_codes generate_action_types)
-target_link_libraries(bsondemo
-  mongoclient
-  ${TOKUMX_SSL_LIBRARIES}
-  )
 
 foreach (base ${normal_bins} ${abnormal_srcs})
   install(FILES ${base}.cpp

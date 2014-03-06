@@ -19,7 +19,12 @@ target_link_libraries(mocklib LINK_PUBLIC
   )
 
 file(GLOB testfiles *.cpp)
-list(REMOVE_ITEM testfiles framework.cpp)
+foreach (testfile ${testfiles})
+  if (testfile MATCHES "framework.cpp$")
+    set(framework_fullpath "${testfile}")
+  endif ()
+endforeach ()
+list(REMOVE_ITEM testfiles ${framework_fullpath})
 add_executable(smokeTest ${testfiles})
 add_dependencies(smokeTest generate_error_codes generate_action_types install_tdb_h)
 if (NOT APPLE)
@@ -27,24 +32,16 @@ if (NOT APPLE)
     jemalloc
     )
 endif ()
-target_link_whole_libraries(smokeTest
+link_recursive_deps(smokeTest
   mongocommon
   serveronly
-  authservercommon
   coreserver
   coredb
-  )
-target_link_libraries(smokeTest
   testframework
-  )
-target_link_whole_libraries(smokeTest
   gridfs
   notmongodormongos
   s_upgrade
   mocklib
-  base
-  )
-target_link_libraries(smokeTest
   ${TokuKV_LIBRARIES}
   ${TOKUMX_SSL_LIBRARIES}
   )
