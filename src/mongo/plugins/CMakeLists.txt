@@ -4,7 +4,7 @@ add_library(plugins STATIC
   loader
   )
 add_dependencies(plugins generate_error_codes generate_action_types install_tdb_h)
-target_link_libraries(plugins LINK_PRIVATE
+target_link_libraries(plugins LINK_PUBLIC
   dl
   )
 

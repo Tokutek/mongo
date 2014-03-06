@@ -36,7 +36,7 @@ add_library(authcore STATIC
   privilege_set
   )
 add_dependencies(authcore generate_error_codes generate_action_types)
-target_link_libraries(authcore LINK_PRIVATE
+target_link_libraries(authcore LINK_PUBLIC
   base
   bson
   stringutils
@@ -48,7 +48,7 @@ add_library(authservercommon STATIC
   security_key
   )
 add_dependencies(authservercommon generate_error_codes generate_action_types)
-target_link_libraries(authservercommon LINK_PRIVATE
+target_link_libraries(authservercommon LINK_PUBLIC
   authcore
   )
 
@@ -56,7 +56,7 @@ add_library(authmongod STATIC
   auth_external_state_d
   )
 add_dependencies(authmongod generate_error_codes generate_action_types)
-target_link_libraries(authmongod LINK_PRIVATE
+target_link_libraries(authmongod LINK_PUBLIC
   authservercommon
   )
 
@@ -64,7 +64,7 @@ add_library(authmongos STATIC
   auth_external_state_s
   )
 add_dependencies(authmongos generate_error_codes generate_action_types)
-target_link_libraries(authmongos LINK_PRIVATE
+target_link_libraries(authmongos LINK_PUBLIC
   authservercommon
   )
 
@@ -77,12 +77,11 @@ if (BUILD_TESTING)
       )
     add_executable(${test} ${test})
     add_dependencies(${test} generate_error_codes generate_action_types)
-    target_link_whole_libraries(${test}
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME auth_unittest_deps
       authcore
       unittest_main
-      foundation
       unittest_crutch
-      base
       ${TOKUMX_SSL_LIBRARIES}
       )
   endforeach ()

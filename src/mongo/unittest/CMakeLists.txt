@@ -2,7 +2,7 @@ add_library(unittest STATIC
   unittest
   )
 add_dependencies(unittest generate_error_codes generate_action_types)
-target_link_libraries(unittest LINK_PRIVATE
+target_link_libraries(unittest LINK_PUBLIC
   foundation
   )
 
@@ -10,7 +10,7 @@ add_library(unittest_main STATIC
   unittest_main
   )
 add_dependencies(unittest_main generate_error_codes generate_action_types)
-target_link_libraries(unittest_main LINK_PRIVATE
+target_link_libraries(unittest_main LINK_PUBLIC
   unittest
   base
   )
@@ -27,11 +27,10 @@ if (BUILD_TESTING)
       )
     add_executable(${test} ${test})
     add_dependencies(${test} generate_error_codes generate_action_types)
-    target_link_whole_libraries(${test}
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME basic_unittest_deps
       unittest_main
-      foundation
       unittest_crutch
-      base
       ${TOKUMX_SSL_LIBRARIES}
       )
   endforeach ()
