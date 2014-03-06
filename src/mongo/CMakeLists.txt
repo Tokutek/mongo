@@ -92,7 +92,6 @@ target_link_libraries(mongocommon LINK_PUBLIC
 
 add_subdirectory(base)
 add_subdirectory(bson)
-add_subdirectory(client)
 add_subdirectory(db)
 add_subdirectory(platform)
 add_subdirectory(plugins)
@@ -101,6 +100,7 @@ add_subdirectory(scripting)
 add_subdirectory(shell)
 add_subdirectory(tools)
 add_subdirectory(util)
+add_subdirectory(client)
 
 if (BUILD_TESTING)
   add_subdirectory(dbtests)
