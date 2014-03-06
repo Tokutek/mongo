@@ -207,7 +207,7 @@ if (BUILD_TESTING)
     add_executable(${test} platform/${test})
     add_dependencies(${test} generate_error_codes generate_action_types)
     link_recursive_deps(${test}
-      #COMBINED_LIBNAME basic_unittest_deps
+      COMBINED_LIBNAME basic_unittest_deps
       unittest_main
       unittest_crutch
       ${TOKUMX_SSL_LIBRARIES}

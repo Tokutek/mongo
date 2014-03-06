@@ -204,10 +204,18 @@ function(link_recursive_deps bin)
     foreach (_lib ${_all_libs})
       get_target_property(_loc ${_lib} LOCATION)
       if (_loc)
-        get_property(_libdeps
-          TARGET ${_lib}
-          PROPERTY INTERFACE_LINK_LIBRARIES
-          )
+        if (APPLE)
+          # for unknown reasons, LINK_INTERFACE_LIBRARIES doesn't work on osx
+          get_property(_libdeps
+            TARGET ${_lib}
+            PROPERTY INTERFACE_LINK_LIBRARIES
+            )
+        else ()
+          get_property(_libdeps
+            TARGET ${_lib}
+            PROPERTY LINK_INTERFACE_LIBRARIES
+            )
+        endif ()
         list(APPEND _new_libs ${_libdeps})
       endif ()
     endforeach ()
