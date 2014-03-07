@@ -14,11 +14,12 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "gtid.h"
-
 #include "mongo/pch.h"
+
+#include "mongo/db/gtid.h"
+
+#include "mongo/bson/util/builder.h"
 #include "mongo/util/time_support.h"
-#include "mongo/util/stacktrace.h"
 
 namespace mongo {
 
@@ -204,10 +205,9 @@ namespace mongo {
             _lastUnappliedGTID = gtid;
         }
         catch (std::exception &e) {
-            log() << "exception during noteApplyingGTID, aborting system: " << e.what() << endl;
-            stringstream ss;
-            printStackTrace(ss);
-            log() << ss.str() << endl;
+            StackStringBuilder ssb;
+            ssb << "exception during noteApplyingGTID, aborting system: " << e.what();
+            rawOut(ssb.str());
             ::abort();
         }
     }
@@ -235,10 +235,9 @@ namespace mongo {
             }
         }
         catch (std::exception &e) {
-            log() << "exception during noteApplyingGTID, aborting system: " << e.what() << endl;
-            stringstream ss;
-            printStackTrace(ss);
-            log() << ss.str() << endl;
+            StackStringBuilder ssb;
+            ssb << "exception during noteGTIDApplied, aborting system: " << e.what();
+            rawOut(ssb.str());
             ::abort();
         }
     }
