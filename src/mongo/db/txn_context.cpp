@@ -17,15 +17,16 @@
 
 #include "mongo/pch.h"
 
+#include "mongo/db/txn_context.h"
+
 #include "mongo/base/counter.h"
 #include "mongo/bson/bsonobjiterator.h"
+#include "mongo/bson/util/builder.h"
 #include "mongo/db/gtid.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/repl.h"
-#include "mongo/db/txn_context.h"
 #include "mongo/db/stats/timer_stats.h"
 #include "mongo/db/storage/env.h"
-#include "mongo/util/stacktrace.h"
 
 #include "mongo/s/d_logic.h"
 
@@ -173,9 +174,9 @@ namespace mongo {
             _txn.commit(flags);
         }
         catch (std::exception &e) {
-            log() << "exception during critical section of txn child commit, aborting system: " << e.what() << endl;
-            printStackTrace();
-            logflush();
+            StackStringBuilder ssb;
+            ssb << "exception during critical section of txn child commit, aborting system: " << e.what();
+            rawOut(ssb.str());
             ::abort();
         }
 
@@ -224,9 +225,9 @@ namespace mongo {
                 _txn.commit(flags);
             }
             catch (std::exception &e) {
-                log() << "exception during critical section of txn root commit, aborting system: " << e.what() << endl;
-                printStackTrace();
-                logflush();
+                StackStringBuilder ssb;
+                ssb << "exception during critical section of txn root commit, aborting system: " << e.what();
+                rawOut(ssb.str());
                 ::abort();
             }
 

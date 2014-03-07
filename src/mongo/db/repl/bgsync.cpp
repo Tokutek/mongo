@@ -20,6 +20,7 @@
 #include "mongo/db/client.h"
 #include "mongo/db/commands/fsync.h"
 #include "mongo/db/commands/server_status.h"
+#include "mongo/db/crash.h"
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/repl/rs_sync.h"
 #include "mongo/base/counter.h"
@@ -173,6 +174,7 @@ namespace mongo {
                         log() << "oplog entry: " << curr.str() << endl;
                         if (numTries == 100) {
                             // something is really wrong if we fail 100 times, let's abort
+                            dumpCrashInfo("100 errors applying oplog entry");
                             ::abort();
                         }
                         sleepsecs(1);
