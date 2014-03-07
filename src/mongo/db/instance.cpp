@@ -42,6 +42,7 @@
 #include "mongo/db/introspect.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/client.h"
+#include "mongo/db/crash.h"
 #include "mongo/db/dbmessage.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/lasterror.h"
@@ -300,8 +301,7 @@ namespace mongo {
     void mongoAbort(const char *msg) { 
         if( reportEventToSystem ) 
             reportEventToSystem(msg);
-        rawOut(msg);
-        db_env_do_backtrace();
+        dumpCrashInfo(msg);
         ::abort();
     }
 

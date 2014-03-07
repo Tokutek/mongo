@@ -114,6 +114,7 @@ add_library(serveronly STATIC
   curop
   kill_current_op
   interrupt_status_mongod
+  crash
   d_globals
   ttl
   d_concurrency

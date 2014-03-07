@@ -10,4 +10,5 @@ namespace mongo {
   const char *loaderFlags() { return "${TOKUMX_LOADER_FLAGS}"; }
   const char *compilerFlags() { return "${TOKUMX_COMPILER_FLAGS}"; }
   std::string sysInfo() { return "${TOKUMX_SYS_INFO} BOOST_LIB_VERSION=" BOOST_LIB_VERSION; }
+  const char *sysInfoCstr() { return "${TOKUMX_SYS_INFO} BOOST_LIB_VERSION=" BOOST_LIB_VERSION; }
 }  // namespace mongo

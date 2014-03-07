@@ -31,6 +31,7 @@
 #include "mongo/db/client.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/cmdline.h"
+#include "mongo/db/crash.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/d_globals.h"
 #include "mongo/db/database.h"
@@ -1266,22 +1267,19 @@ namespace mongo {
 
 namespace mongo {
 
-    void abruptQuit(int x) {
+    static void abruptQuitNoCrashInfo(int x) {
         ostringstream ossSig;
         ossSig << "Got signal: " << x << " (" << strsignal( x ) << ")." << endl;
-        rawOut( ossSig.str() );
+        rawOut(ossSig.str());
 
-        ostringstream oss;
-        oss << "Backtrace:" << endl;
-        printStackTrace( oss );
-        rawOut( oss.str() );
+        // Reinstall default signal handler, to generate core if necessary.
+        signal(x, SIG_DFL);
+    }
 
-        db_env_do_backtrace();
-
-        // Try to get even more information if gdbPath was set to a gdb executable.
-        if (cmdLine.gdbPath != "") {
-            db_env_try_gdb_stack_trace(cmdLine.gdbPath.c_str());
-        }
+    void abruptQuit(int x) {
+        ostringstream ossSig;
+        ossSig << "Got signal: " << x << " (" << strsignal( x ) << ").";
+        dumpCrashInfo(ossSig.str());
 
         // Reinstall default signal handler, to generate core if necessary.
         signal(x, SIG_DFL);
@@ -1296,8 +1294,8 @@ namespace mongo {
             oss << " operation";
         }
         oss << " at address: " << siginfo->si_addr << " from thread: " << getThreadName() << endl;
-        rawOut( oss.str() );
-        abruptQuit( signal );
+        dumpCrashInfo(oss.str());
+        abruptQuitNoCrashInfo(signal);
     }
 
     sigset_t asyncSignals;
@@ -1327,17 +1325,13 @@ namespace mongo {
     // this will be called in certain c++ error cases, for example if there are two active
     // exceptions
     void myterminate() {
-        rawOut( "terminate() called, printing stack (if implemented for platform):" );
-        printStackTrace();
-        db_env_do_backtrace();
+        dumpCrashInfo("terminate() called");
         ::abort();
     }
 
     // this gets called when new fails to allocate memory
     void my_new_handler() {
-        rawOut( "out of memory, printing stack and exiting:" );
-        printStackTrace();
-        db_env_do_backtrace();
+        dumpCrashInfo("out of memory");
         ::_exit(EXIT_ABRUPT);
     }
 

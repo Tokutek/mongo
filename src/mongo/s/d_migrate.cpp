@@ -36,6 +36,7 @@
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/privilege.h"
+#include "mongo/db/crash.h"
 #include "mongo/db/database.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
@@ -1212,6 +1213,7 @@ namespace mongo {
                         error() << "moveChunk commit failed: " << ChunkVersion::fromBSON(found[ChunkType::DEPRECATED_lastmod()])
                                 << " instead of " << maxVersion << migrateLog;
                         error() << "TERMINATING" << migrateLog;
+                        dumpCrashInfo("moveChunk commit failed");
                         dbexit(EXIT_SHARDING_ERROR);
                     }
 
@@ -1308,6 +1310,7 @@ namespace mongo {
                         // same as if we catch any other exception
                         error() << "moveChunk failed to get confirmation of commit" << migrateLog;
                         error() << "TERMINATING" << migrateLog;
+                        dumpCrashInfo("moveChunk failed to get confirmation of commit");
                         dbexit(EXIT_SHARDING_ERROR);
                     }
                 }
@@ -1315,6 +1318,7 @@ namespace mongo {
                     // TODO(leif): Vanilla, if it fails, waits 10 seconds and does a query to see if somehow the commit made it through anyway.  Maybe we need such a mechanism too?
                     error() << "moveChunk failed to get confirmation of commit" << migrateLog;
                     error() << "TERMINATING" << migrateLog;
+                    dumpCrashInfo("moveChunk failed to get confirmation of commit");
                     dbexit(EXIT_SHARDING_ERROR);
                 }
 
