@@ -165,6 +165,7 @@ namespace mongo {
         massert(10356, str::stream() << "invalid ns: " << ns,
                        NamespaceString::validCollectionName(ns));
 
+        scoped_ptr<Client::CreatingSystemUsersScope> creatingSystemUsersScope;
         if (isOplogCollection(ns)) {
             if (options["partitioned"].trueValue()) {
                 _cd = PartitionedOplogCollection::make(ns, options);
@@ -175,7 +176,7 @@ namespace mongo {
         } else if (isSystemCatalog(ns)) {
             _cd.reset(new SystemCatalogCollection(ns, options));
         } else if (isSystemUsersCollection(ns)) {
-            Client::CreatingSystemUsersScope scope;
+            creatingSystemUsersScope.reset(new Client::CreatingSystemUsersScope());
             _cd.reset(new SystemUsersCollection(ns, options));
         } else if (isProfileCollection(ns)) {
             // TokuMX doesn't _necessarily_ need the profile to be capped, but vanilla does.
@@ -216,6 +217,7 @@ namespace mongo {
         _ns(serialized["ns"].String()),
         _options(serialized["options"].Obj().copy()) {
 
+        scoped_ptr<Client::CreatingSystemUsersScope> creatingSystemUsersScope;
         const StringData ns = serialized["ns"].Stringdata();
         bool reserializeNeeded = false;
         if (isOplogCollection(ns)) {
@@ -234,7 +236,7 @@ namespace mongo {
             _cd.reset(new SystemCatalogCollection(serialized));
         } else if (isSystemUsersCollection(ns)) {
             massert( 17002, "bug: Should not bulk load the users collection", !bulkLoad );
-            Client::CreatingSystemUsersScope scope;
+            creatingSystemUsersScope.reset(new Client::CreatingSystemUsersScope());
             _cd.reset(new SystemUsersCollection(serialized, &reserializeNeeded));
 
             int idx = _cd->findIndexByKeyPattern(extendedSystemUsersKeyPattern);
