@@ -22,6 +22,8 @@
 #include <vector>
 
 #include "mongo/base/counter.h"
+#include "mongo/bson/util/builder.h"
+#include "mongo/db/crash.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/keypattern.h"
@@ -391,9 +393,9 @@ namespace mongo {
                 transaction.commit(DB_TXN_NOSYNC);
             }
             catch (std::exception &e) {
-                log() << "exception during commit of applyTransactionFromOplog, aborting system: " << e.what() << endl;
-                printStackTrace();
-                logflush();
+                StackStringBuilder ssb;
+                ssb << "exception during commit of applyTransactionFromOplog, aborting system: " << e.what();
+                dumpCrashInfo(ssb.str());
                 ::abort();
             }
         }
