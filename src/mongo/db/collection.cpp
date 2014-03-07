@@ -1088,6 +1088,7 @@ namespace mongo {
 
     void Collection::rebuildIndexes(const StringData &name, const BSONObj &options, BSONObjBuilder &result) {
         bool pkIndexChanged = false;
+        bool someIndexChanged = false;
         if (name == "*") {
             BSONArrayBuilder ab;
             // "*" means everything
@@ -1099,6 +1100,7 @@ namespace mongo {
                     if (isPKIndex(idx)) {
                         pkIndexChanged = true;
                     }
+                    someIndexChanged = true;
                     removeFromIndexesCatalog(_ns, idx.indexName());
                     addToIndexesCatalog(idx.info());
                 }
@@ -1121,6 +1123,7 @@ namespace mongo {
                 if (isPKIndex(idx)) {
                     pkIndexChanged = true;
                 }
+                someIndexChanged = true;
                 removeFromIndexesCatalog(_ns, idx.indexName());
                 addToIndexesCatalog(idx.info());
             }
@@ -1136,27 +1139,21 @@ namespace mongo {
                     optionsBuilder.append(*it);
                 }
             } else {
-                optionsBuilder.append(_options["create"]);
                 for (BSONObjIterator it(_options); it.more(); ++it) {
                     BSONElement e = *it;
                     StringData fn(e.fieldName());
-                    if (options.hasField(fn)) {
-                        optionsBuilder.append(options[fn]);
-                    } else {
-                        optionsBuilder.append(_options[fn]);
-                    }
-                }
-                for (BSONObjIterator it(options); it.more(); ++it) {
-                    BSONElement e = *it;
-                    StringData fn(e.fieldName());
-                    if (!_options.hasField(fn)) {
+                    if (!options.hasField(fn)) {
                         optionsBuilder.append(e);
                     }
                 }
+                optionsBuilder.appendElements(options);
             }
             _options = optionsBuilder.obj();
             removeFromNamespacesCatalog(_ns);
             addToNamespacesCatalog(_ns, &_options);
+        }
+        if (someIndexChanged) {
+            collectionMap(_ns)->update_ns(_ns, serialize(), true);
         }
     }
 
