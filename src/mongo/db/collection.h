@@ -1529,6 +1529,9 @@ namespace mongo {
         }
         // states which partition the row or PK belongs to
         int partitionWithPK(const BSONObj& pk) const;
+        shared_ptr<CollectionData> getMetaCollection() {
+            return _metaCollection;
+        }
 
         static shared_ptr<PartitionedCollection> make(const StringData &ns, const BSONObj &options);
         static shared_ptr<PartitionedCollection> make(const BSONObj &serialized, CollectionRenamer* renamer);
