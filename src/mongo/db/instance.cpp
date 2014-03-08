@@ -978,13 +978,13 @@ namespace mongo {
         int cb(const DBT *key, const DBT *val) {
             size_t length = key->size;
             if (length > 0) {
-                char *cp = (char *) key->data + length - 1;
+                const char *cp = (const char *) key->data + length - 1;
                 if (*cp == 0) {
                     length -= 1;
                 }
-                StringData dbname(cp, length);
+                StringData dbname((const char *) key->data, length);
                 if (dbname.endsWith(".ns")) {
-                    Status s = _f(dbname);
+                    Status s = _f(dbname.substr(0, dbname.size() - 3));
                     if (!s.isOK()) {
                         _s = s;
                         return 1;

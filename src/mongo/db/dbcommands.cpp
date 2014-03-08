@@ -887,6 +887,8 @@ namespace mongo {
         }
     public:
         CmdReIndex() : ModifyCommand("reIndex") { }
+        virtual LockType locktype() const { return NONE; } // we'll manage our own locks and txn, changing options needs WRITE but hot optimize just needs READ
+        virtual bool needsTxn() const { return false; }
         virtual bool logTheOp() { return false; } // only reindexes on the one node
         virtual bool slaveOk() const { return true; }    // can reindex on a secondary
         virtual bool requiresSync() const { return false; }
@@ -905,32 +907,52 @@ namespace mongo {
 
             const BSONElement e = cmdObj.firstElement();
             const string ns = getSisterNS(dbname, e.valuestrsafe());
-            Collection *cl = getCollection(ns);
-            tlog() << "CMD: reIndex " << ns << endl;
 
-            if (cl == NULL) {
-                errmsg = "ns not found";
-                return false;
+            {
+                // Changing options needs a write lock because it needs to modify the CollectionMap.
+                bool needsWriteLock = cmdObj["options"].isABSONObj() && !cmdObj["options"].Obj().isEmpty();
+                LOCK_REASON(lockReason, "reIndex");
+                scoped_ptr<Lock::ScopedLock> lk(needsWriteLock
+                                                ? static_cast<Lock::ScopedLock*>(new Lock::DBWrite(ns, lockReason))
+                                                : static_cast<Lock::ScopedLock*>(new Lock::DBRead(ns, lockReason)));
+                Client::Context ctx(ns);
+                Client::Transaction txn(DB_SERIALIZABLE);
+                Collection *cl = getCollection(ns);
+                tlog() << "CMD: reIndex " << ns << endl;
+
+                if (cl == NULL) {
+                    errmsg = "ns not found";
+                    return false;
+                }
+
+                // Perform the reindex work
+                const bool ok = _reIndex(cl, cmdObj, errmsg, result);
+                if (!ok) {
+                    return false;
+                }
+                txn.commit();
             }
 
-            // Perform the reindex work
-            const bool ok = _reIndex(cl, cmdObj, errmsg, result);
-            if (!ok) {
-                return false;
+            {
+                LOCK_REASON(lockReason, "query after reIndex");
+                Client::ReadContext ctx(dbname);
+                Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
+                // Capture and return the state of indexes as a result of reindexing.
+                BSONArrayBuilder b;
+                for (auto_ptr<DBClientCursor> c = db.query(getSisterNS(dbname, "system.indexes"),
+                                                           BSON("ns" << ns), 0, 0, 0, QueryOption_SlaveOk);
+                     c->more(); ) {
+                    const BSONObj o = c->next();
+                    b.append(o);
+                }
+                Collection *cl = getCollection(ns);
+                verify(cl != NULL);
+                result.append("nIndexes", cl->nIndexes());
+                result.append("nIndexesWas", cl->nIndexes());
+                result.appendArray("indexes", b.arr());
+                txn.commit();
+                return true;
             }
-
-            // Capture and return the state of indexes as a result of reindexing.
-            BSONArrayBuilder b;
-            for (auto_ptr<DBClientCursor> c = db.query(getSisterNS(dbname, "system.indexes"),
-                                                       BSON("ns" << ns), 0, 0, 0, QueryOption_SlaveOk);
-                 c->more(); ) {
-                const BSONObj o = c->next().getOwned();
-                b.append(o);
-            }
-            result.append("nIndexes", cl->nIndexes());
-            result.append("nIndexesWas", cl->nIndexes());
-            result.appendArray("indexes", b.arr());
-            return true;
         }
     } cmdReIndex;
 

@@ -32,6 +32,7 @@
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/crash.h"
+#include "mongo/db/cursor.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/d_globals.h"
 #include "mongo/db/database.h"
@@ -43,6 +44,7 @@
 #include "mongo/db/json.h"
 #include "mongo/db/kill_current_op.h"
 #include "mongo/db/module.h"
+#include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/repl/rs.h"
@@ -309,7 +311,8 @@ namespace mongo {
             DISK_VERSION_INVALID = 0,
             DISK_VERSION_1 = 1,  // < 1.4
             DISK_VERSION_2 = 2,  // 1.4.0: changed how ints with abs value larger than 2^52 are packed (#820)
-            DISK_VERSION_3 = 3,  // 1.4.1: moved upgrade of system.users collections into DiskFormatVersion framework (#978)
+            DISK_VERSION_3 = 3,  // 1.4.0+hotfix.1: moved upgrade of system.users collections into DiskFormatVersion framework (#978)
+            DISK_VERSION_4 = 4,  // 1.4.1: remove old partitioned collection entries from system.namespaces (#967)
             DISK_VERSION_NEXT,
             DISK_VERSION_CURRENT = DISK_VERSION_NEXT - 1,
             MIN_SUPPORTED_VERSION = 1,
@@ -358,6 +361,51 @@ namespace mongo {
             return Status::OK();
         }
 
+        static Status cleanupPartitionedNamespacesEntries(const StringData &dbname) {
+            string ns = getSisterNS(dbname, "system.namespaces");
+            Client::Context ctx(ns);
+            Collection *nscl = getCollection(ns);
+            if (nscl == NULL) {
+                return Status(ErrorCodes::InternalError, mongoutils::str::stream() << "didn't find system.namespaces collection for db " << dbname);
+            }
+            for (shared_ptr<Cursor> cursor = Cursor::make(nscl); cursor->ok(); cursor->advance()) {
+                BSONObj cur = cursor->current();
+                if (!cur.getObjectField("options")["partitioned"].trueValue()) {
+                    continue;
+                }
+                Collection *cl = getCollection(cur["name"].Stringdata());
+                if (cl == NULL || !cl->isPartitioned()) {
+                    return Status(ErrorCodes::InternalError, mongoutils::str::stream() << "didn't find partitioned collection for " << cur);
+                }
+                PartitionedCollection *pcl = cl->as<PartitionedCollection>();
+
+                shared_ptr<CollectionData> mcd = pcl->getMetaCollection();
+                for (int j = 0; j < mcd->nIndexes(); ++j) {
+                    BSONObj query = BSON("name" << mcd->idx(j).indexNamespace());
+                    long long ndeleted = _deleteObjects(ns.c_str(), query, true, true);
+                    LOG(1) << "deleted " << ndeleted << " objects from system.namespaces for " << query << endl;
+                    if (ndeleted != 1) {
+                        LOG(0) << "didn't delete any system.namespaces entries for " << query << startupWarningsLog;
+                    }
+                }
+
+                for (size_t i = 0; i < pcl->numPartitions(); ++i) {
+                    shared_ptr<CollectionData> pcd = pcl->getPartition(i);
+                    for (int j = 0; j < pcd->nIndexes(); ++j) {
+                        BSONObj query = BSON("name" << pcd->idx(j).indexNamespace());
+                        long long ndeleted = _deleteObjects(ns.c_str(), query, true, true);
+                        LOG(1) << "deleted " << ndeleted << " objects from system.namespaces for " << query << endl;
+                        if (ndeleted != 1) {
+                            LOG(0) << "didn't delete any system.namespaces entries for " << query << startupWarningsLog;
+                        }
+                    }
+                }
+            }
+            string dbpath = cc().database()->path();
+            Database::closeDatabase(dbname, dbpath);
+            return Status::OK();
+        }
+
         Status upgradeToVersion(VersionID targetVersion) {
             if (_currentVersion + 1 != targetVersion) {
                 return Status(ErrorCodes::BadValue, "bad version in upgrade");
@@ -398,6 +446,18 @@ namespace mongo {
                     verify(cc().hasTxn());
 
                     Status s = applyToDatabaseNames(&DiskFormatVersion::upgradeSystemUsersCollection);
+                    if (!s.isOK()) {
+                        return s;
+                    }
+
+                    break;
+                }
+
+                case DISK_VERSION_4: {
+                    verify(Lock::isW());
+                    verify(cc().hasTxn());
+
+                    Status s = applyToDatabaseNames(&DiskFormatVersion::cleanupPartitionedNamespacesEntries);
                     if (!s.isOK()) {
                         return s;
                     }

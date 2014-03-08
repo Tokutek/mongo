@@ -1090,6 +1090,7 @@ namespace mongo {
 
     void Collection::rebuildIndexes(const StringData &name, const BSONObj &options, BSONObjBuilder &result) {
         bool pkIndexChanged = false;
+        bool someIndexChanged = false;
         if (name == "*") {
             BSONArrayBuilder ab;
             // "*" means everything
@@ -1098,11 +1099,13 @@ namespace mongo {
                 BSONObjBuilder wasBuilder(ab.subobjStart());
                 wasBuilder.append("name", idx.indexName());
                 if (_cd->rebuildIndex(i, options, wasBuilder)) {
-                    if (isPKIndex(idx)) {
+                    IndexDetails &newIdx = _cd->idx(i); // idx may be invalid after rebuildIndex
+                    if (isPKIndex(newIdx)) {
                         pkIndexChanged = true;
                     }
-                    removeFromIndexesCatalog(_ns, idx.indexName());
-                    addToIndexesCatalog(idx.info());
+                    someIndexChanged = true;
+                    removeFromIndexesCatalog(_ns, newIdx.indexName());
+                    addToIndexesCatalog(newIdx.info());
                 }
                 wasBuilder.doneFast();
             }
@@ -1117,12 +1120,13 @@ namespace mongo {
                            i >= 0);
             uassert(17232, str::stream() << "cannot rebuild a background index: " << name,
                            i < nIndexes()); // i == _nIndexes is the hot index
-            IndexDetails &idx = _cd->idx(i);
             BSONObjBuilder wasBuilder;
             if (_cd->rebuildIndex(i, options, wasBuilder)) {
+                IndexDetails &idx = _cd->idx(i);
                 if (isPKIndex(idx)) {
                     pkIndexChanged = true;
                 }
+                someIndexChanged = true;
                 removeFromIndexesCatalog(_ns, idx.indexName());
                 addToIndexesCatalog(idx.info());
             }
@@ -1138,27 +1142,21 @@ namespace mongo {
                     optionsBuilder.append(*it);
                 }
             } else {
-                optionsBuilder.append(_options["create"]);
                 for (BSONObjIterator it(_options); it.more(); ++it) {
                     BSONElement e = *it;
                     StringData fn(e.fieldName());
-                    if (options.hasField(fn)) {
-                        optionsBuilder.append(options[fn]);
-                    } else {
-                        optionsBuilder.append(_options[fn]);
-                    }
-                }
-                for (BSONObjIterator it(options); it.more(); ++it) {
-                    BSONElement e = *it;
-                    StringData fn(e.fieldName());
-                    if (!_options.hasField(fn)) {
+                    if (!options.hasField(fn)) {
                         optionsBuilder.append(e);
                     }
                 }
+                optionsBuilder.appendElements(options);
             }
             _options = optionsBuilder.obj();
             removeFromNamespacesCatalog(_ns);
             addToNamespacesCatalog(_ns, &_options);
+        }
+        if (someIndexChanged) {
+            collectionMap(_ns)->update_ns(_ns, serialize(), true);
         }
     }
 
@@ -3109,6 +3107,15 @@ namespace mongo {
     
     bool PartitionedCollection::rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &result) {
         bool changed = false;
+        BSONObjBuilder b;
+        for (BSONObjIterator it(_options); it.more(); it.next()) {
+            BSONElement e = *it;
+            if (!options.hasField(e.fieldName())) {
+                b.append(e);
+            }
+        }
+        b.appendElements(options);
+        BSONObj newOptions = b.done();
         for (IndexCollVector::const_iterator it = _partitions.begin(); it != _partitions.end(); ++it) {
             CollectionData *currColl = it->get();
             BSONObjBuilder fakeBuilder;
@@ -3117,6 +3124,33 @@ namespace mongo {
                                         ? result
                                         : fakeBuilder))) {
                 changed = true;
+                // reimplementing the non-static Collection::serialize here
+                // TODO(zardosht): refactor this.  Reunifying Collection and CollectionData is
+                // probably the right approach.
+                // This also will need updating when we have partitioned collection with secondary
+                // indexes because this assumes we're always changing the PK options.
+                BSONArrayBuilder ab;
+                for (int i = 0; i < currColl->nIndexes(); ++i) {
+                    ab.append(currColl->idx(i).info());
+                }
+                BSONObj newSerialized = Collection::serialize(currColl->ns(),
+                                                              newOptions,
+                                                              currColl->pkPattern(),
+                                                              currColl->getMultiKeyIndexBits(),
+                                                              ab.arr());
+                DEV LOG(0) << "PartitionedCollection updating " << currColl->ns() << " to " << newSerialized << endl;
+                collectionMap(currColl->ns())->update_ns(currColl->ns(), newSerialized, true);
+            }
+        }
+        if (changed) {
+            // Update in-memory copy of _options so new partitions get the new options.
+            _options = newOptions.getOwned();
+            // Update the IndexDetails with new info() which contains the new options, so that when
+            // Collection::rebuildIndexes serializes us, we give it the right indexes info.
+            for (PartitionedIndexVector::iterator it = _indexDetails.begin(); it != _indexDetails.end(); ++it) {
+                size_t idxNum = it - _indexDetails.begin();
+                BSONObj info = _partitions[0]->idx(idxNum).info();
+                it->reset(new PartitionedIndexDetails(replaceNSField(info, _ns), this, idxNum));
             }
         }
         return changed;
