@@ -364,7 +364,11 @@ namespace mongo {
         static Status cleanupPartitionedNamespacesEntries(const StringData &dbname) {
             string ns = getSisterNS(dbname, "system.namespaces");
             Client::Context ctx(ns);
-            for (shared_ptr<Cursor> cursor = Cursor::make(ns); cursor->ok(); cursor->advance()) {
+            Collection *nscl = getCollection(ns);
+            if (nscl == NULL) {
+                return Status(ErrorCodes::InternalError, mongoutils::str::stream() << "didn't find system.namespaces collection for db " << dbname);
+            }
+            for (shared_ptr<Cursor> cursor = Cursor::make(nscl); cursor->ok(); cursor->advance()) {
                 BSONObj cur = cursor->current();
                 if (!cur.getObjectField("options")["partitioned"].trueValue()) {
                     continue;
