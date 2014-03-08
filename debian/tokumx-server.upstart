@@ -32,6 +32,13 @@ stop on runlevel [06]
 
 script
   ENABLE_TOKUMX="yes"
+  CONF=/etc/tokumx.conf
+  DAEMON=/usr/bin/mongod
+  DAEMONUSER=${DAEMONUSER:-tokumx}
+
   if [ -f /etc/default/tokumx ]; then . /etc/default/tokumx; fi
-  if [ "x$ENABLE_TOKUMX" = "xyes" ]; then exec start-stop-daemon --start --quiet --chuid tokumx --exec  /usr/bin/mongod -- --config /etc/tokumx.conf; fi
+  if [ "x$ENABLE_TOKUMX" = "xyes" ]
+  then
+    exec start-stop-daemon --start --quiet --chuid $DAEMONUSER --exec $DAEMON -- --config $CONF
+  fi
 end script
