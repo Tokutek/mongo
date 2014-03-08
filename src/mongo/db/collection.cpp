@@ -1862,14 +1862,19 @@ namespace mongo {
         )
     {
         shared_ptr<PartitionedOplogCollection> ret;
-        ret.reset(new PartitionedOplogCollection(ns, options));
-        ret->initialize(ns, options);
+        BSONObj stripped = cloneBSONWithFieldStripped(options, "partitioned");
+        ret.reset(new PartitionedOplogCollection(ns, stripped));
+        ret->initialize(ns, stripped);
         return ret;
     }
     shared_ptr<PartitionedOplogCollection> PartitionedOplogCollection::make(const BSONObj &serialized) {
         shared_ptr<PartitionedOplogCollection> ret;
-        ret.reset(new PartitionedOplogCollection(serialized));
-        ret->initialize(serialized);
+        BSONObj stripped = cloneBSONWithFieldChanged(
+            serialized, "options",
+            cloneBSONWithFieldStripped(serialized.getObjectField("options"), "partitioned"),
+            false);
+        ret.reset(new PartitionedOplogCollection(stripped));
+        ret->initialize(stripped);
         return ret;
     }
 
@@ -2536,7 +2541,7 @@ namespace mongo {
     //
     PartitionedCollection::PartitionedCollection(const StringData &ns, const BSONObj &options) :
         CollectionData(ns, BSON("_id" << 1)), // the pk MUST be _id:1, we verify below
-        _options(options.copy()),
+        _options(options.getOwned()),
         _ordering(Ordering::make(BSONObj())) // dummy for now, we create it properly below
     {
         // MUST CALL initialize directly after this.
@@ -2569,8 +2574,9 @@ namespace mongo {
         )
     {
         shared_ptr<PartitionedCollection> ret;
-        ret.reset(new PartitionedCollection(ns, options));
-        ret->initialize(ns, options);
+        BSONObj stripped = cloneBSONWithFieldStripped(options, "partitioned");
+        ret.reset(new PartitionedCollection(ns, stripped));
+        ret->initialize(ns, stripped);
         return ret;
     }
 
@@ -2583,7 +2589,7 @@ namespace mongo {
         CollectionRenamer* renamer
         ) :
            CollectionData(serialized),
-           _options(serialized["options"].Obj().copy()),
+           _options(serialized["options"].Obj().getOwned()),
            _ordering(Ordering::make(BSONObj())) // dummy for now, we create it properly below
     {
     }
@@ -2619,8 +2625,12 @@ namespace mongo {
 
     shared_ptr<PartitionedCollection> PartitionedCollection::make(const BSONObj &serialized, CollectionRenamer* renamer) {
         shared_ptr<PartitionedCollection> ret;
-        ret.reset(new PartitionedCollection(serialized, renamer));
-        ret->initialize(serialized, renamer);
+        BSONObj stripped = cloneBSONWithFieldChanged(
+            serialized, "options",
+            cloneBSONWithFieldStripped(serialized.getObjectField("options"), "partitioned"),
+            false);
+        ret.reset(new PartitionedCollection(stripped, renamer));
+        ret->initialize(stripped, renamer);
         return ret;
     }
 
@@ -2629,7 +2639,7 @@ namespace mongo {
     //
     PartitionedCollection::PartitionedCollection(const BSONObj &serialized) :
         CollectionData(serialized),
-        _options(serialized["options"].Obj().copy()),
+        _options(serialized["options"].Obj().getOwned()),
         _ordering(Ordering::make(BSONObj())) // dummy for now, we create it properly below
     {
         // MUST CALL initialize directly after this.
@@ -2665,8 +2675,12 @@ namespace mongo {
 
     shared_ptr<PartitionedCollection> PartitionedCollection::make(const BSONObj &serialized) {
         shared_ptr<PartitionedCollection> ret;
-        ret.reset(new PartitionedCollection(serialized));
-        ret->initialize(serialized);
+        BSONObj stripped = cloneBSONWithFieldChanged(
+            serialized, "options",
+            cloneBSONWithFieldStripped(serialized.getObjectField("options"), "partitioned"),
+            false);
+        ret.reset(new PartitionedCollection(stripped));
+        ret->initialize(stripped);
         return ret;
     }
 
@@ -3138,7 +3152,6 @@ namespace mongo {
                                                               currColl->pkPattern(),
                                                               currColl->getMultiKeyIndexBits(),
                                                               ab.arr());
-                DEV LOG(0) << "PartitionedCollection updating " << currColl->ns() << " to " << newSerialized << endl;
                 collectionMap(currColl->ns())->update_ns(currColl->ns(), newSerialized, true);
             }
         }

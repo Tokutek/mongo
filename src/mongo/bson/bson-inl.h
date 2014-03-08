@@ -1137,8 +1137,8 @@ dodouble:
     inline void cloneBSONWithFieldChanged(BSONObjBuilder &b, const BSONObj &orig, const BSONElement &newElement, bool appendIfMissing = true) {
         StringData fieldName = newElement.fieldName();
         bool replaced = false;
-        for (BSONObjIterator it(orig); it.more(); ) {
-            BSONElement e = it.next();
+        for (BSONObjIterator it(orig); it.more(); it.next()) {
+            BSONElement e = *it;
             if (fieldName == e.fieldName()) {
                 b.append(newElement);
                 replaced = true;
@@ -1160,8 +1160,8 @@ dodouble:
     template<typename T>
     void cloneBSONWithFieldChanged(BSONObjBuilder &b, const BSONObj &orig, const StringData &fieldName, const T &newValue, bool appendIfMissing = true) {
         bool replaced = false;
-        for (BSONObjIterator it(orig); it.more(); ) {
-            BSONElement e = it.next();
+        for (BSONObjIterator it(orig); it.more(); it.next()) {
+            BSONElement e = *it;
             if (fieldName == e.fieldName()) {
                 b.append(fieldName, newValue);
                 replaced = true;
@@ -1178,6 +1178,21 @@ dodouble:
     BSONObj cloneBSONWithFieldChanged(const BSONObj &orig, const StringData &fieldName, const T &newValue, bool appendIfMissing = true) {
         BSONObjBuilder b(orig.objsize());
         cloneBSONWithFieldChanged(b, orig, fieldName, newValue, appendIfMissing);
+        return b.obj();
+    }
+
+    inline void cloneBSONWithFieldStripped(BSONObjBuilder &b, const BSONObj &orig, const StringData &fieldName) {
+        for (BSONObjIterator it(orig); it.more(); it.next()) {
+            BSONElement e = *it;
+            if (fieldName != e.fieldName()) {
+                b.append(e);
+            }
+        }
+    }
+
+    inline BSONObj cloneBSONWithFieldStripped(const BSONObj &orig, const StringData &fieldName) {
+        BSONObjBuilder b(orig.objsize());
+        cloneBSONWithFieldStripped(b, orig, fieldName);
         return b.obj();
     }
 
