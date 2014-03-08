@@ -129,6 +129,7 @@ namespace mongo {
         virtual ~CollectionData() { }
         virtual bool indexBuildInProgress() const = 0;
         virtual int nIndexes() const = 0;
+        const string &ns() const { return _ns; }
 
         // Close the collection. For regular collections, closes the underlying IndexDetails
         // (and their underlying dictionaries). For bulk loaded collections, closes the
