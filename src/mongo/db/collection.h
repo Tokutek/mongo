@@ -129,6 +129,7 @@ namespace mongo {
         virtual ~CollectionData() { }
         virtual bool indexBuildInProgress() const = 0;
         virtual int nIndexes() const = 0;
+        const string &ns() const { return _ns; }
 
         // Close the collection. For regular collections, closes the underlying IndexDetails
         // (and their underlying dictionaries). For bulk loaded collections, closes the
@@ -1528,6 +1529,9 @@ namespace mongo {
         }
         // states which partition the row or PK belongs to
         int partitionWithPK(const BSONObj& pk) const;
+        shared_ptr<CollectionData> getMetaCollection() {
+            return _metaCollection;
+        }
 
         static shared_ptr<PartitionedCollection> make(const StringData &ns, const BSONObj &options);
         static shared_ptr<PartitionedCollection> make(const BSONObj &serialized, CollectionRenamer* renamer);
