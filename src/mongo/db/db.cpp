@@ -32,6 +32,7 @@
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/crash.h"
+#include "mongo/db/cursor.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/d_globals.h"
 #include "mongo/db/database.h"
@@ -45,7 +46,6 @@
 #include "mongo/db/module.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/update.h"
-#include "mongo/db/query_optimizer.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/restapi.h"
@@ -364,11 +364,11 @@ namespace mongo {
         static Status cleanupPartitionedNamespacesEntries(const StringData &dbname) {
             string ns = getSisterNS(dbname, "system.namespaces");
             Client::Context ctx(ns);
-            for (shared_ptr<Cursor> cursor = getOptimizedCursor(ns, BSON("options.partitioned" << 1)); cursor->ok(); cursor->advance()) {
-                if (!cursor->currentMatches()) {
+            for (shared_ptr<Cursor> cursor = Cursor::make(ns); cursor->ok(); cursor->advance()) {
+                BSONObj cur = cursor->current();
+                if (!cur.getObjectField("options")["partitioned"].trueValue()) {
                     continue;
                 }
-                BSONObj cur = cursor->current();
                 string pat = mongoutils::str::stream() << "^\\Q" << cur["name"].String() + "$$\\E";
                 long long ndeleted = _deleteObjects(ns.c_str(), BSON("name" << BSONRegEx(pat)), false, false);
                 if (ndeleted < 1) {
