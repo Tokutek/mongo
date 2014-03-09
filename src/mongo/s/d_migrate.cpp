@@ -689,6 +689,8 @@ namespace mongo {
                 return false;
             }
 
+            // This is effectively a "getMore" so it should have a read lock.
+            Client::ReadContext ctx(cmdObj["ns"].Stringdata());
             ClientCursor::Pin pin(id);
             ClientCursor *cursor = pin.c();
             massert(17227, "Cursor shouldn't have been deleted", cursor);
@@ -1461,6 +1463,7 @@ namespace mongo {
             auto_ptr<DBClientCursor> mlogCursor(conn->query(MigrateFromStatus::MIGRATE_LOG_NS,
                                                             QUERY("_id" << GTE << _lastAppliedMigrateLogID).hint(BSON("_id" << 1)),
                                                             0, 0, 0, 0));
+            massert(17320, "migratelog cursor query returned NULL, aborting migration", mlogCursor.get() != NULL);
             // Check that what we thought was the last one really is the last one and we don't have a gap.
             if (_lastAppliedMigrateLogID >= 0) {
                 BSONObj op = mlogCursor->nextSafe();
