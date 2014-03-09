@@ -1,6 +1,66 @@
 tokumx news
 ===========
 
+tokumx 1.4.1
+------------
+Release date: TBD
+
+General
+~~~~~~~
+
+    - This release is focused on bug fixes since 1.4.0.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Improved the speed and reduced the impact of deletes after a chunk
+      migration.  (#957)
+
+    - Improved the speed of the `touch` command.  (#959)
+
+    - TokuMX now gathers more information and tries to output it to the
+      log on a crash.  (#987, #993)
+
+    - Added `compressionRatio` section to `serverStatus` to report the
+      compression ratio calculated on disk write.  (#989)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Fixed the output of `show dbs` and `listDatabases` in sharded
+      clusters.  (#962)
+
+    - Fixed a bad query plan used by a secondary to find its rollback
+      point in the oplog, which could cause startup to time out.  (#965)
+
+    - Removed erroneous `system.namespaces` entries for partitioned
+      collections, including the oplog.  (#966, #967)
+
+    - Enabled the use of a hashed shard key when there is a user-defined
+      primary key.  In 1.4.0, the shard key would be rejected because the
+      primary key looks like a unique index whose uniqueness cannot be
+      enforced, however, for a primary key it is enforced by the `_id`'s
+      uniqueness assumption.  (#968)
+
+    - Fixed linking of some commands, including `loadPlugin` and the bulk
+      loader commands in `mongorestore`.  (#977, #981, #983)
+
+    - Fixed problem opening too many files on startup, causing listening
+      sockets' ids to be too high.  (#978, #984)
+
+    - Changing storage settings (compression, page sizes, etc.) with
+      `reIndex` now correctly persists the change for future opens and
+      added partitions.  (#982)
+
+    - The `getParameter` command now accepts `journalCommitInterval` as an
+      alias for `logFlushPeriod`.  (#988)
+
+    - Fixed issue with `listDatabases` and partitioned collections.
+      (#997)
+
+
 tokumx 1.4.0
 ------------
 Release date: 2014-02-13
