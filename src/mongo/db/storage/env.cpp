@@ -1164,6 +1164,10 @@ namespace mongo {
             fassertFailed(16853);
         }
     
+        void do_backtrace() {
+            env->do_backtrace(env);
+        }
+
     } // namespace storage
 
 } // namespace mongo

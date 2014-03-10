@@ -104,7 +104,7 @@ namespace mongo {
             rawOut("--------------------------------------------------------------------------------");
             rawOut("TokuKV engine backtrace:");
             rawOut(" ");
-            db_env_do_backtrace();
+            storage::do_backtrace();
             rawOut(" ");
         }
 
