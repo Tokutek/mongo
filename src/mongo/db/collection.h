@@ -1523,9 +1523,10 @@ namespace mongo {
         }
 
         // return the partition at offset index, note this is NOT the partition ID
-        shared_ptr<CollectionData> getPartition(uint64_t index) {
-            massert(17254, "invalid index for partition", (index >= 0 && index < _numPartitions));
-            return _partitions[index];
+        shared_ptr<CollectionData> getPartition(uint64_t idx) {
+            massert(17254, mongoutils::str::stream() << "invalid index " << idx << " for partition (max: " << _numPartitions << ")",
+                    (idx >= 0 && idx < _numPartitions));
+            return _partitions[idx];
         }
         // states which partition the row or PK belongs to
         int partitionWithPK(const BSONObj& pk) const;
