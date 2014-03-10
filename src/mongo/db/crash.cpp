@@ -26,6 +26,7 @@
 #include "mongo/db/client.h"
 #include "mongo/db/cmdline.h"
 #include "mongo/db/curop.h"
+#include "mongo/db/storage/env.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/log.h"
 #include "mongo/util/stacktrace.h"
