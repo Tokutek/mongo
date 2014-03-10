@@ -110,9 +110,8 @@ namespace mongo {
 
     struct getNamespacesExtra {
         list<string> &tofill;
-        list<string> &partitionedNamespaces;
         std::exception *ex;
-        getNamespacesExtra(list<string> &l, list<string> &pn) : tofill(l), partitionedNamespaces(pn) {}
+        getNamespacesExtra(list<string> &l) : tofill(l) {}
     };
 
     static int getNamespacesCallback(const DBT *key, const DBT *val, void *extra) {
@@ -123,9 +122,6 @@ namespace mongo {
                 const BSONObj obj(static_cast<char *>(val->data));
                 const string &ns = obj["ns"].String();
                 e->tofill.push_back(ns);
-                if (obj.getObjectField("options")["partitioned"].trueValue()) {
-                    e->partitionedNamespaces.push_back(ns);
-                }
             }
             return 0;
         }
@@ -142,8 +138,7 @@ namespace mongo {
             return;
         }
 
-        list<string> partitionedNamespaces;
-        getNamespacesExtra extra(tofill, partitionedNamespaces);
+        getNamespacesExtra extra(tofill);
         storage::Cursor c(_metadb->db());
         int r = 0;
         while (r != DB_NOTFOUND) {
@@ -154,18 +149,6 @@ namespace mongo {
             }
             if (r != 0 && r != DB_NOTFOUND) {
                 storage::handle_ydb_error(r);
-            }
-        }
-
-        for (list<string>::const_iterator pit = partitionedNamespaces.begin(); pit != partitionedNamespaces.end(); ++pit) {
-            string prefix = (*pit) + "$$";
-            for (list<string>::iterator it = tofill.begin(); it != tofill.end(); ) {
-                StringData ns(*it);
-                if (ns.startsWith(prefix)) {
-                    it = tofill.erase(it);
-                } else {
-                    ++it;
-                }
             }
         }
     }
