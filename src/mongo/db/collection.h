@@ -1524,8 +1524,8 @@ namespace mongo {
 
         // return the partition at offset index, note this is NOT the partition ID
         shared_ptr<CollectionData> getPartition(uint64_t idx) {
-            massert(17254, mongoutils::str::stream() << "invalid index " << idx << " for partition (max: " << _numPartitions << ")",
-                    (idx >= 0 && idx < _numPartitions));
+            massert(17254, mongoutils::str::stream() << "invalid index " << idx << " for partition (max: " << numPartitions() << ")",
+                    (idx >= 0 && idx < numPartitions()));
             return _partitions[idx];
         }
         // states which partition the row or PK belongs to
@@ -1605,9 +1605,6 @@ namespace mongo {
         // then partition i stores values x such that 100 < x <= 200
         std::vector<BSONObj> _partitionPivots;
         Ordering _ordering; // used for comparisons
-        // number of partitions we currently have
-        // length of _partitions should equal this number
-        uint64_t _numPartitions;
     };
 
     // for legacy oplogs that were not partitioned. So we can open them just long enough
