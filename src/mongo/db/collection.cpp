@@ -3138,21 +3138,6 @@ namespace mongo {
                                         ? result
                                         : fakeBuilder))) {
                 changed = true;
-                // reimplementing the non-static Collection::serialize here
-                // TODO(zardosht): refactor this.  Reunifying Collection and CollectionData is
-                // probably the right approach.
-                // This also will need updating when we have partitioned collection with secondary
-                // indexes because this assumes we're always changing the PK options.
-                BSONArrayBuilder ab;
-                for (int i = 0; i < currColl->nIndexes(); ++i) {
-                    ab.append(currColl->idx(i).info());
-                }
-                BSONObj newSerialized = Collection::serialize(currColl->ns(),
-                                                              newOptions,
-                                                              currColl->pkPattern(),
-                                                              currColl->getMultiKeyIndexBits(),
-                                                              ab.arr());
-                collectionMap(currColl->ns())->update_ns(currColl->ns(), newSerialized, true);
             }
         }
         if (changed) {
