@@ -1,8 +1,8 @@
-tokumx (1.4.1-rc.0) unstable; urgency=low
+tokumx (1.4.1-rc.1) unstable; urgency=low
 
-  * see http://github.com/Tokutek/mongo/releases/1.4.1-rc.0
+  * see http://github.com/Tokutek/mongo/releases/1.4.1-rc.1
 
- -- Leif Walsh <leif.walsh@gmail.com>  Sun, 09 Mar 2014 20:23:24 +0000
+ -- Leif Walsh <leif.walsh@gmail.com>  Mon, 10 Mar 2014 21:23:24 +0000
 
 tokumx (1.4.0) unstable; urgency=low
 
