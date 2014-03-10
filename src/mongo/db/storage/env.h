@@ -60,6 +60,8 @@ namespace mongo {
         void handle_ydb_error(int error);
         MONGO_COMPILER_NORETURN void handle_ydb_error_fatal(int error);
 
+        void do_backtrace();
+
     } // namespace storage
 
 } // namespace mongo
