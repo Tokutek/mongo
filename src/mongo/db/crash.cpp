@@ -29,6 +29,7 @@
 #include "mongo/db/storage/env.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/log.h"
+#include "mongo/util/processinfo.h"
 #include "mongo/util/stacktrace.h"
 #include "mongo/util/version.h"
 
@@ -135,6 +136,25 @@ namespace mongo {
             rawOut(" ");
         }
 
+        static void processInfo() {
+            rawOut("--------------------------------------------------------------------------------");
+            rawOut("Process info:");
+            rawOut(" ");
+            ProcessInfo pi;
+            char buf[1<<12];
+            snprintf(buf, sizeof buf, "OS:   %s %s %s %s",
+                     pi.getOsType().c_str(), pi.getOsName().c_str(), pi.getOsVersion().c_str(), pi.getArch().c_str());
+            rawOut(buf);
+            snprintf(buf, sizeof buf, "NCPU: %d", pi.getNumCores());
+            snprintf(buf, sizeof buf, "VIRT: %d MB", pi.getVirtualMemorySize());
+            rawOut(buf);
+            snprintf(buf, sizeof buf, "RES:  %d MB", pi.getVirtualMemorySize());
+            rawOut(buf);
+            snprintf(buf, sizeof buf, "PHYS: %llu MB", pi.getMemSizeMB());
+            rawOut(buf);
+            rawOut(" ");
+        }
+
         static void parsedOpts() {
             rawOut("--------------------------------------------------------------------------------");
             rawOut("Parsed server options:");
@@ -188,6 +208,7 @@ namespace mongo {
         }
 
         static void extraInfo() {
+            processInfo();
             parsedOpts();
             curOpInfo();
             opDebugInfo();
