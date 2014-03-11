@@ -34,6 +34,7 @@
 #   jobs on the same host at once.  So something's gotta change.
 
 from datetime import datetime
+from itertools import izip
 import glob
 from optparse import OptionParser
 import os
@@ -178,15 +179,21 @@ class mongod(object):
         except Exception, e:
             return False
 
+    def is_mongod_up(self, port=mongod_port):
+        try:
+            self.check_mongo_port(int(port))
+            return True
+        except Exception,e:
+            print >> sys.stderr, e
+            return False
+        
     def did_mongod_start(self, port=mongod_port, timeout=300):
         while timeout > 0:
             time.sleep(1)
-            try:
-                self.check_mongo_port(int(port))
+            is_up = self.is_mongod_up(port)
+            if is_up:
                 return True
-            except Exception,e:
-                print >> sys.stderr, e
-                timeout = timeout - 1
+            timeout = timeout - 1
         print >> sys.stderr, "timeout starting mongod"
         return False
 
@@ -420,8 +427,16 @@ def check_db_hashes(master, slave):
             stats = {'hashes': {'master': mhash, 'slave': shash},
                      'counts':{'master': mCount, 'slave': sCount}}
             try:
-                stats["docs"] = {'master':list(mTestDB[coll].find(limit=10)),
-                                  'slave':list(sTestDB[coll].find(limit=10))}
+                mDocs = list(mTestDB[coll].find().sort("_id", 1))
+                sDocs = list(sTestDB[coll].find().sort("_id", 1))
+                mDiffDocs = list()
+                sDiffDocs = list()
+                for left, right in izip(mDocs, sDocs):
+                    if left != right:
+                        mDiffDocs.append(left)
+                        sDiffDocs.append(right)
+
+                stats["docs"] = {'master': mDiffDocs, 'slave': sDiffDocs }
             except Exception, e:
                 stats["error-docs"] = e;
             screwy_in_slave[coll] = stats
@@ -504,6 +519,10 @@ def runTest(test, testnum, result):
     # the dbtests know how to format themselves nicely, we'll detect if we're running them and if
     # so, we won't mess with the output
     is_test_binary = False
+    test_mongod = mongod()
+    mongod_is_up = test_mongod.is_mongod_up(mongod_port)
+    result["mongod_running_at_start"] = mongod_is_up;
+
     if file_of_commands_mode:
         # smoke.py was invoked like "--mode files --from-file foo",
         # so don't try to interpret the test path too much
@@ -644,15 +663,19 @@ def runTest(test, testnum, result):
     finally:
         tempfile.close()
 
+    is_mongod_still_up = test_mongod.is_mongod_up(mongod_port)
+    if not is_mongod_still_up:
+        print "mongod is not running after test"
+        result["mongod_running_at_end"] = is_mongod_still_up;
+        if start_mongod:
+            raise TestServerFailure(path)
+
+    result["mongod_running_at_end"] = is_mongod_still_up;
+
     if r != 0:
         raise TestExitFailure(path, r)
 
-    if start_mongod:
-        try:
-            c = Connection(host="127.0.0.1", port=int(mongod_port), ssl=use_ssl)
-        except Exception,e:
-            print "Exception from pymongo: ", e
-            raise TestServerFailure(path)
+    print ""
 
 def run_tests(tests):
     # FIXME: some suites of tests start their own mongod, so don't
@@ -711,6 +734,7 @@ def run_tests(tests):
                 sys.stdout.write('1..%d\n' % len(tests))
             for tests_run, test in enumerate(tests):
                 test_result = { "start": time.time() }
+
                 (test_path, use_db) = test
 
                 if test_path.startswith(mongo_repo + os.path.sep):
@@ -740,7 +764,6 @@ def run_tests(tests):
                     test_result["end"] = time.time()
                     test_result["elapsed"] = test_result["end"] - test_result["start"]
                     test_report["results"].append( test_result )
-
                     if small_oplog or small_oplog_rs:
                         master.wait_for_repl()
 
@@ -798,10 +821,15 @@ at the end of testing:"""
             stats = screwy_in_slave[coll]
             print "collection: %s\t (master/slave) hashes: %s/%s counts: %i/%i" % (coll, stats['hashes']['master'], stats['hashes']['slave'], stats['counts']['master'], stats['counts']['slave'])
             if "docs" in stats:
-                print "Master docs (limited):"
-                pprint.pprint(stats["docs"]["master"], indent=2)
-                print "Slave docs (limited):"
-                pprint.pprint(stats["docs"]["slave"], indent=2)
+                if (("master" in stats["docs"] and len(stats["docs"]["master"]) != 0) or
+                    ("slave" in stats["docs"] and len(stats["docs"]["slave"]) != 0)):
+                    print "All docs matched!"
+                else:
+                    print "Different Docs"
+                    print "Master docs:"
+                    pprint.pprint(stats["docs"]["master"], indent=2)
+                    print "Slave docs:"
+                    pprint.pprint(stats["docs"]["slave"], indent=2)
             if "error-docs" in stats:
                 print "Error getting docs to diff:"
                 pprint.pprint(stats["error-docs"])
@@ -1305,6 +1333,7 @@ def main():
         tests = filtered_tests
 
     test_report["start"] = time.time()
+    test_report["mongod_running_at_start"] = mongod().is_mongod_up(mongod_port)
     try:
         run_tests(tests)
     finally:
@@ -1313,9 +1342,10 @@ def main():
         test_report["end"] = time.time()
         test_report["elapsed"] = test_report["end"] - test_report["start"]
         test_report["failures"] = len(losers.keys())
+        test_report["mongod_running_at_end"] = mongod().is_mongod_up(mongod_port)
         if report_file:
             f = open( report_file, "wb" )
-            f.write( json.dumps( test_report ) )
+            f.write( json.dumps( test_report, indent=4, separators=(',', ': ')) )
             f.close()
 
         report()
