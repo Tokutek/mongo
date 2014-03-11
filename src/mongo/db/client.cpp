@@ -179,18 +179,16 @@ namespace mongo {
         // client is being destroyed, if there are any transactions on our stack,
         // abort them, starting with the one in the loadInfo object if it exists.
         _loadInfo.reset();
+
+        {
+            scoped_lock bl(clientsMutex);
+            clients.erase(this);
+        }
+
         if (_transactions) {
             while (_transactions->hasLiveTxn()) {
                 _transactions->abortTxn();
             }
-        }
-
-        if ( inShutdown() ) {
-            return false;
-        }
-        {
-            scoped_lock bl(clientsMutex);
-            clients.erase(this);
         }
 
         return false;
