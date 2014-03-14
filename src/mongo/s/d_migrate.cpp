@@ -690,7 +690,8 @@ namespace mongo {
             }
 
             // This is effectively a "getMore" so it should have a read lock.
-            Client::ReadContext ctx(cmdObj["ns"].Stringdata());
+            LOCK_REASON(lockReason, "sharding: getting first batch while starting clone transaction for migrate");
+            Client::ReadContext ctx(cmdObj["ns"].Stringdata(), lockReason);
             ClientCursor::Pin pin(id);
             ClientCursor *cursor = pin.c();
             massert(17227, "Cursor shouldn't have been deleted", cursor);
