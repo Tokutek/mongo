@@ -699,6 +699,7 @@ namespace mongo {
             BufBuilder &bb = result.bb();
             int lenBefore = bb.len();
             try {
+                Client::WithTxnStack wts(cursor->transactions);
                 BSONObjBuilder cursorObj(result.subobjStart("cursor"));
                 cursorObj.append("id", id);
                 cursorObj.append("ns", cmdObj["ns"].Stringdata());
