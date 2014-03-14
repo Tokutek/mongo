@@ -35,7 +35,7 @@ namespace NamespaceTests {
             shared_ptr<IndexDetailsBase> _idx;
         public:
             IndexDetailsBase &idx() { return *_idx; }
-            Base() : _context(ns()), _idx() {
+            Base() : lk(mongo::unittest::EMPTY_STRING), _context(ns()), _idx() {
             }
             virtual ~Base() {
             }
@@ -961,7 +961,7 @@ namespace NamespaceTests {
             Lock::GlobalWrite lk;
             Client::Context _context;
         public:
-            Base( const char *ns = "unittests.CollectionTests" ) : ns_( ns ) , _transaction(DB_SERIALIZABLE), _context( ns ) {}
+            Base( const char *ns = "unittests.CollectionTests" ) : ns_( ns ) , _transaction(DB_SERIALIZABLE), lk(mongo::unittest::EMPTY_STRING), _context( ns ) {}
             virtual ~Base() {
                 if ( !nsd() )
                     return;
@@ -977,7 +977,7 @@ namespace NamespaceTests {
             }
         protected:
             void create() {
-                Lock::GlobalWrite lk;
+                Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
                 string err;
                 ASSERT( userCreateNS( ns(), fromjson( spec() ), err, false ) );
             }

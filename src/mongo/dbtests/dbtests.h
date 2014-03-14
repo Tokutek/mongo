@@ -28,3 +28,10 @@ using namespace mongo;
 using namespace mongo::unittest;
 using boost::shared_ptr;
 
+namespace mongo {
+namespace unittest {
+
+static const string EMPTY_STRING("");
+
+} // namespace unittest
+} // namespace mongo

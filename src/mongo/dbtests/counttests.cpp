@@ -33,7 +33,7 @@ namespace CountTests {
         Client::Transaction _transaction;
         Client::WriteContext _context;
     public:
-        Base() : _transaction(DB_SERIALIZABLE), _context(ns()) {
+        Base() : _transaction(DB_SERIALIZABLE), _context(ns(), mongo::unittest::EMPTY_STRING) {
             addIndex( fromjson( "{\"a\":1}" ) );
         }
         ~Base() {

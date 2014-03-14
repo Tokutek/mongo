@@ -234,7 +234,7 @@ namespace QueryOptimizerCursorTests {
     public:
         Base() {
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             string err;
             userCreateNS( ns(), BSONObj(), err, false );
@@ -295,7 +295,7 @@ namespace QueryOptimizerCursorTests {
     public:
         void run() {
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             shared_ptr<QueryOptimizerCursor> c =
             dynamic_pointer_cast<QueryOptimizerCursor>
@@ -334,7 +334,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "_id" << 2 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSONObj() );
             ASSERT_EQUALS( 2, itcount() );
@@ -351,7 +351,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "_id" << GT << 0 << "a" << GT << 0 ) );
             ASSERT( ok() );
@@ -370,7 +370,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "_id" << GT << 5 << LT << 4 << "a" << GT << 0 ) );
             ASSERT( !ok() );
@@ -388,7 +388,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
 
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "_id" << GT << 0 << "a" << GT << 0 ) );
             ASSERT( ok() );
@@ -414,7 +414,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
 
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "_id" << GT << 5 << "a" << GT << 5 ) );
             ASSERT( ok() );
@@ -440,7 +440,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
 
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
 
             setQueryOptimizerCursor( BSON( "_id" << GT << -1 << "a" << GT << -1 ) );
@@ -464,7 +464,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "_id" << 500 << "a" << BSON_ARRAY( 0 << 300 ) ) );
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "_id" << GT << -1 << "a" << GT << -1 ) );
             ASSERT_EQUALS( 102, itcount() );
@@ -482,7 +482,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "_id" << 101 << "a" << 600 ) );
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "_id" << GT << -1 << "a" << LT << 500 ) );
             ASSERT_EQUALS( 101, itcount() );
@@ -501,7 +501,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "_id" << 202 << "a" << BSON_ARRAY( 2 << 3 ) ) );
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "_id" << GT << -1 << "a" << GT << 0) );
             ASSERT_EQUALS( 102, itcount() );
@@ -517,7 +517,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "_id" << 1 << "a" << 1 ) );
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "$or" << BSON_ARRAY( BSON( "_id" << 0 ) << BSON( "a" << 1 ) ) ) );
             ASSERT_EQUALS( BSON( "_id" << 0 << "a" << 0 ), current() );
@@ -536,7 +536,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "_id" << 1 << "a" << 1 ) );
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "$or" << BSON_ARRAY( BSON( "_id" << -1 ) << BSON( "a" << 1 ) ) ) );
             ASSERT_EQUALS( BSON( "_id" << 0 << "a" << 1 ), current() );
@@ -555,7 +555,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "_id" << 1 << "a" << 1 ) );
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "$or" << BSON_ARRAY( BSON( "_id" << 0 ) << BSON( "_id" << -1 ) << BSON( "a" << 1 ) ) ) );
             ASSERT_EQUALS( BSON( "_id" << 0 << "a" << 1 ), current() );
@@ -574,7 +574,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "_id" << 1 << "a" << 1 ) );
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "$or" << BSON_ARRAY( BSON( "_id" << 2 ) << BSON( "_id" << 4 ) << BSON( "_id" << 0 ) << BSON( "_id" << -1 ) << BSON( "_id" << 6 ) << BSON( "a" << 1 ) << BSON( "_id" << 9 ) ) ) );
             ASSERT_EQUALS( BSON( "_id" << 0 << "a" << 1 ), current() );
@@ -600,7 +600,7 @@ namespace QueryOptimizerCursorTests {
             }
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "$or" << BSON_ARRAY( BSON( "a" << 0 ) << BSON( "a" << 1 ) << BSON( "_id" << GTE << 120 << "a" << GT << 1 ) ) ) );
             for( int i = 0; i < 120; ++i ) {
@@ -625,7 +625,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.insert( ns(), BSON( "_id" << i ) );   
             }
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "$or" << BSON_ARRAY( BSON( "_id" << LT << 101 ) << BSON( "_id" << 101 ) ) ) );
             for( int i = 0; i < 102; ++i ) {
@@ -644,7 +644,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.insert( ns(), BSON( "_id" << i ) );   
             }
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "$or" << BSON_ARRAY( BSON( "_id" << LT << 100 ) << BSON( "_id" << 100 ) ) ) );
             for( int i = 0; i < 101; ++i ) {
@@ -663,7 +663,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.insert( ns(), BSON( "_id" << i ) );   
             }
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "$or" << BSON_ARRAY( BSON( "_id" << LT << 102 ) << BSON( "_id" << 102 ) ) ) );
             for( int i = 0; i < 103; ++i ) {
@@ -686,7 +686,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             shared_ptr< Cursor > c = newQueryOptimizerCursor( ns(), BSON( "_id" << GT << 5 << "a" << GT << 5 ) );
             ASSERT( c->ok() );
@@ -765,7 +765,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "_id" << "ba" ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             shared_ptr< Cursor > c = newQueryOptimizerCursor( ns(), fromjson( "{_id:/a/}" ) );
             ASSERT( c->ok() );
@@ -799,7 +799,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             shared_ptr< Cursor > c = newQueryOptimizerCursor( ns(), BSON( "$or" << BSON_ARRAY( BSON( "_id" << LT << 300 ) << BSON( "a" << 1 ) ) ) );
             for( int i = 0; i < 151; ++i ) {
@@ -821,7 +821,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             shared_ptr< Cursor > c = newQueryOptimizerCursor( ns(), BSON( "a" << GT << 1 << LT << 5 ) );
             // Two sided bounds work.
@@ -838,7 +838,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "a" << GT << 5 << LT << 3 ) );
             // Multi key bounds work.
@@ -860,7 +860,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "b" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             shared_ptr<Cursor> c = newQueryOptimizerCursor( ns(), BSON( "a" << 0 << "b" << 0 ) );
             
@@ -909,7 +909,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "b" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             shared_ptr<Cursor> c = newQueryOptimizerCursor( ns(), BSON( "a" << GTE << -1 << LTE << 0 << "b" << GTE << -1 << LTE << 0 ) );
             while( c->advance() );
@@ -941,7 +941,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "_id" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             shared_ptr<Cursor> c = newQueryOptimizerCursor( ns(), BSON( "$or" << BSON_ARRAY( BSON( "_id" << GT << 0 ) << BSON( "_id" << 1 ) ) ) );
             ASSERT( c->ok() );
@@ -960,7 +960,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             shared_ptr<Cursor> c = newQueryOptimizerCursor( ns(), BSON( "$or" << BSON_ARRAY( BSON( "_id" << LT << 140 ) << BSON( "_id" << 145 ) << BSON( "a" << 145 ) ) ) );
             
@@ -991,7 +991,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "a" << GT << -1 ) );
             ASSERT_EQUALS( 149, itcount() );
@@ -1008,7 +1008,7 @@ namespace QueryOptimizerCursorTests {
             }
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             shared_ptr<Cursor> c = newQueryOptimizerCursor( ns(), BSON( "$or" << BSON_ARRAY( BSON( "_id" << LTE << 147 ) << BSON( "_id" << 148 ) << BSON( "_id" << 149 ) ) ) );
             for( int i = 0; i < 150; ++i ) {
@@ -1029,7 +1029,7 @@ namespace QueryOptimizerCursorTests {
             }
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSONObj(), BSON( "_id" << 1 ) );
             
@@ -1050,7 +1050,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "_id" << 1 << "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "_id" << GTE << 0 << "a" << GTE << 0 ), BSON( "_id" << 1 ) );
             
@@ -1071,7 +1071,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "a" << GTE << 3 ), BSON( "_id" << 1 ) );
             
@@ -1097,7 +1097,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "_id" << GT << 0 ), BSON( "$natural" << 1 ) );
             
@@ -1116,7 +1116,7 @@ namespace QueryOptimizerCursorTests {
     public:
         void run() {
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             ASSERT( !newQueryOptimizerCursor( ns(), BSONObj(), BSON( "a" << 1 ) ).get() );
             transaction.commit();
@@ -1135,7 +1135,7 @@ namespace QueryOptimizerCursorTests {
             ASSERT( _cli.query( ns(), QUERY( "a" << 2 ).sort( "b" ) )->more() );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             shared_ptr<Cursor> c = newQueryOptimizerCursor( ns(), BSON( "a" << 2 ),
                                                            BSON( "b" << 1 ) );
@@ -1157,7 +1157,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "b" << 1 ) );
             
             Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-            Client::ReadContext ctx( ns() );
+            Client::ReadContext ctx( ns(), mongo::unittest::EMPTY_STRING );
             setQueryOptimizerCursor( BSON( "_id" << GT << 0 << "b" << GT << 0 ) );
             ASSERT( ok() );
             cc().curop()->kill();
@@ -1176,7 +1176,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "b" << 1 ) );
             
             Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-            Client::ReadContext ctx( ns() );
+            Client::ReadContext ctx( ns(), mongo::unittest::EMPTY_STRING );
             shared_ptr<Cursor> c = newQueryOptimizerCursor( ns(), BSON( "$or" << BSON_ARRAY( BSON( "_id" << GT << 0 ) << BSON( "b" << GT << 0 ) ) ) );
             ASSERT( c->ok() );
             cc().curop()->kill();
@@ -1200,7 +1200,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.insert( ns(), BSON( "a" << 1 << "b" << 1 ) );
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
-                    Lock::GlobalWrite lk;
+                    Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
 
                     Client::Context ctx( ns() );
                     ClientCursor::Holder p
@@ -1225,7 +1225,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.insert( ns(), BSON( "a" << 1 << "b" << 1 ) );
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
-                    Lock::GlobalWrite lk;
+                    Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
                     Client::Context ctx( ns() );
                     ClientCursor::Holder p
                             ( new ClientCursor
@@ -1253,7 +1253,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.insert( ns(), BSON( "a" << 1 << "b" << 1 ) );
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
-                    Lock::GlobalWrite lk;
+                    Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
 
                     Client::Context ctx( ns() );
                     ClientCursor::Holder p
@@ -1283,7 +1283,7 @@ namespace QueryOptimizerCursorTests {
                 {
                     Client::Transaction transaction(DB_SERIALIZABLE);
                     {
-                        Client::WriteContext ctx(ns());
+                        Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
                         ClientCursor::Holder p
                             ( new ClientCursor
                              ( QueryOption_NoCursorTimeout,
@@ -1309,7 +1309,7 @@ namespace QueryOptimizerCursorTests {
     public:
         void run() {
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx(ns());
+            Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
             shared_ptr<Cursor> c =
             newQueryOptimizerCursor( ns(), BSONObj(), BSON( "a" << 1 ),
                                     QueryPlanSelectionPolicy::any(), false );
@@ -1337,7 +1337,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.insert( ns(), BSON( "a" << 3 << "b" << 10 ) );
             }            
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx(ns());
+            Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
             shared_ptr<Cursor> c =
             newQueryOptimizerCursor( ns(), BSON( "a" << LT << 3 << "b" << 1 ), BSON( "a" << 1 ),
                                     QueryPlanSelectionPolicy::any(), false );
@@ -1365,7 +1365,7 @@ namespace QueryOptimizerCursorTests {
             }
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx(ns());
+            Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
             shared_ptr<Cursor> c =
             newQueryOptimizerCursor( ns(), BSON( "a" << 1 ), BSON( "b" << 1 ),
                                     QueryPlanSelectionPolicy::any(), false );
@@ -1386,7 +1386,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "a" << 1 << "b" << 10 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx(ns());
+            Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
             shared_ptr<ParsedQuery> parsedQuery
                     ( new ParsedQuery( ns(), 0, 0, 0, BSONObj(), BSON( "_id" << 0 << "a" << 1 ) ) );
             shared_ptr<QueryOptimizerCursor> c =
@@ -1425,7 +1425,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "a" << 2 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx(ns());
+            Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
             shared_ptr<ParsedQuery> parsedQuery
                     ( new ParsedQuery( ns(), 0, 0, 0, BSONObj(), BSON( "_id" << 0 << "a" << 1 ) ) );
             shared_ptr<QueryOptimizerCursor> c =
@@ -1493,7 +1493,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             _cli.ensureIndex( ns(), BSON( "b" << 1 ) );
 
-            Lock::DBWrite lk(ns());
+            Lock::DBWrite lk(ns(), mongo::unittest::EMPTY_STRING);
             {
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 Client::Context ctx( ns() );
@@ -1627,7 +1627,7 @@ namespace QueryOptimizerCursorTests {
             }
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx(ns());
+            Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
             nPlans( 2, BSON( "a" << 1 << "b" << 1 ), BSON( "b" << 1 ) );
             setCursor( BSON( "a" << 1 << "b" << 1 ), BSON( "b" << 1 ) );
             checkCursor( true, false );
@@ -1717,7 +1717,7 @@ namespace QueryOptimizerCursorTests {
             _bPreferableQuery = BSON( "a" << GTE << 0 << LTE << 100 << "b" << 0 );
 
             Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-            Client::ReadContext ctx( ns() );
+            Client::ReadContext ctx( ns() , mongo::unittest::EMPTY_STRING);
             
             // If abortOutOfOrderPlans() is not set, other plans will be attempted.
             recordAIndex();
@@ -1739,7 +1739,7 @@ namespace QueryOptimizerCursorTests {
         /** Record the a:1 index for the query pattern of interest. */
         void recordAIndex() const {
             Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-            Client::ReadContext ctx( ns() );
+            Client::ReadContext ctx( ns() , mongo::unittest::EMPTY_STRING);
             getCollection(ns())->getQueryCache().clearQueryCache();
             shared_ptr<QueryOptimizerCursor> c = getCursor( _aPreferableQuery, BSON( "a" << 1 ) );
             while( c->advance() );
@@ -1785,7 +1785,7 @@ namespace QueryOptimizerCursorTests {
             }
 
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx(ns());
+            Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
             
             shared_ptr<QueryOptimizerCursor> c =
             getCursor( fromjson( "{$or:[{a:{$lte:2}},{a:{$gte:2}},{a:9}]}" ), BSONObj() );
@@ -1815,7 +1815,7 @@ namespace QueryOptimizerCursorTests {
             }
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx(ns());
+            Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
             
             BSONObj query =
             BSON(
@@ -1864,7 +1864,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "b" << 1 << "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx(ns());
+            Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
 
             // This $or query will scan index a:1,b:1 then b:1,a:1.  If the key pattern is specified
             // incorrectly for the second clause, matching will fail.
@@ -1883,7 +1883,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), fromjson( "{ a:[ { b:1 } ] }" ) );
 
             Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-            Client::ReadContext ctx( ns() );
+            Client::ReadContext ctx( ns() , mongo::unittest::EMPTY_STRING);
             setQueryOptimizerCursor( BSON( "a.b" << 1 ) );
             MatchDetails details;
             details.requestElemMatchKey();
@@ -1905,7 +1905,7 @@ namespace QueryOptimizerCursorTests {
             virtual ~Base() {}
             void run() {
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Lock::GlobalWrite lk;
+                Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
                 Client::Context ctx( ns() );
                 if ( expectException() ) {
                     ASSERT_THROWS
@@ -2045,7 +2045,7 @@ namespace QueryOptimizerCursorTests {
             void run() {
                 _cli.insert( ns(), BSON( "_id" << 5 ) );
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Lock::GlobalWrite lk;
+                Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
                 Client::Context ctx( ns() );
                 shared_ptr<Cursor> c = getOptimizedCursor( ns(), BSONObj(), BSON( "b" << 1 ) );
                 ASSERT( !c );
@@ -2057,7 +2057,7 @@ namespace QueryOptimizerCursorTests {
         public:
             void run() {
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Client::WriteContext ctx(ns());
+                Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
                 shared_ptr<ParsedQuery> parsedQuery
                         ( new ParsedQuery( ns(), 0, 0, 0,
                                           BSON( "$query" << BSONObj() <<
@@ -2081,7 +2081,7 @@ namespace QueryOptimizerCursorTests {
                 // record {_id:1} index for this query
                 ASSERT( _cli.query( ns(), QUERY( "_id" << GT << 0 << "b" << GT << 0 ).sort( "b" ) )->more() );
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Lock::GlobalWrite lk;
+                Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
                 Client::Context ctx( ns() );
                 shared_ptr<Cursor> c = getOptimizedCursor( ns(), BSON( "_id" << GT << 0 << "b" << GT << 0 ), BSON( "b" << 1 ) );
                 // {_id:1} requires scan and order, so {b:1} must be chosen.
@@ -2101,7 +2101,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.ensureIndex( ns(), BSON( "_id" << 1 << "q" << 1 ) );
                 ASSERT( _cli.query( ns(), QUERY( "_id" << GT << 0 ) )->more() );
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Lock::GlobalWrite lk;
+                Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
                 Client::Context ctx( ns() );
                 // Check the plan that was recorded for this query.
                 ASSERT_EQUALS( BSON( "_id" << 1 ), cachedIndexForQuery( BSON( "_id" << GT << 0 ) ) );
@@ -2122,7 +2122,7 @@ namespace QueryOptimizerCursorTests {
                 // Need to use a range on _id so that the queryByIdHack path is not taken.
                 ASSERT( _cli.query( ns(), QUERY( "q" << 1 << "_id" << GTE << 1 << LTE << 1 ) )->more() );
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Lock::GlobalWrite lk;
+                Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
                 Client::Context ctx( ns() );
                 ASSERT_EQUALS( BSON( "_id" << 1 ),
                               cachedIndexForQuery( BSON( "q" << 1 << "_id" << 1 ) ) );
@@ -2298,7 +2298,7 @@ namespace QueryOptimizerCursorTests {
             }
         private:
             static void checkInvalidQueryAssertions() {
-                Client::ReadContext ctx( ns() );
+                Client::ReadContext ctx( ns() , mongo::unittest::EMPTY_STRING);
                 
                 // An invalid query generating a single query plan asserts.
                 BSONObj invalidQuery = fromjson( "{$and:[{$atomic:true}]}" );
@@ -2347,7 +2347,7 @@ namespace QueryOptimizerCursorTests {
             }
         private:
             bool hasMatcher( const BSONObj& query, bool requestMatcher ) {
-                Client::ReadContext ctx( ns() );
+                Client::ReadContext ctx( ns() , mongo::unittest::EMPTY_STRING);
                 shared_ptr<Cursor> cursor = getOptimizedCursor( ns(),
                                                                 query,
                                                                 BSONObj(),
@@ -2365,7 +2365,7 @@ namespace QueryOptimizerCursorTests {
         class MatcherValidate : public Base {
         public:
             void run() {
-                Client::ReadContext ctx( ns() );
+                Client::ReadContext ctx( ns() , mongo::unittest::EMPTY_STRING);
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
                     // An assertion is triggered because { a:undefined } is an invalid query, even
@@ -2392,7 +2392,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             }
             void run() {
-                Client::ReadContext ctx( ns() );
+                Client::ReadContext ctx( ns() , mongo::unittest::EMPTY_STRING);
                 shared_ptr<Cursor> cursor = getOptimizedCursor( ns(),
                                                                 BSON( "a" << 1 ),
                                                                 BSONObj(),
@@ -2414,7 +2414,7 @@ namespace QueryOptimizerCursorTests {
                 
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
-                    Client::WriteContext ctx(ns());
+                    Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
                     BSONObj query = BSON( "a" << 1 << "b" << 1 );
                     shared_ptr<Cursor> c =
                     getOptimizedCursor( ns(), query );
@@ -2448,7 +2448,7 @@ namespace QueryOptimizerCursorTests {
                 
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
-                    Client::WriteContext ctx(ns());
+                    Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
                     shared_ptr<ParsedQuery> parsedQuery
                             ( new ParsedQuery( ns(), 0, 0, 0,
                                               BSON( "$query" << query() << "$explain" << true ),
@@ -2897,7 +2897,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.ensureIndex( ns(), BSON( "c" << 1 ) );
                 
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Client::WriteContext ctx(ns());
+                Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
 
                 shared_ptr<Cursor> aCursor
                 ( getOptimizedCursor( ns(), BSON( "a" << 1 ) ) );
@@ -2933,7 +2933,7 @@ namespace QueryOptimizerCursorTests {
         public:
             void run() {
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Lock::GlobalWrite lk;
+                Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
 
                 Client::Context ctx( ns() );
                 

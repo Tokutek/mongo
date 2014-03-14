@@ -89,7 +89,7 @@ namespace mongo {
             bool noop;
         public:
             // timeoutms is only for writelocktry -- deprecated -- do not use
-            GlobalWrite(const string &context = "", const int timeoutms = -1);
+            GlobalWrite(const string &context, const int timeoutms = -1);
             virtual ~GlobalWrite();
         };
         class GlobalRead : public ScopedLock { // recursive is ok
@@ -97,7 +97,7 @@ namespace mongo {
             bool noop;
         public:
             // timeoutms is only for readlocktry -- deprecated -- do not use
-            GlobalRead(const string &context = "", const int timeoutms = -1);
+            GlobalRead(const string &context, const int timeoutms = -1);
             virtual ~GlobalRead();
         };
 
@@ -120,7 +120,7 @@ namespace mongo {
             void unlockDB();
 
         public:
-            DBWrite(const StringData& dbOrNs, const string &context = "");
+            DBWrite(const StringData& dbOrNs, const string &context);
             virtual ~DBWrite();
 
             class UpgradeToExclusive : private boost::noncopyable {
@@ -161,7 +161,7 @@ namespace mongo {
         public:
             void lockDB(const string &ns, const string &context);
             void unlockDB();
-            DBRead(const StringData& dbOrNs, const string &context = "");
+            DBRead(const StringData& dbOrNs, const string &context);
             virtual ~DBRead();
 
         private:
@@ -179,7 +179,7 @@ namespace mongo {
         bool _got;
         scoped_ptr<Lock::GlobalRead> _dbrlock;
     public:
-        readlocktry(int tryms, const string &context = "");
+        readlocktry(int tryms, const string &context);
         ~readlocktry();
         bool got() const { return _got; }
     };
@@ -188,7 +188,7 @@ namespace mongo {
         bool _got;
         scoped_ptr<Lock::GlobalWrite> _dbwlock;
     public:
-        writelocktry(int tryms, const string &context = "");
+        writelocktry(int tryms, const string &context);
         ~writelocktry();
         bool got() const { return _got; }
     };

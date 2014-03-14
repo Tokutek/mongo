@@ -46,7 +46,7 @@ namespace QueryTests {
         Lock::GlobalWrite lk;
         Client::Context _context;
     public:
-        Base() : _transaction(DB_SERIALIZABLE), _context( ns() ) {
+        Base() : _transaction(DB_SERIALIZABLE), lk(mongo::unittest::EMPTY_STRING), _context( ns() ) {
             addIndex( fromjson( "{\"a\":1}" ) );
         }
         ~Base() {
@@ -176,7 +176,7 @@ namespace QueryTests {
 
             {
                 // Check internal server handoff to getmore.
-                Lock::DBWrite lk(ns);
+                Lock::DBWrite lk(ns, mongo::unittest::EMPTY_STRING);
                 Client::Context ctx( ns );
                 ClientCursor::Pin clientCursor( cursorId );
                 ASSERT( clientCursor.c()->pq );
@@ -516,7 +516,7 @@ namespace QueryTests {
         }
         void run() {
             const char *ns = "unittests.querytests.OplogReplaySlaveReadTill";
-            Lock::DBWrite lk(ns);
+            Lock::DBWrite lk(ns, mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns );
             
             BSONObj info;
@@ -939,7 +939,7 @@ namespace QueryTests {
     class DirectLocking : public ClientBase {
     public:
         void run() {
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( "unittests.DirectLocking" );
             client().remove( "a.b", BSONObj() );
             ASSERT_EQUALS( "unittests", cc().database()->name() );
@@ -1059,7 +1059,7 @@ namespace QueryTests {
             string err;
 
             {
-                Client::WriteContext ctx( "unittests" );
+                Client::WriteContext ctx( "unittests", mongo::unittest::EMPTY_STRING );
                 Client::Transaction txn(DB_SERIALIZABLE);
                 // note that extents are always at least 4KB now - so this will get rounded up a bit.
                 ASSERT( userCreateNS( ns() , fromjson( "{ capped : true , size : 2000 }" ) , err , false ) );
@@ -1095,7 +1095,7 @@ namespace QueryTests {
         }
 
         void insertNext() {
-            Client::ReadContext ctx("unittests");
+            Client::ReadContext ctx("unittests", mongo::unittest::EMPTY_STRING);
             Client::Transaction txn(DB_SERIALIZABLE);
             BSONObjBuilder b;
             b.appendOID("_id", 0, true);
@@ -1112,7 +1112,7 @@ namespace QueryTests {
         }
 
         void run() {
-            Client::WriteContext ctx( "unittests" );
+            Client::WriteContext ctx( "unittests", mongo::unittest::EMPTY_STRING );
 
             for ( int i=0; i<1000; i++ ) {
                 insert( ns() , BSON( "_id" << i << "x" << i * 2 ) );
@@ -1200,7 +1200,7 @@ namespace QueryTests {
     public:
         CollectionInternalBase( const char *nsLeaf ) :
           CollectionBase( nsLeaf ),
-          _lk( ns() ),
+          _lk( ns(), mongo::unittest::EMPTY_STRING ),
           _ctx( ns() ) {
         }
     private:
@@ -1257,7 +1257,7 @@ namespace QueryTests {
             long long cursorId = cursor->getCursorId();
             
             {
-                Client::WriteContext ctx( ns() );
+                Client::WriteContext ctx( ns(), mongo::unittest::EMPTY_STRING );
                 ClientCursor::Pin pinCursor( cursorId );
   
                 ASSERT_THROWS( client().killCursor( cursorId ), MsgAssertionException );
