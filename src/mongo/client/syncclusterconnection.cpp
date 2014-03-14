@@ -72,7 +72,10 @@ namespace mongo {
         for ( size_t i=0; i<_conns.size(); i++ )
             delete _conns[i];
         _conns.clear();
-        verify(_txnNestLevel == 0);
+        if (_txnNestLevel != 0) {
+            warning() << "SyncClusterConnection: txnNestLevel is " << _txnNestLevel
+                      << " when closing the connection, did a commit or rollback fail?" << endl;
+        }
     }
 
     bool SyncClusterConnection::prepare( string& errmsg ) {
