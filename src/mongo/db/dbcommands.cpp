@@ -935,7 +935,7 @@ namespace mongo {
 
             {
                 LOCK_REASON(lockReason, "query after reIndex");
-                Client::ReadContext ctx(dbname);
+                Client::ReadContext ctx(dbname, lockReason);
                 Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
                 // Capture and return the state of indexes as a result of reindexing.
                 BSONArrayBuilder b;

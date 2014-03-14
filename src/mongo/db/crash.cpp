@@ -216,21 +216,75 @@ namespace mongo {
 
     } // namespace crashdump
 
-    void dumpCrashInfo(const StringData &reason) {
+    void dumpCrashInfo(const StringData &reason) try {
         crashdump::basicInfo();
         char buf[1<<12];
         strncpy(buf, reason.rawData(), reason.size());
         buf[reason.size()] = '\0';
         crashdump::reason(buf);
         crashdump::extraInfo();
+    } catch (DBException &e) {
+        // can't rethrow here, might be crashing
+        try {
+            rawOut(" ");
+            rawOut("Unhandled DBException while dumping crash info:");
+            rawOut(e.what());
+            char buf[1<<12];
+            snprintf(buf, 1<<12, "code: %d", e.getCode());
+            rawOut(buf);
+        } catch (...) {
+            // uh-oh
+        }
+    } catch (std::exception &e) {
+        try {
+            rawOut(" ");
+            rawOut("Unhandled exception while dumping crash info:");
+            rawOut(e.what());
+        } catch (...) {
+            // uh-oh
+        }
+    } catch (...) {
+        try {
+            rawOut(" ");
+            rawOut("Unhandled unknown exception while dumping crash info.");
+        } catch (...) {
+            // whoa, nelly
+        }
     }
 
-    void dumpCrashInfo(const DBException &e) {
+    void dumpCrashInfo(const DBException &e) try {
         crashdump::basicInfo();
         char buf[1<<12];
         snprintf(buf, 1<<12, "DBException code: %d what: %s", e.getCode(), e.what());
         crashdump::reason(buf);
         crashdump::extraInfo();
+    } catch (DBException &e) {
+        // can't rethrow here, might be crashing
+        try {
+            rawOut(" ");
+            rawOut("Unhandled DBException while dumping crash info:");
+            rawOut(e.what());
+            char buf[1<<12];
+            snprintf(buf, 1<<12, "code: %d", e.getCode());
+            rawOut(buf);
+        } catch (...) {
+            // uh-oh
+        }
+    } catch (std::exception &e) {
+        try {
+            rawOut(" ");
+            rawOut("Unhandled exception while dumping crash info:");
+            rawOut(e.what());
+        } catch (...) {
+            // uh-oh
+        }
+    } catch (...) {
+        try {
+            rawOut(" ");
+            rawOut("Unhandled unknown exception while dumping crash info.");
+        } catch (...) {
+            // whoa, nelly
+        }
     }
 
 } // namespace mongo

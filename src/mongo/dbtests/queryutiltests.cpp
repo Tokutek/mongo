@@ -1615,7 +1615,7 @@ namespace QueryUtilTests {
             Lock::DBWrite _lk;
             Client::Context _ctx;
         public:
-            IndexBase() : _lk(ns()), _ctx( ns() ) , indexNum_( 0 ) {
+            IndexBase() : _lk(ns(), mongo::unittest::EMPTY_STRING), _ctx( ns() ) , indexNum_( 0 ) {
                 string err;
                 // TODO: Create this index
             }

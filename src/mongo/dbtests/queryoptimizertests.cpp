@@ -100,7 +100,7 @@ namespace QueryOptimizerTests {
 
         class Base {
         public:
-            Base() : _transaction(DB_SERIALIZABLE), _ctx( ns() ) , indexNum_( 0 ) {
+            Base() : _transaction(DB_SERIALIZABLE), lk_(mongo::unittest::EMPTY_STRING), _ctx( ns() ) , indexNum_( 0 ) {
                 string err;
                 userCreateNS( ns(), BSONObj(), err, false );
             }
@@ -878,7 +878,7 @@ namespace QueryOptimizerTests {
 
         class Base {
         public:
-            Base() : _transaction(DB_SERIALIZABLE), _context( ns() ) {
+            Base() : _transaction(DB_SERIALIZABLE), lk_(mongo::unittest::EMPTY_STRING), _context( ns() ) {
                 string err;
                 userCreateNS( ns(), BSONObj(), err, false );
             }
@@ -1432,7 +1432,7 @@ namespace QueryOptimizerTests {
 
     class Base {
     public:
-        Base() : _transaction(DB_SERIALIZABLE), _ctx( ns() ) {
+        Base() : _transaction(DB_SERIALIZABLE), lk_(mongo::unittest::EMPTY_STRING), _ctx( ns() ) {
             string err;
             userCreateNS( ns(), BSONObj(), err, false );
         }
