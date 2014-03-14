@@ -1208,7 +1208,7 @@ namespace mongo {
 
                 try {
                     scoped_ptr<ScopedDbConnection> conn(ScopedDbConnection::getInternalScopedDbConnection(shardingState.getConfigServer(), 10.0));
-                    RemoteTransaction txn(conn->conn(), "serializable");
+                    scoped_ptr<RemoteTransaction> txn(new RemoteTransaction(conn->conn(), "serializable"));
 
                     // Check the precondition
                     BSONObjBuilder b;
@@ -1240,6 +1240,8 @@ namespace mongo {
                     catch (DBException &e) {
                         warning() << e << migrateLog;
                         error() << "moveChunk error updating the chunk being moved" << migrateLog;
+                        txn.reset();
+                        conn->done();
                         throw e;
                     }
 
@@ -1276,6 +1278,8 @@ namespace mongo {
                         catch (DBException &e) {
                             warning() << e << migrateLog;
                             error() << "moveChunk error updating chunk on the FROM shard" << migrateLog;
+                            txn.reset();
+                            conn->done();
                             throw e;
                         }
                     }
@@ -1283,7 +1287,8 @@ namespace mongo {
                         log() << "moveChunk moved last chunk out for collection '" << ns << "'" << migrateLog;
                     }
 
-                    txn.commit();
+                    txn->commit();
+                    txn.reset();
                     conn->done();
                 }
                 catch (DBException& e) {
