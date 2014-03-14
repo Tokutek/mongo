@@ -138,7 +138,7 @@ namespace ReplSetTests {
         DBDirectClient *client() const { return &client_; }
 
         static void insert( const BSONObj &o, bool god = false ) {
-            Lock::DBWrite lk(ns());
+            Lock::DBWrite lk(ns(), mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             insertObject( ns(), o );
         }
@@ -148,7 +148,7 @@ namespace ReplSetTests {
         }
 
         void drop() {
-            Client::WriteContext c(ns());
+            Client::WriteContext c(ns(), mongo::unittest::EMPTY_STRING);
             string errmsg;
             BSONObjBuilder result;
 
@@ -216,7 +216,7 @@ namespace ReplSetTests {
             return o;
         }
     public:
-        CappedInitialSync() : _cappedNs("unittests.foo.bar"), _lk(_cappedNs) {
+        CappedInitialSync() : _cappedNs("unittests.foo.bar"), _lk(_cappedNs, mongo::unittest::EMPTY_STRING) {
             dropCapped();
             create();
         }
@@ -237,7 +237,7 @@ namespace ReplSetTests {
         }
 
         void run() {
-            Lock::DBWrite lk(_cappedNs);
+            Lock::DBWrite lk(_cappedNs, mongo::unittest::EMPTY_STRING);
 
             BSONObj op = updateFail();
 
@@ -321,7 +321,7 @@ namespace ReplSetTests {
                    int version = 0) {
             OpTime ts;
             {
-                Lock::GlobalWrite lk;
+                Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
                 ts = OpTime::_now();
             }
 

@@ -105,37 +105,37 @@ namespace ThreadedTests {
             sleepmillis(0);
             for( int i = 0; i < N; i++ ) {
                 if( i % 7 == 0 ) {
-                    Lock::GlobalRead r; // nested test
-                    Lock::GlobalRead r2;
+                    Lock::GlobalRead r(mongo::unittest::EMPTY_STRING); // nested test
+                    Lock::GlobalRead r2(mongo::unittest::EMPTY_STRING);
                 }
                 else if( i % 7 == 1 ) {
-                    Lock::GlobalRead r;
+                    Lock::GlobalRead r(mongo::unittest::EMPTY_STRING);
                     ASSERT( Lock::isReadLocked() );
                     ASSERT( Lock::isLocked() );
                 }
                 else if( i % 7 == 4 && 
                          tnumber == 1 /*only one upgrader legal*/ ) {
-                    Lock::GlobalWrite w;
+                    Lock::GlobalWrite w(mongo::unittest::EMPTY_STRING);
                     ASSERT( Lock::isW() );
                     ASSERT( Lock::isW() );
                 }
                 else if( i % 7 == 2 ) {
-                    Lock::GlobalWrite w;
+                    Lock::GlobalWrite w(mongo::unittest::EMPTY_STRING);
                     ASSERT( Lock::isW() );
                     ASSERT( Lock::isW() );
                 }
                 else if( i % 7 == 3 ) {
-                    Lock::GlobalWrite w;
-                    Lock::GlobalRead r;
+                    Lock::GlobalWrite w(mongo::unittest::EMPTY_STRING);
+                    Lock::GlobalRead r(mongo::unittest::EMPTY_STRING);
                     ASSERT( Lock::isW() );
                     ASSERT( Lock::isW() );
                 }
                 else if( i % 7 == 5 ) {
                     {
-                        Lock::DBRead r("foo");
+                        Lock::DBRead r("foo", mongo::unittest::EMPTY_STRING);
                     }
                     {
-                        Lock::DBRead r("bar");
+                        Lock::DBRead r("bar", mongo::unittest::EMPTY_STRING);
                     }
                 }
                 else if( i % 7 == 6 ) {
@@ -143,45 +143,45 @@ namespace ThreadedTests {
                         int q = i % 11;
                         if( q == 0 ) { 
                             char what = 'r';
-                            Lock::DBRead r("foo");
+                            Lock::DBRead r("foo", mongo::unittest::EMPTY_STRING);
                             ASSERT( Lock::isLocked() == what && Lock::atLeastReadLocked("foo") );
                             ASSERT( !Lock::nested() );
-                            Lock::DBRead r2("foo");
+                            Lock::DBRead r2("foo", mongo::unittest::EMPTY_STRING);
                             ASSERT( Lock::nested() );
                             ASSERT( Lock::isLocked() == what && Lock::atLeastReadLocked("foo") );
-                            Lock::DBRead r3("local");
+                            Lock::DBRead r3("local", mongo::unittest::EMPTY_STRING);
                             ASSERT( Lock::isLocked() == what && Lock::atLeastReadLocked("foo") );
                             ASSERT( Lock::isLocked() == what && Lock::atLeastReadLocked("local") );
                         }
                         else if( q == 1 ) {
                             // test locking local only -- with no preceeding lock
                             { 
-                                Lock::DBRead x("local"); 
+                                Lock::DBRead x("local", mongo::unittest::EMPTY_STRING); 
                                 //Lock::DBRead y("q");
                             }
                             { 
-                                Lock::DBWrite x("local"); 
+                                Lock::DBWrite x("local", mongo::unittest::EMPTY_STRING); 
                             }
                         } else if( q == 1 ) {
-                            { Lock::DBRead  x("admin"); }
-                            { Lock::DBWrite x("admin"); }
+                            { Lock::DBRead  x("admin", mongo::unittest::EMPTY_STRING); }
+                            { Lock::DBWrite x("admin", mongo::unittest::EMPTY_STRING); }
                         } else if( q == 2 ) { 
-                            /*Lock::DBWrite x("foo");
-                            Lock::DBWrite y("admin");*/
+                            /*Lock::DBWrite x("foo", mongo::unittest::EMPTY_STRING);
+                            Lock::DBWrite y("admin", mongo::unittest::EMPTY_STRING);*/
                         }
                         else if( q == 3 ) {
-                            Lock::DBWrite x("foo");
-                            Lock::DBRead y("admin");
+                            Lock::DBWrite x("foo", mongo::unittest::EMPTY_STRING);
+                            Lock::DBRead y("admin", mongo::unittest::EMPTY_STRING);
                         } 
                         else if( q == 4 ) { 
-                            Lock::DBRead x("foo2");
-                            Lock::DBRead y("admin");
+                            Lock::DBRead x("foo2", mongo::unittest::EMPTY_STRING);
+                            Lock::DBRead y("admin", mongo::unittest::EMPTY_STRING);
                         }
                         else if ( q > 4 && q < 8 ) {
                             static const char * const dbnames[] = {
                                 "bar0", "bar1", "bar2", "bar3", "bar4", "bar5",
                                 "bar6", "bar7", "bar8", "bar9", "bar10" };
-                            Lock::DBWrite w(dbnames[q]);
+                            Lock::DBWrite w(dbnames[q], mongo::unittest::EMPTY_STRING);
                             {
                                 Lock::DBWrite::UpgradeToExclusive wToX;
                                 if (wToX.gotUpgrade()) {
@@ -193,15 +193,15 @@ namespace ThreadedTests {
                             }
                         }
                         else { 
-                            Lock::DBWrite w("foo");
-                            Lock::DBRead r2("foo");
-                            Lock::DBRead r3("local");
+                            Lock::DBWrite w("foo", mongo::unittest::EMPTY_STRING);
+                            Lock::DBRead r2("foo", mongo::unittest::EMPTY_STRING);
+                            Lock::DBRead r3("local", mongo::unittest::EMPTY_STRING);
                         }
                     }
                     else { 
-                        Lock::DBRead r("foo");
-                        Lock::DBRead r2("foo");
-                        Lock::DBRead r3("local");
+                        Lock::DBRead r("foo", mongo::unittest::EMPTY_STRING);
+                        Lock::DBRead r2("foo", mongo::unittest::EMPTY_STRING);
+                        Lock::DBRead r3("local", mongo::unittest::EMPTY_STRING);
                     }
                 }
                 pm.hit();
@@ -213,10 +213,10 @@ namespace ThreadedTests {
             ASSERT( ! Lock::isReadLocked() );
             ASSERT( wToXSuccessfulUpgradeCount >= 39 * N / 2000 );
             {
-                    Lock::GlobalWrite w;
+                    Lock::GlobalWrite w(mongo::unittest::EMPTY_STRING);
             }
             {
-                    Lock::GlobalRead r;
+                    Lock::GlobalRead r(mongo::unittest::EMPTY_STRING);
             }
         }
     };
@@ -336,7 +336,7 @@ namespace ThreadedTests {
             counter.fetchAndAdd(1);
             ASSERT_EQUALS(counter.load(), 0U);
 
-            writelocktry lk( 0 );
+            writelocktry lk( 0, mongo::unittest::EMPTY_STRING );
             ASSERT( lk.got() );
             ASSERT( Lock::isW() );
         }

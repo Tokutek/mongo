@@ -25,6 +25,14 @@
 #include "mongo/db/namespacestring.h"
 #include "mongo/util/log.h"
 
+namespace mongo {
+namespace unittest {
+
+static const string EMPTY_STRING("");
+
+} // namespace unittest
+} // namespace mongo
+
 namespace {
 
     using boost::shared_ptr;
@@ -65,7 +73,7 @@ namespace {
             ASSERT_FALSE(cur->more());
         }
         void addUser() {
-            Client::WriteContext ctx(_ns);
+            Client::WriteContext ctx(_ns, mongo::unittest::EMPTY_STRING);
             Client::Transaction txn(DB_SERIALIZABLE);
             _c.insert(_ns, BSON(mongo::GENOID <<
                                 "user" << "admin" <<
@@ -76,7 +84,7 @@ namespace {
         }
         void printAllUsers() {
             Client::AlternateTransactionStack altStack;
-            Client::ReadContext ctx(_ns);
+            Client::ReadContext ctx(_ns, mongo::unittest::EMPTY_STRING);
             Client::Transaction txn(DB_SERIALIZABLE);
             auto_ptr<DBClientCursor> cur = _c.query(_ns, BSONObj());
             LOG(0) << "users:" << endl;
@@ -87,7 +95,7 @@ namespace {
     };
 
     TEST_F(SystemUsersTests, DefaultIndexCreate) {
-        Client::WriteContext ctx(_ns);
+        Client::WriteContext ctx(_ns, mongo::unittest::EMPTY_STRING);
         Client::Transaction txn(DB_SERIALIZABLE);
         _c.createCollection(_ns);
         txn.commit();
@@ -140,7 +148,7 @@ namespace {
         shared_ptr<mongo::Collection> d;
         {
             Client::UpgradingSystemUsersScope usus;
-            Client::WriteContext ctx(_ns);
+            Client::WriteContext ctx(_ns, mongo::unittest::EMPTY_STRING);
             Client::Transaction txn(DB_SERIALIZABLE);
             // This would throw if we didn't handle the corruption fix properly
             d = mongo::Collection::make(mongo::Collection::serialize(_ns, BSONObj(), BSON("_id" << 1), 0ULL, b.arr()));

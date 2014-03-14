@@ -42,7 +42,7 @@ namespace RemoveTests {
             
             {
                 // Remove _id range [_min, _max).
-                Client::WriteContext ctx(ns);
+                Client::WriteContext ctx(ns, mongo::unittest::EMPTY_STRING);
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 deleteIndexRange( ns,
                                   BSON( "_id" << _min ),
