@@ -699,6 +699,10 @@ namespace mongo {
             BufBuilder &bb = result.bb();
             int lenBefore = bb.len();
             try {
+                OpSettings settings;
+                settings.setBulkFetch(true);
+                settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
+                cc().setOpSettings(settings);
                 Client::WithTxnStack wts(cursor->transactions);
                 BSONObjBuilder cursorObj(result.subobjStart("cursor"));
                 cursorObj.append("id", id);
@@ -713,6 +717,7 @@ namespace mongo {
                 }
                 ab.done();
                 cursorObj.done();
+                cursor->resetIdleAge();
                 return true;
             }
             catch (...) {
