@@ -27,6 +27,7 @@
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/querypattern.h"
 #include "mongo/db/storage/builder.h"
+#include "mongo/util/assert_util.h"
 #include "mongo/util/concurrency/rwlock.h"
 #include "mongo/util/concurrency/simplerwlock.h"
 #include "mongo/db/queryutil.h"
@@ -983,10 +984,9 @@ namespace mongo {
         }
 
     private:
-        struct findByPKCallbackExtra {
+        struct findByPKCallbackExtra : public ExceptionSaver {
             BSONObj &obj;
-            std::exception *ex;
-            findByPKCallbackExtra(BSONObj &o) : obj(o), ex(NULL) { }
+            findByPKCallbackExtra(BSONObj &o) : obj(o) { }
         };
         static int findByPKCallback(const DBT *key, const DBT *value, void *extra);
         static int getLastKeyCallback(const DBT *key, const DBT *value, void *extra);
