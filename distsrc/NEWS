@@ -25,6 +25,9 @@ New features and improvements
     - Added `compressionRatio` section to `serverStatus` to report the
       compression ratio calculated on disk write.  (#989)
 
+    - Added aggregate per-index stats in output of `db.collection.stats()`
+      for sharded collections.  (#1019)
+
 
 Bug fixes
 ~~~~~~~~~
