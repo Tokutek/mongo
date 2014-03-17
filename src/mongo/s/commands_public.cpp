@@ -671,6 +671,12 @@ namespace mongo {
                 BSONObjBuilder shardStats;
                 map<string,long long> counts;
                 map<string,long long> indexSizes;
+                map<string,long long> indexStorageSizes;
+                map<string,long long> queries;
+                map<string,long long> nscanned;
+                map<string,long long> nscannedObjects;
+                map<string,long long> inserts;
+                map<string,long long> deletes;
                 /*
                 long long count=0;
                 long long size=0;
@@ -703,16 +709,36 @@ namespace mongo {
                         }
                         else if ( str::equals( e.fieldName() , "count" ) ||
                                   str::equals( e.fieldName() , "size" ) ||
+                                  str::equals( e.fieldName() , "dataSize" ) ||
                                   str::equals( e.fieldName() , "storageSize" ) ||
                                   str::equals( e.fieldName() , "numExtents" ) ||
-                                  str::equals( e.fieldName() , "totalIndexSize" ) ) {
+                                  str::equals( e.fieldName() , "totalIndexSize" ) ||
+                                  str::equals( e.fieldName() , "totalIndexStorageSize" ) ) {
                             counts[e.fieldName()] += e.numberLong();
                         }
-                        else if ( str::equals( e.fieldName() , "indexSizes" ) ) {
-                            BSONObjIterator k( e.Obj() );
-                            while ( k.more() ) {
-                                BSONElement temp = k.next();
-                                indexSizes[temp.fieldName()] += temp.numberLong();
+                        else if ( str::equals( e.fieldName() , "indexDetails" ) ) {
+                            for (BSONObjIterator arrayIter(e.Obj()); arrayIter.more(); ++arrayIter) {
+                                string name;
+                                for (BSONObjIterator k((*arrayIter).Obj()); k.more(); ++k ) {
+                                    BSONElement temp = *k;
+                                    if (str::equals(temp.fieldName(), "name")) {
+                                        name = temp.String();
+                                    } else if (str::equals(temp.fieldName(), "size")) {
+                                        indexSizes[name] += temp.numberLong();
+                                    } else if (str::equals(temp.fieldName(), "storageSize")) {
+                                        indexStorageSizes[name] += temp.numberLong();
+                                    } else if (str::equals(temp.fieldName(), "queries")) {
+                                        queries[name] += temp.numberLong();
+                                    } else if (str::equals(temp.fieldName(), "nscanned")) {
+                                        nscanned[name] += temp.numberLong();
+                                    } else if (str::equals(temp.fieldName(), "nscannedObjects")) {
+                                        nscannedObjects[name] += temp.numberLong();
+                                    } else if (str::equals(temp.fieldName(), "inserts")) {
+                                        inserts[name] += temp.numberLong();
+                                    } else if (str::equals(temp.fieldName(), "deletes")) {
+                                        deletes[name] += temp.numberLong();
+                                    }
+                                }
                             }
                         }
                         else if ( str::equals( e.fieldName() , "flags" ) ) {
@@ -756,6 +782,48 @@ namespace mongo {
                 {
                     BSONObjBuilder ib( result.subobjStart( "indexSizes" ) );
                     for ( map<string,long long>::iterator i=indexSizes.begin(); i!=indexSizes.end(); ++i )
+                        ib.appendNumber( i->first , i->second );
+                    ib.done();
+                }
+
+                {
+                    BSONObjBuilder ib( result.subobjStart( "indexStorageSizes" ) );
+                    for ( map<string,long long>::iterator i=indexStorageSizes.begin(); i!=indexStorageSizes.end(); ++i )
+                        ib.appendNumber( i->first , i->second );
+                    ib.done();
+                }
+
+                {
+                    BSONObjBuilder ib( result.subobjStart( "indexQueries" ) );
+                    for ( map<string,long long>::iterator i=queries.begin(); i!=queries.end(); ++i )
+                        ib.appendNumber( i->first , i->second );
+                    ib.done();
+                }
+
+                {
+                    BSONObjBuilder ib( result.subobjStart( "indexNscanned" ) );
+                    for ( map<string,long long>::iterator i=nscanned.begin(); i!=nscanned.end(); ++i )
+                        ib.appendNumber( i->first , i->second );
+                    ib.done();
+                }
+
+                {
+                    BSONObjBuilder ib( result.subobjStart( "indexNscannedObjects" ) );
+                    for ( map<string,long long>::iterator i=nscannedObjects.begin(); i!=nscannedObjects.end(); ++i )
+                        ib.appendNumber( i->first , i->second );
+                    ib.done();
+                }
+
+                {
+                    BSONObjBuilder ib( result.subobjStart( "indexInserts" ) );
+                    for ( map<string,long long>::iterator i=inserts.begin(); i!=inserts.end(); ++i )
+                        ib.appendNumber( i->first , i->second );
+                    ib.done();
+                }
+
+                {
+                    BSONObjBuilder ib( result.subobjStart( "indexDeletes" ) );
+                    for ( map<string,long long>::iterator i=deletes.begin(); i!=deletes.end(); ++i )
                         ib.appendNumber( i->first , i->second );
                     ib.done();
                 }
