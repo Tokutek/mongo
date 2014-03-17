@@ -907,7 +907,7 @@ namespace mongo {
                     catch (DBException &e) {
                         warning() << e << endl;
                         error() << "splitChunk error updating the chunk ending in " << endKey << endl;
-                        throw e;
+                        throw;
                     }
 
                     // remember this chunk info for logging later

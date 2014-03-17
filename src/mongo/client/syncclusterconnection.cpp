@@ -413,7 +413,7 @@ namespace mongo {
             }
             catch ( std::exception& e ) {
                 if ( _writeConcern )
-                    throw e;
+                    throw;
             }
         }
 
@@ -517,7 +517,7 @@ namespace mongo {
         }
         catch (DBException &e) {
             _txnNestLevel--;
-            throw e;
+            throw;
         }
     }
 

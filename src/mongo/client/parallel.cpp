@@ -153,7 +153,7 @@ namespace mongo {
         }
         catch ( SocketException& e ) {
             if ( ! ( _options & QueryOption_PartialResults ) )
-                throw e;
+                throw;
             _done = true;
             return auto_ptr<DBClientCursor>();
         }
@@ -1732,13 +1732,13 @@ namespace mongo {
 
                 if( i >= maxRetries ){
                     error() << "Future::spawnCommand (part 2) stale config exception" << causedBy( e ) << endl;
-                    throw e;
+                    throw;
                 }
 
                 if( i >= maxRetries / 2 ){
                     if( ! versionManager.forceRemoteCheckShardVersionCB( staleNS ) ){
                         error() << "Future::spawnCommand (part 2) no config detected" << causedBy( e ) << endl;
-                        throw e;
+                        throw;
                     }
                 }
 

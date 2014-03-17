@@ -300,7 +300,7 @@ namespace mongo {
                    << " res: " << res.obj()
                    << " exc: " << e.what();
                 problem() << ss.str() << endl;
-                throw e;
+                throw;
             }
             try {
                 Client::WriteContext ctx(MIGRATE_LOG_REF_NS, lockReason);
@@ -320,7 +320,7 @@ namespace mongo {
                    << " res: " << res.obj()
                    << " exc: " << e.what();
                 problem() << ss.str() << endl;
-                throw e;
+                throw;
             }
         }
 
@@ -1242,7 +1242,7 @@ namespace mongo {
                         error() << "moveChunk error updating the chunk being moved" << migrateLog;
                         txn.reset();
                         conn->done();
-                        throw e;
+                        throw;
                     }
 
                     nextVersion = myVersion;
@@ -1280,7 +1280,7 @@ namespace mongo {
                             error() << "moveChunk error updating chunk on the FROM shard" << migrateLog;
                             txn.reset();
                             conn->done();
-                            throw e;
+                            throw;
                         }
                     }
                     else {

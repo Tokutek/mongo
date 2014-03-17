@@ -108,9 +108,8 @@ namespace mongo {
         }
     }
 
-    struct getNamespacesExtra {
+    struct getNamespacesExtra : public ExceptionSaver {
         list<string> &tofill;
-        std::exception *ex;
         getNamespacesExtra(list<string> &l) : tofill(l) {}
     };
 
@@ -126,8 +125,7 @@ namespace mongo {
             return 0;
         }
         catch (std::exception &ex) {
-            // Can't throw back through the ydb, so return -1 here and we'll throw on the other side.
-            e->ex = &ex;
+            e->saveException(ex);
             return -1;
         }
     }
@@ -144,8 +142,8 @@ namespace mongo {
         while (r != DB_NOTFOUND) {
             r = c.dbc()->c_getf_next(c.dbc(), 0, getNamespacesCallback, &extra);
             if (r == -1) {
-                verify(extra.ex != NULL);
-                throw *extra.ex;
+                extra.throwException();
+                msgasserted(17322, "got -1 from cursor iteration but didn't save an exception");
             }
             if (r != 0 && r != DB_NOTFOUND) {
                 storage::handle_ydb_error(r);

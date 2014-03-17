@@ -340,9 +340,8 @@ namespace mongo {
             RowBuffer *buffer;
             int rows_fetched;
             int rows_to_fetch;
-            std::exception *ex;
             cursor_getf_extra(RowBuffer *buf, int n_to_fetch) :
-                buffer(buf), rows_fetched(0), rows_to_fetch(n_to_fetch), ex(NULL) {
+                buffer(buf), rows_fetched(0), rows_to_fetch(n_to_fetch) {
             }
         };
         static int cursor_getf(const DBT *key, const DBT *val, void *extra);
