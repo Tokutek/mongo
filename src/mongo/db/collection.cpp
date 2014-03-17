@@ -495,9 +495,9 @@ namespace mongo {
             }
             return 0;
         } catch (std::exception &e) {
-            info->ex = &e;
+            info->saveException(e);
+            return -1;
         }
-        return -1;
     }
 
     bool CollectionBase::findByPK(const BSONObj &key, BSONObj &result) const {
@@ -513,8 +513,9 @@ namespace mongo {
                           DB_SERIALIZABLE | DB_RMW : 0;
         const int r = db->getf_set(db, cc().txn().db_txn(), flags, &key_dbt,
                                    findByPKCallback, &extra);
-        if (extra.ex != NULL) {
-            throw *extra.ex;
+        if (r == -1) {
+            extra.throwException();
+            msgasserted(17323, "got -1 from findByPKCallback but no exception saved");
         }
         if (r != 0 && r != DB_NOTFOUND) {
             storage::handle_ydb_error(r);
@@ -537,7 +538,7 @@ namespace mongo {
             }
             return 0;
         } catch (std::exception &e) {
-            info->ex = &e;
+            info->saveException(e);
         }
         return -1;
     }
@@ -548,8 +549,9 @@ namespace mongo {
         BSONObj obj;
         struct findByPKCallbackExtra extra(obj);
         const int r = db->get_last_key(db, getLastKeyCallback, &extra);
-        if (extra.ex != NULL) {
-            throw *extra.ex;
+        if (r == -1) {
+            extra.throwException();
+            msgasserted(17324, "got -1 from getLastKeyCallback but no exception saved");
         }
         if (r != 0 && r != DB_NOTFOUND) {
             storage::handle_ydb_error(r);
