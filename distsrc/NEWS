@@ -25,6 +25,9 @@ New features and improvements
     - Added `compressionRatio` section to `serverStatus` to report the
       compression ratio calculated on disk write.  (#989)
 
+    - Added aggregate per-index stats in output of `db.collection.stats()`
+      for sharded collections.  (#1019)
+
 
 Bug fixes
 ~~~~~~~~~
@@ -59,6 +62,16 @@ Bug fixes
 
     - Fixed issue with `listDatabases` and partitioned collections.
       (#997)
+
+    - Fixed a race between aborting a transaction due to client
+      disconnect, and the transaction abort due to replica set
+      relinquish.  (#1003)
+
+    - Fixed an issue that could cause migrations to fail repeatedly.
+      (#1011)
+
+    - Fixed command authorization settings for enterprise plugin loading
+      commands.  (#1012)
 
 
 tokumx 1.4.0

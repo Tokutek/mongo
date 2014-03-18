@@ -196,7 +196,7 @@ namespace mongo {
             }
 
         It tries several dynamic_casts at save time in order to record the static type of the exception.
-        Therefore, the thrown exception will have the same static type (as long as it is one of the listed types.
+        Therefore, the thrown exception will have the same static type (as long as it is one of the listed types).
     */
     class ExceptionSaver {
         boost::scoped_ptr<MsgAssertionException> _mae;

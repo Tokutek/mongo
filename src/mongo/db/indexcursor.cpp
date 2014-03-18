@@ -521,8 +521,9 @@ namespace mongo {
         } else {
             r = cursor->c_getf_set_range_reverse(cursor, getf_flags(), &key_dbt, cursor_getf, &extra);
         }
-        if ( extra.ex != NULL ) {
-            throw *extra.ex;
+        if (r == -1) {
+            extra.throwException();
+            msgasserted(17325, "got -1 from getf callback but no exception saved");
         }
         if (r == TOKUDB_INTERRUPTED) {
             _interrupt_extra.throwException();
@@ -719,8 +720,9 @@ again:      while ( !allInclusive && ok() ) {
         } else {
             r = cursor->c_getf_prev(cursor, getf_flags(), cursor_getf, &extra);
         }
-        if ( extra.ex != NULL ) {
-            throw *extra.ex;
+        if (r == -1) {
+            extra.throwException();
+            msgasserted(17326, "got -1 from getf callback but no exception saved");
         }
         if (r == TOKUDB_INTERRUPTED) {
             _interrupt_extra.throwException();
