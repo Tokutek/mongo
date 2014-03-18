@@ -67,6 +67,9 @@ DBCollection.prototype.help = function () {
     print("\tdb." + shortName + ".getShardVersion() - only for use with sharding");
     print("\tdb." + shortName + ".getShardDistribution() - prints statistics about data distribution in the cluster");
     print("\tdb." + shortName + ".getSplitKeysForChunks( <maxChunkSize> ) - calculates split points over all chunks and returns splitter function");
+    print("\tdb." + shortName + ".addPartition( <pivot> ) - add partition to a partitioned collection, optionally pass in pivot");
+    print("\tdb." + shortName + ".getPartitionInfo() - get partition information of partitioned collection");
+    print("\tdb." + shortName + ".dropPartition( id ) - drop partition of partitioned collection with specified id");
     return __magicNoPrint;
 }
 
@@ -684,6 +687,24 @@ DBCollection.prototype.group = function( params ){
 DBCollection.prototype.groupcmd = function( params ){
     params.ns = this._shortName;
     return this._db.groupcmd( params );
+}
+
+DBCollection.prototype.addPartition = function( pivot ){
+    if ( pivot == undefined) {
+        return this._dbCommand( { addPartition : this._shortName } );
+    }
+    return this._dbCommand( { addPartition : this._shortName , newPivot : pivot } );
+}
+
+DBCollection.prototype.getPartitionInfo = function(){
+    return this._dbCommand( { getPartitionInfo : this._shortName } );
+}
+
+DBCollection.prototype.dropPartition = function( partitionID ){
+    if ( partitionID == undefined) {
+        throw "must specify id of partition to drop";
+    }
+    return this._dbCommand( { dropPartition : this._shortName , id : partitionID } );
 }
 
 MapReduceResult = function( db , o ){
