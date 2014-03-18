@@ -958,6 +958,12 @@ rs.help = function () {
     print("\trs.remove(hostportstr)          remove a host from the replica set (disconnects)");
     print("\trs.slaveOk()                    shorthand for db.getMongo().setSlaveOk()");
     print();
+    print("\trs.addPartition()               { replAddPartition : 1 }, add a partition to oplog and oplog.refs");
+    print("\trs.oplogPartitionInfo()         get partition information for oplog collection");
+    print("\trs.oplogRefsPartitionInfo()     get partition information for oplog.refs collection");
+    print("\trs.trimToTS(date)               drop partitions with data preceding date from oplog and oplog.refs");
+    print("\trs.trimToGTID(GTIDBinData)      drop partitions with data preceding GTIDBinData from oplog and oplog.refs");
+    print();
     print("\tdb.isMaster()                   check who is primary");
     print("\tdb.printReplicationInfo()       check oplog size and time range");
     print();
