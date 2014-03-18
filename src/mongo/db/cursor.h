@@ -625,7 +625,12 @@ namespace mongo {
             return _currentCursor->indexKeyPattern();
         }
 
-        virtual string toString() const { return "PartitionedCursor"; }
+        virtual string toString() const {
+            if (cursorOverPartitionKey()) {
+                return "PartitionedCursor";
+            }
+            return "DistributedPartitionedCursor";
+        }
 
         virtual bool getsetdup(const BSONObj &pk) {
             // Partitioned Collections cannot have multikey indexes
@@ -691,7 +696,7 @@ namespace mongo {
         void makeSubCursor(uint64_t partitionIndex);
         void getNextSubCursor();
         void initializeSubCursor();
-        bool cursorOverPartitionKey() {
+        bool cursorOverPartitionKey() const {
             return (_idxNo == 0);
         }
 
