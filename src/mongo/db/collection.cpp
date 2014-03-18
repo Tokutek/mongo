@@ -330,7 +330,7 @@ namespace mongo {
                        !info["dropDups"].trueValue());
 
         uassert(12588, "cannot add index with a hot index build in progress",
-                       nIndexesBeingBuilt() > nIndexes());
+                       nIndexesBeingBuilt() == nIndexes());
 
         uassert(12523, "no index name specified",
                         info["name"].ok());
@@ -912,10 +912,7 @@ namespace mongo {
     // Wrapper for offline (write locked) indexing.
     void CollectionBase::createIndex(const BSONObj &info) {
         const string sourceNS = info["ns"].String();
-
-        if (!Lock::isWriteLocked(_ns)) {
-            throw RetryWithWriteLock();
-        }
+        Lock::assertWriteLocked(_ns);
 
         shared_ptr<CollectionIndexer> indexer = newIndexer(info, false);
         indexer->prepare();
@@ -1042,12 +1039,11 @@ namespace mongo {
         const int idxNum = _cd->findIndexByName(name);
         if (name == "*") {
             result.append("nIndexesWas", (double) nIndexes());
-            for (int i = 0; i < nIndexes(); ) {
-                IndexDetails &idx = _cd->idx(i);
+            while(nIndexes() > 0) {
+                int curr = nIndexes() - 1;
+                IndexDetails &idx = _cd->idx(curr);
                 if (mayDeleteIdIndex || (!idx.isIdIndex() && !isPKIndex(idx))) {
-                    dropIndex(i);
-                } else {
-                    i++;
+                    dropIndex(curr);
                 }
             }
             // Assuming id/pk index isn't multikey
@@ -1248,6 +1244,24 @@ namespace mongo {
     void Collection::noteIndexBuilt() {
         collectionMap(_ns)->update_ns(_ns, serialize(true), true);
         resetTransient();
+    }
+
+    bool Collection::ensureIndex(const BSONObj &info) {
+        if (!Lock::isWriteLocked(_ns)) {
+            throw RetryWithWriteLock();
+        }
+        checkAddIndexOK(info);
+        // Note this ns in the rollback so if this transaction aborts, we'll
+        // close this ns, forcing the next user to reload in-memory metadata.
+        CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
+        rollback.noteNs(_ns);
+        
+        bool ret = _cd->ensureIndex(info);
+        if (ret) {
+            addToNamespacesCatalog(IndexDetails::indexNamespace(_ns, info["name"].String()));
+            noteIndexBuilt();
+        }
+        return ret;
     }
 
     void CollectionData::Stats::appendInfo(BSONObjBuilder &b, int scale) const {
@@ -2779,6 +2793,34 @@ namespace mongo {
         return false;
     }
 
+    bool PartitionedCollection::ensureIndex(const BSONObj &info) {
+        // Contract is for ensureIndex to
+        // check if index already exists. Therefore, this
+        // snippet is copied from CollectionBase
+        const BSONObj keyPattern = info["key"].Obj();
+        const int i = findIndexByKeyPattern(keyPattern);
+        if (i >= 0) {
+            return false;
+        }
+        for (uint64_t i = 0; i < numPartitions(); i++) {
+            BSONObjBuilder b;
+            uint64_t currID = _partitionIDs[i];
+            cloneBSONWithFieldChanged(b, info, "ns", getPartitionName(currID), false);
+            if (!_partitions[i]->ensureIndex(b.obj())) {
+                return false;
+            }
+        }
+        shared_ptr<PartitionedIndexDetails> details(
+            new PartitionedIndexDetails(
+                replaceNSField(info, _ns),
+                this,
+                i
+                )
+            );
+        _indexDetails.push_back(details);
+        return true;
+    }
+
     shared_ptr<Cursor> PartitionedCollection::makeCursor(
         const int direction, 
         const bool countCursor
@@ -2960,12 +3002,14 @@ namespace mongo {
                 BSONObj currInfo = _partitions[0]->idx(i).info();                
                 const BSONObj keyPattern = currInfo["key"].Obj();
                 // it's possible the index already exists (e.g. _id index or the pk)
-                const int index = findIndexByKeyPattern(keyPattern);
+                const int index = newPartition->findIndexByKeyPattern(keyPattern);
                 if (index >= 0) {
                     continue;
                 }
                 // we want to make sure any other secondary index actually works
-                bool ret = newPartition->ensureIndex(currInfo);
+                BSONObjBuilder b;
+                cloneBSONWithFieldChanged(b, currInfo, "ns", getPartitionName(id), false);
+                bool ret = newPartition->ensureIndex(b.obj());
                 massert(0, str::stream() << "could not add index " << currInfo, ret);
             }
             massert(0, "could not add proper indexes", newPartition->nIndexes() == _partitions[0]->nIndexes());

@@ -446,20 +446,7 @@ namespace mongo {
         // Ensure that the given index exists, or build it if it doesn't.
         // @param info is the index spec (ie: { ns: "test.foo", key: { a: 1 }, name: "a_1", clustering: true })
         // @return whether or the the index was just built.
-        bool ensureIndex(const BSONObj &info) {
-            checkAddIndexOK(info);
-            // Note this ns in the rollback so if this transaction aborts, we'll
-            // close this ns, forcing the next user to reload in-memory metadata.
-            CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
-            rollback.noteNs(_ns);
-            
-            bool ret = _cd->ensureIndex(info);
-            if (ret) {
-                addToNamespacesCatalog(IndexDetails::indexNamespace(_ns, info["name"].String()));
-                noteIndexBuilt();
-            }
-            return ret;
-        }
+        bool ensureIndex(const BSONObj &info);
 
         void acquireTableLock() {
             _cd->acquireTableLock();
@@ -1309,31 +1296,13 @@ namespace mongo {
             _metaCollection->close(aborting, indexBitsChanged);
         }
 
-        virtual bool ensureIndex(const BSONObj &info) {
-            // Contract is for ensureIndex to
-            // check if index already exists. Therefore, this
-            // snippet is copied from CollectionBase
-            const BSONObj keyPattern = info["key"].Obj();
-            const int i = findIndexByKeyPattern(keyPattern);
-            if (i >= 0) {
-                return false;
-            }
-            for (uint64_t i = 0; i < numPartitions(); i++) {
-                if (!_partitions[i]->ensureIndex(info)) {
-                    return false;
-                }
-            }
-            return true;
-        }
+        virtual bool ensureIndex(const BSONObj &info);
 
         virtual int nIndexesBeingBuilt() const {
-            return nIndexes();
+            return _partitions[0]->nIndexesBeingBuilt();
         }
 
         virtual IndexDetails& idx(int idxNo) const {
-            // for now, verify that it is 0, while partitioned collections
-            // don't support secondary indexes
-            verify( idxNo == 0 );
             return *_indexDetails[idxNo];
         }
 
