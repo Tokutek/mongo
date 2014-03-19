@@ -1432,6 +1432,21 @@ namespace mongo {
     class MigrateStatus {
         long long _lastAppliedMigrateLogID;
 
+        template<typename T>
+        class CounterResetter : boost::noncopyable {
+            T &_val;
+            T _was;
+            bool _done;
+          public:
+            CounterResetter(T &val) : _val(val), _was(val), _done(false) {}
+            ~CounterResetter() {
+                if (!_done) {
+                    _val = _was;
+                }
+            }
+            void setDone() { _done = true; }
+        };
+
     public:
         
         MigrateStatus() : _lastAppliedMigrateLogID(-1), m_active("MigrateStatus") { active = false; }
@@ -1484,15 +1499,110 @@ namespace mongo {
             }
             while (mlogCursor->more()) {
                 LOCK_REASON(lockReason, "sharding: applying mods for migrate");
-                scoped_ptr<Client::ReadContext> ctxp(new Client::ReadContext(ns, lockReason));
-                scoped_ptr<Client::Transaction> txnp(new Client::Transaction(DB_SERIALIZABLE));
-                while (mlogCursor->moreInCurrentBatch()) {
-                    BSONObj op = mlogCursor->nextSafe();
-                    dassert(op["_id"].Long() == _lastAppliedMigrateLogID + 1);
-                    if (op.hasField("a")) {
-                        if (!txnp) {
-                            ctxp.reset(new Client::ReadContext(ns, lockReason));
-                            txnp.reset(new Client::Transaction(DB_SERIALIZABLE));
+                try {
+                    scoped_ptr<Client::ReadContext> ctxp(new Client::ReadContext(ns, lockReason));
+                    scoped_ptr<Client::Transaction> txnp(new Client::Transaction(DB_SERIALIZABLE));
+                    scoped_ptr<DBClientCursor::BatchResetter> br(new DBClientCursor::BatchResetter(*mlogCursor));
+                    scoped_ptr<CounterResetter<long long> > mlidResetter(new CounterResetter<long long>(_lastAppliedMigrateLogID));
+                    scoped_ptr<CounterResetter<long long> > catchupResetter(new CounterResetter<long long>(numCatchup));
+                    scoped_ptr<CounterResetter<long long> > steadyResetter(new CounterResetter<long long>(numSteady));
+                    while (mlogCursor->moreInCurrentBatch()) {
+                        BSONObj op = mlogCursor->nextSafe();
+                        dassert(op["_id"].Long() == _lastAppliedMigrateLogID + 1);
+                        if (op.hasField("a")) {
+                            if (!txnp) {
+                                ctxp.reset(new Client::ReadContext(ns, lockReason));
+                                txnp.reset(new Client::Transaction(DB_SERIALIZABLE));
+                                br.reset(new DBClientCursor::BatchResetter(*mlogCursor));
+                                mlidResetter.reset(new CounterResetter<long long>(_lastAppliedMigrateLogID));
+                                catchupResetter.reset(new CounterResetter<long long>(numCatchup));
+                                steadyResetter.reset(new CounterResetter<long long>(numSteady));
+                            }
+                            SpillableVectorIterator it(op, conn.conn(), MigrateFromStatus::MIGRATE_LOG_REF_NS);
+                            while (it.more()) {
+                                OplogHelpers::applyOperationFromOplog(it.next());
+                                if (state == CATCHUP) {
+                                    numCatchup++;
+                                } else {
+                                    numSteady++;
+                                }
+                            }
+                        } else {
+                            if (txnp) {
+                                txnp->commit();
+                                br->setDone();
+                                mlidResetter->setDone();
+                                catchupResetter->setDone();
+                                steadyResetter->setDone();
+
+                                txnp.reset();
+                                ctxp.reset();
+                                br.reset();
+                                mlidResetter.reset();
+                                catchupResetter.reset();
+                                steadyResetter.reset();
+                            }
+                            SpillableVectorIterator it(op, conn.conn(), MigrateFromStatus::MIGRATE_LOG_REF_NS);
+                            while (it.more()) {
+                                LOCK_REASON(lockReasonInner, "sharding: applying mods from migratelog.refs for migrate");
+                                try {
+                                    Client::ReadContext ctx(ns, lockReasonInner);
+                                    Client::Transaction txn(DB_SERIALIZABLE);
+                                    SpillableVectorIterator::BatchResetter itbr(it);
+                                    CounterResetter<long long> cr(numCatchup);
+                                    CounterResetter<long long> sr(numSteady);
+                                    while (it.moreInCurrentBatch()) {
+                                        OplogHelpers::applyOperationFromOplog(it.next());
+                                        if (state == CATCHUP) {
+                                            numCatchup++;
+                                        } else {
+                                            numSteady++;
+                                        }
+                                    }
+                                    txn.commit();
+                                    itbr.setDone();
+                                    cr.setDone();
+                                    sr.setDone();
+                                } catch (RetryWithWriteLock) {
+                                    Client::WriteContext ctx(ns, lockReasonInner);
+                                    Client::Transaction txn(DB_SERIALIZABLE);
+                                    while (it.moreInCurrentBatch()) {
+                                        OplogHelpers::applyOperationFromOplog(it.next());
+                                        if (state == CATCHUP) {
+                                            numCatchup++;
+                                        } else {
+                                            numSteady++;
+                                        }
+                                    }
+                                    txn.commit();
+                                }
+                            }
+                        }
+                        _lastAppliedMigrateLogID = op["_id"].Long();
+                    }
+                    if (txnp) {
+                        txnp->commit();
+                        br->setDone();
+                        mlidResetter->setDone();
+                        catchupResetter->setDone();
+                        steadyResetter->setDone();
+                    }
+                } catch (RetryWithWriteLock) {
+                    // This case is much simpler because we hopefully only have a normal op, not a
+                    // spilled op (if that got RetryWithWriteLock, it should have been handled in
+                    // the inner try/catch block).  We know we won't yield for this entire batch, so
+                    // we just blast right through it.
+                    //
+                    // WARNING: Normally, code like this would be factored out.  If something
+                    // changes in the above try block, something should probably change here too.
+                    Client::WriteContext ctx(ns, lockReason);
+                    Client::Transaction txn(DB_SERIALIZABLE);
+                    while (mlogCursor->moreInCurrentBatch()) {
+                        BSONObj op = mlogCursor->nextSafe();
+                        dassert(op["_id"].Long() == _lastAppliedMigrateLogID + 1);
+                        if (!op.hasField("a")) {
+                            warning() << "moveChunk: transferMods handling a spilled migratelog operation in a write lock,"
+                                      << " this shouldn't happen and can cause locking problems" << migrateLog;
                         }
                         SpillableVectorIterator it(op, conn.conn(), MigrateFromStatus::MIGRATE_LOG_REF_NS);
                         while (it.more()) {
@@ -1503,32 +1613,9 @@ namespace mongo {
                                 numSteady++;
                             }
                         }
-                    } else {
-                        if (txnp) {
-                            txnp->commit();
-                            txnp.reset();
-                            ctxp.reset();
-                        }
-                        SpillableVectorIterator it(op, conn.conn(), MigrateFromStatus::MIGRATE_LOG_REF_NS);
-                        while (it.more()) {
-                            LOCK_REASON(lockReasonInner, "sharding: applying mods from migratelog.refs for migrate");
-                            Client::ReadContext ctx(ns, lockReasonInner);
-                            Client::Transaction txn(DB_SERIALIZABLE);
-                            while (it.moreInCurrentBatch()) {
-                                OplogHelpers::applyOperationFromOplog(it.next());
-                                if (state == CATCHUP) {
-                                    numCatchup++;
-                                } else {
-                                    numSteady++;
-                                }
-                            }
-                            txn.commit();
-                        }
+                        _lastAppliedMigrateLogID = op["_id"].Long();
                     }
-                    _lastAppliedMigrateLogID = op["_id"].Long();
-                }
-                if (txnp) {
-                    txnp->commit();
+                    txn.commit();
                 }
                 GTID lastGTID = cc().getLastOp();
                 for (Timer t; !opReplicatedEnough(lastGTID); sleepmillis(20)) {
@@ -1542,21 +1629,6 @@ namespace mongo {
             }
             return cc().getLastOp();
         }
-
-        template<typename T>
-        class CounterResetter : boost::noncopyable {
-            T &_val;
-            T _was;
-            bool _done;
-          public:
-            CounterResetter(T &val) : _val(val), _was(val), _done(false) {}
-            ~CounterResetter() {
-                if (!_done) {
-                    _val = _was;
-                }
-            }
-            void setDone() { _done = true; }
-        };
 
         /**
          * We may need to handle RetryWithWriteLock inside this code, so it is factored out of _go
