@@ -1597,12 +1597,23 @@ namespace mongo {
                     // changes in the above try block, something should probably change here too.
                     Client::WriteContext ctx(ns, lockReason);
                     Client::Transaction txn(DB_SERIALIZABLE);
+                    int opsHandled = 0;
                     while (mlogCursor->moreInCurrentBatch()) {
                         BSONObj op = mlogCursor->nextSafe();
                         dassert(op["_id"].Long() == _lastAppliedMigrateLogID + 1);
                         if (!op.hasField("a")) {
-                            warning() << "moveChunk: transferMods handling a spilled migratelog operation in a write lock,"
-                                      << " this shouldn't happen and can cause locking problems" << migrateLog;
+                            if (opsHandled == 0) {
+                                warning() << "moveChunk: transferMods found a spilled migratelog operation in a write lock,"
+                                          << " but hasn't processed anything properly yet." << migrateLog;
+                                std::stringstream ss;
+                                ss << "Aborting migration to prevent infinite loop in transferMods due to op " << op;
+                                warning() << ss.str() << migrateLog;
+                                msgasserted(17327, ss.str());
+                            }
+                            LOG(0) << "moveChunk: transferMods found a spilled migratelog operation in a write lock,"
+                                   << " stopping here and returning to normal transferMods implementation." << migrateLog;
+                            mlogCursor->putBack(op);
+                            break;
                         }
                         SpillableVectorIterator it(op, conn.conn(), MigrateFromStatus::MIGRATE_LOG_REF_NS);
                         while (it.more()) {
@@ -1614,6 +1625,7 @@ namespace mongo {
                             }
                         }
                         _lastAppliedMigrateLogID = op["_id"].Long();
+                        opsHandled++;
                     }
                     txn.commit();
                 }
