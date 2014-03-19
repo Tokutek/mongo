@@ -996,8 +996,6 @@ namespace mongo {
 
     class IndexedCollection : public CollectionBase {
     private:
-        BSONObj determinePrimaryKey(const BSONObj &options);
-
         const bool _idPrimaryKey;
 
     public:
@@ -1520,7 +1518,8 @@ namespace mongo {
         PartitionedCollection(const BSONObj &serialized);
         void initialize(const StringData &ns, const BSONObj &options);
         void initialize(const BSONObj &serialized, CollectionRenamer* renamer);
-        void initialize(const BSONObj &serialized);
+        void initialize(const BSONObj &serialized);        
+        virtual BSONObj determinePrimaryKey(const BSONObj &options);
     private:
         void createIndexDetails();
         void sanityCheck();
