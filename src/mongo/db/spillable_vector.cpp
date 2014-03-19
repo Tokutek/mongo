@@ -127,22 +127,29 @@ namespace mongo {
 
     SpillableVectorIterator::SpillableVectorIterator(const BSONObj &obj, DBClientBase &conn, const StringData &refNs) {
         if (obj.hasField("a")) {
-            _objIter.reset(new BSONObjIterator(obj["a"].Obj()));
+            _originalObj = obj["a"].Obj();
+            _objIter.reset(new BSONObjIterator(_originalObj));
         } else {
             massert(17226, mongoutils::str::stream() << "spilled vector object " << obj << " doesn't have a proper 'refOID' or 'a' field", obj.hasField("refOID"));
             _spilledIter.reset(new SpilledIterator(conn, refNs.toString(), obj["refOID"].OID()));
         }
     }
 
+    void SpillableVectorIterator::resetBatch() {
+        if (_objIter) {
+            _objIter.reset(new BSONObjIterator(_originalObj));
+        } else {
+            dassert(_spilledIter);
+            _spilledIter->resetBatch();
+        }
+    }
+
     SpillableVectorIterator::SpilledIterator::SpilledIterator(DBClientBase &conn, const string &refNs, OID oid)
-            : _cursor(conn.query(refNs.c_str(), QUERY("_id.oid" << oid).hint(BSON("_id" << 1))).release()), _seq(0) {}
+            : _cursor(conn.query(refNs.c_str(), QUERY("_id.oid" << oid).hint(BSON("_id" << 1))).release()) {}
 
     void SpillableVectorIterator::SpilledIterator::nextObj() {
         verify(_cursor->more());
         BSONObj obj = _cursor->nextSafe();
-        BSONElement seqElt = obj.getFieldDotted("_id.seq");
-        verify(seqElt.Long() == _seq);
-        ++_seq;
         _iter.reset(new BSONObjIterator(obj["a"].Obj()));
     }
 
@@ -178,6 +185,10 @@ namespace mongo {
             nextObj();
             return *(*this);
         }
+    }
+
+    void SpillableVectorIterator::SpilledIterator::resetBatch() {
+        _iter.reset();
     }
 
 } // namespace mongo
