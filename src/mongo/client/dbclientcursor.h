@@ -208,8 +208,32 @@ namespace mongo {
             int nReturned;
             int pos;
             const char *data;
+            const char *dataStart;
         public:
-            Batch() : m( new Message() ), nReturned(), pos(), data() { }
+            Batch() : m( new Message() ), nReturned(), pos(), data(), dataStart() { }
+        };
+
+        /**
+         * Resets the current batch to the beginning of the last received batch of data.  Should
+         * really only be used if you're careful about moreInCurrentBatch().
+         */
+        void resetBatch();
+
+        /**
+         * RAII class for resetting a batch on non-clean scope exit.  Used in migrate code to handle
+         * RetryWithWriteLock.
+         */
+        class BatchResetter : boost::noncopyable {
+            DBClientCursor &_c;
+            bool _done;
+          public:
+            BatchResetter(DBClientCursor &c) : _c(c), _done(false) {}
+            ~BatchResetter() {
+                if (!_done) {
+                    _c.resetBatch();
+                }
+            }
+            void setDone() { _done = true; }
         };
 
     private:
