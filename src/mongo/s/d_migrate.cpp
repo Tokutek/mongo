@@ -58,6 +58,7 @@
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/delete.h"
+#include "mongo/db/relock.h"
 #include "mongo/db/server_parameters.h"
 
 #include "mongo/client/connpool.h"
@@ -1542,6 +1543,79 @@ namespace mongo {
             return cc().getLastOp();
         }
 
+        template<typename T>
+        class CounterResetter : boost::noncopyable {
+            T &_val;
+            T _was;
+            bool _done;
+          public:
+            CounterResetter(T &val) : _val(val), _was(val), _done(false) {}
+            ~CounterResetter() {
+                if (!_done) {
+                    _val = _was;
+                }
+            }
+            void setDone() { _done = true; }
+        };
+
+        /**
+         * We may need to handle RetryWithWriteLock inside this code, so it is factored out of _go
+         * below.
+         */
+        void lockedMigrateInsertFirstBatch(const BSONObj &firstBatch, uint64_t insertFlags) {
+            Client::Transaction txn(DB_SERIALIZABLE);
+            Collection *cl = getCollection(ns);
+            massert(17318, "collection must exist during migration", cl);
+            for (BSONObjIterator it(firstBatch); it.more(); ++it) {
+                BSONObj obj = (*it).Obj();
+                insertOneObject(cl, obj, insertFlags);
+                OplogHelpers::logInsert(ns.c_str(), obj, true);
+                numCloned++;
+                clonedBytes += obj.objsize();
+            }
+            txn.commit();
+        }
+
+        void lockedMigrateInsertBatch(DBClientCursorBatchIterator &iter, uint64_t insertFlags) {
+            Client::Transaction txn(DB_SERIALIZABLE);
+            Collection *cl = getCollection(ns);
+            massert(17319, "collection must exist during migration", cl);
+            while (iter.moreInCurrentBatch()) {
+                BSONObj obj = iter.nextSafe();
+                insertOneObject(cl, obj, insertFlags);
+                OplogHelpers::logInsert(ns.c_str(), obj, true);
+                numCloned++;
+                clonedBytes += obj.objsize();
+            }
+            txn.commit();
+        }
+
+        bool lockedMigrateHandleLegacyBatch(const BSONObj &arr) {
+            Client::Transaction txn(DB_SERIALIZABLE);
+            int thisTime = 0;
+
+            for (BSONObjIterator i(arr); i.more(); i++) {
+                BSONObj o = (*i).Obj();
+                BSONObj id = o["_id"].wrap();
+                OpDebug debug;
+                updateObjects(ns.c_str(),
+                              o,
+                              id,
+                              true,  // upsert
+                              false, // multi
+                              true   // fromMigrate
+                              );
+
+                thisTime++;
+                numCloned++;
+                clonedBytes += o.objsize();
+            }
+
+            txn.commit();
+
+            return thisTime != 0;
+        }
+
         void go() {
             try {
                 _go();
@@ -1678,43 +1752,45 @@ namespace mongo {
                     }
 
                     LOCK_REASON(lockReason, "sharding: cloning documents on recipient for migrate");
-                    {
+                    try {
                         Client::ReadContext ctx(ns, lockReason);
-                        Client::Transaction txn(DB_SERIALIZABLE);
-                        Collection *cl = getCollection(ns);
-                        massert(17318, "collection must exist during migration", cl);
-                        for (BSONObjIterator it(cursorObj["firstBatch"].Obj()); it.more(); ++it) {
-                            BSONObj obj = (*it).Obj();
-                            insertOneObject(cl, obj, insertFlags);
-                            OplogHelpers::logInsert(ns.c_str(), obj, true);
-                            numCloned++;
-                            clonedBytes += obj.objsize();
-                        }
-                        txn.commit();
+                        CounterResetter<long long> numClonedResetter(numCloned);
+                        CounterResetter<long long> clonedBytesResetter(clonedBytes);
+
+                        lockedMigrateInsertFirstBatch(cursorObj["firstBatch"].Obj(), insertFlags);
+
+                        numClonedResetter.setDone();
+                        clonedBytesResetter.setDone();
+                    } catch (RetryWithWriteLock) {
+                        Client::WriteContext ctx(ns, lockReason);
+
+                        lockedMigrateInsertFirstBatch(cursorObj["firstBatch"].Obj(), insertFlags);
                     }
 
                     for (DBClientCursor cursor(conn.get(), ns, cursorObj["id"].Long(), 0, 0);
                          cursor.more(); ) {
-                        Client::ReadContext ctx(ns, lockReason);
-                        Client::Transaction txn(DB_SERIALIZABLE);
-                        Collection *cl = getCollection(ns);
-                        massert(17319, "collection must exist during migration", cl);
-                        while (cursor.moreInCurrentBatch()) {
-                            BSONObj obj = cursor.nextSafe();
-                            insertOneObject(cl, obj, insertFlags);
-                            OplogHelpers::logInsert(ns.c_str(), obj, true);
-                            numCloned++;
-                            clonedBytes += obj.objsize();
+                        try {
+                            Client::ReadContext ctx(ns, lockReason);
+                            CounterResetter<long long> numClonedResetter(numCloned);
+                            CounterResetter<long long> clonedBytesResetter(clonedBytes);
+                            DBClientCursor::BatchResetter br(cursor);
+                            DBClientCursorBatchIterator iter(cursor);
+
+                            lockedMigrateInsertBatch(iter, insertFlags);
+
+                            numClonedResetter.setDone();
+                            clonedBytesResetter.setDone();
+                            br.setDone();
+                        } catch (RetryWithWriteLock) {
+                            Client::WriteContext ctx(ns, lockReason);
+                            DBClientCursorBatchIterator iter(cursor);
+
+                            lockedMigrateInsertBatch(iter, insertFlags);
                         }
-                        txn.commit();
                     }
                 } else {
                     // The old path, for compatibility with older TokuMX servers.
                     LOG(0) << "moveChunk using old migrate path, please upgrade all shards soon" << migrateLog;
-
-                    LOCK_REASON(lockReason, "sharding: cloning documents on recipient for migrate, using old _migrateClone");
-                    Client::ReadContext ctx(ns, lockReason);
-                    Client::Transaction txn(DB_SERIALIZABLE);
 
                     while ( true ) {
                         BSONObj res;
@@ -1728,31 +1804,26 @@ namespace mongo {
                         }
 
                         BSONObj arr = res["objects"].Obj();
-                        int thisTime = 0;
+                        bool nonempty;
+                        LOCK_REASON(lockReason, "sharding: cloning documents on recipient for migrate, using old _migrateClone");
+                        try {
+                            Client::ReadContext ctx(ns, lockReason);
+                            CounterResetter<long long> numClonedResetter(numCloned);
+                            CounterResetter<long long> clonedBytesResetter(clonedBytes);
 
-                        BSONObjIterator i( arr );
-                        while( i.more() ) {
-                            BSONObj o = i.next().Obj();
-                            BSONObj id = o["_id"].wrap();
-                            OpDebug debug;
-                            updateObjects(ns.c_str(),
-                                          o,
-                                          id,
-                                          true,  // upsert
-                                          false, // multi
-                                          true   // fromMigrate
-                                          );
+                            nonempty = lockedMigrateHandleLegacyBatch(arr);
 
-                            thisTime++;
-                            numCloned++;
-                            clonedBytes += o.objsize();
+                            numClonedResetter.setDone();
+                            clonedBytesResetter.setDone();
+                        } catch (RetryWithWriteLock) {
+                            Client::WriteContext ctx(ns, lockReason);
+
+                            nonempty = lockedMigrateHandleLegacyBatch(arr);
                         }
-
-                        if ( thisTime == 0 )
+                        if (!nonempty) {
                             break;
+                        }
                     }
-
-                    txn.commit();
                 }
 
                 timing.done(3);
