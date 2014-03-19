@@ -334,14 +334,6 @@ namespace mongo {
 
         uassert(12523, "no index name specified",
                         info["name"].ok());
-
-        uassert(16753, str::stream() << "index with name " << name << " already exists",
-                       _cd->findIndexByName(name) < 0);
-
-        uassert(16754, str::stream() << "index already exists with diff name " <<
-                       name << " " << keyPattern.toString(),
-                       findIndexByKeyPattern(keyPattern) < 0);
-
         uassert(12505, str::stream() << "add index fails, too many indexes for " <<
                        name << " key:" << keyPattern.toString(),
                        nIndexes() < Collection::NIndexesMax);
@@ -1769,7 +1761,7 @@ namespace mongo {
 
     // ------------------------------------------------------------------------
 
-    BSONObj IndexedCollection::determinePrimaryKey(const BSONObj &options) {
+    static BSONObj getPrimaryKeyFromOptions(const BSONObj &options) {
         const BSONObj idPattern = BSON("_id" << 1);
         BSONObj pkPattern = idPattern;
         if (options["primaryKey"].ok()) {
@@ -1790,8 +1782,8 @@ namespace mongo {
     }
 
     IndexedCollection::IndexedCollection(const StringData &ns, const BSONObj &options) :
-        CollectionBase(ns, determinePrimaryKey(options), options),
-        // determinePrimaryKey() was called, so whatever the pk is, it
+        CollectionBase(ns, getPrimaryKeyFromOptions(options), options),
+        // getPrimaryKeyFromOptions() was called, so whatever the pk is, it
         // exists in _indexes. Thus, we know we have an _id primary key
         // if we can find an index with pattern "_id: 1" at this point.
         _idPrimaryKey(findIndexByKeyPattern(BSON("_id" << 1)) >= 0) {
@@ -2610,7 +2602,7 @@ namespace mongo {
     // constructor and methods that create a PartitionedCollection
     //
     PartitionedCollection::PartitionedCollection(const StringData &ns, const BSONObj &options) :
-        CollectionData(ns, BSON("_id" << 1)), // the pk MUST be _id:1, we verify below
+        CollectionData(ns, determinePrimaryKey(options)),
         _options(options.getOwned()),
         _ordering(Ordering::make(BSONObj())) // dummy for now, we create it properly below
     {
@@ -2619,9 +2611,6 @@ namespace mongo {
     }
 
     void PartitionedCollection::initialize(const StringData &ns, const BSONObj &options) {
-        // verify that there is no defined primary key
-        uassert(17245, str::stream() << "Partitioned Collection cannot have a defined primary key: " << ns, !options["primaryKey"].ok());
-
         // create the meta collection
         // note that we create it with empty options
         _metaCollection.reset(new IndexedCollection(getMetaCollectionName(ns), BSONObj()));
@@ -2631,7 +2620,6 @@ namespace mongo {
 
         // some sanity checks
         verify(numPartitions() == 1);
-        verify(_partitions[0]->nIndexes() == 1);
 
         // create the index details
         createIndexDetails();
@@ -2718,8 +2706,6 @@ namespace mongo {
     }
 
     void PartitionedCollection::initialize(const BSONObj &serialized) {
-        // verify that there is no defined primary key
-        uassert(17246, str::stream() << "Partitioned Collection cannot have a defined primary key: " << _ns, !_options["primaryKey"].ok());
         // open the metadata collection
         BSONObj metaSerialized = makeMetaPartitionedSerialized(getMetaCollectionName(_ns));
         _metaCollection.reset(new IndexedCollection(metaSerialized));
@@ -2773,6 +2759,10 @@ namespace mongo {
         shared_ptr<IndexedCollection> ret;
         ret.reset(new IndexedCollection(serialized));
         return ret;
+    }
+
+    BSONObj PartitionedCollection::determinePrimaryKey(const BSONObj &options) {
+        return getPrimaryKeyFromOptions(options);
     }
 
     unsigned long long PartitionedCollection::getMultiKeyIndexBits() const {
@@ -3057,9 +3047,23 @@ namespace mongo {
         
         // first drop the existing partition.
         dropPartitionInternal(_partitionIDs[0]);
-        // now add the rest of the partitions        
+        // now add the rest of the partitions
         for (vector<BSONElement>::const_iterator it = partitionInfo.begin(); it != partitionInfo.end(); it++) {
-            appendPartition(it->Obj());
+            // the keys are stored without their field names,
+            // in the "packed" format. Here we put the
+            // field names back. Probably not the most efficient code,
+            // but it does not need to be. This function probably is not called
+            // very often
+            BSONObj curr = it->Obj();
+            BSONObj pivot = curr["max"].Obj();
+            BSONObjBuilder strippedPivot;
+            for (BSONObjIterator it(pivot); it.more(); it.next()) {
+                BSONElement pivotElement = *it;
+                strippedPivot.appendAs(pivotElement, "");
+            }
+            BSONObjBuilder currWithFilledPivot;
+            cloneBSONWithFieldChanged(currWithFilledPivot, curr, "max", strippedPivot.done(), false);
+            appendPartition(currWithFilledPivot.obj());
         }
         sanityCheck();
     }
@@ -3141,14 +3145,45 @@ namespace mongo {
         sanityCheck();
     }
 
+    // returns the partition info with field names for the pivots filled in
     void PartitionedCollection::getPartitionInfo(uint64_t* numPartitions, BSONArray* partitionArray) {
         BSONArrayBuilder b;
-        // for sanity checking
         uint64_t numPartitionsFoundInMeta = 0;
         for (shared_ptr<Cursor> c( Cursor::make(_metaCollection.get(), 1, false) ); c->ok() ; c->advance()) {
-            BSONObj curr = c->current();
-            b.append(curr);
             numPartitionsFoundInMeta++;
+        }
+        // reason we run through this twice is to make it simple
+        // to know when we are at the last element
+        shared_ptr<Cursor> c( Cursor::make(_metaCollection.get(), 1, false) );
+        for (uint64_t i = 0; i < numPartitionsFoundInMeta; i++) {
+            massert(0, "Bad cursor", c->ok());
+            BSONObj curr = c->current();
+            if (i < numPartitionsFoundInMeta - 1) {
+                // the keys are stored without their field names,
+                // in the "packed" format. Here we put the
+                // field names back. Probably not the most efficient code,
+                // but it does not need to be. This function probably is not called
+                // very often
+                BSONObj pivot = curr["max"].Obj();
+                BSONObjBuilder filledPivot;
+                BSONObjIterator pkIT(_pk); 
+                BSONObjIterator pivotIT(pivot);
+                while (pivotIT.more()) {
+                    BSONElement pivotElement = *pivotIT;
+                    filledPivot.appendAs(pivotElement, (*pkIT).fieldName());
+                    pivotIT.next();
+                    pkIT.next();
+                }
+                massert(0, str::stream() << "There should be no more PK fields available for pivot " << curr, !pkIT.more());
+                BSONObjBuilder currWithFilledPivot;
+                cloneBSONWithFieldChanged(currWithFilledPivot, curr, "max", filledPivot.done(), false);
+                b.append(currWithFilledPivot.obj());
+            }
+            else {
+                massert(0, "bad final pivot", curr["max"][""].type() == MaxKey);
+                b.append(curr);
+            }
+            c->advance();
         }
         // note that we cannot just return numPartitions() for this
         // command, because this is done in the context of a transaction

@@ -92,8 +92,8 @@ doTest = function (signal, startPort, txnLimit) {
     assert(oplogPartitionInfo.numPartitions == 2);
     // verify the pivot
     print(pivot);
-    print(oplogPartitionInfo["partitions"][0]["max"][""]);
-    assert(friendlyEqual(oplogPartitionInfo["partitions"][0]["max"][""], pivot));
+    print(oplogPartitionInfo["partitions"][0]["max"]["_id"]);
+    assert(friendlyEqual(oplogPartitionInfo["partitions"][0]["max"]["_id"], pivot));
     x = localdb.oplog.rs.find();
     y = localdb.oplogControl.find();
     // make sure data is good
@@ -115,7 +115,7 @@ doTest = function (signal, startPort, txnLimit) {
     assert(!y.hasNext());
     if (txnLimit < 15) {
         assert(refsPartitionInfo.numPartitions == 2);
-        assert(friendlyEqual(refsPartitionInfo["partitions"][0]["max"][""],refsPivot));
+        assert(friendlyEqual(refsPartitionInfo["partitions"][0]["max"]["_id"],refsPivot));
         // make sure maxRefGTID is set
         assert(friendlyEqual(refsPartitionInfo["partitions"][0]["maxRefGTID"], pivot));
     }

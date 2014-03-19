@@ -31,7 +31,7 @@ db.rollbackTransaction();
 partInfo = db.runCommand({getPartitionInfo:"part_ops"});
 assert.eq(2, partInfo.numPartitions);
 // make sure we have the right pivot
-assert.eq(199, partInfo["partitions"][0]["max"][""]);
+assert.eq(199, partInfo["partitions"][0]["max"]["_id"]);
 
 for (i = 0; i < 200; i++) {
     x = t.find({_id:i});

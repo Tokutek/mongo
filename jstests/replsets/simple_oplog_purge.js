@@ -10,13 +10,13 @@ var refsPartitionInfo;
 verifyStuff = function (txnLimit, num) {
     assert.eq(num, oplogPartitionInfo.numPartitions);
     if (num - 4 >= 0) {
-        assert(friendlyEqual(pivot, oplogPartitionInfo["partitions"][num-4]["max"][""]));
+        assert(friendlyEqual(pivot, oplogPartitionInfo["partitions"][num-4]["max"]["_id"]));
     }
     if (num - 3 >= 0) {
-        assert(friendlyEqual(pivot2, oplogPartitionInfo["partitions"][num-3]["max"][""]));
+        assert(friendlyEqual(pivot2, oplogPartitionInfo["partitions"][num-3]["max"]["_id"]));
     }
     if (num - 2 >= 1) {
-        assert(friendlyEqual(pivot3, oplogPartitionInfo["partitions"][num-2]["max"][""]));
+        assert(friendlyEqual(pivot3, oplogPartitionInfo["partitions"][num-2]["max"][_id""]));
     }
     if (txnLimit < 10) {
         assert.eq(num, refsPartitionInfo.numPartitions);
@@ -68,7 +68,7 @@ doOtherTest = function (signal, startPort, txnLimit, trimWithGTID) {
     oplogPartitionInfo = localdb.runCommand({getPartitionInfo:"oplog.rs"});
     refsPartitionInfo = localdb.runCommand({getPartitionInfo:"oplog.refs"});
     assert.eq(2, oplogPartitionInfo.numPartitions);
-    assert(friendlyEqual(pivot, oplogPartitionInfo["partitions"][0]["max"][""]));
+    assert(friendlyEqual(pivot, oplogPartitionInfo["partitions"][0]["max"]["_id"]));
     if (txnLimit < 10) {
         assert.eq(2, refsPartitionInfo.numPartitions);
         assert(friendlyEqual(pivot, refsPartitionInfo["partitions"][0]["maxRefGTID"]));
