@@ -191,7 +191,6 @@ namespace mongo {
         batch.nReturned = qr->nReturned;
         batch.pos = 0;
         batch.data = qr->data();
-        batch.dataStart = batch.data;
 
         _client->checkResponse( batch.data, batch.nReturned, &retry, &host ); // watches for "not master"
 
@@ -243,9 +242,9 @@ namespace mongo {
         return o;
     }
 
-    void DBClientCursor::resetBatch() {
-        batch.pos = 0;
-        batch.data = batch.dataStart;
+    void DBClientCursor::resetBatch(int pos, const char *data) {
+        batch.pos = pos;
+        batch.data = data;
     }
 
     void DBClientCursor::peek(vector<BSONObj>& v, int atMost) {
