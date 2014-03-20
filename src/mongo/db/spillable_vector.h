@@ -109,13 +109,39 @@ namespace mongo {
      *     }
      */
     class SpillableVectorIterator {
+      public:
+        class BatchResetter : boost::noncopyable {
+            SpillableVectorIterator &_it;
+            scoped_ptr<DBClientCursor::BatchResetter> _cbr;
+            bool _done;
 
+          public:
+            BatchResetter(SpillableVectorIterator &it) : _it(it), _cbr(), _done(false) {
+                if (_it._spilledIter) {
+                    _cbr.reset(new DBClientCursor::BatchResetter(*_it._spilledIter->_cursor));
+                }
+            }
+            ~BatchResetter() {
+                if (!_done) {
+                    _it.resetBatch();
+                }
+            }
+            void setDone() {
+                _done = true;
+                if (_cbr) {
+                    _cbr->setDone();
+                }
+            }
+        };
+
+      private:
         class SpilledIterator {
             scoped_ptr<DBClientCursor> _cursor;
             scoped_ptr<BSONObjIterator> _iter;
-            long long _seq;
 
             void nextObj();
+
+            friend class SpillableVectorIterator::BatchResetter;
 
           public:
             SpilledIterator(DBClientBase &conn, const string &refNs, OID oid);
@@ -123,10 +149,12 @@ namespace mongo {
             bool moreInCurrentBatch();
             BSONObj next();
             BSONObj operator*();
+            void resetBatch();
         };
 
         scoped_ptr<BSONObjIterator> _objIter;
         scoped_ptr<SpilledIterator> _spilledIter;
+        BSONObj _originalObj;  // only if _objIter is used
 
       public:
         SpillableVectorIterator(const BSONObj &obj, DBClientBase &conn, const StringData &refNs);
@@ -142,7 +170,7 @@ namespace mongo {
 
         bool moreInCurrentBatch() {
             if (_objIter) {
-                return true;
+                return more();
             } else {
                 dassert(_spilledIter);
                 return _spilledIter->moreInCurrentBatch();
@@ -168,6 +196,8 @@ namespace mongo {
                 return *(*_spilledIter);
             }
         }
+
+        void resetBatch();
     };
 
 } // namespace mongo
