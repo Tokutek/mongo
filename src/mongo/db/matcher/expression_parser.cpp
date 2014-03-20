@@ -242,9 +242,16 @@ namespace mongo {
                                           mongoutils::str::stream() << "not handled: " << e.fieldName() );
     }
 
-    StatusWithMatchExpression MatchExpressionParser::_parse( const BSONObj& obj, bool topLevel ) {
+    StatusWithMatchExpression MatchExpressionParser::_parse( const BSONObj& obj, int level ) {
+        if (level > kMaximumTreeDepth) {
+            return StatusWithMatchExpression( ErrorCodes::BadValue,
+                                              "exceeded maximum query tree depth" );
+        }
 
         std::auto_ptr<AndMatchExpression> root( new AndMatchExpression() );
+
+        bool topLevel = (level == 0);
+        level++;
 
         BSONObjIterator i( obj );
         while ( i.more() ){
@@ -259,7 +266,7 @@ namespace mongo {
                         return StatusWithMatchExpression( ErrorCodes::BadValue,
                                                      "$or needs an array" );
                     std::auto_ptr<OrMatchExpression> temp( new OrMatchExpression() );
-                    Status s = _parseTreeList( e.Obj(), temp.get() );
+                    Status s = _parseTreeList( e.Obj(), temp.get(), level );
                     if ( !s.isOK() )
                         return StatusWithMatchExpression( s );
                     root->add( temp.release() );
@@ -269,7 +276,7 @@ namespace mongo {
                         return StatusWithMatchExpression( ErrorCodes::BadValue,
                                                      "and needs an array" );
                     std::auto_ptr<AndMatchExpression> temp( new AndMatchExpression() );
-                    Status s = _parseTreeList( e.Obj(), temp.get() );
+                    Status s = _parseTreeList( e.Obj(), temp.get(), level );
                     if ( !s.isOK() )
                         return StatusWithMatchExpression( s );
                     root->add( temp.release() );
@@ -279,7 +286,7 @@ namespace mongo {
                         return StatusWithMatchExpression( ErrorCodes::BadValue,
                                                      "and needs an array" );
                     std::auto_ptr<NorMatchExpression> temp( new NorMatchExpression() );
-                    Status s = _parseTreeList( e.Obj(), temp.get() );
+                    Status s = _parseTreeList( e.Obj(), temp.get(), level );
                     if ( !s.isOK() )
                         return StatusWithMatchExpression( s );
                     root->add( temp.release() );
