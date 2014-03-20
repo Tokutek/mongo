@@ -1267,6 +1267,9 @@ namespace mongo {
         scoped_ptr<storage::Loader> _loader;
     };
 
+    string getMetaCollectionName(const StringData &ns);
+    string getPartitionName(const StringData &ns, uint64_t partitionID);
+
     class PartitionedCollection : public CollectionData {
     public:
         //
@@ -1472,15 +1475,51 @@ namespace mongo {
                                        const int direction, const int numWanted,
                                        const bool countCursor);
 
-        virtual shared_ptr<CollectionRenamer> getRenamer() {
-            uasserted(17294, "cannot rename a partitioned collection");
-        }
 
+        class Renamer : public CollectionRenamer {
+            shared_ptr<CollectionRenamer> _metaRenamer;
+            std::vector< shared_ptr<CollectionRenamer> > _partitionRenamers;
+            std::vector<uint64_t> _ids;
+        public:
+            Renamer(PartitionedCollection *pc) {
+                _metaRenamer = pc->_metaCollection->getRenamer();
+                for (uint64_t i = 0; i < pc->numPartitions(); i++) {
+                    _partitionRenamers.push_back(pc->_partitions[i]->getRenamer());
+                    _ids.push_back(pc->_partitionIDs[i]);
+                }
+            }
+
+            // not sure if it is necessary to pass in from, whether this is the
+            // same as _ns
+            virtual void renameCollection(const StringData& from, const StringData& to) {
+                _metaRenamer->renameCollection(
+                    getMetaCollectionName(from),
+                    getMetaCollectionName(to)
+                    );
+                uint64_t curr = 0;
+                for ( vector< shared_ptr<CollectionRenamer> >::const_iterator it = _partitionRenamers.begin(); 
+                      it != _partitionRenamers.end(); 
+                      it++
+                      )
+                {
+                    (*it)->renameCollection(
+                        getPartitionName(from, _ids[curr]),
+                        getPartitionName(to, _ids[curr])
+                        );
+                    curr++;
+                }
+            }
+        };
+        shared_ptr<CollectionRenamer> getRenamer() {
+            shared_ptr<CollectionRenamer> ret(new Renamer (this));
+            return ret;
+        }
 
         // functions for adding/dropping partitions
         void dropPartition(uint64_t id);
         void addPartition();
         void manuallyAddPartition(const BSONObj& newPivot);
+        void addPartitionFromOplog(const BSONObj& newPivot, const BSONObj &partitionInfo);
         void getPartitionInfo(uint64_t* numPartitions, BSONArray* partitionArray);
         void addClonedPartitionInfo(const vector<BSONElement> &partitionInfo);
         BSONObj getPartitionMetadata(uint64_t index);
@@ -1523,15 +1562,15 @@ namespace mongo {
     private:
         void createIndexDetails();
         void sanityCheck();
-        string getMetaCollectionName(const StringData &ns);
         int partitionWithRow(const BSONObj& row) const {
             return partitionWithPK(getValidatedPKFromObject(row));
         }
 
         // function used internally to drop a partition
         void dropPartitionInternal(uint64_t id);
-        // returns name of the IndexedCollection for an associated partition
-        string getPartitionName(uint64_t partitionID);
+        // helper function that runs common code for the various
+        // methods that add a partition
+        void prepareAddPartition();
         // helper function, adds a partition as specified by partitionInfo
         // used by appendNewPartition and createPartitionsFromClone
         void appendPartition(BSONObj partitionInfo);

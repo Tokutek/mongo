@@ -985,13 +985,14 @@ namespace mongo {
             }
 
             bool capped = false;
+            bool partitioned = false;
             long long size = 0;
             {
                 Client::Context ctx( source );
                 Collection *cl = getCollection( source );
                 uassert( 10026 ,  "source namespace does not exist", cl );
                 capped = cl->isCapped();
-                uassert(17295, "cannot rename a partitioned collection", !cl->isPartitioned());
+                partitioned = cl->isPartitioned();
                 // TODO: Get the capped size
             }
 
@@ -1022,6 +1023,7 @@ namespace mongo {
 
             // renaming across databases, so we must copy all
             // the data and then remove the source collection.
+            uassert(17295, "cannot rename a partitioned collection", !partitioned);
             BSONObjBuilder spec;
             if ( capped ) {
                 spec.appendBool( "capped", true );
@@ -1774,7 +1776,6 @@ namespace mongo {
             bool isOplogNS = (strcmp(ns.c_str(), rsoplog) == 0) || (strcmp(ns.c_str(), rsOplogRefs) == 0);
             uassert( 17300, "cannot manually drop partition on oplog or oplog.refs", force.trueValue() || !isOplogNS);
             Collection *cl = getCollection( ns );
-            OplogHelpers::logUnsupportedOperation(ns.c_str());
             uassert( 17301, "dropPartition no such collection", cl );
             uassert( 17302, "collection must be partitioned", cl->isPartitioned() );
 
@@ -1782,7 +1783,9 @@ namespace mongo {
             uassert(17303, "invalid id", e.ok() && e.isNumber());
             
             PartitionedCollection *pc = cl->as<PartitionedCollection>();
-            pc->dropPartition(e.numberLong());
+            uint64_t partitionID = e.numberLong();
+            pc->dropPartition(partitionID);
+            OplogHelpers::logDropPartition(ns.c_str(), partitionID);
             return true;
         }
     } cmdDropPartition;
@@ -1815,8 +1818,6 @@ namespace mongo {
             Collection *cl = getCollection( ns );
             uassert( 17306, "addPartition no such collection", cl );
             uassert( 17307, "collection must be partitioned", cl->isPartitioned() );
-            OplogHelpers::logUnsupportedOperation(ns.c_str());
-
             BSONElement e = cmdObj["newPivot"];            
             PartitionedCollection *pc = cl->as<PartitionedCollection>();
             if (e.ok()) {
@@ -1827,6 +1828,14 @@ namespace mongo {
             else {
                 pc->addPartition();
             }
+            // now that we have added the partition, take care of the oplog
+            uint64_t numPartitions = pc->numPartitions();
+            massert(0, str::stream() << "bad numPartitions after adding a partition " << numPartitions, numPartitions > 1);
+            // this partition has the pivot that was capped
+            BSONObj oldEnd = pc->getPartitionMetadata(numPartitions - 2);
+            // this is the newly added partition
+            BSONObj newEnd = pc->getPartitionMetadata(numPartitions - 1);            
+            OplogHelpers::logAddPartition(ns.c_str(), oldEnd["max"].Obj(), newEnd);
             return true;
         }
     } cmdAddPartition;

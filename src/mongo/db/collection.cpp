@@ -1339,6 +1339,23 @@ namespace mongo {
             }
             string logNs = cl.toString() + ".$cmd";
             OplogHelpers::logCommand(logNs.c_str(), options);
+            // now handle partitioned collections. It is a shame that
+            // this needs to be done. We want to make sure that the initial
+            // partition created by partitioned collections is identical
+            // on secondaries. Namely, that they have the same create time
+            // So, we need this special case code here.
+            if (options["partitioned"].trueValue()) {
+                BSONObj res;
+                Collection* cl = getCollection(ns);
+                massert(0, "Could not get collection we just created in userCreateNS", cl);
+                PartitionedCollection* pc = cl->as<PartitionedCollection>();
+                uint64_t numPartitions;
+                BSONArray partitionArray;
+                pc->getPartitionInfo(&numPartitions, &partitionArray);
+                std::vector<BSONElement> v;
+                partitionArray.elems(v);
+                OplogHelpers::logPartitionInfoAfterCreate(ns.rawData(), v);
+            }
         }
         return true;
     }
@@ -2596,7 +2613,18 @@ namespace mongo {
                                                           0, //multiKeyIndexBits is 0
                                                           newIndexesArray.arr());
     }
+    
+    string getMetaCollectionName(const StringData &ns) {
+        mongo::StackStringBuilder ss;
+        ss << ns << "$$meta";
+        return ss.str();
+    }
 
+    string getPartitionName(const StringData &ns, uint64_t partitionID) {
+        mongo::StackStringBuilder ss;
+        ss << ns << "$$p" << partitionID;
+        return ss.str();
+    }
 
     //
     // constructor and methods that create a PartitionedCollection
@@ -2673,11 +2701,11 @@ namespace mongo {
         _partitions[0]->dropIndexDetails(0, false);
         _partitions.erase(_partitions.begin());
 
-        renamer->renameCollection(_ns, getPartitionName(0));
+        renamer->renameCollection(_ns, getPartitionName(_ns, 0));
         //partition 0 ready to go
         BSONObj currCollSerialized = makePartitionedSerialized(
             serialized,
-            getPartitionName(0)
+            getPartitionName(_ns, 0)
             );
         _partitions.push_back(openExistingPartition(currCollSerialized));        
     }
@@ -2717,7 +2745,7 @@ namespace mongo {
             uint64_t currID = curr["_id"].numberLong();
             BSONObj currCollSerialized = makePartitionedSerialized(
                 serialized,
-                getPartitionName(currID)
+                getPartitionName(_ns, currID)
                 );
             _partitions.push_back(openExistingPartition(currCollSerialized));
             // extract the pivot
@@ -2795,7 +2823,7 @@ namespace mongo {
         for (uint64_t i = 0; i < numPartitions(); i++) {
             BSONObjBuilder b;
             uint64_t currID = _partitionIDs[i];
-            cloneBSONWithFieldChanged(b, info, "ns", getPartitionName(currID), false);
+            cloneBSONWithFieldChanged(b, info, "ns", getPartitionName(_ns, currID), false);
             if (!_partitions[i]->ensureIndex(b.obj())) {
                 return false;
             }
@@ -2984,7 +3012,7 @@ namespace mongo {
 
         // add new collection to vector of partitions
         shared_ptr<CollectionData> newPartition;
-        newPartition = makeNewPartition(getPartitionName(id), _options);
+        newPartition = makeNewPartition(getPartitionName(_ns, id), _options);
         if (numPartitions() > 0) {
             // if this is not the first partition, we need to make sure the
             // secondary indexes match
@@ -2998,7 +3026,7 @@ namespace mongo {
                 }
                 // we want to make sure any other secondary index actually works
                 BSONObjBuilder b;
-                cloneBSONWithFieldChanged(b, currInfo, "ns", getPartitionName(id), false);
+                cloneBSONWithFieldChanged(b, currInfo, "ns", getPartitionName(_ns, id), false);
                 bool ret = newPartition->ensureIndex(b.obj());
                 massert(0, str::stream() << "could not add index " << currInfo, ret);
             }
@@ -3034,7 +3062,7 @@ namespace mongo {
         sanityCheck();
     }
 
-    // create partitions from the cloner
+    // create partitions from the cloner or replication (after a create)
     void PartitionedCollection::addClonedPartitionInfo(const vector<BSONElement> &partitionInfo) {
         uassert(17279, "Called addClonedPartitionInfo with more than one current partition", (numPartitions() == 1));
         // Note that the caller of this function needs to be REALLY careful
@@ -3105,7 +3133,7 @@ namespace mongo {
         verify(!indexBitChanged);
     }
 
-    void PartitionedCollection::addPartition() {
+    void PartitionedCollection::prepareAddPartition() {
         Lock::assertWriteLocked(_ns);
         sanityCheck();
         // ensure only one thread can modify partitions at a time
@@ -3120,30 +3148,29 @@ namespace mongo {
         _metaCollection->acquireTableLock();
         // kill all cursors first, this may be unnecessary, determine later
         ClientCursor::invalidate(_ns);
+    }
+
+    void PartitionedCollection::addPartition() {
+        prepareAddPartition();
         capLastPartition();
         appendNewPartition();
         sanityCheck();
     }
 
     void PartitionedCollection::manuallyAddPartition(const BSONObj& newPivot) {
-        Lock::assertWriteLocked(_ns);
-        sanityCheck();
-
-        CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
-        rollback.noteNs(_ns);
-
-        // ensure only one thread can modify partitions at a time
-        // if we have multiple multi-statement transactions adding partitions
-        // concurrently, things can get hairy (like closing during an abort).
-        // So, to keep this simple, only allowing one transaction the ability
-        // to drop or add a collection at a time
-        _metaCollection->acquireTableLock();
-        // kill all cursors first, this may be unnecessary, determine later
-        ClientCursor::invalidate(_ns);
+        prepareAddPartition();
         manuallyCapLastPartition(getValidatedPKFromObject(newPivot));
         appendNewPartition();
         sanityCheck();
     }
+
+    void PartitionedCollection::addPartitionFromOplog(const BSONObj& newPivot, const BSONObj &partitionInfo) {
+        prepareAddPartition();
+        manuallyCapLastPartition(newPivot);
+        appendPartition(partitionInfo);
+        sanityCheck();
+    }
+
 
     // returns the partition info with field names for the pivots filled in
     void PartitionedCollection::getPartitionInfo(uint64_t* numPartitions, BSONArray* partitionArray) {
@@ -3290,18 +3317,6 @@ namespace mongo {
         return low;
     }
 
-    string PartitionedCollection::getMetaCollectionName(const StringData &ns) {
-        mongo::StackStringBuilder ss;
-        ss << ns << "$$meta";
-        return ss.str();
-    }
-
-    string PartitionedCollection::getPartitionName(uint64_t partitionID) {
-        mongo::StackStringBuilder ss;
-        ss << _ns << "$$p" << partitionID;
-        return ss.str();
-    }
-    
     bool PartitionedCollection::rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &result) {
         bool changed = false;
         BSONObjBuilder b;
