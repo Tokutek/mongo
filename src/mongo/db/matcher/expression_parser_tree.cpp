@@ -30,7 +30,14 @@
 
 namespace mongo {
 
-    Status MatchExpressionParser::_parseTreeList( const BSONObj& arr, ListOfMatchExpression* out ) {
+    // static
+    const int MatchExpressionParser::kMaximumTreeDepth = 20;
+
+    Status MatchExpressionParser::_parseTreeList( const BSONObj& arr,
+                                                  ListOfMatchExpression* out,
+                                                  int level ) {
+        level++;
+
         if ( arr.isEmpty() )
             return Status( ErrorCodes::BadValue,
                            "$and/$or/$nor must be a nonempty array" );
@@ -43,7 +50,7 @@ namespace mongo {
                 return Status( ErrorCodes::BadValue,
                                "$or/$and/$nor entries need to be full objects" );
 
-            StatusWithMatchExpression sub = _parse( e.Obj(), false );
+            StatusWithMatchExpression sub = _parse( e.Obj(), level );
             if ( !sub.isOK() )
                 return sub.getStatus();
 
