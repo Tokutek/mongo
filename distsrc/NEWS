@@ -73,6 +73,9 @@ Bug fixes
     - Fixed command authorization settings for enterprise plugin loading
       commands.  (#1012)
 
+    - Fixed a bug that caused migrations to fail when the migration causes
+      the recipient shard to transition an index to multiKey.  (#1025)
+
 
 tokumx 1.4.0
 ------------
