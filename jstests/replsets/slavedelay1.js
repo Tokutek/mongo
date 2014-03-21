@@ -1,3 +1,6 @@
+// This test is temporarily disabled until it can be fixed to be reliable.  #929
+if (0) {
+
 load("jstests/replsets/rslib.js");
 
 doTest = function( signal ) {
@@ -149,3 +152,5 @@ doTest = function( signal ) {
 }
 
 doTest(15);
+
+}
