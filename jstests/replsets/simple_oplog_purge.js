@@ -16,7 +16,7 @@ verifyStuff = function (txnLimit, num) {
         assert(friendlyEqual(pivot2, oplogPartitionInfo["partitions"][num-3]["max"]["_id"]));
     }
     if (num - 2 >= 1) {
-        assert(friendlyEqual(pivot3, oplogPartitionInfo["partitions"][num-2]["max"][_id""]));
+        assert(friendlyEqual(pivot3, oplogPartitionInfo["partitions"][num-2]["max"]["_id"]));
     }
     if (txnLimit < 10) {
         assert.eq(num, refsPartitionInfo.numPartitions);
