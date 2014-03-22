@@ -1352,7 +1352,7 @@ namespace mongo {
                 uint64_t numPartitions;
                 BSONArray partitionArray;
                 pc->getPartitionInfo(&numPartitions, &partitionArray);
-                std::vector<BSONElement> v;
+                vector<BSONElement> v;
                 partitionArray.elems(v);
                 OplogHelpers::logPartitionInfoAfterCreate(ns.rawData(), v);
             }
@@ -2972,9 +2972,9 @@ namespace mongo {
         if (foundLast) {
             uassert(
                 17250, 
-                str::stream() << "new pivot must be greater than max element in collection, newPivot: " <<
+                str::stream() << "new pivot must be greater than or equal to max element in collection, newPivot: " <<
                 newPivot.str() << " max element: " << currPK.str(), 
-                newPivot.woCompare(currPK, _ordering) > 0);
+                newPivot.woCompare(currPK, _ordering) >= 0);
         }
         overwritePivot(numPartitions()-1, newPivot);
     }
@@ -3259,12 +3259,8 @@ namespace mongo {
         _partitionIDs.erase(_partitionIDs.begin() + index);
         // ugly way to "drop" a collection. Perhaps we need
         // a CollectionData method for this.
-
-        // this calls partitions[0]->nIndexes(), if we are dropping that 
-        // partition, then we need to cache the number
-        int num = nIndexes(); 
-        for (int i = 0; i < num; i++) {
-            _partitions[index]->dropIndexDetails(i, false);
+        while (_partitions[index]->nIndexes() > 0) {
+            _partitions[index]->dropIndexDetails(0, false);
         }
         
         // special case for dropping last partition, we have to fix up

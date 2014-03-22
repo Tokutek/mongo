@@ -286,12 +286,17 @@ namespace mongo {
         void logPartitionInfoAfterCreate(const char *ns, const vector<BSONElement> &partitionInfo) {
             if (logTxnOpsForReplication()) {
                 BSONObjBuilder b;
+                BSONArrayBuilder barr;
                 if (isLocalNs(ns)) {
                     return;
                 }
                 appendOpType(OP_STR_PARTITION_INFO, &b);
                 appendNsStr(ns, &b);
-                b.append(KEY_STR_ROW, partitionInfo);
+                for (vector<BSONElement>::const_iterator it = partitionInfo.begin(); it != partitionInfo.end(); it++) {
+                    BSONObj curr = it->Obj();
+                    barr.append(curr);
+                }
+                b.append(KEY_STR_ROW, barr.arr());
                 cc().txn().logOpForReplication(b.obj());
             }
         }
@@ -703,13 +708,13 @@ namespace mongo {
                 opCounters->gotDelete();
                 runCappedDeleteFromOplog(ns, op);
             }
-            else if (strcmp(opType, OP_STR_DROP_PARTITION)) {
+            else if (strcmp(opType, OP_STR_DROP_PARTITION) == 0) {
                 runDropPartitionFromOplog(ns, op);
             }
-            else if (strcmp(opType, OP_STR_ADD_PARTITION)) {
+            else if (strcmp(opType, OP_STR_ADD_PARTITION) == 0) {
                 runAddPartitionFromOplog(ns, op);
             }
-            else if (strcmp(opType, OP_STR_PARTITION_INFO)) {
+            else if (strcmp(opType, OP_STR_PARTITION_INFO) == 0) {
                 runPartitionInfoAfterCreate(ns, op);
             }
             else {
@@ -763,13 +768,13 @@ namespace mongo {
             else if (strcmp(opType, OP_STR_CAPPED_DELETE) == 0) {
                 runCappedInsertFromOplog(ns, op);
             }
-            else if (strcmp(opType, OP_STR_DROP_PARTITION)) {
+            else if (strcmp(opType, OP_STR_DROP_PARTITION) == 0) {
                 rollbackDropPartitionFromOplog(ns, op);
             }
-            else if (strcmp(opType, OP_STR_ADD_PARTITION)) {
+            else if (strcmp(opType, OP_STR_ADD_PARTITION) == 0) {
                 rollbackAddPartitionFromOplog(ns, op);
             }
-            else if (strcmp(opType, OP_STR_PARTITION_INFO)) {
+            else if (strcmp(opType, OP_STR_PARTITION_INFO) == 0) {
                 rollbackPartitionInfoAfterCreate(ns, op);
             }
             else {
