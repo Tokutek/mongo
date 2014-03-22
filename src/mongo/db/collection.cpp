@@ -2816,8 +2816,8 @@ namespace mongo {
         // check if index already exists. Therefore, this
         // snippet is copied from CollectionBase
         const BSONObj keyPattern = info["key"].Obj();
-        const int i = findIndexByKeyPattern(keyPattern);
-        if (i >= 0) {
+        const int idx = findIndexByKeyPattern(keyPattern);
+        if (idx >= 0) {
             return false;
         }
         for (uint64_t i = 0; i < numPartitions(); i++) {
@@ -2832,7 +2832,7 @@ namespace mongo {
             new PartitionedIndexDetails(
                 replaceNSField(info, _ns),
                 this,
-                i
+                _indexDetails.size()
                 )
             );
         _indexDetails.push_back(details);
@@ -3259,7 +3259,11 @@ namespace mongo {
         _partitionIDs.erase(_partitionIDs.begin() + index);
         // ugly way to "drop" a collection. Perhaps we need
         // a CollectionData method for this.
-        for (int i = 0; i < nIndexes(); i++) {
+
+        // this calls partitions[0]->nIndexes(), if we are dropping that 
+        // partition, then we need to cache the number
+        int num = nIndexes(); 
+        for (int i = 0; i < num; i++) {
             _partitions[index]->dropIndexDetails(i, false);
         }
         
