@@ -365,7 +365,8 @@ namespace mongo {
     }
 
     ShardStatus Shard::getStatus() const {
-        return ShardStatus( *this , runCommand( "admin" , BSON( "serverStatus" << 1 ) , true ) );
+        return ShardStatus( *this , runCommand( "admin" , BSON( "serverStatus" << 1 ) , true ) ,
+                                    runCommand( "admin" , BSON( "listDatabases" << 1 ) , true ) );
     }
 
     void Shard::reloadShardInfo() {
@@ -403,9 +404,9 @@ namespace mongo {
         return best.shard();
     }
 
-    ShardStatus::ShardStatus( const Shard& shard , const BSONObj& obj )
+    ShardStatus::ShardStatus( const Shard& shard , const BSONObj& obj , const BSONObj& dblistobj )
         : _shard( shard ) {
-        _mapped = obj.getFieldDotted( "mem.mapped" ).numberLong();
+        _dataSize = dblistobj.getFieldDotted("totalSize").numberLong();
         _hasOpsQueued = obj["writeBacksQueued"].Bool();
         _writeLock = 0; // TODO
         _mongoVersion = obj["version"].String();
