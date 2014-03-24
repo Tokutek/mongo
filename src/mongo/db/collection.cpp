@@ -2686,11 +2686,17 @@ namespace mongo {
         CollectionRenamer* renamer
         )
     {
+        // note, for now, this exists just to convert the oplog
+        // from a normal collection to a partitioned collection
+        // Theoretically, we could change this function
+        // to support changing any arbitrary collection to a partitioned
+        // collection with a single partition. But for now, that
+        // is just more functionality that needs to be tested
+        // and maintained, so not supporting it at the moment.
+        uassert(0, "there should only be one index", nIndexes() == 1);
+        
         // first operate as though we are creating a new
         // collection
-
-        // TODO: check that we have only one index
-        
         initialize(_ns, _options);
         verify(numPartitions() == 1);
         verify(_partitionIDs[0] == 0);
