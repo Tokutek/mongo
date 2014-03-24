@@ -175,7 +175,7 @@ namespace mongo {
     class ShardStatus {
     public:
 
-        ShardStatus( const Shard& shard , const BSONObj& obj );
+        ShardStatus( const Shard& shard , const BSONObj& obj, const BSONObj& dblistobj );
 
         friend ostream& operator << (ostream& out, const ShardStatus& s) {
             out << s.toString();
@@ -185,22 +185,22 @@ namespace mongo {
         string toString() const {
             stringstream ss;
             ss << "shard: " << _shard 
-               << " mapped: " << _mapped 
+               << " dataSize: " << _dataSize
                << " writeLock: " << _writeLock
                << " version: " << _mongoVersion;
             return ss.str();
         }
 
         bool operator<( const ShardStatus& other ) const {
-            return _mapped < other._mapped;
+            return _dataSize < other._dataSize;
         }
 
         Shard shard() const {
             return _shard;
         }
 
-        long long mapped() const {
-            return _mapped;
+        long long datasize() const {
+            return _dataSize;
         }
 
         bool hasOpsQueued() const {
@@ -213,7 +213,7 @@ namespace mongo {
 
     private:
         Shard _shard;
-        long long _mapped;
+        long long _dataSize;
         bool _hasOpsQueued;  // true if 'writebacks' are pending
         double _writeLock;
         string _mongoVersion;
