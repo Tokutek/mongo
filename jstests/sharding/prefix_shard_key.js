@@ -125,7 +125,7 @@ for( i=0; i < 3; i++ ){
         // weird
         jsTest.log("tried to movePrimary but it was already the primary, not sure why this isn't the case in vanilla.  TODO: look in to this");
     } else {
-        assert.eq( moveRes.ok , 1 , "primary not moved correctly" );
+        assert.eq( moveRes.ok , 1 , "primary not moved correctly" + tojson( moveRes ) );
     }
 
     // declare a longer index
