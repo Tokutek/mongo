@@ -84,6 +84,8 @@ namespace mongo {
             }
         }
 
+        static BSONObj pretty_key(const DBT *key, DB *db);
+
         static void runUpdateMods(DB *db, const DBT *key, const DBT *old_val, const BSONObj& updateObj,
                                    void (*set_val)(const DBT *new_val, void *set_extra),
                                    void *set_extra) {
@@ -109,9 +111,12 @@ namespace mongo {
                 const BSONObj updateObj = msg["o"].Obj();
                 runUpdateMods(db, key, old_val, updateObj, set_val, set_extra);
                 return 0;
-            } catch (const std::exception &ex) { 
-                problem() << "Caught exception in ydb update callback, cannot proceed: " 
-                          << ex.what() << endl;
+            } catch (const std::exception &ex) {
+                problem() << "Caught exception in ydb update callback, ex: " << ex.what()
+                          << "key: " << (key != NULL ? pretty_key(key, db) : BSONObj())
+                          << "oldObj: " << (old_val != NULL ? BSONObj(static_cast<char *>(old_val->data)) : BSONObj())
+                          << "msg: " << (extra != NULL ? BSONObj(static_cast<char *>(extra->data)) : BSONObj())
+                          << endl;
                 fassertFailed(17215);
             }
             return -1;
