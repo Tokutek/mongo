@@ -3,7 +3,7 @@ tokumx news
 
 tokumx 1.4.1
 ------------
-Release date: 2014-03-24
+Release date: 2014-03-25
 
 General
 ~~~~~~~
@@ -31,6 +31,10 @@ New features and improvements
 
 Bug fixes
 ~~~~~~~~~
+
+    - Newly sharded databases now have their primary shard chosen as the
+      most lightly loaded shard (by data size), rather than always
+      choosing the first shard.  (#422, #1029)
 
     - Fixed the output of `show dbs` and `listDatabases` in sharded
       clusters.  (#962)
@@ -67,6 +71,10 @@ Bug fixes
       disconnect, and the transaction abort due to replica set
       relinquish.  (#1003)
 
+    - Fixed the way errors during chunk migration cleanup are handled to
+      avoid a crash when a replica set primary steps down at the end of a
+      migration.  (#1010)
+
     - Fixed an issue that could cause migrations to fail repeatedly.
       (#1011)
 
@@ -75,6 +83,10 @@ Bug fixes
 
     - Fixed a bug that caused migrations to fail when the migration causes
       the recipient shard to transition an index to multiKey.  (#1025)
+
+    - Backported a fix for SERVER-12515, a bug that corrupts the state of
+      the config.chunks collection in sharded clusters when using hashed
+      shard keys.  (#1030)
 
 
 tokumx 1.4.0
