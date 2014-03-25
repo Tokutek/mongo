@@ -261,7 +261,7 @@ namespace mongo {
             return true;
         }
 
-        void done() {
+        void done(bool inDestructor) {
             log() << "MigrateFromStatus::done About to acquire sharding write lock to exit critical "
                     "section" << endl;
             ShardingState::SetVersionScope sc;
@@ -270,7 +270,13 @@ namespace mongo {
             scoped_lock l(_mutex);
             disableLogTxnOpsForSharding();
             _snapshotTaken = false;
-            clearMigrateLog();
+            if (!inDestructor) {
+                // If we're in the destructor, don't bother because this might throw.  This is an
+                // optimization that isn't necessary for correctness; next time we start a migration
+                // we'll clean it up then if we don't do it now.  The normal (non-error) path always
+                // cleans this up because we call done() explicitly.
+                clearMigrateLog();
+            }
             _active = false;
             _inCriticalSection = false;
             _inCriticalSectionCV.notify_all();
@@ -627,7 +633,7 @@ namespace mongo {
         }
         ~MigrateStatusHolder() {
             if (!_isAnotherMigrationActive) {
-                migrateFromStatus.done();
+                migrateFromStatus.done(true);
             }
         }
 
@@ -1395,7 +1401,7 @@ namespace mongo {
                 configServer.logChange( "moveChunk.commit" , ns , chunkInfo );
             }
 
-            migrateFromStatus.done();
+            migrateFromStatus.done(false);
             timing.done(5);
 
             // 6.
