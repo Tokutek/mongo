@@ -19,6 +19,7 @@
 #include "mongo/db/commands.h"
 #include "mongo/db/client.h"
 #include "mongo/db/repl/rs.h"
+#include "mongo/db/storage/assert_ids.h"
 
 namespace mongo {
 
@@ -111,7 +112,7 @@ namespace mongo {
                          BSONObjBuilder& result, 
                          bool fromRepl) 
         {
-            uassert(16788, "no transaction exists to be committed", cc().hasTxn());
+            uassert(storage::ASSERT_IDS::TxnNotFoundOnCommit, "no transaction exists to be committed", cc().hasTxn());
             uassert(16889, "a bulk load is still in progress. commit or abort the load before committing the transaction.",
                             !cc().loadInProgress());
             cc().commitTopTxn();

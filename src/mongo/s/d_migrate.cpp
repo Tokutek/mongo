@@ -60,6 +60,7 @@
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/relock.h"
 #include "mongo/db/server_parameters.h"
+#include "mongo/db/storage/assert_ids.h"
 
 #include "mongo/client/connpool.h"
 #include "mongo/client/distlock.h"
@@ -1294,22 +1295,59 @@ namespace mongo {
                         log() << "moveChunk moved last chunk out for collection '" << ns << "'" << migrateLog;
                     }
 
-                    static const int max_commit_retries = 30;
-                    int retries = max_commit_retries;
-                    while (retries-- > 0) {
-                        BSONObj res;
-                        if (txn->commit(&res)) {
-                            break;
+                    {
+                        static const int max_commit_retries = 30;
+                        int retries = max_commit_retries;
+                        bool committed = false;
+                        while (retries-- > 0) {
+                            BSONObj res;
+                            committed = txn->commit(&res);
+                            if (committed) {
+                                break;
+                            }
+                            if (res["code"].isNumber() && res["code"].numberLong() == storage::ASSERT_IDS::TxnNotFoundOnCommit) {
+                                // It may have been committed without giving us a response, or it may have been aborted.
+                                // We need to check whether the effect of our operation can be read.
+                                //
+                                // if the commit made it to the config, we'll see the chunk in the new shard and there's no action
+                                // if the commit did not make it, currently the only way to fix this state is to bounce the mongod so
+                                // that the old state (before migrating) be brought in
+
+                                warning() << "moveChunk commit outcome ongoing" << migrateLog;
+
+                                // look for the chunk in this shard whose version got bumped
+                                // we assume that if that mod made it to the config, the transaction was successful
+                                BSONObj doc = conn->get()->findOne(ChunkType::ConfigNS,
+                                                                   Query(BSON(ChunkType::ns(ns)))
+                                                                   .sort(BSON(ChunkType::DEPRECATED_lastmod() << -1)));
+
+                                ChunkVersion checkVersion =
+                                        ChunkVersion::fromBSON(doc[ChunkType::DEPRECATED_lastmod()]);
+
+                                if (checkVersion.isEquivalentTo(nextVersion)) {
+                                    log() << "moveChunk commit confirmed" << migrateLog;
+                                    committed = true;
+                                    break;
+                                } else {
+                                    error() << "moveChunk commit failed: version is at"
+                                            << checkVersion << " instead of " << nextVersion << migrateLog;
+                                    error() << "TERMINATING" << migrateLog;
+                                    dbexit( EXIT_SHARDING_ERROR );
+                                }
+                            }
+
+                            warning() << "Error committing transaction to finish migration: " << res << migrateLog;
+                            warning() << "Retrying (" << retries << " attempts remaining)" << migrateLog;
+                            sleepmillis(std::min(1 << (max_commit_retries - retries), 1000));
                         }
-                        warning() << "Error committing transaction to finish migration: " << res << endl;
-                        warning() << "Retrying (" << retries << " attempts remaining)" << endl;
-                        sleepmillis(std::min(1 << (max_commit_retries - retries), 1000));
-                    }
-                    if (retries == 0) {
-                        stringstream ss;
-                        ss << "Couldn't commit transaction to finish migration after " << max_commit_retries << " attempts.";
-                        warning() << ss.str() << endl;
-                        msgasserted(17328, ss.str());
+                        if (!committed) {
+                            stringstream ss;
+                            ss << "Couldn't commit transaction to finish migration after " << (max_commit_retries - retries) << " attempts.";
+                            error() << ss.str() << migrateLog;
+                            txn.reset();
+                            conn->done();
+                            msgasserted(17328, ss.str());
+                        }
                     }
                     txn.reset();
                     conn->done();
@@ -1352,64 +1390,11 @@ namespace mongo {
                     }
                 }
                 catch (...) {
-                    // TODO(leif): Vanilla, if it fails, waits 10 seconds and does a query to see if somehow the commit made it through anyway.  Maybe we need such a mechanism too?
                     error() << "moveChunk failed to get confirmation of commit" << migrateLog;
                     error() << "TERMINATING" << migrateLog;
                     dumpCrashInfo("moveChunk failed to get confirmation of commit");
                     dbexit(EXIT_SHARDING_ERROR);
                 }
-
-                // Vanilla does the following at the end.  Keep this code around as notes until we know we don't need it.
-#if 0
-                if ( ! ok ) {
-
-                    // this could be a blip in the connectivity
-                    // wait out a few seconds and check if the commit request made it
-                    //
-                    // if the commit made it to the config, we'll see the chunk in the new shard and there's no action
-                    // if the commit did not make it, currently the only way to fix this state is to bounce the mongod so
-                    // that the old state (before migrating) be brought in
-
-                    warning() << "moveChunk commit outcome ongoing: " << cmd << " for command :" << cmdResult << migrateLog;
-                    sleepsecs( 10 );
-
-                    try {
-                        scoped_ptr<ScopedDbConnection> conn(
-                                ScopedDbConnection::getInternalScopedDbConnection(
-                                        shardingState.getConfigServer(),
-                                        10.0 ) );
-
-                        // look for the chunk in this shard whose version got bumped
-                        // we assume that if that mod made it to the config, the applyOps was successful
-                        BSONObj doc = conn->get()->findOne(ChunkType::ConfigNS,
-                                                           Query(BSON(ChunkType::ns(ns)))
-                                                               .sort(BSON(ChunkType::DEPRECATED_lastmod() << -1)));
-
-                        ChunkVersion checkVersion =
-                            ChunkVersion::fromBSON(doc[ChunkType::DEPRECATED_lastmod()]);
-
-                        if ( checkVersion.isEquivalentTo( nextVersion ) ) {
-                            log() << "moveChunk commit confirmed" << migrateLog;
-                            errmsg.clear();
-
-                        }
-                        else {
-                            error() << "moveChunk commit failed: version is at"
-                                            << checkVersion << " instead of " << nextVersion << migrateLog;
-                            error() << "TERMINATING" << migrateLog;
-                            dbexit( EXIT_SHARDING_ERROR );
-                        }
-
-                        conn->done();
-
-                    }
-                    catch ( ... ) {
-                        error() << "moveChunk failed to get confirmation of commit" << migrateLog;
-                        error() << "TERMINATING" << migrateLog;
-                        dbexit( EXIT_SHARDING_ERROR );
-                    }
-                }
-#endif
 
                 migrateFromStatus.setInCriticalSection( false );
 
