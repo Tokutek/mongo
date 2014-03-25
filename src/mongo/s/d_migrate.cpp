@@ -1294,7 +1294,22 @@ namespace mongo {
                         log() << "moveChunk moved last chunk out for collection '" << ns << "'" << migrateLog;
                     }
 
-                    txn->commit();
+                    static const int max_commit_retries = 30;
+                    for (int retries = max_commit_retries; retries > 0; --retries) {
+                        BSONObj res;
+                        if (txn->commit(&res)) {
+                            break;
+                        }
+                        warning() << "Error committing transaction to finish migration: " << res << endl;
+                        warning() << "Retrying (" << retries << " attempts remaining)" << endl;
+                        sleepmillis(std::min(1 << (max_commit_retries - retries), 1000));
+                    }
+                    if (retries == 0) {
+                        stringstream ss;
+                        ss << "Couldn't commit transaction to finish migration after " << max_commit_retries << " attempts.";
+                        warning() << ss.str() << endl;
+                        msgasserted(17328, ss.str());
+                    }
                     txn.reset();
                     conn->done();
                 }
