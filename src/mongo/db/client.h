@@ -37,6 +37,7 @@
 #include "mongo/db/gtid.h"
 #include "mongo/db/txn_context.h"
 #include "mongo/db/opsettings.h"
+#include "mongo/db/querysettings.h"
 #include "mongo/s/d_logic.h"
 #include "mongo/util/paths.h"
 #include "mongo/util/concurrency/threadlocal.h"
@@ -278,6 +279,19 @@ namespace mongo {
             _opSettings = settings;
         }
 
+        QuerySettings querySettings() const {
+            return _querySettings;
+        }
+
+        void setQuerySettings(const QuerySettings& querySettings) {
+            _querySettings = querySettings;
+        }
+
+        void clearQuerySettings() {
+            QuerySettings settings;
+            _querySettings = settings;
+        }
+
         void setGloballyUninterruptible(bool val) {
             _globallyUninterruptible = val;
         }
@@ -357,6 +371,7 @@ namespace mongo {
         BSONObj _handshake;
         BSONObj _remoteId;
         OpSettings _opSettings;
+        QuerySettings _querySettings;
         // if true, this client cannot be uninterrupted by global events,
         // and _checkForInterrupt will return false even if we are globally
         // killed
