@@ -1295,7 +1295,8 @@ namespace mongo {
                     }
 
                     static const int max_commit_retries = 30;
-                    for (int retries = max_commit_retries; retries > 0; --retries) {
+                    int retries = max_commit_retries;
+                    while (retries-- > 0) {
                         BSONObj res;
                         if (txn->commit(&res)) {
                             break;
