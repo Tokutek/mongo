@@ -225,7 +225,8 @@ namespace mongo {
         }
 
         static void tokudb_print_error(const DB_ENV * db_env, const char *db_errpfx, const char *buffer) {
-            tokulog() << db_errpfx << ": " << buffer << endl;
+            // We may be calling this from a crashing state, so we should use rawOut.
+            rawOut(buffer);
         }
 
         // Called by the ydb to determine how long a txn should sleep on a lock.
