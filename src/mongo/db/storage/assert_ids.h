@@ -27,6 +27,7 @@ namespace mongo {
             static const int ParallelArrays = 10888;
             static const int LockDeadlock = 16760;
             static const int CapPartitionFailed = 17248;
+            static const int TxnNotFoundOnCommit = 16788; // uassert(16788, "no transaction exists to be committed", cc().hasTxn());
         };
 
     } // namespace storage
