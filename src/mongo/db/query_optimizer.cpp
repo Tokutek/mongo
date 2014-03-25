@@ -20,8 +20,21 @@
 #include "mongo/db/queryoptimizercursorimpl.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/storage/exception.h"
+#include "mongo/db/querysettings.h"
 
 namespace mongo {
+
+    // RAII struct to set a client's query settings
+    struct QuerySettingsHolder {
+        QuerySettingsHolder(BSONObj query, BSONObj sort) {
+            const QuerySettings settings(query, !sort.isEmpty());
+            cc().setQuerySettings(settings);
+        }
+
+        ~QuerySettingsHolder() {
+            cc().clearQuerySettings();
+        }
+    };
 
     shared_ptr<Cursor> getOptimizedCursor( const StringData& ns,
                                            const BSONObj& query,
@@ -30,6 +43,9 @@ namespace mongo {
                                            const shared_ptr<const ParsedQuery>& parsedQuery,
                                            bool requireOrder,
                                            QueryPlanSummary* singlePlanSummary ) {
+
+        QuerySettingsHolder asdfkjdasfkjl (query, order);
+
         try {
             CursorGenerator generator( ns,
                                        query,
@@ -48,6 +64,7 @@ namespace mongo {
                                            const BSONObj& query,
                                            const BSONObj& sort ) {
 
+        QuerySettingsHolder(query, sort);
         auto_ptr<FieldRangeSetPair> frsp( new FieldRangeSetPair( ns, query, true ) );
         auto_ptr<FieldRangeSetPair> origFrsp( new FieldRangeSetPair( *frsp ) );
 

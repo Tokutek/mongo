@@ -348,6 +348,7 @@ namespace mongo {
     }
 
     void PartitionedCursor::initializeSubCursor() {
+log() << "Query: " << cc().querySettings().getQuery() << " sort: " << cc().querySettings().sortRequired() << endl;
         _currPartition = _startPartition;
         makeSubCursor(_currPartition);
         while (!_currentCursor->ok() && _currPartition != _endPartition) {
