@@ -235,19 +235,21 @@ namespace mongo {
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // Partitioned Cursors (over the _id index)
     PartitionedCursor::PartitionedCursor(PartitionedCollection* pc, const int idxNo, const int direction, const bool countCursor):
-        _pc(pc),
         _idxNo(idxNo),
         _prevNScanned(0),
         _currPartition(0),
-        _cursorType(PC_TABLE_SCAN),
         _direction(direction),
-        _numWanted(0), // dummy assignment, not needed
-        _countCursor(countCursor),
-        _endKeyInclusive(false), // dummy assignment, not needed
-        _singleIntervalLimit(0), // dummy assignment, not needed
         _tailable(false)
     {
         // full table scan
+        _subCursorGenerator.reset(new TablePartitionCursorGenerator(
+            pc,
+            idxNo,
+            direction,
+            countCursor,
+            cursorOverPartitionKey()
+            )
+        );
         _startPartition = direction > 0 ? 0 : pc->numPartitions() - 1;
         _endPartition = direction > 0 ? pc->numPartitions() - 1 : 0;
         initializeSubCursor();
@@ -259,20 +261,23 @@ namespace mongo {
                       const bool endKeyInclusive,
                       const int direction, const int numWanted,
                       const bool countCursor) :
-        _pc(pc),
         _idxNo(idxNo),
         _prevNScanned(0),
         _currPartition(0),
-        _cursorType(PC_RANGE_SCAN),
         _direction(direction),
-        _numWanted(numWanted),
-        _countCursor(countCursor),
-        _startKey(startKey),
-        _endKey(endKey),
-        _endKeyInclusive(endKeyInclusive),
-        _singleIntervalLimit(0), // dummy assignment, not needed
         _tailable(false)
     {
+        _subCursorGenerator.reset( new RangePartitionCursorGenerator(
+            pc,
+            idxNo,
+            direction,
+            countCursor,
+            numWanted,
+            startKey,
+            endKey,
+            endKeyInclusive
+            )
+            );
         if (cursorOverPartitionKey()) {
             _startPartition = pc->partitionWithPK(startKey);
             _endPartition = pc->partitionWithPK(endKey);
@@ -297,19 +302,22 @@ namespace mongo {
                       const int singleIntervalLimit,
                       const int direction, const int numWanted,
                       const bool countCursor) :
-        _pc(pc),
         _idxNo(idxNo),
         _prevNScanned(0),
         _currPartition(0),
-        _cursorType(PC_BOUNDS_SCAN),
         _direction(direction),
-        _numWanted(numWanted),
-        _countCursor(countCursor),
-        _endKeyInclusive(false), // dummy assignment, not needed
-        _bounds(bounds),
-        _singleIntervalLimit(singleIntervalLimit),
         _tailable(false)
     {
+        _subCursorGenerator.reset( new BoundsPartitionCursorGenerator(
+            pc,
+            idxNo,
+            direction,
+            countCursor,
+            numWanted,
+            bounds,
+            singleIntervalLimit
+            )
+            );
         if (cursorOverPartitionKey()) {
             _startPartition = pc->partitionWithPK(bounds->startKey());
             _endPartition = pc->partitionWithPK(bounds->endKey());
@@ -337,7 +345,7 @@ namespace mongo {
             _currPartition--;
         }
         shared_ptr<Cursor> oldCursor = _currentCursor;
-        makeSubCursor(_currPartition);
+        _currentCursor = _subCursorGenerator->makeSubCursor(_currPartition);
         if (oldCursor) {
             if (_matcher) {
                 _currentCursor->setMatcher(_matcher);
@@ -350,7 +358,7 @@ namespace mongo {
     void PartitionedCursor::initializeSubCursor() {
 log() << "Query: " << cc().querySettings().getQuery() << " sort: " << cc().querySettings().sortRequired() << endl;
         _currPartition = _startPartition;
-        makeSubCursor(_currPartition);
+        _currentCursor = _subCursorGenerator->makeSubCursor(_currPartition);
         while (!_currentCursor->ok() && _currPartition != _endPartition) {
             getNextSubCursor();
             // because we are called from a constructor,
@@ -376,65 +384,64 @@ log() << "Query: " << cc().querySettings().getQuery() << " sort: " << cc().query
         return ret;
     }
 
-    void PartitionedCursor::makeSubCursor(uint64_t partitionIndex) {
-        shared_ptr<CollectionData> currColl = _pc->getPartition(partitionIndex);
-        if (_cursorType == PC_TABLE_SCAN) {
-            if (cursorOverPartitionKey()) {
-                _currentCursor = Cursor::make(
-                    currColl.get(),
-                    _direction,
-                    _countCursor
-                    );
-            }
-            else {
-                _currentCursor = Cursor::make(
-                    currColl.get(),
-                    currColl->idx(_idxNo),
-                    _direction,
-                    _countCursor
-                    );
-            }
-        }
-        else if (_cursorType == PC_RANGE_SCAN) {
-            // an optimization for a future day may be
-            // if we know that the entire partition falls between startKey
-            // and endKey, then we can use  a table scan cursor
-            _currentCursor = Cursor::make(
-                currColl.get(),
-                currColl->idx(_idxNo),
-                _startKey,
-                _endKey,
-                _endKeyInclusive,
-                _direction,
-                _numWanted,
-                _countCursor
-                );
-        }
-        else if (_cursorType == PC_BOUNDS_SCAN) {
-            // I am not sure this case is currently possible
-            // because the index is just a simple _id index
-            // Look at coverage tools to see if this is dead
-            // code
-            _currentCursor = Cursor::make(
-                currColl.get(),
-                currColl->idx(_idxNo),
-                _bounds,
-                _singleIntervalLimit,
-                _direction,
-                _numWanted,
-                _countCursor
-                );
-        }
-        else {
-            verify(false);
-        }
-    }
-
     
     void PartitionedCursor::setTailable() {
         _tailable = true;
         if (_currPartition == _endPartition) {
             _currentCursor->setTailable();
+        }
+    }
+
+    shared_ptr<Cursor> RangePartitionCursorGenerator::makeSubCursor(uint64_t partitionIndex) {
+        shared_ptr<CollectionData> currColl = _pc->getPartition(partitionIndex);
+        // an optimization for a future day may be
+        // if we know that the entire partition falls between startKey
+        // and endKey, then we can use  a table scan cursor
+        return Cursor::make(
+            currColl.get(),
+            currColl->idx(_idxNo),
+            _startKey,
+            _endKey,
+            _endKeyInclusive,
+            _direction,
+            _numWanted,
+            _countCursor
+            );
+    }
+
+    shared_ptr<Cursor> BoundsPartitionCursorGenerator::makeSubCursor(uint64_t partitionIndex) {
+        shared_ptr<CollectionData> currColl = _pc->getPartition(partitionIndex);
+        // I am not sure this case is currently possible
+        // because the index is just a simple _id index
+        // Look at coverage tools to see if this is dead
+        // code
+        return Cursor::make(
+            currColl.get(),
+            currColl->idx(_idxNo),
+            _bounds,
+            _singleIntervalLimit,
+            _direction,
+            _numWanted,
+            _countCursor
+            );
+    }
+
+    shared_ptr<Cursor> TablePartitionCursorGenerator::makeSubCursor(uint64_t partitionIndex) {
+        shared_ptr<CollectionData> currColl = _pc->getPartition(partitionIndex);
+        if (_cursorOverPartitionKey) {
+            return Cursor::make(
+                currColl.get(),
+                _direction,
+                _countCursor
+                );
+        }
+        else {
+            return Cursor::make(
+                currColl.get(),
+                currColl->idx(_idxNo),
+                _direction,
+                _countCursor
+                );
         }
     }
 } // namespace mongo
