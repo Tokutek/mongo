@@ -88,6 +88,10 @@ Bug fixes
       the config.chunks collection in sharded clusters when using hashed
       shard keys.  (#1030)
 
+    - Added a retry mechanism for chunk migration commit to make it less
+      brittle in the face of a flaky connection to the config servers.
+      (#1032)
+
 
 tokumx 1.4.0
 ------------
