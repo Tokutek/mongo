@@ -717,6 +717,17 @@ namespace mongo {
             }
         }
 
+        if (params->count("noprealloc")) {
+            Status ret = params->set("storage.preallocDataFiles", moe::Value(false));
+            if (!ret.isOK()) {
+                return ret;
+            }
+            ret = params->remove("noprealloc");
+            if (!ret.isOK()) {
+                return ret;
+            }
+        }
+
         return Status::OK();
     }
 
@@ -828,11 +839,9 @@ namespace mongo {
         if (params.count("noscripting")) {
             mongodGlobalParams.scriptingEnabled = false;
         }
-        if (params.count("noprealloc") ||
-            (params.count("storage.preallocDataFiles") &&
-             params["storage.preallocDataFiles"].as<bool>() == false)) {
+        if (params.count("storage.preallocDataFiles")) {
             return Status(ErrorCodes::BadValue,
-                          "noprealloc and storage.preallocDataFiles are deprecated in TokuMX");
+                          "storage.preallocDataFiles is deprecated in TokuMX");
         }
         if (params.count("storage.smallFiles")) {
             return Status(ErrorCodes::BadValue,
