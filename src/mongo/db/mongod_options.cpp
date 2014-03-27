@@ -76,11 +76,11 @@ namespace mongo {
         // Way to enable or disable auth on command line and in Legacy config file
         general_options.addOptionChaining("auth", "auth", moe::Switch, "run with security")
                                          .setSources(moe::SourceAllLegacy)
-                                         .incompatibleWith("security.authentication");
+                                         .incompatibleWith("noauth");
 
         general_options.addOptionChaining("noauth", "noauth", moe::Switch, "run without security")
                                          .setSources(moe::SourceAllLegacy)
-                                         .incompatibleWith("security.authentication");
+                                         .incompatibleWith("auth");
 
         // Way to enable or disable auth in JSON Config
         general_options.addOptionChaining("security.authentication", "", moe::String,
@@ -88,8 +88,6 @@ namespace mongo {
                 "Options are \"optional\", which means that a client can connect with or without "
                 "authentication, and \"required\" which means clients must use authentication")
                                          .setSources(moe::SourceYAMLConfig)
-                                         .incompatibleWith("auth")
-                                         .incompatibleWith("noauth")
                                          .format("(:?optional)|(:?required)",
                                                  "(optional/required)");
 
@@ -621,6 +619,31 @@ namespace mongo {
             }
         }
 
+        // "security.authentication" comes from the config file, so override it if "noauth" or
+        // "auth" are set since those come from the command line.
+        if (params->count("noauth")) {
+            Status ret = params->set("security.authentication",
+                                     moe::Value(std::string("optional")));
+            if (!ret.isOK()) {
+                return ret;
+            }
+            ret = params->remove("noauth");
+            if (!ret.isOK()) {
+                return ret;
+            }
+        }
+        if (params->count("auth")) {
+            Status ret = params->set("security.authentication",
+                                     moe::Value(std::string("required")));
+            if (!ret.isOK()) {
+                return ret;
+            }
+            ret = params->remove("auth");
+            if (!ret.isOK()) {
+                return ret;
+            }
+        }
+
         return Status::OK();
     }
 
@@ -690,14 +713,12 @@ namespace mongo {
         if (params.count("cpu")) {
             serverGlobalParams.cpu = true;
         }
-        if (params.count("noauth") ||
-            (params.count("security.authentication") &&
-             params["security.authentication"].as<std::string>() == "optional")) {
+        if (params.count("security.authentication") &&
+            params["security.authentication"].as<std::string>() == "optional") {
             AuthorizationManager::setAuthEnabled(false);
         }
-        if (params.count("auth") ||
-            (params.count("security.authentication") &&
-             params["security.authentication"].as<std::string>() == "required")) {
+        if (params.count("security.authentication") &&
+            params["security.authentication"].as<std::string>() == "required") {
             AuthorizationManager::setAuthEnabled(true);
         }
         if (params.count("storage.quota.enforced")) {
