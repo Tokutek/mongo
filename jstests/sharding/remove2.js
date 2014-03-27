@@ -13,6 +13,12 @@ removeShard = function(st, replTest) {
     res = st.admin.runCommand( { removeshard: replTest.name } )
     printjson(res);
     assert( res.ok , "failed to start draining shard" );
+    if (res.dbsToMove) {
+        for (var i = 0; i < res.dbsToMove.length; ++i) {
+            var dbToMove = res.dbsToMove[i];
+            assert.commandWorked(st.admin.runCommand({movePrimary: dbToMove, to: st.getNonPrimaries(dbToMove)[0]}));
+        }
+    }
 
     checkRemoveShard = function() {
         res = st.admin.runCommand( { removeshard: replTest.name } );

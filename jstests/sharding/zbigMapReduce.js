@@ -180,13 +180,31 @@ assert.eq( 2 , db[outcol].findOne().value , "Received wrong result" );
 jsTestLog( "Test G" )
 
 // verify that data is also on secondary
-var primary = s._rs[0].test.liveNodes.master
-var secondaries = s._rs[0].test.liveNodes.slaves
-s._rs[0].test.awaitReplication( 300 * 1000 ); // this can take a while since chunks are moving
-assert.eq( 51200 , primary.getDB("test")[outcol].count() , "Wrong count" );
-for (var i = 0; i < secondaries.length; ++i) {
-	assert.eq( 51200 , secondaries[i].getDB("test")[outcol].count() , "Wrong count" );
+var countsOk = false;
+for (var shardnum = 0; !countsOk && shardnum < 2; ++shardnum) {
+    var thisCountOk = true;
+    var primary = s._rs[shardnum].test.liveNodes.master
+    var secondaries = s._rs[shardnum].test.liveNodes.slaves
+    s._rs[shardnum].test.awaitReplication( 300 * 1000 ); // this can take a while since chunks are moving
+    if (51200 != primary.getDB("test")[outcol].count()) {
+        print("Wrong count on primary for shard " + shardnum + ": should be 51200, was " + primary.getDB("test")[outcol].count());
+        thisCountOk = false;
+    }
+    for (var i = 0; i < secondaries.length; ++i) {
+	if (51200 != secondaries[i].getDB("test")[outcol].count()) {
+            print("Wrong count on secondary " + i + " for shard " + shardnum + ": should be 51200, was " + primary.getDB("test")[outcol].count());
+            thisCountOk = false;
+        }
+    }
+    if (thisCountOk) {
+        countsOk = true;
+    }
 }
+if (!countsOk) {
+    jsTest.log("didn't find a shard with the right counts");
+    printjson(sh.status());
+}
+assert(countsOk);
 
 jsTestLog( "DONE" )
 
