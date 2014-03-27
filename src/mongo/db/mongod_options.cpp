@@ -528,6 +528,91 @@ namespace mongo {
         return true;
     }
 
+    Status validateMongodOptions(const moe::Environment& params) {
+        if (params.count("nodur") || params.count("nojournal")) {
+            return Status(ErrorCodes::BadValue,
+                          "nodur and nojournal are deprecated in TokuMX");
+        }
+
+        if (params.count("dur") || params.count("journal")) {
+            return Status(ErrorCodes::BadValue,
+                          "dur and journal are deprecated in TokuMX");
+        }
+
+        if (params.count("durOptions")) {
+            return Status(ErrorCodes::BadValue,
+                          "durOptions is deprecated in TokuMX");
+        }
+
+        if (params.count("journalOptions")) {
+            return Status(ErrorCodes::BadValue,
+                          "journalOptions is deprecated in TokuMX");
+        }
+
+        if ((params.count("nodur") || params.count("nojournal")) &&
+            (params.count("dur") || params.count("journal"))) {
+            return Status(ErrorCodes::BadValue,
+                          "Can't specify both --journal and --nojournal options.");
+        }
+
+        return Status::OK();
+    }
+
+    Status canonicalizeMongodOptions(moe::Environment* params) {
+
+        // "storage.journal.enabled" comes from the config file, so override it if any of "journal",
+        // "nojournal", "dur", and "nodur" are set, since those come from the command line.
+        if (params->count("nodur") || params->count("nojournal")) {
+            Status ret = params->set("storage.journal.enabled", moe::Value(false));
+            if (!ret.isOK()) {
+                return ret;
+            }
+            ret = params->remove("nodur");
+            if (!ret.isOK()) {
+                return ret;
+            }
+            ret = params->remove("nojournal");
+            if (!ret.isOK()) {
+                return ret;
+            }
+        }
+
+        if (params->count("dur") || params->count("journal")) {
+            Status ret = params->set("storage.journal.enabled", moe::Value(true));
+            if (!ret.isOK()) {
+                return ret;
+            }
+            ret = params->remove("dur");
+            if (!ret.isOK()) {
+                return ret;
+            }
+            ret = params->remove("journal");
+            if (!ret.isOK()) {
+                return ret;
+            }
+        }
+
+        // "storage.journal.durOptions" comes from the config file, so override it if "durOptions"
+        // is set since that comes from the command line.
+        if (params->count("durOptions")) {
+            int durOptions;
+            Status ret = params->get("durOptions", &durOptions);
+            if (!ret.isOK()) {
+                return ret;
+            }
+            ret = params->set("storage.journal.debugFlags", moe::Value(durOptions));
+            if (!ret.isOK()) {
+                return ret;
+            }
+            ret = params->remove("durOptions");
+            if (!ret.isOK()) {
+                return ret;
+            }
+        }
+
+        return Status::OK();
+    }
+
     Status storeMongodOptions(const moe::Environment& params,
                               const std::vector<std::string>& args) {
 
@@ -611,37 +696,12 @@ namespace mongo {
             storageGlobalParams.quota = true;
             storageGlobalParams.quotaFiles = params["storage.quota.maxFilesPerDB"].as<int>() - 1;
         }
-        if ((params.count("nodur") || params.count("nojournal")) &&
-            (params.count("dur") || params.count("journal"))) {
-            return Status(ErrorCodes::BadValue,
-                          "Can't specify both --journal and --nojournal options.");
-        }
 
-        // "storage.journal.enabled" comes from the config file, so check it before we check
-        // "journal", "nojournal", "dur", and "nodur", since those come from the command line.
         if (params.count("storage.journal.enabled")) {
             return Status(ErrorCodes::BadValue,
                           "storage.journal.enabled is deprecated in TokuMX");
         }
 
-        if (params.count("nodur") || params.count("nojournal")) {
-            return Status(ErrorCodes::BadValue,
-                          "nodur and nojournal are deprecated in TokuMX");
-        }
-
-        if (params.count("dur") || params.count("journal")) {
-            return Status(ErrorCodes::BadValue,
-                          "dur and journal are deprecated in TokuMX");
-        }
-
-        if (params.count("durOptions")) {
-            return Status(ErrorCodes::BadValue,
-                          "durOptions is deprecated in TokuMX");
-        }
-        if (params.count("journalOptions")) {
-            return Status(ErrorCodes::BadValue,
-                          "journalOptions is deprecated in TokuMX");
-        }
         if (params.count("storage.journal.debugFlags")) {
             return Status(ErrorCodes::BadValue,
                           "storage.journal.debugFlags is deprecated in TokuMX");
@@ -740,9 +800,10 @@ namespace mongo {
             _diaglog.setLevel(x);
         }
 
-        if ((params.count("dur") || params.count("journal")) && params.count("repair")) {
+        if ((params.count("storage.journal.enabled") &&
+             params["storage.journal.enabled"].as<bool>() == true) && params.count("repair")) {
             return Status(ErrorCodes::BadValue,
-                          "Can't specify both --journal and --repair options.");
+                          "Can't have journaling enabled when using --repair option.");
         }
 
         if (params.count("repair")) {
