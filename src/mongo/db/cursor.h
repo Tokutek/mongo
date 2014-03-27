@@ -591,8 +591,15 @@ namespace mongo {
         friend class Cursor;
     };
 
+    //
+    // a helper class for cursors that run over partitioned collections,
+    // As of this writing, that is the PartitionedCursor and SortedPartitionedCursor
+    // This class stores the information necessary such that
+    // the PartitionedCursor may create a cursor over a partition at any time.
+    //
     class SubPartitionCursorGenerator {
     public:
+        // generate a cursor on partition with index of partitionIndex
         virtual shared_ptr<Cursor> makeSubCursor(uint64_t partitionIndex) = 0;
         virtual ~SubPartitionCursorGenerator() { }
     protected:
@@ -614,6 +621,27 @@ namespace mongo {
         const int _direction;
         const bool _countCursor;
     };
+
+    // bad name
+    // a helper class for cursors that run over partitioned collections
+    // This class gives the cursor a mechanism for identifying which
+    // partitions the cursor needs to run over. The functions below
+    // are to allow the cursor a way to iterate over the indexes
+    class SubPartitionIDGenerator{
+    public:
+        virtual ~SubPartitionIDGenerator() { }
+        // get the current partition index that this class is identifying
+        virtual uint64_t getCurrentPartitionIndex() = 0;
+        // advance from the current partition index the cursor cares
+        // about to the next one. If lastIndex() is true, then this function
+        // masserts
+        virtual void advanceIndex() = 0;
+        // return true if the current partition index is the final one
+        // that the cursor cares about. If true, calls to advanceIndex
+        // will massert
+        virtual bool lastIndex() = 0;
+    };
+
 
     // class for cursor over Partitioned Collection
     // This cursor assumes to be running over 
@@ -645,10 +673,10 @@ namespace mongo {
         }
 
         virtual string toString() const {
-            if (cursorOverPartitionKey()) {
-                return "PartitionedCursor";
+            if (_distributed) {
+                return "DistributedPartitionedCursor";
             }
-            return "DistributedPartitionedCursor";
+            return "PartitionedCursor";
         }
 
         virtual bool getsetdup(const BSONObj &pk) {
@@ -699,27 +727,17 @@ namespace mongo {
         void setTailable();
 
     private:
-        // used for table scans
-        // all of these assume to be running over the primary key
-        PartitionedCursor(PartitionedCollection* pc, const int idxNo, const int direction, const bool countCursor);
-        PartitionedCursor(PartitionedCollection* pc, const int idxNo, const BSONObj &startKey, const BSONObj &endKey,
-                          const bool endKeyInclusive,
-                          const int direction, const int numWanted,
-                          const bool countCursor);        
-        PartitionedCursor(PartitionedCollection* pc, const int idxNo,
-                          const shared_ptr<FieldRangeVector> &bounds,
-                          const int singleIntervalLimit,
-                          const int direction, const int numWanted,
-                          const bool countCursor);
-
+        PartitionedCursor(
+            const bool distributed,
+            shared_ptr<SubPartitionCursorGenerator> subCursorGenerator,
+            shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator
+            );
         void getNextSubCursor();
         void initializeSubCursor();
-        bool cursorOverPartitionKey() const {
-            return (_idxNo == 0);
-        }
 
         shared_ptr<SubPartitionCursorGenerator> _subCursorGenerator;
-        const int _idxNo;
+        shared_ptr<SubPartitionIDGenerator> _subPartitionIDGenerator;
+        const bool _distributed;
         // cursor currently being used to retrieve documents
         shared_ptr<Cursor> _currentCursor;
         // number of documents scanned
@@ -727,13 +745,6 @@ namespace mongo {
         long long _prevNScanned;        
         shared_ptr< CoveredIndexMatcher > _matcher;
         shared_ptr<Projection::KeyOnly> _keyFieldsOnly;
-        // these make up the range of partitions we need to query
-        // the bounds are inclusive
-        uint64_t _startPartition;
-        uint64_t _endPartition;
-        uint64_t _currPartition; // current partition that we are iterating cursor over
-        const int _direction;
-
 
         bool _tailable;
 
@@ -812,6 +823,31 @@ namespace mongo {
         }
     private:
         const bool _cursorOverPartitionKey;
+    };
+
+    class SubPartitionIDGeneratorImpl : public SubPartitionIDGenerator {
+    public:
+        SubPartitionIDGeneratorImpl(PartitionedCollection* pc, const int direction);
+        SubPartitionIDGeneratorImpl(
+            PartitionedCollection* pc,
+            const BSONObj &startKey,
+            const BSONObj &endKey,
+            const int direction
+            );        
+        SubPartitionIDGeneratorImpl(
+            PartitionedCollection* pc,
+            const shared_ptr<FieldRangeVector> &bounds,
+            const int direction
+            );
+        virtual uint64_t getCurrentPartitionIndex();
+        virtual void advanceIndex();
+        virtual bool lastIndex();
+    private:
+        uint64_t _currPartition;
+        const uint64_t _startPartition;
+        const uint64_t _endPartition;       
+        const int _direction;
+        void sanityCheckPartitionEndpoints();
     };
 
 } // namespace mongo

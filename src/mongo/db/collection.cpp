@@ -2851,16 +2851,39 @@ namespace mongo {
         )
     {
         // pass in an idxNo of 0, because we are assuming 0 is the pk
-        shared_ptr<Cursor> ret(new PartitionedCursor(this, 0, direction, countCursor));
+        shared_ptr<SubPartitionCursorGenerator> subCursorGenerator (
+            new TablePartitionCursorGenerator(
+                this,
+                0,
+                direction,
+                countCursor,
+                true
+                )
+            );
+        shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator (
+            new SubPartitionIDGeneratorImpl(this, direction)
+            );
+        shared_ptr<Cursor> ret(new PartitionedCursor(false, subCursorGenerator, subPartitionIDGenerator));
         return ret;
     }
     
     shared_ptr<Cursor> PartitionedCollection::makeCursor(const IndexDetails &idx,
                                     const int direction, 
                                     const bool countCursor) {
-        // as of now, no secondary indexes, so this should
-        // just be a table scan
-        shared_ptr<Cursor> ret(new PartitionedCursor(this, idxNo(idx), direction, countCursor));
+        // pass in an idxNo of 0, because we are assuming 0 is the pk
+        shared_ptr<SubPartitionCursorGenerator> subCursorGenerator (
+            new TablePartitionCursorGenerator(
+                this,
+                idxNo(idx),
+                direction,
+                countCursor,
+                isPKIndex(idx)
+                )
+            );
+        shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator (
+            new SubPartitionIDGeneratorImpl(this, direction)
+            );
+        shared_ptr<Cursor> ret(new PartitionedCursor(!isPKIndex(idx), subCursorGenerator, subPartitionIDGenerator));
         return ret;
     }
 
@@ -2871,19 +2894,25 @@ namespace mongo {
                                    const int direction, const int numWanted,
                                    const bool countCursor)
     {
-        // as of now, no secondary indexes
-        shared_ptr<Cursor> ret(
-            new PartitionedCursor(
-                this,
-                idxNo(idx),
-                startKey,
-                endKey,
-                endKeyInclusive,
-                direction,
-                numWanted,
-                countCursor
-                )
+        shared_ptr<SubPartitionCursorGenerator> subCursorGenerator ( new RangePartitionCursorGenerator(
+            this,
+            idxNo(idx),
+            direction,
+            countCursor,
+            numWanted,
+            startKey,
+            endKey,
+            endKeyInclusive
+            )
             );
+        shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator;
+        if (isPKIndex(idx)) {
+            subPartitionIDGenerator.reset(new SubPartitionIDGeneratorImpl(this, startKey, endKey, direction));
+        }
+        else {
+            subPartitionIDGenerator.reset(new SubPartitionIDGeneratorImpl(this, direction));
+        }
+        shared_ptr<Cursor> ret(new PartitionedCursor(!isPKIndex(idx), subCursorGenerator, subPartitionIDGenerator));
         return ret;
     }
     
@@ -2894,18 +2923,25 @@ namespace mongo {
                                    const int direction, const int numWanted,
                                    const bool countCursor)
     {
-        // as of now, no secondary indexes
-        shared_ptr<Cursor> ret(
-            new PartitionedCursor (
-                this,
-                idxNo(idx),
-                bounds,
-                singleIntervalLimit,
-                direction,
-                numWanted,
-                countCursor
-                )
+        shared_ptr<SubPartitionCursorGenerator> subCursorGenerator ( new BoundsPartitionCursorGenerator(
+            this,
+            idxNo(idx),
+            direction,
+            countCursor,
+            numWanted,
+            bounds,
+            singleIntervalLimit
+            )
             );
+        shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator;
+        if (isPKIndex(idx)) {
+            subPartitionIDGenerator.reset(new SubPartitionIDGeneratorImpl(this, bounds, direction));
+        }
+        else {
+            subPartitionIDGenerator.reset(new SubPartitionIDGeneratorImpl(this, direction));
+        }
+
+        shared_ptr<Cursor> ret(new PartitionedCursor(!isPKIndex(idx), subCursorGenerator, subPartitionIDGenerator));
         return ret;
     }
 
