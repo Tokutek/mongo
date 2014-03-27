@@ -234,118 +234,24 @@ namespace mongo {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // Partitioned Cursors (over the _id index)
-    PartitionedCursor::PartitionedCursor(PartitionedCollection* pc, const int idxNo, const int direction, const bool countCursor):
-        _idxNo(idxNo),
+    PartitionedCursor::PartitionedCursor(
+        const bool distributed,
+        shared_ptr<SubPartitionCursorGenerator> subCursorGenerator,
+        shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator
+        ) :
+        _subCursorGenerator(subCursorGenerator),
+        _subPartitionIDGenerator(subPartitionIDGenerator),
+        _distributed(distributed),
         _prevNScanned(0),
-        _currPartition(0),
-        _direction(direction),
         _tailable(false)
     {
-        // full table scan
-        _subCursorGenerator.reset(new TablePartitionCursorGenerator(
-            pc,
-            idxNo,
-            direction,
-            countCursor,
-            cursorOverPartitionKey()
-            )
-        );
-        _startPartition = direction > 0 ? 0 : pc->numPartitions() - 1;
-        _endPartition = direction > 0 ? pc->numPartitions() - 1 : 0;
         initializeSubCursor();
-    }
-
-    PartitionedCursor::PartitionedCursor(PartitionedCollection* pc,
-                      const int idxNo,
-                      const BSONObj &startKey, const BSONObj &endKey,
-                      const bool endKeyInclusive,
-                      const int direction, const int numWanted,
-                      const bool countCursor) :
-        _idxNo(idxNo),
-        _prevNScanned(0),
-        _currPartition(0),
-        _direction(direction),
-        _tailable(false)
-    {
-        _subCursorGenerator.reset( new RangePartitionCursorGenerator(
-            pc,
-            idxNo,
-            direction,
-            countCursor,
-            numWanted,
-            startKey,
-            endKey,
-            endKeyInclusive
-            )
-            );
-        if (cursorOverPartitionKey()) {
-            _startPartition = pc->partitionWithPK(startKey);
-            _endPartition = pc->partitionWithPK(endKey);
-        }
-        else {
-            _startPartition = direction > 0 ? 0 : pc->numPartitions() - 1;
-            _endPartition = direction > 0 ? pc->numPartitions() - 1 : 0;
-        }
-        // sanity check
-        if (direction > 0) {
-            verify(_endPartition >= _startPartition);
-        }
-        else {
-            verify(_startPartition >= _endPartition);
-        }
-        initializeSubCursor();
-    }
-
-    PartitionedCursor::PartitionedCursor(PartitionedCollection* pc,
-                      const int idxNo,
-                      const shared_ptr<FieldRangeVector> &bounds,
-                      const int singleIntervalLimit,
-                      const int direction, const int numWanted,
-                      const bool countCursor) :
-        _idxNo(idxNo),
-        _prevNScanned(0),
-        _currPartition(0),
-        _direction(direction),
-        _tailable(false)
-    {
-        _subCursorGenerator.reset( new BoundsPartitionCursorGenerator(
-            pc,
-            idxNo,
-            direction,
-            countCursor,
-            numWanted,
-            bounds,
-            singleIntervalLimit
-            )
-            );
-        if (cursorOverPartitionKey()) {
-            _startPartition = pc->partitionWithPK(bounds->startKey());
-            _endPartition = pc->partitionWithPK(bounds->endKey());
-        }
-        else {
-            _startPartition = direction > 0 ? 0 : pc->numPartitions() - 1;
-            _endPartition = direction > 0 ? pc->numPartitions() - 1 : 0;
-        }
-        // sanity check
-        if (direction > 0) {
-            verify(_endPartition >= _startPartition);
-        }
-        else {
-            verify(_startPartition >= _endPartition);
-        }
-        initializeSubCursor();
-        
     }
 
     void PartitionedCursor::getNextSubCursor() {
-        if (_direction > 0) {
-            _currPartition++;
-        }
-        else {
-            _currPartition--;
-        }
+        _subPartitionIDGenerator->advanceIndex();
         shared_ptr<Cursor> oldCursor = _currentCursor;
-        _currentCursor = _subCursorGenerator->makeSubCursor(_currPartition);
+        _currentCursor = _subCursorGenerator->makeSubCursor(_subPartitionIDGenerator->getCurrentPartitionIndex());
         if (oldCursor) {
             if (_matcher) {
                 _currentCursor->setMatcher(_matcher);
@@ -357,9 +263,9 @@ namespace mongo {
 
     void PartitionedCursor::initializeSubCursor() {
 log() << "Query: " << cc().querySettings().getQuery() << " sort: " << cc().querySettings().sortRequired() << endl;
-        _currPartition = _startPartition;
-        _currentCursor = _subCursorGenerator->makeSubCursor(_currPartition);
-        while (!_currentCursor->ok() && _currPartition != _endPartition) {
+        uint64_t currPartition = _subPartitionIDGenerator->getCurrentPartitionIndex();
+        _currentCursor = _subCursorGenerator->makeSubCursor(currPartition);
+        while (!_currentCursor->ok() && !_subPartitionIDGenerator->lastIndex()) {
             getNextSubCursor();
             // because we are called from a constructor,
             // we don't need to check to see if we are tailable
@@ -368,7 +274,7 @@ log() << "Query: " << cc().querySettings().getQuery() << " sort: " << cc().query
 
     bool PartitionedCursor::advance(){
         bool ret = _currentCursor->advance();
-        while (!_currentCursor->ok() && _currPartition != _endPartition) {
+        while (!_currentCursor->ok() && !_subPartitionIDGenerator->lastIndex()) {
             dassert(!ret);
             getNextSubCursor();
             // if we are iterating over the last partition and we are tailable,
@@ -376,7 +282,7 @@ log() << "Query: " << cc().querySettings().getQuery() << " sort: " << cc().query
             // invalidate cursors, so we don't need to worry about
             // partitions being added or dropped in the lifetime of
             // a cursor
-            if (_tailable && (_currPartition == _endPartition)) {
+            if (_tailable && _subPartitionIDGenerator->lastIndex()) {
                 _currentCursor->setTailable();
             }
             ret = _currentCursor->ok();
@@ -387,7 +293,7 @@ log() << "Query: " << cc().querySettings().getQuery() << " sort: " << cc().query
     
     void PartitionedCursor::setTailable() {
         _tailable = true;
-        if (_currPartition == _endPartition) {
+        if (_subPartitionIDGenerator->lastIndex()) {
             _currentCursor->setTailable();
         }
     }
@@ -444,4 +350,73 @@ log() << "Query: " << cc().querySettings().getQuery() << " sort: " << cc().query
                 );
         }
     }
+
+
+    SubPartitionIDGeneratorImpl::SubPartitionIDGeneratorImpl(
+        PartitionedCollection* pc,
+        const int direction
+        ) :
+        _startPartition(direction > 0 ? 0 : pc->numPartitions() - 1),
+        _endPartition(direction > 0 ? pc->numPartitions() - 1 : 0),
+        _direction(direction)
+    {
+        _currPartition = _startPartition;
+        sanityCheckPartitionEndpoints();
+    }
+
+    SubPartitionIDGeneratorImpl::SubPartitionIDGeneratorImpl(
+        PartitionedCollection* pc,
+        const BSONObj &startKey,
+        const BSONObj &endKey,
+        const int direction
+        ) :
+        _startPartition(pc->partitionWithPK(startKey)),
+        _endPartition(pc->partitionWithPK(endKey)),
+        _direction(direction)
+    {
+        _currPartition = _startPartition;
+        sanityCheckPartitionEndpoints();
+    }
+
+    SubPartitionIDGeneratorImpl::SubPartitionIDGeneratorImpl(
+        PartitionedCollection* pc,
+        const shared_ptr<FieldRangeVector> &bounds,
+        const int direction
+        ) :
+        _startPartition(pc->partitionWithPK(bounds->startKey())),
+        _endPartition(pc->partitionWithPK(bounds->endKey())),
+        _direction(direction)
+    {
+        _currPartition = _startPartition;
+        sanityCheckPartitionEndpoints();
+    }
+
+    void SubPartitionIDGeneratorImpl::sanityCheckPartitionEndpoints() {
+        // sanity check
+        if (_direction > 0) {
+            massert(0, str::stream() << "bad _endPartition " << _endPartition << " and _startPartition " << _startPartition, _endPartition >= _startPartition);
+        }
+        else {
+            massert(0, str::stream() << "bad _endPartition " << _endPartition << " and _startPartition " << _startPartition, _startPartition >= _endPartition);
+        }
+    }
+
+    uint64_t SubPartitionIDGeneratorImpl::getCurrentPartitionIndex() {
+        return _currPartition;
+    }
+
+    void SubPartitionIDGeneratorImpl::advanceIndex() {
+        massert(0, "cannot advanceIndex, at end", !lastIndex());
+        if (_direction > 0) {
+            _currPartition++;
+        }
+        else {
+            _currPartition--;
+        }
+    }
+    
+    bool SubPartitionIDGeneratorImpl::lastIndex() {
+            return (_currPartition == _endPartition);
+    }
+    
 } // namespace mongo
