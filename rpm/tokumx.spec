@@ -27,7 +27,6 @@ Source6: %{product_name}.service
 %if 0%{?fedora} >= 15
 BuildRequires: boost-devel
 %endif
-BuildRequires: pcre-devel
 BuildRequires: readline-devel
 BuildRequires: libpcap-devel
 %if 0%{?fedora} >= 15
@@ -154,7 +153,7 @@ mkdir -p opt
 %else
     -D USE_SYSTEM_BOOST=OFF \
 %endif
-    -D USE_SYSTEM_PCRE=ON \
+    -D USE_SYSTEM_PCRE=OFF \
     -D TOKUMX_STRIP_BINARIES=OFF \
     -D TOKUMX_SET_RPATH=OFF \
     -D CMAKE_INSTALL_PREFIX=%{buildroot}/%{_prefix} \
