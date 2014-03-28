@@ -290,12 +290,95 @@ log() << "Query: " << cc().querySettings().getQuery() << " sort: " << cc().query
         return ret;
     }
 
-    
     void PartitionedCursor::setTailable() {
         _tailable = true;
         if (_subPartitionIDGenerator->lastIndex()) {
             _currentCursor->setTailable();
         }
+    }
+
+    class SPCComparator {
+    public:
+        SPCComparator(const int direction, const Ordering* ordering) : _direction(direction), _ordering(ordering) {
+        }
+        bool operator()(const SPCSubCursor &left, const SPCSubCursor &right) const {
+            shared_ptr<Cursor> leftCursor = left.first;
+            shared_ptr<Cursor> rightCursor = right.first;
+            uint32_t leftID = left.second;
+            uint32_t rightID = right.second;
+            if (!leftCursor->ok() && !rightCursor->ok()) {
+                bool ret = leftID < rightID;
+                return ret;
+            }
+            if (!leftCursor->ok()) {
+                // say rightCursor is bigger
+                return true;
+            }
+            else if (!rightCursor->ok()) {
+                // say leftCursor is bigger
+                return false;
+            }
+            // we want to say that the smaller one is "greater", so it goes to the top of the heap
+            if (_direction > 0) {
+                // if leftCursor < rightCursor, say leftCursor is bigger, so leftCursor gets put on top of heap
+                // this is what we want for diretion < 0
+                if (rightCursor->currKey().woCompare(leftCursor->currKey(), *_ordering) == 0) {
+                    return (rightID < leftID);
+                }
+                return (rightCursor->currKey().woCompare(leftCursor->currKey(), *_ordering) < 0);
+            }
+            // if leftCursor < rightCursor, say leftCursor is smaller, so rightCursor gets put on top of heap
+            // this is what we want for direction < 0
+            if (leftCursor->currKey().woCompare(rightCursor->currKey(), *_ordering) == 0) {
+                return (leftID < rightID);
+            }
+            return (leftCursor->currKey().woCompare(rightCursor->currKey(), *_ordering) < 0);
+        }
+    private:
+        const int _direction;
+        const Ordering* _ordering;
+    };
+
+    SortedPartitionedCursor::SortedPartitionedCursor(
+        const BSONObj idxPattern,
+        const int direction,
+        shared_ptr<SubPartitionCursorGenerator> subCursorGenerator,
+        shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator
+        ) :
+        _direction(direction),
+        _ordering(Ordering::make(idxPattern)),
+        _subCursorGenerator(subCursorGenerator),
+        _subPartitionIDGenerator(subPartitionIDGenerator)
+    {
+        // create each sub cursor in _cursors
+        SPCComparator comparator(_direction, &_ordering);
+
+        uint64_t curr = _subPartitionIDGenerator->getCurrentPartitionIndex();
+        shared_ptr<Cursor> currentCursor = _subCursorGenerator->makeSubCursor(curr);
+        _cursors.push_back(SPCSubCursor(currentCursor, curr));
+        while (!_subPartitionIDGenerator->lastIndex()) {
+            _subPartitionIDGenerator->advanceIndex();
+            curr = _subPartitionIDGenerator->getCurrentPartitionIndex();
+            currentCursor = _subCursorGenerator->makeSubCursor(curr);
+            _cursors.push_back(SPCSubCursor(currentCursor, curr));
+        }
+
+        // now that we have a vector of cursors, make a heap out of it
+        std::make_heap(_cursors.begin(), _cursors.end(), comparator);
+    }
+    
+    bool SortedPartitionedCursor::advance() {
+        SPCComparator comparator(_direction, &_ordering);
+        std::pop_heap(
+            _cursors.begin(),
+            _cursors.end(),
+            comparator
+            );
+        shared_ptr<Cursor> currentCursor = _cursors.back().first;
+        massert(0, "cursor should be ok", currentCursor->ok());
+        currentCursor->advance();
+        std::push_heap(_cursors.begin(), _cursors.end(), comparator);
+        return ok();
     }
 
     shared_ptr<Cursor> RangePartitionCursorGenerator::makeSubCursor(uint64_t partitionIndex) {
@@ -350,7 +433,6 @@ log() << "Query: " << cc().querySettings().getQuery() << " sort: " << cc().query
                 );
         }
     }
-
 
     SubPartitionIDGeneratorImpl::SubPartitionIDGeneratorImpl(
         PartitionedCollection* pc,
