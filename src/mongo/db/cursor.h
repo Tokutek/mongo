@@ -198,6 +198,18 @@ namespace mongo {
     class FieldRangeVectorIterator;
     struct FieldInterval;
     
+    /** Helper class for deduping primary keys (_id keys) */
+    class PKDupSet {
+    public:
+        /** @return true if dup, otherwise return false and insert. */
+        bool getsetdup( const BSONObj &pk ) {
+            pair<set<BSONObj>::iterator, bool> p = _dups.insert(pk.copy());
+            return !p.second;
+        }
+    private:
+        set<BSONObj> _dups;
+    };
+
     // Class for storing rows bulk fetched from TokuMX
     class RowBuffer {
     public:
@@ -261,8 +273,7 @@ namespace mongo {
          */
         bool getsetdup(const BSONObj &pk) {
             if ( _multiKey ) {
-                pair<set<BSONObj>::iterator, bool> p = _dups.insert(pk.copy());
-                return !p.second;
+                return _dups.getsetdup(pk);
             }
             return false;
         }
@@ -376,7 +387,7 @@ namespace mongo {
         const IndexDetails &_idx;
         const Ordering _ordering;
 
-        set<BSONObj> _dups;
+        PKDupSet _dups;
         BSONObj _startKey;
         BSONObj _endKey;
         BSONObj _minUnsafeKey;
@@ -642,7 +653,6 @@ namespace mongo {
         virtual bool lastIndex() = 0;
     };
 
-
     // class for cursor over Partitioned Collection
     // This cursor assumes to be running over 
     // the primary key, which is the _id index, and
@@ -747,6 +757,7 @@ namespace mongo {
         shared_ptr<Projection::KeyOnly> _keyFieldsOnly;
 
         bool _tailable;
+        PKDupSet _dups;
 
         friend class PartitionedCollection;
     };
