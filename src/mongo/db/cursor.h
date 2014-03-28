@@ -654,9 +654,15 @@ namespace mongo {
     };
 
     // class for cursor over Partitioned Collection
-    // This cursor assumes to be running over 
-    // the primary key, which is the _id index, and
-    // is also the key which we are partitioning over
+    // This cursor iterates over the necessary partitions
+    // one at a time returning results. That is, if we have
+    // two partitions to iterate over, we iterate over the first
+    // partition with user calls to advance() and current(),
+    // and once we are done with the first partition, we move
+    // on to the second. That means if the query is on an index
+    // that is not the partition/primary key (as of this writing, they
+    // are one and the same), then results may come out of order.
+    // If results must be in order, the caller should use a SortedPartitionedCursor
     class PartitionedCursor : public Cursor {
     public:
 
@@ -762,6 +768,128 @@ namespace mongo {
         friend class PartitionedCollection;
     };
 
+    // SPC stands for SortedPartitionedCursor, this is an element
+    // of the vector we maintain in SortedPartitionedCursors::_cursors
+    // first() is the cursor, second() is the partitionID, which is used
+    // in comparisons
+    typedef std::pair<shared_ptr<Cursor>, uint32_t > SPCSubCursor;
+    // a cursor over a partitioned collection that returns
+    // elements in sorted order (ove the key we are querying)
+    // That means we run cursors over all the necessary partitions
+    // simultaneously
+    class SortedPartitionedCursor : public Cursor {
+    public:
+
+        virtual bool ok() {
+            return (_cursors.front().first)->ok();
+        }
+
+        virtual BSONObj current() {
+            return _cursors.front().first->current();
+        }
+
+        virtual bool advance();
+
+        virtual BSONObj currKey() const {
+            return _cursors.front().first->currKey();
+        }
+
+        virtual BSONObj currPK() const {
+            return _cursors.front().first->currPK();
+        }
+
+        virtual BSONObj indexKeyPattern() const {
+            return _cursors.front().first->indexKeyPattern();
+        }
+
+        virtual string toString() const {
+            return "SortedPartitionedCursor";
+        }
+
+        virtual bool getsetdup(const BSONObj &pk) {
+            // Partitioned Collections cannot have multikey indexes
+            // as of now
+            verify(!isMultiKey());
+            return false;
+        }
+
+        virtual bool isMultiKey() const {
+            // TODO: make sure constructors verify this
+            return false;
+        }
+
+        virtual bool modifiedKeys() const {
+            verify(!isMultiKey());
+            return false;
+        }
+
+        virtual BSONObj prettyIndexBounds() const {
+            return _cursors.front().first->prettyIndexBounds();
+        }
+
+        virtual long long nscanned() const {
+            long long ret = 0;
+            for (uint32_t i = 0; i < _cursors.size(); i++) {
+                ret += _cursors[i].first->nscanned();
+            }
+            return ret;
+        }
+
+        virtual CoveredIndexMatcher *matcher() const {
+            return _matcher.get();
+        }
+
+        virtual bool currentMatches( MatchDetails *details = 0 ) {
+            return _cursors.front().first->currentMatches(details);
+        }
+
+        virtual void setMatcher( shared_ptr< CoveredIndexMatcher > matcher ) {
+            _matcher = matcher;
+            for (uint32_t i = 0; i < _cursors.size(); i++) {
+                _cursors[i].first->setMatcher(matcher);
+            }
+        }
+
+        const Projection::KeyOnly *keyFieldsOnly() const { return _keyFieldsOnly.get(); }
+        void setKeyFieldsOnly( const shared_ptr<Projection::KeyOnly> &keyFieldsOnly ) {
+            _keyFieldsOnly = keyFieldsOnly;
+            // unsure if this is necessary
+            for (uint32_t i = 0; i < _cursors.size(); i++) {
+                _cursors[i].first->setKeyFieldsOnly(keyFieldsOnly);
+            }
+        }
+        bool tailable() const { return false; }
+        void setTailable() {
+            uasserted(0, "Cannot set a secondary index on a partitioned cursor to tailable");
+        }
+
+    private:
+        SortedPartitionedCursor(
+            const BSONObj idxPattern,
+            const int direction,
+            shared_ptr<SubPartitionCursorGenerator> subCursorGenerator,
+            shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator
+            );
+        const int _direction;
+        const Ordering _ordering;
+        shared_ptr<SubPartitionCursorGenerator> _subCursorGenerator;
+        shared_ptr<SubPartitionIDGenerator> _subPartitionIDGenerator;
+
+
+        // number of documents scanned
+        // by previous cursors
+        shared_ptr< CoveredIndexMatcher > _matcher;
+        shared_ptr<Projection::KeyOnly> _keyFieldsOnly;
+
+        // cursors organized in a heap
+        vector< SPCSubCursor > _cursors;
+
+        PKDupSet _dups;
+
+        friend class PartitionedCollection;
+    };
+
+
     // need better names
 
     // for range scans
@@ -860,5 +988,4 @@ namespace mongo {
         const int _direction;
         void sanityCheckPartitionEndpoints();
     };
-
 } // namespace mongo
