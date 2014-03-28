@@ -224,17 +224,6 @@ namespace mongo {
         int _bufferedMatches;
     };
 
-    /** Helper class for deduping primary keys (_id keys) */
-    class PKDupSet {
-    public:
-        /** @return true if dup, otherwise return false and insert. */
-        bool getsetdup( const BSONObj &pk ) {
-            pair<set<BSONObj>::iterator, bool> p = _dups.insert(pk.copy());
-            return !p.second;
-        }
-    private:
-        set<BSONObj> _dups;
-    };
 
     /**
      * Build strategy for a QueryOptimizerCursor containing some in order and some out of order
