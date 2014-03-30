@@ -547,7 +547,11 @@ DBCollection.prototype.stats = function( scale ){
     if (typeof scale == 'object') {
         sc = scale.scale;
     }
-    return this._db.runCommand( { collstats : this._shortName , scale : sc } );
+    var cmd = {collstats: this._shortName};
+    if (sc) {
+        cmd = Object.extend(cmd, {scale: sc});
+    }
+    return this._db.runCommand(cmd);
 }
 
 DBCollection.prototype.dataSize = function(){

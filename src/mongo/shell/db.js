@@ -86,7 +86,11 @@ DB.prototype.stats = function(scale){
     if (typeof scale == 'object') {
         sc = scale.scale;
     }
-    return this.runCommand( { dbstats : 1 , scale : sc } );
+    var cmd = {dbstats: 1};
+    if (sc) {
+        cmd = Object.extend(cmd, {scale: sc});
+    }
+    return this.runCommand(cmd);
 }
 
 DB.prototype.getCollection = function( name ){
