@@ -443,8 +443,9 @@ namespace mongo {
             int row = 0;
             bool discover = hasParam( "discover" );
             int maxLockedDbWidth = 0;
+            int rowCount = getParam("rowcount", 0);
 
-            while ( 1 ) {
+            while (rowCount == 0 || row < rowCount) {
                 sleepsecs( (int)ceil(_statUtil.getSeconds()) );
 
                 // collect data
