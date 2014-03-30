@@ -58,7 +58,7 @@ DBCollection.prototype.help = function () {
     print("\tdb." + shortName + ".renameCollection( newName , <dropTarget> ) renames the collection.");
     print("\tdb." + shortName + ".runCommand( name , <options> ) runs a db command with the given name where the first param is the collection name");
     print("\tdb." + shortName + ".save(obj)");
-    print("\tdb." + shortName + ".stats()");
+    print("\tdb." + shortName + ".stats(scale)");
     print("\tdb." + shortName + ".storageSize() - includes free space allocated to this collection");
     print("\tdb." + shortName + ".totalIndexSize() - size in bytes of all the indexes");
     print("\tdb." + shortName + ".totalSize() - storage allocated for all data and indexes");
@@ -543,7 +543,11 @@ DBCollection.prototype.getCollection = function( subName ){
 }
 
 DBCollection.prototype.stats = function( scale ){
-    return this._db.runCommand( { collstats : this._shortName , scale : scale } );
+    var sc = scale;
+    if (typeof scale == 'object') {
+        sc = scale.scale;
+    }
+    return this._db.runCommand( { collstats : this._shortName , scale : sc } );
 }
 
 DBCollection.prototype.dataSize = function(){

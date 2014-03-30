@@ -82,7 +82,11 @@ DB.prototype.setParameter = function(param, value){
 }
 
 DB.prototype.stats = function(scale){
-    return this.runCommand( { dbstats : 1 , scale : scale } );
+    var sc = scale;
+    if (typeof scale == 'object') {
+        sc = scale.scale;
+    }
+    return this.runCommand( { dbstats : 1 , scale : sc } );
 }
 
 DB.prototype.getCollection = function( name ){
@@ -535,7 +539,7 @@ DB.prototype.help = function() {
     print("\tdb.listCommands() lists all the db commands");
     print("\tdb.loadServerScripts() loads all the scripts in db.system.js");
     print("\tdb.logout()");
-    print("\tdb.printCollectionStats()");
+    print("\tdb.printCollectionStats(scale)");
     print("\tdb.printReplicationInfo()");
     print("\tdb.printShardingStatus()");
     print("\tdb.printSlaveReplicationInfo()");
@@ -548,7 +552,7 @@ DB.prototype.help = function() {
     print("\tdb.setProfilingLevel(level,<slowms>) 0=off 1=slow 2=all");
     print("\tdb.setVerboseShell(flag) display extra information in shell output");
     print("\tdb.shutdownServer()");
-    print("\tdb.stats()");
+    print("\tdb.stats(scale)");
     print("\tdb.version() current version of the server");
 
     return __magicNoPrint;
@@ -558,16 +562,6 @@ DB.prototype.printCollectionStats = function(scale) {
     if (arguments.length > 1) { 
         print("printCollectionStats() has a single optional argument (scale)");
         return;
-    }
-    if (typeof scale != 'undefined') {
-        if(typeof scale != 'number') {
-            print("scale has to be a number >= 1");
-            return;
-        }
-        if (scale < 1) {
-            print("scale has to be >= 1");
-            return;
-        }
     }
     var mydb = this;
     this.getCollectionNames().forEach(
@@ -758,10 +752,18 @@ DB.prototype.getLastError = function( w , wtimeout ){
 }
 DB.prototype.getLastErrorObj = function( w , wtimeout ){
     var cmd = { getlasterror : 1 };
-    if ( w ){
-        cmd.w = w;
-        if ( wtimeout )
-            cmd.wtimeout = wtimeout;
+    if (w) {
+        if (typeof w == 'object') {
+            if (arguments.length > 1) {
+                throw "getlasterror accepts a single object or a list of values w, wtimeout";
+            }
+            cmd = Object.extend(cmd, w);
+        } else {
+            cmd.w = w;
+            if (wtimeout) {
+                cmd.wtimeout = wtimeout;
+            }
+        }
     }
     var res = this.runCommand( cmd );
 
@@ -824,8 +826,12 @@ DB.prototype.currentOp = function( arg ){
 DB.prototype.currentOP = DB.prototype.currentOp;
 
 DB.prototype.killOp = function(op) {
-    if( !op ) 
+    if (typeof op == 'object') {
+        op = op.op;
+    }
+    if (!op) {
         throw "no opNum to kill specified";
+    }
     return this.$cmd.sys.killop.findOne({'op':op});
 }
 DB.prototype.killOP = DB.prototype.killOp;
@@ -979,6 +985,9 @@ DB.prototype.engineStatus = function(){
 }
 
 DB.prototype.beginTransaction = function(iso){
+    if (typeof iso == 'object') {
+        iso = iso.isolation;
+    }
     var cmd = {beginTransaction: 1};
     if (iso) {
         cmd.isolation = iso;
