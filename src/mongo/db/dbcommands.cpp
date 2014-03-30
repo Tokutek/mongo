@@ -1444,15 +1444,11 @@ namespace mongo {
             result.append( "ns" , ns.c_str() );
 
             int scale = 1;
-            if ( jsobj["scale"].isNumber() ) {
-                scale = jsobj["scale"].numberInt();
-                if ( scale <= 0 ) {
-                    errmsg = "scale has to be >= 1";
-                    return false;
-                }
+            if (jsobj["scale"].ok()) {
+                scale = BytesQuantity<int>(jsobj["scale"]);
             }
-            else if ( jsobj["scale"].trueValue() ) {
-                errmsg = "scale has to be a number >= 1";
+            if (scale <= 0) {
+                errmsg = "scale must be a number >= 1";
                 return false;
             }
 
@@ -1480,15 +1476,11 @@ namespace mongo {
         }
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
             int scale = 1;
-            if ( jsobj["scale"].isNumber() ) {
-                scale = jsobj["scale"].numberInt();
-                if ( scale <= 0 ) {
-                    errmsg = "scale has to be > 0";
-                    return false;
-                }
+            if (jsobj["scale"].ok()) {
+                scale = BytesQuantity<int>(jsobj["scale"]);
             }
-            else if ( jsobj["scale"].trueValue() ) {
-                errmsg = "scale has to be a number > 0";
+            if (scale <= 0) {
+                errmsg = "scale must be a number >= 1";
                 return false;
             }
 
