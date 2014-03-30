@@ -752,10 +752,18 @@ DB.prototype.getLastError = function( w , wtimeout ){
 }
 DB.prototype.getLastErrorObj = function( w , wtimeout ){
     var cmd = { getlasterror : 1 };
-    if ( w ){
-        cmd.w = w;
-        if ( wtimeout )
-            cmd.wtimeout = wtimeout;
+    if (w) {
+        if (typeof w == 'object') {
+            if (arguments.length > 1) {
+                throw "getlasterror accepts a single object or a list of values w, wtimeout";
+            }
+            cmd = Object.extend(cmd, w);
+        } else {
+            cmd.w = w;
+            if (wtimeout) {
+                cmd.wtimeout = wtimeout;
+            }
+        }
     }
     var res = this.runCommand( cmd );
 
@@ -818,8 +826,12 @@ DB.prototype.currentOp = function( arg ){
 DB.prototype.currentOP = DB.prototype.currentOp;
 
 DB.prototype.killOp = function(op) {
-    if( !op ) 
+    if (typeof op == 'object') {
+        op = op.op;
+    }
+    if (!op) {
         throw "no opNum to kill specified";
+    }
     return this.$cmd.sys.killop.findOne({'op':op});
 }
 DB.prototype.killOP = DB.prototype.killOp;
@@ -973,6 +985,9 @@ DB.prototype.engineStatus = function(){
 }
 
 DB.prototype.beginTransaction = function(iso){
+    if (typeof iso == 'object') {
+        iso = iso.isolation;
+    }
     var cmd = {beginTransaction: 1};
     if (iso) {
         cmd.isolation = iso;
