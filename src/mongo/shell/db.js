@@ -82,7 +82,11 @@ DB.prototype.setParameter = function(param, value){
 }
 
 DB.prototype.stats = function(scale){
-    return this.runCommand( { dbstats : 1 , scale : scale } );
+    var sc = scale;
+    if (typeof scale == 'object') {
+        sc = scale.scale;
+    }
+    return this.runCommand( { dbstats : 1 , scale : sc } );
 }
 
 DB.prototype.getCollection = function( name ){
@@ -535,7 +539,7 @@ DB.prototype.help = function() {
     print("\tdb.listCommands() lists all the db commands");
     print("\tdb.loadServerScripts() loads all the scripts in db.system.js");
     print("\tdb.logout()");
-    print("\tdb.printCollectionStats()");
+    print("\tdb.printCollectionStats(scale)");
     print("\tdb.printReplicationInfo()");
     print("\tdb.printShardingStatus()");
     print("\tdb.printSlaveReplicationInfo()");
@@ -548,7 +552,7 @@ DB.prototype.help = function() {
     print("\tdb.setProfilingLevel(level,<slowms>) 0=off 1=slow 2=all");
     print("\tdb.setVerboseShell(flag) display extra information in shell output");
     print("\tdb.shutdownServer()");
-    print("\tdb.stats()");
+    print("\tdb.stats(scale)");
     print("\tdb.version() current version of the server");
 
     return __magicNoPrint;
@@ -558,16 +562,6 @@ DB.prototype.printCollectionStats = function(scale) {
     if (arguments.length > 1) { 
         print("printCollectionStats() has a single optional argument (scale)");
         return;
-    }
-    if (typeof scale != 'undefined') {
-        if(typeof scale != 'number') {
-            print("scale has to be a number >= 1");
-            return;
-        }
-        if (scale < 1) {
-            print("scale has to be >= 1");
-            return;
-        }
     }
     var mydb = this;
     this.getCollectionNames().forEach(
