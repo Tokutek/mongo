@@ -2867,7 +2867,8 @@ namespace mongo {
         shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator (
             new SubPartitionIDGeneratorImpl(this, direction)
             );
-        shared_ptr<Cursor> ret (new PartitionedCursor(false, subCursorGenerator, subPartitionIDGenerator));
+        // pk cannot be multiKey, hence passing false for last parameter
+        shared_ptr<Cursor> ret (new PartitionedCursor(false, subCursorGenerator, subPartitionIDGenerator, false));
         return ret;
     }
     
@@ -2897,12 +2898,13 @@ namespace mongo {
                 idx.keyPattern(),
                 direction,
                 subCursorGenerator,
-                subPartitionIDGenerator
+                subPartitionIDGenerator,
+                isMultiKey(idxNo(idx))
                 )
                 );
         }
         else {
-            ret.reset(new PartitionedCursor(!isPK, subCursorGenerator, subPartitionIDGenerator));
+            ret.reset(new PartitionedCursor(!isPK, subCursorGenerator, subPartitionIDGenerator, isMultiKey(idxNo(idx))));
         }
         return ret;
     }
@@ -2939,12 +2941,13 @@ namespace mongo {
                 idx.keyPattern(),
                 direction,
                 subCursorGenerator,
-                subPartitionIDGenerator
+                subPartitionIDGenerator,
+                isMultiKey(idxNo(idx))
                 )
                 );
         }
         else {
-            ret.reset(new PartitionedCursor(!isPK, subCursorGenerator, subPartitionIDGenerator));
+            ret.reset(new PartitionedCursor(!isPK, subCursorGenerator, subPartitionIDGenerator, isMultiKey(idxNo(idx))));
         }
         return ret;
     }
@@ -2981,12 +2984,13 @@ namespace mongo {
                 idx.keyPattern(),
                 direction,
                 subCursorGenerator,
-                subPartitionIDGenerator
+                subPartitionIDGenerator,
+                isMultiKey(idxNo(idx))
                 )
                 );
         }
         else {
-            ret.reset(new PartitionedCursor(!isPK, subCursorGenerator, subPartitionIDGenerator));
+            ret.reset(new PartitionedCursor(!isPK, subCursorGenerator, subPartitionIDGenerator, isMultiKey(idxNo(idx))));
         }
         return ret;
     }

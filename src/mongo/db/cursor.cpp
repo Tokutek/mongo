@@ -237,11 +237,13 @@ namespace mongo {
     PartitionedCursor::PartitionedCursor(
         const bool distributed,
         shared_ptr<SubPartitionCursorGenerator> subCursorGenerator,
-        shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator
+        shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator,
+        const bool multiKey
         ) :
+        _distributed(distributed),
         _subCursorGenerator(subCursorGenerator),
         _subPartitionIDGenerator(subPartitionIDGenerator),
-        _distributed(distributed),
+        _multiKey(multiKey),
         _prevNScanned(0),
         _tailable(false)
     {
@@ -262,7 +264,7 @@ namespace mongo {
     }
 
     void PartitionedCursor::initializeSubCursor() {
-log() << "Query: " << cc().querySettings().getQuery() << " sort: " << cc().querySettings().sortRequired() << endl;
+        TOKULOG(3) << "Query: " << cc().querySettings().getQuery() << " sort: " << cc().querySettings().sortRequired() << endl;
         uint64_t currPartition = _subPartitionIDGenerator->getCurrentPartitionIndex();
         _currentCursor = _subCursorGenerator->makeSubCursor(currPartition);
         while (!_currentCursor->ok() && !_subPartitionIDGenerator->lastIndex()) {
@@ -343,12 +345,14 @@ log() << "Query: " << cc().querySettings().getQuery() << " sort: " << cc().query
         const BSONObj idxPattern,
         const int direction,
         shared_ptr<SubPartitionCursorGenerator> subCursorGenerator,
-        shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator
+        shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator,
+        const bool multiKey
         ) :
         _direction(direction),
         _ordering(Ordering::make(idxPattern)),
         _subCursorGenerator(subCursorGenerator),
-        _subPartitionIDGenerator(subPartitionIDGenerator)
+        _subPartitionIDGenerator(subPartitionIDGenerator),
+        _multiKey(multiKey)
     {
         // create each sub cursor in _cursors
         SPCComparator comparator(_direction, &_ordering);
@@ -559,7 +563,10 @@ log() << "Query: " << cc().querySettings().getQuery() << " sort: " << cc().query
                 org.popOrClauseSingleKey();
             }
         }while (!org.orRangesExhausted());
-        
+        // at this point, we have set all of the appropriate
+        // entries in _partitionsToRead to true
+        // Now we need to set up _currPartition
+        // and _endPartition so that partition id's can be generated
         if (_direction > 0) {
             _currPartition = minPartitionToRead;
             _endPartition = maxPartitionToRead;
