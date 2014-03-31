@@ -988,4 +988,23 @@ namespace mongo {
         const int _direction;
         void sanityCheckPartitionEndpoints();
     };
+
+    class FilteredPartitionIDGeneratorImpl : public SubPartitionIDGenerator {
+    public:
+        // get the current partition index that this class is identifying
+        FilteredPartitionIDGeneratorImpl(
+            PartitionedCollection* pc,
+            const char* ns,
+            const ShardKeyPattern key,
+            const int direction
+            );
+        virtual uint64_t getCurrentPartitionIndex();
+        virtual void advanceIndex();
+        virtual bool lastIndex();
+    private:
+        vector<bool> _partitionsToRead;
+        uint64_t _currPartition;
+        uint64_t _endPartition;
+        const int _direction;
+    };
 } // namespace mongo

@@ -500,5 +500,100 @@ log() << "Query: " << cc().querySettings().getQuery() << " sort: " << cc().query
     bool SubPartitionIDGeneratorImpl::lastIndex() {
             return (_currPartition == _endPartition);
     }
+
+    FilteredPartitionIDGeneratorImpl::FilteredPartitionIDGeneratorImpl(
+        PartitionedCollection* pc,
+        const char* ns,
+        const ShardKeyPattern key,
+        const int direction
+        ):
+        _direction(direction)
+    {
+        // initialize the bitmap to be all false
+        uint64_t numPartitions = pc->numPartitions();
+        uint64_t minPartitionToRead = numPartitions;
+        uint64_t maxPartitionToRead = 0;
+        for (uint64_t i = 0; i < numPartitions; i++) {
+            _partitionsToRead.push_back(false);
+        }
+        // This code was pattern-matched/taken from sharding code
+        // Specifically, from ChunkManager::getShardsForQuery
+        OrRangeGenerator org(ns, cc().querySettings().getQuery(), false);
+        do {
+            boost::scoped_ptr<FieldRangeSetPair> frsp (org.topFrsp());
+
+            // special case if most-significant field isn't in query
+            // only have this because ChunkManager::getShardsForQuery
+            // has it as well
+            FieldRange range = frsp->shardKeyRange(key.key().firstElementFieldName());
+            if ( range.universal() ) {
+                for (uint64_t i = 0; i < numPartitions; i++) {
+                    _partitionsToRead[i] = true;
+                }
+                minPartitionToRead = 0;
+                maxPartitionToRead = numPartitions-1;
+                break;
+            }
+            
+            if ( frsp->matchPossibleForSingleKeyFRS( key.key() ) ) {
+                BoundList ranges = key.keyBounds( frsp->getSingleKeyFRS() );
+                for ( BoundList::const_iterator it=ranges.begin(); it != ranges.end(); ++it ){
+                    TOKULOG(3) << "Bounds for partitions: first: " << it->first << " second " << it->second << endl;
+                    uint64_t first = pc->partitionWithRow(it->first);
+                    uint64_t second = pc->partitionWithRow(it->second);
+                    uint64_t min = first < second ? first : second;
+                    uint64_t max = first < second ? second : first;
+                    TOKULOG(3) << "Setting partitions " << min << " through " << max << " to be read" <<endl;
+                    for (uint64_t i = min; i <= max; i++) {
+                        _partitionsToRead[i] = true;
+                        if (i < minPartitionToRead) {
+                            minPartitionToRead = i;
+                        }
+                        if (i > maxPartitionToRead) {
+                            maxPartitionToRead = i;
+                        }
+                    }
+                }
+            }
+            if (!org.orRangesExhausted()) {
+                org.popOrClauseSingleKey();
+            }
+        }while (!org.orRangesExhausted());
+        
+        if (_direction > 0) {
+            _currPartition = minPartitionToRead;
+            _endPartition = maxPartitionToRead;
+        }
+        else {
+            _currPartition = maxPartitionToRead;
+            _endPartition = minPartitionToRead;
+        }
+        massert(0, "bad _endPartition", _partitionsToRead[_endPartition]);
+        massert(0, "bad _currPartition", _partitionsToRead[_currPartition]);
+    }
+
+    uint64_t FilteredPartitionIDGeneratorImpl::getCurrentPartitionIndex() {
+        return _currPartition;
+    }
+    
+    void FilteredPartitionIDGeneratorImpl::advanceIndex() {
+        massert(0, "cannot advanceIndex, at end", !lastIndex());
+        if (_direction > 0) {
+            _currPartition++;
+            while (!_partitionsToRead[_currPartition]) {
+                _currPartition++;
+            }
+        }
+        else {
+            _currPartition--;
+            while (!_partitionsToRead[_currPartition]) {
+                _currPartition--;
+            }
+        }
+    }
+    
+    bool FilteredPartitionIDGeneratorImpl::lastIndex() {
+            return (_currPartition == _endPartition);
+    }
     
 } // namespace mongo

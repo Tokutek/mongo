@@ -39,6 +39,7 @@
 #include "mongo/platform/atomic_word.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/db/storage/assert_ids.h"
+#include "mongo/db/queryutil.h"
 
 namespace mongo {
 
@@ -2632,7 +2633,8 @@ namespace mongo {
     PartitionedCollection::PartitionedCollection(const StringData &ns, const BSONObj &options) :
         CollectionData(ns, determinePrimaryKey(options)),
         _options(options.getOwned()),
-        _ordering(Ordering::make(BSONObj())) // dummy for now, we create it properly below
+        _ordering(Ordering::make(BSONObj())), // dummy for now, we create it properly below
+        _shardKeyPattern(_pk)
     {
         // MUST CALL initialize directly after this.
         // We can't call initialize here because it depends on virtual functions
@@ -2677,7 +2679,8 @@ namespace mongo {
         ) :
            CollectionData(serialized),
            _options(serialized["options"].Obj().getOwned()),
-           _ordering(Ordering::make(BSONObj())) // dummy for now, we create it properly below
+           _ordering(Ordering::make(BSONObj())), // dummy for now, we create it properly below
+           _shardKeyPattern(_pk)
     {
     }
 
@@ -2733,7 +2736,8 @@ namespace mongo {
     PartitionedCollection::PartitionedCollection(const BSONObj &serialized) :
         CollectionData(serialized),
         _options(serialized["options"].Obj().getOwned()),
-        _ordering(Ordering::make(BSONObj())) // dummy for now, we create it properly below
+        _ordering(Ordering::make(BSONObj())), // dummy for now, we create it properly below
+        _shardKeyPattern(_pk)
     {
         // MUST CALL initialize directly after this.
         // We can't call initialize here because it depends on virtual functions
@@ -2880,9 +2884,13 @@ namespace mongo {
                 isPK
                 )
             );
-        shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator (
-            new SubPartitionIDGeneratorImpl(this, direction)
-            );
+        shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator;
+        if (isPK) {
+            subPartitionIDGenerator.reset(new SubPartitionIDGeneratorImpl(this, direction));
+        }
+        else {
+            subPartitionIDGenerator.reset(new FilteredPartitionIDGeneratorImpl(this, _ns.c_str(), _shardKeyPattern, direction));
+        }
         shared_ptr<Cursor> ret;
         if (!isPK && cc().querySettings().sortRequired()) {
             ret.reset(new SortedPartitionedCursor(
@@ -2923,7 +2931,7 @@ namespace mongo {
             subPartitionIDGenerator.reset(new SubPartitionIDGeneratorImpl(this, startKey, endKey, direction));
         }
         else {
-            subPartitionIDGenerator.reset(new SubPartitionIDGeneratorImpl(this, direction));
+            subPartitionIDGenerator.reset(new FilteredPartitionIDGeneratorImpl(this, _ns.c_str(), _shardKeyPattern, direction));
         }
         shared_ptr<Cursor> ret;
         if (!isPK && cc().querySettings().sortRequired()) {
@@ -2964,7 +2972,7 @@ namespace mongo {
             subPartitionIDGenerator.reset(new SubPartitionIDGeneratorImpl(this, bounds, direction));
         }
         else {
-            subPartitionIDGenerator.reset(new SubPartitionIDGeneratorImpl(this, direction));
+            subPartitionIDGenerator.reset(new FilteredPartitionIDGeneratorImpl(this, _ns.c_str(), _shardKeyPattern, direction));
         }
 
         shared_ptr<Cursor> ret;
@@ -3363,7 +3371,7 @@ namespace mongo {
         sanityCheck();
     }
     
-    int PartitionedCollection::partitionWithPK(const BSONObj& pk) const {
+    uint64_t PartitionedCollection::partitionWithPK(const BSONObj& pk) const {
         // if there is one partition, then the answer is easy
         if (numPartitions() == 1) {
             return 0;
