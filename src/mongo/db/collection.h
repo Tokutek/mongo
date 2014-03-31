@@ -31,6 +31,7 @@
 #include "mongo/util/concurrency/rwlock.h"
 #include "mongo/util/concurrency/simplerwlock.h"
 #include "mongo/db/queryutil.h"
+#include "mongo/s/shardkey.h"
 
 namespace mongo {
 
@@ -1345,7 +1346,7 @@ namespace mongo {
         }
 
         virtual bool findByPK(const BSONObj &pk, BSONObj &result) const {
-            int whichPartition = partitionWithPK(pk);
+            uint64_t whichPartition = partitionWithPK(pk);
             return _partitions[whichPartition]->findByPK(pk, result);
         }
 
@@ -1366,12 +1367,12 @@ namespace mongo {
         }
         
         virtual void insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged) {
-            int whichPartition = partitionWithRow(obj);
+            uint64_t whichPartition = partitionWithRow(obj);
             _partitions[whichPartition]->insertObject(obj, flags, indexBitChanged);
         }
 
         virtual void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
-            int whichPartition = partitionWithPK(pk);
+            uint64_t whichPartition = partitionWithPK(pk);
             _partitions[whichPartition]->deleteObject(pk, obj, flags);
         }
 
@@ -1390,7 +1391,7 @@ namespace mongo {
         virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
                                       const bool fromMigrate,
                                       uint64_t flags) {
-            int whichPartition = partitionWithPK(pk);
+            uint64_t whichPartition = partitionWithPK(pk);
             _partitions[whichPartition]->updateObjectMods(pk, updateObj, fromMigrate, flags);
         }
 
@@ -1537,7 +1538,10 @@ namespace mongo {
             return _partitions[idx];
         }
         // states which partition the row or PK belongs to
-        int partitionWithPK(const BSONObj& pk) const;
+        uint64_t partitionWithPK(const BSONObj& pk) const;
+        uint64_t partitionWithRow(const BSONObj& row) const {
+            return partitionWithPK(getValidatedPKFromObject(row));
+        }
         shared_ptr<CollectionData> getMetaCollection() {
             return _metaCollection;
         }
@@ -1562,9 +1566,6 @@ namespace mongo {
     private:
         void createIndexDetails();
         void sanityCheck();
-        int partitionWithRow(const BSONObj& row) const {
-            return partitionWithPK(getValidatedPKFromObject(row));
-        }
 
         // function used internally to drop a partition
         void dropPartitionInternal(uint64_t id);
@@ -1614,6 +1615,9 @@ namespace mongo {
         // then partition i stores values x such that 100 < x <= 200
         std::vector<BSONObj> _partitionPivots;
         Ordering _ordering; // used for comparisons
+
+        // for makeCursor, to determine what partitions we needto visit
+        const ShardKeyPattern _shardKeyPattern;
     };
 
     // for legacy oplogs that were not partitioned. So we can open them just long enough
