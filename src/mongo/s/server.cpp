@@ -168,6 +168,12 @@ namespace mongo {
         dbexit(EXIT_CLEAN, (string("received signal ") + BSONObjBuilder::numStr(sig)).c_str());
     }
 
+    void abruptQuit(int x) {
+        severe() << "Got signal: " << x << " (" << strsignal( x ) << ").";
+        printStackTrace(severe().stream() << "Backtrace: \n");
+        ::_exit(EXIT_ABRUPT);
+    }
+
     // this gets called when new fails to allocate memory
     void my_new_handler() {
         rawOut( "out of memory, printing stack and exiting:" );
@@ -252,13 +258,13 @@ namespace mongo {
 #endif
 
 #if defined(SIGQUIT)
-        signal( SIGQUIT , printStackAndExit );
+        signal( SIGQUIT , abruptQuit );
 #endif
-        signal( SIGSEGV , printStackAndExit );
-        signal( SIGABRT , printStackAndExit );
-        signal( SIGFPE , printStackAndExit );
+        signal( SIGSEGV , abruptQuit );
+        signal( SIGABRT , abruptQuit );
+        signal( SIGFPE , abruptQuit );
 #if defined(SIGBUS)
-        signal( SIGBUS , printStackAndExit );
+        signal( SIGBUS , abruptQuit );
 #endif
 #if defined(SIGPIPE)
         signal( SIGPIPE , SIG_IGN );
