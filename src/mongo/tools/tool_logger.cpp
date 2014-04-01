@@ -70,8 +70,6 @@ MONGO_INITIALIZER_GENERAL(ToolLogRedirection,
         logger::globalLogDomain()->attachAppender(MessageLogDomain::AppenderAutoPtr(
                     new ConsoleAppender<MessageEventEphemeral, ErrorConsole>(
                         new MessageEventDetailsEncoder)));
-
-        setRawOutToStderr();
     }
 
     return Status::OK();

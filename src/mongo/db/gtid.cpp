@@ -204,9 +204,7 @@ namespace mongo {
             _lastUnappliedGTID = gtid;
         }
         catch (std::exception &e) {
-            StackStringBuilder ssb;
-            ssb << "exception during noteApplyingGTID, aborting system: " << e.what();
-            rawOut(ssb.str());
+            severe() << "exception during noteApplyingGTID, aborting system: " << e.what() << std::endl;
             ::abort();
         }
     }
@@ -234,9 +232,7 @@ namespace mongo {
             }
         }
         catch (std::exception &e) {
-            StackStringBuilder ssb;
-            ssb << "exception during noteGTIDApplied, aborting system: " << e.what();
-            rawOut(ssb.str());
+            severe() << "exception during noteGTIDApplied, aborting system: " << e.what() << std::endl;
             ::abort();
         }
     }

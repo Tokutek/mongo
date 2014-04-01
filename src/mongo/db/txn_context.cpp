@@ -175,9 +175,7 @@ namespace mongo {
             _txn.commit(flags);
         }
         catch (std::exception &e) {
-            StackStringBuilder ssb;
-            ssb << "exception during critical section of txn child commit, aborting system: " << e.what();
-            rawOut(ssb.str());
+            severe() << "exception during critical section of txn child commit, aborting system: " << e.what() << std::endl;
             ::abort();
         }
 
@@ -226,9 +224,7 @@ namespace mongo {
                 _txn.commit(flags);
             }
             catch (std::exception &e) {
-                StackStringBuilder ssb;
-                ssb << "exception during critical section of txn root commit, aborting system: " << e.what();
-                rawOut(ssb.str());
+                severe() << "exception during critical section of txn root commit, aborting system: " << e.what() << std::endl;
                 ::abort();
             }
 
