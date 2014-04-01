@@ -205,6 +205,7 @@ install -p -Dm755 %{SOURCE1} $RPM_BUILD_ROOT%{_initddir}/%{product_name}
 
 install -p -Dm644 %{SOURCE2} %{buildroot}%{_sysconfdir}/logrotate.d/%{product_name}
 install -p -Dm644 %{SOURCE3} %{buildroot}%{_sysconfdir}/%{product_name}.conf
+sed -i'' -e "s/@LIBDIR@/"%{_libdir}"/" %{buildroot}%{_sysconfdir}/%{product_name}.conf
 install -p -Dm644 %{SOURCE4} %{buildroot}%{_sysconfdir}/sysconfig/%{product_name}
 
 install -dm755 %{buildroot}%{_mandir}/man1
