@@ -34,6 +34,7 @@
 #include "mongo/db/repl/rs_sync.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/util/mongoutils/str.h"
+#include "mongo/util/progress_meter.h"
 
 namespace mongo {
 
@@ -114,20 +115,27 @@ namespace mongo {
         ) 
     {
         verify(Lock::isW());
+        ProgressMeter dbsProgress(dbs.size(), 3, 1, "databases", "Initial sync progress");
         for (list<string>::const_iterator i = dbs.begin(); i != dbs.end(); i++) {
             string db = *i;
             if (db == "local") {
                 continue;
             }
             
-            sethbmsg(str::stream() << "initial sync cloning db: " << db, 0);
+            if (i == dbs.begin()) {
+                sethbmsg(str::stream() << "initial sync cloning db: " << db, 0);
+            }
 
             Client::Context ctx(db);
             if (!clone(master, db, conn, _buildIndexes)) {
                 sethbmsg(str::stream() << "initial sync error clone of " << db << " failed sleeping 5 minutes", 0);
                 return false;
             }
+            if (dbsProgress.hit()) {
+                sethbmsg(dbsProgress.toString(), 0);
+            }
         }
+        dbsProgress.finished();
 
         return true;
     }
