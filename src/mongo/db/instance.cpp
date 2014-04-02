@@ -998,7 +998,7 @@ namespace mongo {
             return e->cb(key, val);
         }
 
-        vector<string> &batch() const {
+        vector<string> &batch() {
             return _batch;
         }
     };
