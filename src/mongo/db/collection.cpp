@@ -2430,8 +2430,7 @@ namespace mongo {
             _dbs[i] = idx.db();
             _multiKeyTrackers[i].reset(new MultiKeyTracker(_dbs[i]));
         }
-        _loader.reset(new storage::Loader(_dbs.get(), n));
-        _loader->setPollMessagePrefix(str::stream() << "Loader build progress: " << _ns);
+        _loader.reset(new storage::Loader(_dbs.get(), n, str::stream() << "Loader build progress for " << _ns));
     }
 
     void BulkLoadedCollection::close(const bool abortingLoad, bool* indexBitsChanged) {
