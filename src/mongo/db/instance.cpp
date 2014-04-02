@@ -972,8 +972,7 @@ namespace mongo {
     }
 
     class ApplyToDatabaseNamesWrapper {
-        boost::function<Status (const StringData &)> &_f;
-        Status _s;
+        vector<string> _batch;
 
         int cb(const DBT *key, const DBT *val) {
             size_t length = key->size;
@@ -984,41 +983,44 @@ namespace mongo {
                 }
                 StringData dbname((const char *) key->data, length);
                 if (dbname.endsWith(".ns")) {
-                    Status s = _f(dbname.substr(0, dbname.size() - 3));
-                    if (!s.isOK()) {
-                        _s = s;
-                        return 1;
-                    }
+                    _batch.push_back(dbname.substr(0, dbname.size() - 3).toString());
                 }
             }
-            return 0;
+            const size_t max_size = 1<<10;
+            return ((_batch.size() < max_size)
+                    ? TOKUDB_CURSOR_CONTINUE
+                    : 0);
         }
 
       public:
-        ApplyToDatabaseNamesWrapper(boost::function<Status (const StringData &)> &f)
-                : _f(f), _s(Status::OK()) {}
-
         static int callback(const DBT *key, const DBT *val, void *extra) {
             ApplyToDatabaseNamesWrapper *e = static_cast<ApplyToDatabaseNamesWrapper *>(extra);
             return e->cb(key, val);
         }
 
-        Status status() const { return _s; }
+        vector<string> &batch() const {
+            return _batch;
+        }
     };
 
     Status applyToDatabaseNames(boost::function<Status (const StringData &)> f) {
         verify(Lock::isRW());
         verify(cc().hasTxn());
         storage::DirectoryCursor c(storage::env, cc().txn().db_txn());
-        ApplyToDatabaseNamesWrapper wrapper(f);
+        ApplyToDatabaseNamesWrapper wrapper;
         int r = 0;
-        while (r == 0) {
+        Status s = Status::OK();
+        while (r == 0 && s.isOK()) {
             r = c.dbc()->c_getf_next(c.dbc(), 0, &ApplyToDatabaseNamesWrapper::callback, &wrapper);
-            if (r != 0 && r != DB_NOTFOUND && r != 1) {
+            if (r != 0 && r != DB_NOTFOUND) {
                 storage::handle_ydb_error(r);
             }
+            for (vector<string>::const_iterator it = wrapper.batch().begin(); s.isOK() && it != wrapper.batch().end(); ++it) {
+                s = f(*it);
+            }
+            wrapper.batch().clear();
         }
-        return wrapper.status();
+        return s;
     }
 
     /* returns true if there is data on this server.  useful when starting replication.
