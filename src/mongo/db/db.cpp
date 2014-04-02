@@ -323,10 +323,17 @@ namespace mongo {
       private:
         VersionID _startupVersion;
         VersionID _currentVersion;
+        static size_t _numNamespaces;
+        static ProgressMeterHolder *_pm;
 
         static const string versionNs;
         static const BSONFieldValue<string> versionIdValue;
         static const BSONField<int> valueField;
+
+        static Status countNamespaces(const StringData&) {
+            _numNamespaces++;
+            return Status::OK();
+        }
 
         static Status removeZombieNamespaces(const StringData &dbname) {
             Client::Context ctx(dbname);
@@ -346,6 +353,7 @@ namespace mongo {
             }
             string dbpath = cc().database()->path();
             Database::closeDatabase(dbname, dbpath);
+            _pm->hit();
             return Status::OK();
         }
 
@@ -358,6 +366,7 @@ namespace mongo {
             getCollection(ns);
             string dbpath = cc().database()->path();
             Database::closeDatabase(dbname, dbpath);
+            _pm->hit();
             return Status::OK();
         }
 
@@ -382,6 +391,7 @@ namespace mongo {
             }
             string dbpath = cc().database()->path();
             Database::closeDatabase(dbname, dbpath);
+            _pm->hit();
             return Status::OK();
         }
 
@@ -390,8 +400,26 @@ namespace mongo {
                 return Status(ErrorCodes::BadValue, "bad version in upgrade");
             }
 
-            log() << "Running upgrade of disk format version " << static_cast<int>(_currentVersion) <<
-                    " to " << static_cast<int>(targetVersion) << "." << endl;
+            std::stringstream upgradeLogPrefixStream;
+            upgradeLogPrefixStream << "Running upgrade of disk format version " << static_cast<int>(_currentVersion)
+                                   << " to " << static_cast<int>(targetVersion);
+            std::string upgradeLogPrefix = upgradeLogPrefixStream.str();
+            log() << upgradeLogPrefix << "." << endl;
+
+            // This is pretty awkward.  We want a static member to point to a stack
+            // ProgressMeterHolder so it can be used by other static member callback functions, but
+            // not longer than that object exists.  TODO: maybe it would be easier to pass a mem_fn
+            // to applyToDatabaseNames, but this isn't too crazy yet.
+            class ScopedPMH : boost::noncopyable {
+                ProgressMeterHolder *&_pmhp;
+              public:
+                ScopedPMH(ProgressMeterHolder *&pmhp, ProgressMeterHolder *val) : _pmhp(pmhp) {
+                    _pmhp = val;
+                }
+                ~ScopedPMH() {
+                    _pmhp = NULL;
+                }
+            };
 
             switch (targetVersion) {
                 case DISK_VERSION_INVALID:
@@ -407,6 +435,10 @@ namespace mongo {
                     // weren't removed.
                     verify(Lock::isW());
                     verify(cc().hasTxn());
+
+                    ProgressMeter pmObj(_numNamespaces, 3, 1, "databases", upgradeLogPrefix);
+                    ProgressMeterHolder pm(pmObj);
+                    ScopedPMH scpmh(_pm, &pm);
 
                     Status s = applyToDatabaseNames(&DiskFormatVersion::removeZombieNamespaces);
                     if (!s.isOK()) {
@@ -424,6 +456,10 @@ namespace mongo {
                     verify(Lock::isW());
                     verify(cc().hasTxn());
 
+                    ProgressMeter pmObj(_numNamespaces, 3, 1, "databases", upgradeLogPrefix);
+                    ProgressMeterHolder pm(pmObj);
+                    ScopedPMH scpmh(_pm, &pm);
+
                     Status s = applyToDatabaseNames(&DiskFormatVersion::upgradeSystemUsersCollection);
                     if (!s.isOK()) {
                         return s;
@@ -435,6 +471,10 @@ namespace mongo {
                 case DISK_VERSION_4: {
                     verify(Lock::isW());
                     verify(cc().hasTxn());
+
+                    ProgressMeter pmObj(_numNamespaces, 3, 1, "databases", upgradeLogPrefix);
+                    ProgressMeterHolder pm(pmObj);
+                    ScopedPMH scpmh(_pm, &pm);
 
                     Status s = applyToDatabaseNames(&DiskFormatVersion::cleanupPartitionedNamespacesEntries);
                     if (!s.isOK()) {
@@ -511,16 +551,21 @@ namespace mongo {
 
         Status upgradeToCurrent() {
             Status s = Status::OK();
-            while (_currentVersion < DISK_VERSION_CURRENT) {
+            if (_currentVersion < DISK_VERSION_CURRENT) {
+                s = applyToDatabaseNames(&DiskFormatVersion::countNamespaces);
+                log() << "Need to upgrade from disk format version " << static_cast<int>(_currentVersion)
+                      << " to " << static_cast<int>(DISK_VERSION_CURRENT) << "." << endl;
+                log() << _numNamespaces << " databases will be upgraded." << endl;
+            }
+            while (_currentVersion < DISK_VERSION_CURRENT && s.isOK()) {
                 s = upgradeToVersion(static_cast<VersionID>(static_cast<int>(_currentVersion) + 1));
-                if (!s.isOK()) {
-                    break;
-                }
             }
             return s;
         }
     };
 
+    size_t DiskFormatVersion::_numNamespaces = 0;
+    ProgressMeterHolder *DiskFormatVersion::_pm = NULL;
     const string DiskFormatVersion::versionNs("local.system.version");
     const BSONFieldValue<string> DiskFormatVersion::versionIdValue("_id", "diskFormatVersion");
     const BSONField<int> DiskFormatVersion::valueField("value");
