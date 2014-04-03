@@ -1032,11 +1032,12 @@ namespace mongo {
         const int idxNum = _cd->findIndexByName(name);
         if (name == "*") {
             result.append("nIndexesWas", (double) nIndexes());
-            while(nIndexes() > 0) {
-                int curr = nIndexes() - 1;
-                IndexDetails &idx = _cd->idx(curr);
+            for (int i = 0; i < nIndexes(); ) {
+                IndexDetails &idx = _cd->idx(i);
                 if (mayDeleteIdIndex || (!idx.isIdIndex() && !isPKIndex(idx))) {
-                    dropIndex(curr);
+                    dropIndex(i);
+                } else {
+                    i++;
                 }
             }
             // Assuming id/pk index isn't multikey
