@@ -86,3 +86,23 @@ e = db.getLastErrorObj();
 assert(e.err == null);
 assert(t.getIndexes().length == 5); // little test for 90777ddd
 t.drop();
+
+// quick test that pk with a reverse direction works
+assert.commandWorked(db.createCollection(tn, {partitioned:1, primaryKey : {a:-1, _id:1 }}));
+x = t.getPartitionInfo();
+assert.eq(MinKey, x["partitions"][0]["max"]["a"]);
+assert.eq(MaxKey, x["partitions"][0]["max"]["_id"]);
+t.insert({_id:0, a:3});
+t.insert({_id:1, a:2});
+t.insert({_id:2, a:1});
+t.insert({_id:3, a:0});
+assert.commandFailed(t.addPartition({a:4}));
+assert.commandWorked(t.addPartition());
+x = t.getPartitionInfo();
+assert(x.numPartitions == 2);
+assert.eq(0, x["partitions"][0]["max"]["a"]);
+assert.eq(3, x["partitions"][0]["max"]["_id"]);
+assert.eq(MinKey, x["partitions"][1]["max"]["a"]);
+assert.eq(MaxKey, x["partitions"][1]["max"]["_id"]);
+t.drop();
+

@@ -2998,8 +2998,6 @@ namespace mongo {
     void PartitionedCollection::sanityCheck() {
         verify(numPartitions() == _partitionPivots.size());
         verify(numPartitions() == _partitionIDs.size());
-        // verify that the last pivot is maxKey
-        verify( _partitionPivots[numPartitions() - 1][""].type() == MaxKey );
         // verify that pivots are increasing in order
         for (uint64_t i = 1; i < numPartitions(); i++) {
             BSONObj bigger = _partitionPivots[i];
@@ -3139,13 +3137,10 @@ namespace mongo {
         uint64_t id = (numPartitions() == 0) ? 0 : _partitionIDs[numPartitions()-1] + 1;
 
         // make entry for metadata collection
-        // the pivot
-        BSONObjBuilder c(64);
-        c.appendMaxKey("");
         // doc to be inserted into meta collection
         BSONObjBuilder b(64);
         b.append("_id", (long long)id);
-        b.append("max", c.done());
+        b.append("max", getUpperBound());
         b.appendDate("createTime", curTimeMillis64());
 
         // write to metadata collection
@@ -3277,31 +3272,25 @@ namespace mongo {
         for (uint64_t i = 0; i < numPartitionsFoundInMeta; i++) {
             massert(0, "Bad cursor", c->ok());
             BSONObj curr = c->current();
-            if (i < numPartitionsFoundInMeta - 1) {
-                // the keys are stored without their field names,
-                // in the "packed" format. Here we put the
-                // field names back. Probably not the most efficient code,
-                // but it does not need to be. This function probably is not called
-                // very often
-                BSONObj pivot = curr["max"].Obj();
-                BSONObjBuilder filledPivot;
-                BSONObjIterator pkIT(_pk); 
-                BSONObjIterator pivotIT(pivot);
-                while (pivotIT.more()) {
-                    BSONElement pivotElement = *pivotIT;
-                    filledPivot.appendAs(pivotElement, (*pkIT).fieldName());
-                    pivotIT.next();
-                    pkIT.next();
-                }
-                massert(0, str::stream() << "There should be no more PK fields available for pivot " << curr, !pkIT.more());
-                BSONObjBuilder currWithFilledPivot;
-                cloneBSONWithFieldChanged(currWithFilledPivot, curr, "max", filledPivot.done(), false);
-                b.append(currWithFilledPivot.obj());
+            // the keys are stored without their field names,
+            // in the "packed" format. Here we put the
+            // field names back. Probably not the most efficient code,
+            // but it does not need to be. This function probably is not called
+            // very often
+            BSONObj pivot = curr["max"].Obj();
+            BSONObjBuilder filledPivot;
+            BSONObjIterator pkIT(_pk); 
+            BSONObjIterator pivotIT(pivot);
+            while (pivotIT.more()) {
+                BSONElement pivotElement = *pivotIT;
+                filledPivot.appendAs(pivotElement, (*pkIT).fieldName());
+                pivotIT.next();
+                pkIT.next();
             }
-            else {
-                massert(0, "bad final pivot", curr["max"][""].type() == MaxKey);
-                b.append(curr);
-            }
+            massert(0, str::stream() << "There should be no more PK fields available for pivot " << curr, !pkIT.more());
+            BSONObjBuilder currWithFilledPivot;
+            cloneBSONWithFieldChanged(currWithFilledPivot, curr, "max", filledPivot.done(), false);
+            b.append(currWithFilledPivot.obj());
             c->advance();
         }
         // note that we cannot just return numPartitions() for this
@@ -3360,9 +3349,7 @@ namespace mongo {
         // note that numPartitions() may be 1 if called by addClonedPartitionInfo
         // in that case, we don't want to do this
         if ((index == numPartitions() - 1) && numPartitions() > 1) {
-            BSONObjBuilder c(64);
-            c.appendMaxKey("");
-            overwritePivot(numPartitions() - 2, c.done());
+            overwritePivot(numPartitions() - 2, getUpperBound());
         }
         _partitions.erase(_partitions.begin() + index);
     }
@@ -3462,6 +3449,22 @@ namespace mongo {
                                              uint64_t flags, bool* indexBitChanged) {
         int whichPartition = partitionWithPK(pk);
         _partitions[whichPartition]->updateObject(pk, oldObj, newObj, fromMigrate, flags, indexBitChanged);
+    }
+
+    BSONObj PartitionedCollection::getUpperBound() {
+        BSONObjBuilder c(64);
+        BSONObjIterator pkIter( _pk );
+        while( pkIter.more() ){
+            BSONElement elt = pkIter.next();
+            int order = elt.isNumber() ? elt.numberInt() : 1;
+            if( order > 0 ){
+                c.appendMaxKey( "" );
+            }
+            else {
+                c.appendMinKey( "" );
+            }
+        }
+        return c.obj();
     }
 
 } // namespace mongo

@@ -14,7 +14,7 @@ assert.commandFailed(db.runCommand({getPartitionInfo: "not_part"})); // not a pa
 x = db.runCommand({getPartitionInfo:tname});
 assert.eq(1, x.numPartitions);
 assert.eq(0, x.partitions[0]._id);
-assert.eq(MaxKey,  x["partitions"][0]["max"][""]);
+assert.eq(MaxKey,  x["partitions"][0]["max"]["_id"]);
 // test dropping only partition fails
 assert.commandFailed(db.runCommand({dropPartition:tname, id:0}));
 
@@ -29,14 +29,14 @@ assert.eq(1, x.partitions[1]._id);
 // a pivot of 18 should have been created, the max
 // element in the last partition
 assert.eq(18,  x["partitions"][0]["max"]["_id"]);
-assert.eq(MaxKey,  x["partitions"][1]["max"][""]);
+assert.eq(MaxKey,  x["partitions"][1]["max"]["_id"]);
 
 // drop and readd the partition
 assert.commandWorked(db.runCommand({dropPartition:tname, id:1}));
 x = db.runCommand({getPartitionInfo:tname});
 assert.eq(1, x.numPartitions);
 assert.eq(0, x.partitions[0]._id);
-assert.eq(MaxKey,  x["partitions"][0]["max"][""]);
+assert.eq(MaxKey,  x["partitions"][0]["max"]["_id"]);
 assert.commandWorked(db.runCommand({addPartition:tname}));
 x = db.runCommand({getPartitionInfo:tname});
 assert.eq(2, x.numPartitions);
@@ -45,7 +45,7 @@ assert.eq(1, x.partitions[1]._id);
 // a pivot of 18 should have been created, the max
 // element in the last partition
 assert.eq(18,  x["partitions"][0]["max"]["_id"]);
-assert.eq(MaxKey,  x["partitions"][1]["max"][""]);
+assert.eq(MaxKey,  x["partitions"][1]["max"]["_id"]);
 
 // too low
 assert.commandFailed(db.runCommand({addPartition:tname, newPivot:{_id:12} }));
@@ -71,7 +71,7 @@ assert.eq(3, x.partitions[3]._id);
 assert.eq(18,  x["partitions"][0]["max"]["_id"]);
 assert.eq(24,  x["partitions"][1]["max"]["_id"]);
 assert.eq(38,  x["partitions"][2]["max"]["_id"]);
-assert.eq(MaxKey,  x["partitions"][3]["max"][""]);
+assert.eq(MaxKey,  x["partitions"][3]["max"]["_id"]);
 
 // try an add and drop partition in an MST
 assert.commandWorked(db.beginTransaction());
@@ -90,7 +90,7 @@ assert.eq(4, x.partitions[3]._id);
 assert.eq(24,  x["partitions"][0]["max"]["_id"]);
 assert.eq(38,  x["partitions"][1]["max"]["_id"]);
 assert.eq(39,  x["partitions"][2]["max"]["_id"]);
-assert.eq(MaxKey,  x["partitions"][3]["max"][""]);
+assert.eq(MaxKey,  x["partitions"][3]["max"]["_id"]);
 assert.commandWorked(db.rollbackTransaction());
 
 // make sure it successfully rolled back
@@ -104,7 +104,7 @@ assert.eq(3, x.partitions[3]._id);
 assert.eq(18,  x["partitions"][0]["max"]["_id"]);
 assert.eq(24,  x["partitions"][1]["max"]["_id"]);
 assert.eq(38,  x["partitions"][2]["max"]["_id"]);
-assert.eq(MaxKey,  x["partitions"][3]["max"][""]);
+assert.eq(MaxKey,  x["partitions"][3]["max"]["_id"]);
 
 // try just an add, and do a simple test that
 // things still work after the rollback
@@ -168,7 +168,7 @@ assert.eq(2, x.partitions[1]._id);
 assert.eq(3, x.partitions[2]._id);
 assert.eq(24,  x["partitions"][0]["max"]["_id"]);
 assert.eq(38,  x["partitions"][1]["max"]["_id"]);
-assert.eq(MaxKey,  x["partitions"][2]["max"][""]); // verify the last pivot has changed
+assert.eq(MaxKey,  x["partitions"][2]["max"]["_id"]); // verify the last pivot has changed
 // verify data dropped
 y = t.count({_id: {$gt: 60}});
 assert.eq(y, 0);
@@ -182,7 +182,7 @@ assert.eq(2, x.numPartitions);
 assert.eq(1, x.partitions[0]._id);
 assert.eq(3, x.partitions[1]._id);
 assert.eq(24,  x["partitions"][0]["max"]["_id"]);
-assert.eq(MaxKey,  x["partitions"][1]["max"][""]); // verify the last pivot has changed
+assert.eq(MaxKey,  x["partitions"][1]["max"]["_id"]); // verify the last pivot has changed
 y = t.count({_id: {$gt: 24, $lte:39}});
 assert.eq(y, 0);
 
