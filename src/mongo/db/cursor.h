@@ -360,11 +360,6 @@ namespace mongo {
         /** for tailable cursors to get a fresh value for minUnsafeKey from a TailableCollection */
         void refreshMinUnsafeEndKey();
 
-        struct cursor_interrupt_extra : public ExceptionSaver {
-            Client &c;
-            cursor_interrupt_extra() : c(cc()) {
-            }
-        };
         static bool cursor_check_interrupt(void* extra);
         /**
          * Attempt to locate the next index key matching _bounds.  This may mean advancing to the
@@ -429,7 +424,7 @@ namespace mongo {
         int _getf_iteration;
 
         // for interrupt checking
-        struct cursor_interrupt_extra _interrupt_extra;
+        ExceptionSaver _interrupt_extra;
 
         // For the Cursor::make() family of factories
         friend class CollectionBase;
