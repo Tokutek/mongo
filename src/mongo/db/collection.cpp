@@ -338,6 +338,7 @@ namespace mongo {
         uassert(12505, str::stream() << "add index fails, too many indexes for " <<
                        name << " key:" << keyPattern.toString(),
                        nIndexes() < Collection::NIndexesMax);
+        _cd->addIndexOK();
     }
 
     void Collection::computeIndexKeys() {
@@ -1076,6 +1077,7 @@ namespace mongo {
         // Invalidate cursors, then drop all of the indexes.
         ClientCursor::invalidate(_ns);
         dropIndexes("*", errmsg, result, true);
+        _cd->finishDrop();
         verify(nIndexes() == 0);
         removeFromNamespacesCatalog(_ns);
 
@@ -2572,6 +2574,10 @@ namespace mongo {
         uasserted( 16894, "Cannot perform drop/dropIndexes on of a collection under-going bulk load." );
     }
 
+    void BulkLoadedCollection::addIndexOK() {
+        uasserted(0, "Cannot create a hot index on a bulk loaded collection");
+    }
+
     // When closing a BulkLoadedCollection, we need to make sure the key trackers and
     // loaders are destructed before we call up to the parent destructor, because they
     // reference storage::Dictionaries that get destroyed in the parent destructor.
@@ -2690,7 +2696,8 @@ namespace mongo {
         // collection with a single partition. But for now, that
         // is just more functionality that needs to be tested
         // and maintained, so not supporting it at the moment.
-        uassert(0, "there should only be one index", nIndexes() == 1);
+        vector<BSONElement> indexes = serialized["indexes"].Array();
+        uassert(0, "there should only be one index", indexes.size() == 1);
         
         // first operate as though we are creating a new
         // collection
@@ -2702,6 +2709,7 @@ namespace mongo {
 
         // delete existing partition
         _partitions[0]->dropIndexDetails(0, false);
+        _partitions[0]->finishDrop();
         _partitions.erase(_partitions.begin());
 
         renamer->renameCollection(_ns, getPartitionName(_ns, 0));
@@ -3337,6 +3345,7 @@ namespace mongo {
         while (_partitions[index]->nIndexes() > 0) {
             _partitions[index]->dropIndexDetails(0, false);
         }
+        _partitions[index]->finishDrop();
         
         // special case for dropping last partition, we have to fix up
         // the last pivot
@@ -3346,6 +3355,16 @@ namespace mongo {
             overwritePivot(numPartitions() - 2, getUpperBound());
         }
         _partitions.erase(_partitions.begin() + index);
+    }
+
+    void PartitionedCollection::finishDrop() {
+        // May want to later
+        // change CollectionData API to explicitly handle this
+        // challenge is dealing with metadata that Collection class
+        // is responsible for
+        verify(_metaCollection->nIndexes() == 1);
+        _metaCollection->dropIndexDetails(0, false);
+        _metaCollection->finishDrop();
     }
 
     // this is called by the user

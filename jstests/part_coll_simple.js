@@ -11,7 +11,6 @@ assert.commandFailed(db.runCommand({ create: 'part_coll_simple', partitioned:1, 
 assert.commandFailed(db.runCommand({ create: 'part_coll_simple', partitioned:1, capped:1, primaryKey: { a: 1, _id: 1 } }));
 
 assert.commandWorked(db.runCommand({ create: 'part_coll_simple', partitioned:1}));
-assert.commandFailed(db.part_coll_simple.renameCollection("abra"));
 admin = db.getMongo().getDB( "admin" );
 
 // verify that we can drop and recreate
