@@ -1591,6 +1591,10 @@ namespace mongo {
         // according to this id
         uint64_t findInMemoryPartition(uint64_t id);
 
+        // return upper bound
+        BSONObj getUpperBound();
+
+
         // options to be used when creating new partitions
         BSONObj _options;
 
