@@ -88,7 +88,8 @@ namespace mongo {
         const char *master, 
         const std::string& db,
         shared_ptr<DBClientConnection> conn,
-        bool syncIndexes
+        bool syncIndexes,
+        ProgressMeter &progress
         ) 
     {
         CloneOptions options;
@@ -104,7 +105,7 @@ namespace mongo {
         options.syncIndexes = syncIndexes;
 
         string err;
-        return cloneFrom(master, options, conn, err);
+        return cloneFrom(master, options, conn, err, &progress);
     }
 
 
@@ -115,7 +116,7 @@ namespace mongo {
         ) 
     {
         verify(Lock::isW());
-        ProgressMeter dbsProgress(dbs.size(), 3, 1, "databases", "Initial sync progress");
+        ProgressMeter dbsProgress(dbs.size(), 3, 1, "dbs", "Initial sync progress");
         for (list<string>::const_iterator i = dbs.begin(); i != dbs.end(); i++) {
             string db = *i;
             if (db == "local") {
@@ -127,12 +128,16 @@ namespace mongo {
             }
 
             Client::Context ctx(db);
-            if (!clone(master, db, conn, _buildIndexes)) {
+            if (!clone(master, db, conn, _buildIndexes, dbsProgress)) {
                 sethbmsg(str::stream() << "initial sync error clone of " << db << " failed sleeping 5 minutes", 0);
                 return false;
             }
             if (dbsProgress.hit()) {
-                sethbmsg(dbsProgress.toString(), 0);
+                std::string status = dbsProgress.treeString();
+                if (cc().curop()) {
+                    cc().curop()->setMessage(status.c_str());
+                }
+                sethbmsg(status, 2);
             }
         }
         dbsProgress.finished();

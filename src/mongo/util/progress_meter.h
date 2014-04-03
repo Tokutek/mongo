@@ -21,6 +21,10 @@
 
 #include <string>
 
+#include "mongo/bson/bsonobj.h"
+#include "mongo/bson/bsonobjbuilder.h"
+#include "mongo/bson/util/builder.h"
+
 namespace mongo {
 
     class ProgressMeter : boost::noncopyable {
@@ -29,14 +33,16 @@ namespace mongo {
                       int secondsBetween = 3,
                       int checkInterval = 100,
                       std::string units = "",
-                      std::string name = "Progress")
+                      std::string name = "Progress",
+                      const ProgressMeter *parent = NULL)
                 : _showTotal(true),
                   _units(units),
-                  _name(name) {
+                  _name(name),
+                  _parent(parent) {
             reset( total , secondsBetween , checkInterval );
         }
 
-        ProgressMeter() : _active(0), _showTotal(true), _units(""), _name("Progress") {}
+        ProgressMeter() : _active(0), _showTotal(true), _units(""), _name("Progress"), _parent(NULL) {}
 
         // typically you do ProgressMeterHolder
         void reset( unsigned long long total , int secondsBetween = 3 , int checkInterval = 100 );
@@ -72,9 +78,19 @@ namespace mongo {
 
         std::string toString() const;
 
+        void treeString(std::stringstream &ss) const;
+        std::string treeString() const;
+
+        void treeObj(BSONObjBuilder &b) const;
+        BSONObj treeObj() const;
+
         bool operator==( const ProgressMeter& other ) const { return this == &other; }
 
     private:
+
+        // This will return a BufBuilder where the child of this tree can put its information.
+        BufBuilder& treeObjForSubtree(BSONObjBuilder &b) const;
+        void appendInfo(BSONObjBuilder &b) const;
 
         bool _active;
 
@@ -89,6 +105,7 @@ namespace mongo {
 
         std::string _units;
         std::string _name;
+        const ProgressMeter *_parent;
     };
 
     // e.g.: 

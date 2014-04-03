@@ -107,7 +107,8 @@ namespace mongo {
             bool slaveOk, 
             bool mayBeInterrupted, 
             bool isCapped,
-            Query q = Query()
+            Query q = Query(),
+            ProgressMeter *parentProgress = NULL
             );
         struct Fun;
     public:
@@ -126,7 +127,8 @@ namespace mongo {
             bool slaveOk, 
             bool useReplAuth, 
             bool mayBeInterrupted, 
-            int *errCode = 0
+            int *errCode = 0,
+            ProgressMeter *parentProgress = NULL
             );
         
         bool go(
@@ -134,7 +136,8 @@ namespace mongo {
             const CloneOptions& opts, 
             set<string>& clonedColls, 
             string& errmsg, 
-            int *errCode = 0
+            int *errCode = 0,
+            ProgressMeter *parentProgress = NULL
             );
 
         bool copyCollection(
@@ -238,8 +241,14 @@ namespace mongo {
                         }
                         if (progress == NULL) {
                             RATELIMITED(3000) LOG(0) << "Cloning collection " << from_collection << " progress " << n << endl;
-                        } else if (progress->hit(js.objsize()) && cc().curop()) {
-                            cc().curop()->setMessage(progress->toString());
+                        } else if (progress->hit(js.objsize())) {
+                            std::string status = progress->treeString();
+                            if (cc().curop()) {
+                                cc().curop()->setMessage(status.c_str());
+                            }
+                            if (!logForRepl) {
+                                sethbmsg(status, 2);
+                            }
                         }
                     }
                     catch (UserException& e) {
@@ -271,7 +280,8 @@ namespace mongo {
         bool slaveOk, 
         bool mayBeInterrupted,
         bool isCapped,
-        Query query
+        Query query,
+        ProgressMeter *parentProgress
         ) 
     {
         list<BSONObj> storedForLater;
@@ -282,7 +292,7 @@ namespace mongo {
         bool ok = conn->runCommand(nsToDatabase(from_collection), BSON("collStats" << nsToCollectionSubstring(from_collection)), res);
         scoped_ptr<ProgressMeter> dataProgress;
         if (ok && res["size"].isNumber()) {
-            dataProgress.reset(new ProgressMeter(res["size"].numberLong(), 3, 1<<12, "bytes"));
+            dataProgress.reset(new ProgressMeter(res["size"].numberLong(), 3, 1<<12, "bytes", "Progress", parentProgress));
             if (logForRepl) {
                 dataProgress->setName(mongoutils::str::stream() << "Copying data from " << from_collection);
             } else {
@@ -313,7 +323,7 @@ namespace mongo {
             dataProgress->finished();
         }
 
-        ProgressMeter indexesProgress(storedForLater.size(), 3, 1, "indexes");
+        ProgressMeter indexesProgress(storedForLater.size(), 3, 1, "idxs", "Progress", parentProgress);
         if (logForRepl) {
             indexesProgress.setName("Building indexes for clone");
         } else {
@@ -326,9 +336,14 @@ namespace mongo {
                 LOCK_REASON(lockReason, "cloner: creating indexes");
                 Client::WriteContext ctx(js.getStringField("ns"), lockReason);
                 insertObject(to_collection, js, 0, logForRepl);
-                if (indexesProgress.hit() && cc().curop()) {
-                    std::string status = indexesProgress.toString();
-                    cc().curop()->setMessage(status.c_str());
+                if (indexesProgress.hit()) {
+                    std::string status = indexesProgress.treeString();
+                    if (cc().curop()) {
+                        cc().curop()->setMessage(status.c_str());
+                    }
+                    if (!logForRepl) {
+                        sethbmsg(status, 2);
+                    }
                 }
             }
             catch( UserException& e ) {
@@ -431,7 +446,8 @@ namespace mongo {
         bool slaveOk, 
         bool useReplAuth, 
         bool mayBeInterrupted, 
-        int *errCode
+        int *errCode,
+        ProgressMeter *parentProgress
         )
     {
 
@@ -444,7 +460,7 @@ namespace mongo {
         opts.mayBeInterrupted = mayBeInterrupted;
 
         set<string> clonedColls;
-        return go( masterHost, opts, clonedColls, errmsg, errCode );
+        return go( masterHost, opts, clonedColls, errmsg, errCode, parentProgress );
 
     }
 
@@ -455,7 +471,8 @@ namespace mongo {
         const CloneOptions& opts,
         set<string>& clonedColls,
         string& errmsg,
-        int* errCode
+        int* errCode,
+        ProgressMeter *parentProgress
         )
     {
         if ( errCode ) {
@@ -547,7 +564,7 @@ namespace mongo {
             }
         }
 
-        ProgressMeter collsProgress(toClone.size(), 3, 1, "collections");
+        ProgressMeter collsProgress(toClone.size(), 3, 1, "colls", "Progress", parentProgress);
         if (opts.logForRepl) {
             collsProgress.setName(mongoutils::str::stream() << "Copying db " << todb << " progress");
         } else {
@@ -602,11 +619,17 @@ namespace mongo {
                 opts.slaveOk, 
                 opts.mayBeInterrupted, 
                 isCapped,
-                q
+                q,
+                &collsProgress
                 );
-            if (collsProgress.hit() && cc().curop()) {
-                std::string status = collsProgress.toString();
-                cc().curop()->setMessage(status.c_str());
+            if (collsProgress.hit()) {
+                std::string status = collsProgress.treeString();
+                if (cc().curop()) {
+                    cc().curop()->setMessage(status.c_str());
+                }
+                if (!opts.logForRepl) {
+                    sethbmsg(status, 2);
+                }
             }
         }
 
@@ -644,7 +667,8 @@ namespace mongo {
                 opts.slaveOk,
                 opts.mayBeInterrupted,
                 false, //isCapped
-                query
+                query,
+                parentProgress
                 );
         }
 
@@ -737,7 +761,8 @@ namespace mongo {
         const string& masterHost , 
         const CloneOptions& options , 
         shared_ptr<DBClientBase> conn,
-        string& errmsg /* out */
+        string& errmsg, /* out */
+        ProgressMeter *parentProgress
         ) 
     {
         set<string> clonedCollections;
@@ -748,7 +773,8 @@ namespace mongo {
             options,
             clonedCollections,
             errmsg,
-            NULL
+            NULL,
+            parentProgress
             );
     }
 
