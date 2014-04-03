@@ -235,6 +235,11 @@ namespace mongo {
         // the value returned here
         virtual bool getMaxPKForPartitionCap(BSONObj &result) const = 0;
 
+        // called after dropping indexes
+        virtual void finishDrop() = 0;
+
+        virtual void addIndexOK() = 0;
+
         // struct for storing the accumulated states of a Collection
         // all values, except for nIndexes, are estimates
         // note that the id index is used as the main store.
@@ -783,6 +788,10 @@ namespace mongo {
 
         virtual bool getMaxPKForPartitionCap(BSONObj &result) const;
 
+        virtual void addIndexOK() { }
+
+        virtual void finishDrop() { }
+
         // Extracts and returns an owned BSONObj representing
         // the primary key portion of the given query, if each
         // portion of the primary key exists in the query and
@@ -1251,6 +1260,8 @@ namespace mongo {
 
         void dropIndexDetails(int idxNum, bool noteNs);
 
+        void addIndexOK();
+
     private:
         // When closing a BulkLoadedCollection, we need to make sure the key trackers and
         // loaders are destructed before we call up to the parent destructor, because they
@@ -1413,14 +1424,6 @@ namespace mongo {
                 CollectionData *currColl = it->get();
                 currColl->dropIndexDetails(idxNum, false);
             }
-            // not sure I like this, but if we are dropping the primary key,
-            // then we are dropping the collection, which means we need
-            // to take care of the metaCollection as well. May want to later
-            // change CollectionData API to explicitly handle this
-            if (idxNum == 0) {
-                verify(_metaCollection->nIndexes() == 1);
-                _metaCollection->dropIndexDetails(0, false);
-            }
         }
         
         virtual void acquireTableLock() {
@@ -1549,6 +1552,10 @@ namespace mongo {
         static shared_ptr<PartitionedCollection> make(const StringData &ns, const BSONObj &options);
         static shared_ptr<PartitionedCollection> make(const BSONObj &serialized, CollectionRenamer* renamer);
         static shared_ptr<PartitionedCollection> make(const BSONObj &serialized);
+
+        virtual void finishDrop();
+        void addIndexOK() { }
+
     protected:
         // make constructors
         // called in appendNewPartition. This is the method (that can be overridden),
