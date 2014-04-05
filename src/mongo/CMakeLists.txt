@@ -593,6 +593,7 @@ foreach (tool
   add_executable(mongo${tool} tools/${tool})
 endforeach ()
 add_executable(bsondump tools/bsondump)
+add_executable(toku2mongo tools/toku2mongo)
 foreach (tool
     mongodump
     mongorestore
@@ -604,6 +605,7 @@ foreach (tool
     mongofiles
     mongobridge
     bsondump
+    toku2mongo
     )
   add_dependencies(${tool} generate_error_codes generate_action_types install_tdb_h)
   if (NOT APPLE)
