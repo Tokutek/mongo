@@ -66,6 +66,7 @@ public:
         ("noOptionsRestore" , "don't restore collection options")
         ("noIndexRestore" , "don't restore indexes")
         ("w" , po::value<int>()->default_value(0) , "minimum number of replicas per write. WARNING, setting w > 1 prevents the bulk load optimization." )
+        ("noLoader", "don't use bulk loader")
         ;
         add_hidden_options()
         ("dir", po::value<string>()->default_value("dump"), "directory to restore from")
@@ -101,6 +102,9 @@ public:
         _doBulkLoad = _w <= 1;
         if (!_doBulkLoad) {
             log() << "warning: not using bulk loader due to --w > 1" << endl;
+        }
+        if (hasParam( "noLoader" )) {
+            _doBulkLoad = false;
         }
         if (hasParam( "keepIndexVersion" )) {
             log() << "warning: --keepIndexVersion is deprecated in TokuMX" << endl;
