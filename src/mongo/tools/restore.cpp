@@ -283,7 +283,11 @@ public:
         if (_doBulkLoad) {
             RemoteLoader loader(conn(), _curdb, _curcoll, indexes, options);
             processFile( root );
-            loader.commit();
+            BSONObj res;
+            bool ok = loader.commit(&res);
+            if (!ok) {
+                error() << "Error committing load for " << _curdb << "." << _curcoll << ": " << res << endl;
+            }
         } else {
             // No bulk load. Create collection and indexes manually.
             if (!options.isEmpty()) {
