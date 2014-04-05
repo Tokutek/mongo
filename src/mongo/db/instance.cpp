@@ -817,8 +817,8 @@ namespace mongo {
             verify(!sc.handlePossibleShardedMessage(m, 0));
         }
 
-        LOCK_REASON(lockReason, "building hot index");
-        scoped_ptr<Lock::DBWrite> lk(new Lock::DBWrite(ns, lockReason));
+        LOCK_REASON(lockReasonBegin, "initializing hot index build");
+        scoped_ptr<Lock::DBWrite> lk(new Lock::DBWrite(ns, lockReasonBegin));
 
         uassert(16902, "not master", isMasterNs(ns));
 
@@ -847,15 +847,13 @@ namespace mongo {
             addToNamespacesCatalog(IndexDetails::indexNamespace(coll, info["name"].String()));
         }
 
+        lk.reset();
+
         // Perform the index build
-        {
-            Lock::DBWrite::Downgrade dg(lk);
-            uassert(16906, "not master: after indexer setup but before build", isMasterNs(ns));
+        indexer->build();
 
-            Client::Context ctx(ns);
-            indexer->build();
-        }
-
+        LOCK_REASON(lockReasonCommit, "committing hot index build");
+        lk.reset(new Lock::DBWrite(ns, lockReasonCommit));
         uassert(16907, "not master: after indexer build but before commit", isMasterNs(ns));
 
         // Commit the index build
