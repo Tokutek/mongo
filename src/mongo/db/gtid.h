@@ -20,6 +20,8 @@
 //#include "mongo/db/jsobj.h"
 #include <limits>
 
+#include "mongo/base/status.h"
+
 namespace mongo {
 
     class BSONObjBuilder;
@@ -46,6 +48,8 @@ namespace mongo {
         bool operator==(const GTID& other) const {
             return _primarySeqNo == other._primarySeqNo && _GTSeqNo == other._GTSeqNo;
         }
+        static Status parseConciseString(const StringData &s, GTID &gtid);
+        std::string toConciseString() const;
         friend class GTIDManagerTest; // for testing
     };
 

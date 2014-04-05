@@ -29,6 +29,7 @@
 #include "mongo/db/stats/counters.h"
 #include "mongo/db/relock.h"
 #include "mongo/db/ops/count.h"
+#include "mongo/db/oplog_field_names.h"
 #include "mongo/db/query_optimizer.h"
 #include "mongo/db/commands/server_status.h"
 

@@ -18,6 +18,7 @@
 
 #include "mongo/db/gtid.h"
 
+#include "mongo/base/parse_number.h"
 #include "mongo/bson/util/builder.h"
 #include "mongo/util/time_support.h"
 
@@ -86,6 +87,24 @@ namespace mongo {
 
     bool GTID::isInitial() const {
         return (_primarySeqNo == 0);
+    }
+
+    std::string GTID::toConciseString() const {
+        std::stringstream ss;
+        ss << _primarySeqNo << ":" << _GTSeqNo;
+        return ss.str();
+    }
+
+    Status GTID::parseConciseString(const StringData &s, GTID &gtid) {
+        size_t colonPos = s.find(":");
+        StringData primaryStr = s.substr(0, colonPos);
+        StringData seqStr = s.substr(colonPos + 1);
+        Status status = parseNumberFromString(primaryStr, &gtid._primarySeqNo);
+        if (!status.isOK()) {
+            return status;
+        }
+        status = parseNumberFromString(seqStr, &gtid._GTSeqNo);
+        return status;
     }
     
     uint64_t GTID::getPrimary() const {
