@@ -20,6 +20,8 @@
 //#include "mongo/db/jsobj.h"
 #include <limits>
 
+#include "mongo/base/status.h"
+
 namespace mongo {
 
     class BSONObjBuilder;
@@ -42,6 +44,8 @@ namespace mongo {
         void inc_primary();        
         string toString() const;
         bool isInitial() const;
+        static Status parseConciseString(const StringData &s, GTID &gtid);
+        std::string toConciseString() const;
         friend class GTIDManagerTest; // for testing
     };
 
