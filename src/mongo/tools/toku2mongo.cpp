@@ -177,6 +177,10 @@ class TokuOplogTool : public Tool {
                     return -1;
                 }
 
+                if (_reportingTimer.seconds() >= _reportingPeriod) {
+                    report(r);
+                }
+
                 while (running && r.more()) {
                     BSONObj o = r.nextSafe();
                     LOG(2) << o << endl;
