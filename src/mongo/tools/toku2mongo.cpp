@@ -189,6 +189,12 @@ class TokuOplogTool : public Tool {
                             error() << "You appear to have fallen too far behind in replication,"
                                     << " the destination needs to start from scratch." << endl;
                             return -1;
+                        } else if (GTID::cmp(gtid, _maxGTIDSynced) < 0) {
+                            error() << "Wanted to start from GTID " << _maxGTIDSynced.toConciseString()
+                                    << " but we found " << gtid.toConciseString()
+                                    << ", which is earlier." << endl;
+                            error() << "This seems like a query bug, please report it." << endl;
+                            return -1;
                         }
                         needsGTIDCheck = false;
                         // Skip the first op, we believe we've already applied it.
