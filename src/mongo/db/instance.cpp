@@ -825,7 +825,7 @@ namespace mongo {
         const BSONObj &info = objs[0];
         const StringData &coll = info["ns"].Stringdata();
 
-        scoped_ptr<Client::Transaction> transaction(new Client::Transaction(DB_SERIALIZABLE));
+        Client::Transaction transaction(DB_SERIALIZABLE);
         shared_ptr<CollectionIndexer> indexer;
 
         // Prepare the index build. Performs index validation and marks
@@ -837,7 +837,7 @@ namespace mongo {
                 // No error or action if the index already exists. We need to commit
                 // the transaction in case this is an ensure index on the _id field
                 // and the ns was created by getOrCreateCollection()
-                transaction->commit();
+                transaction.commit();
                 return;
             }
 
@@ -866,7 +866,7 @@ namespace mongo {
             verify(cl);
             cl->noteIndexBuilt();
         }
-        transaction->commit();
+        transaction.commit();
     }
 
     static void lockedReceivedInsert(const char *ns, Message &m, const vector<BSONObj> &objs, CurOp &op, const bool keepGoing) {
