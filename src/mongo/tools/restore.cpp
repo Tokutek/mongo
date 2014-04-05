@@ -317,7 +317,6 @@ public:
 
             // wait for insert to propagate to "w" nodes (doesn't warn if w used without replset)
             if ( _w > 0 ) {
-                verify( !_doBulkLoad );
                 string err = conn().getLastError(_curdb, false, false, _w);
                 if (!err.empty()) {
                     error() << err;

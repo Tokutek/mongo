@@ -2482,7 +2482,10 @@ namespace mongo {
         storage::Key sPK(pk, NULL);
         DBT key = storage::dbt_make(sPK.buf(), sPK.size());
         DBT val = storage::dbt_make(obj.objdata(), obj.objsize());
-        _loader->put(&key, &val);
+        const int r = _loader->put(&key, &val);
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
         // multiKey stuff taken care of during close(), so indexBitChanged is not set
     }
 
