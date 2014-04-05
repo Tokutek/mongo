@@ -220,7 +220,7 @@ class TokuOplogTool : public Tool {
                             }
 
                             if (_reportingTimer.seconds() >= _reportingPeriod) {
-                                report(r.conn());
+                                report(r);
                             }
                         }
                     } else if (o.hasElement("ops")) {
@@ -236,7 +236,7 @@ class TokuOplogTool : public Tool {
                     _maxTimestampSynced = o["ts"].Date();
 
                     if (_reportingTimer.seconds() >= _reportingPeriod) {
-                        report(r.conn());
+                        report(r);
                     }
                 }
             }
@@ -251,19 +251,12 @@ class TokuOplogTool : public Tool {
         return 0;
     }
 
-    void report(DBClientBase *conn = NULL) const {
+    void report(OplogReader &rdr) const {
         Nullstream& l = log();
         l << "synced up to " << _maxGTIDSynced.toConciseString()
           << " (" << time_t_to_String_short(_maxTimestampSynced.toTimeT()) << ")";
         _reportingTimer.reset();
-        if (!conn) {
-            l << endl;
-            return;
-        }
-        Query lastQuery;
-        lastQuery.sort("_id", -1);
-        BSONObj lastFields = BSON("_id" << 1 << "ts" << 1);
-        BSONObj lastObj = conn->findOne(_oplogns, lastQuery, &lastFields);
+        BSONObj lastObj = rdr.getLastOp(_oplogns.c_str());
         GTID lastGTID = getGTIDFromBSON("_id", lastObj);
         Date_t lastDate = lastObj["ts"].Date();
         l << ", source has up to " << lastGTID.toConciseString()
