@@ -37,7 +37,6 @@
 #include "mongo/db/gtid.h"
 #include "mongo/db/txn_context.h"
 #include "mongo/db/opsettings.h"
-#include "mongo/db/querysettings.h"
 #include "mongo/s/d_logic.h"
 #include "mongo/util/paths.h"
 #include "mongo/util/concurrency/threadlocal.h"
@@ -120,6 +119,23 @@ namespace mongo {
         ConnectionId getConnectionId() const { return _connectionId; }
 
         LockState& lockState() { return _ls; }
+
+        class QuerySettings {
+        public:
+            QuerySettings(BSONObj query = BSONObj(), bool sortRequired = true) : 
+                _query(query.getOwned()), _sortRequired(sortRequired)
+            {
+            }
+            const BSONObj& getQuery() const {
+                return _query;
+            }
+            const bool& sortRequired() const {
+                return _sortRequired;
+            }
+        private:
+            BSONObj _query;
+            bool _sortRequired;
+        };
 
         /**
          * Creates a scope for the current thread inside of which it is possible to check whether a
@@ -534,4 +550,14 @@ namespace mongo {
 
     inline bool haveClient() { return currentClient.get() > 0; }
 
+    struct QuerySettingsHolder {
+        QuerySettingsHolder(BSONObj query, BSONObj sort) {
+            const Client::QuerySettings settings(query, !sort.isEmpty());
+            cc().setQuerySettings(settings);
+        }
+
+        ~QuerySettingsHolder() {
+            cc().clearQuerySettings();
+        }
+    };
 };
