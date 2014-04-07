@@ -146,6 +146,7 @@ namespace mongo {
                      pi.getOsType().c_str(), pi.getOsName().c_str(), pi.getOsVersion().c_str(), pi.getArch().c_str());
             rawOut(buf);
             snprintf(buf, sizeof buf, "NCPU: %d", pi.getNumCores());
+            rawOut(buf);
             snprintf(buf, sizeof buf, "VIRT: %d MB", pi.getVirtualMemorySize());
             rawOut(buf);
             snprintf(buf, sizeof buf, "RES:  %d MB", pi.getVirtualMemorySize());
