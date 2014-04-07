@@ -20,6 +20,16 @@
 
 #include <string.h>
 
+#if MONGO_HAVE_HEADER_LIMITS_H
+  #include <limits.h>
+#endif
+#if MONGO_HAVE_HEADER_UNISTD_H
+  #include <unistd.h>
+#endif
+#if MONGO_HAVE_HEADER_SYS_RESOURCE_H
+  #include <sys/resource.h>
+#endif
+
 #include <db.h>
 
 #include "mongo/base/init.h"
@@ -138,6 +148,62 @@ namespace mongo {
             rawOut(" ");
         }
 
+#if MONGO_HAVE_HEADER_SYS_RESOURCE_H
+        static void printResourceLimit(int resource, const char *rname) {
+            char buf[1<<12];
+            char *p;
+            int r;
+            struct rlimit rlim;
+            r = getrlimit(resource, &rlim);
+            if (r != 0) {
+                int eno = errno;
+                p = buf;
+                p = stpcpy(p, "Error getting ");
+                p = stpcpy(p, rname);
+                p = stpcpy(p, ": ");
+                p = stpcpy(p, strerror(eno));
+                rawOut(buf);
+                return;
+            }
+
+            p = buf;
+            p = stpcpy(p, rname);
+            p = stpcpy(p, ": ");
+            if (rlim.rlim_cur == RLIM_INFINITY) {
+                p = stpcpy(p, "unlimited (soft)");
+            } else {
+                int n;
+                snprintf(p, (sizeof buf) - (p - buf), "%zu (soft)%n", static_cast<size_t>(rlim.rlim_cur), &n);
+                p += n;
+            }
+            if (rlim.rlim_max == RLIM_INFINITY) {
+                p = stpcpy(p, ", unlimited (hard)");
+            } else {
+                int n;
+                snprintf(p, (sizeof buf) - (p - buf), ", %zu (hard)%n", static_cast<size_t>(rlim.rlim_max), &n);
+                p += n;
+            }
+            rawOut(buf);
+        }
+#endif
+
+        static void printSysconf(int var, const char *name) {
+            char buf[1<<12];
+            long val = sysconf(var);
+            if (val == -1) {
+                int eno = errno;
+                char *p = buf;
+                p = stpcpy(p, "Error getting ");
+                p = stpcpy(p, name);
+                p = stpcpy(p, ": ");
+                p = stpcpy(p, strerror(eno));
+                rawOut(buf);
+                return;
+            }
+            snprintf(buf, sizeof buf, "%s: %ld", name, val);
+            rawOut(buf);
+        }
+
         static void processInfo() {
             rawOut("--------------------------------------------------------------------------------");
             rawOut("Process info:");
@@ -155,6 +221,35 @@ namespace mongo {
             rawOut(buf);
             snprintf(buf, sizeof buf, "PHYS: %llu MB", pi.getMemSizeMB());
             rawOut(buf);
+#if MONGO_HAVE_HEADER_SYS_RESOURCE_H
+            printResourceLimit(RLIMIT_CORE,   "RLIMIT_CORE");
+            printResourceLimit(RLIMIT_CPU,    "RLIMIT_CPU");
+            printResourceLimit(RLIMIT_DATA,   "RLIMIT_DATA");
+            printResourceLimit(RLIMIT_FSIZE,  "RLIMIT_FSIZE");
+            printResourceLimit(RLIMIT_NOFILE, "RLIMIT_NOFILE");
+            printResourceLimit(RLIMIT_STACK,  "RLIMIT_STACK");
+            printResourceLimit(RLIMIT_AS,     "RLIMIT_AS");
+#endif
+#if MONGO_HAVE_HEADER_UNISTD_H
+  #ifdef _SC_OPEN_MAX
+            printSysconf(_SC_OPEN_MAX,         "_SC_OPEN_MAX");
+  #endif
+  #ifdef _SC_PAGESIZE
+            printSysconf(_SC_PAGESIZE,         "_SC_PAGESIZE");
+  #endif
+  #ifdef _SC_PHYS_PAGES
+            printSysconf(_SC_PHYS_PAGES,       "_SC_PHYS_PAGES");
+  #endif
+  #ifdef _SC_AVPHYS_PAGES
+            printSysconf(_SC_AVPHYS_PAGES,     "_SC_AVPHYS_PAGES");
+  #endif
+  #ifdef _SC_NPROCESSORS_CONF
+            printSysconf(_SC_NPROCESSORS_CONF, "_SC_NPROCESSORS_CONF");
+  #endif
+  #ifdef _SC_NPROCESSORS_ONLN
+            printSysconf(_SC_NPROCESSORS_ONLN, "_SC_NPROCESSORS_ONLN");
+  #endif
+#endif
             rawOut(" ");
         }
 
