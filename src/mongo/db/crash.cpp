@@ -22,9 +22,11 @@
 
 #include <db.h>
 
+#include "mongo/base/init.h"
 #include "mongo/base/string_data.h"
 #include "mongo/db/client.h"
 #include "mongo/db/cmdline.h"
+#include "mongo/db/commands.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/util/assert_util.h"
@@ -286,6 +288,32 @@ namespace mongo {
         } catch (...) {
             // whoa, nelly
         }
+    }
+
+    /* for testing */
+    class CmdDumpCrashInfo : public InformationCommand {
+      public:
+        CmdDumpCrashInfo() : InformationCommand("_dumpCrashInfo") { }
+        virtual bool adminOnly() const { return true; }
+        virtual void help( stringstream& help ) const {
+            help << "internal testing-only command: makes the server dump some debugging info to the log";
+        }
+        virtual bool requiresAuth() { return false; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {}
+        bool run(const string& ns, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            LOG(0) << "Dumping crash info for _dumpCrashInfo command." << endl;
+            dumpCrashInfo("Dumping crash info for _dumpCrashInfo command.");
+            return true;
+        }
+    };
+    MONGO_INITIALIZER(RegisterDumpCrashInfoCmd)(InitializerContext* context) {
+        if (Command::testCommandsEnabled) {
+            // Leaked intentionally: a Command registers itself when constructed.
+            new CmdDumpCrashInfo();
+        }
+        return Status::OK();
     }
 
 } // namespace mongo
