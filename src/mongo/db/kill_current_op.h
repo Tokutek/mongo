@@ -50,7 +50,6 @@ namespace mongo {
         // checkForInterrupt uassert and kill operations
         void killForTransition() {
             boost::unique_lock<boost::mutex> lock(_transitionLock);
-            dassert(_killForTransition >= 0);
             _killForTransition++;
         }
         // decrements _killForTransition, thereby reallowing

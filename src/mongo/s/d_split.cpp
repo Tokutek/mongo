@@ -190,7 +190,6 @@ namespace mongo {
     } cmdCheckShardingIndex;
 
     class SplitVectorFinder {
-        std::exception *_ex;
         Collection *_cl;
         const IndexDetails* _idx;
         KeyPattern _chunkPattern;

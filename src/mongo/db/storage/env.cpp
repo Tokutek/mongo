@@ -987,7 +987,7 @@ namespace mongo {
 
           protected:
             virtual Status validate(const uint32_t& period) {
-                if (period < 0 || period > 500) {
+                if (static_cast<int32_t>(period) < 0 || period > 500) {
                     return Status(ErrorCodes::BadValue, "logFlushPeriod must be between 0 and 500 ms");
                 }
                 env->change_fsync_log_period(env, period);
@@ -1000,7 +1000,7 @@ namespace mongo {
             CheckpointPeriodParameter() : ExportedServerParameter<uint32_t>(ServerParameterSet::getGlobal(), "checkpointPeriod", &cmdLine.checkpointPeriod, true, true) {}
 
             virtual Status validate(const uint32_t &period) {
-                if (period < 0) {
+                if (static_cast<int32_t>(period) < 0) {
                     return Status(ErrorCodes::BadValue, "checkpointPeriod must be greater than 0s");
                 }
                 int r = env->checkpointing_set_period(env, period);
@@ -1017,7 +1017,7 @@ namespace mongo {
             CleanerPeriodParameter() : ExportedServerParameter<uint32_t>(ServerParameterSet::getGlobal(), "cleanerPeriod", &cmdLine.cleanerPeriod, true, true) {}
 
             virtual Status validate(const uint32_t &period) {
-                if (period < 0) {
+                if (static_cast<int32_t>(period) < 0) {
                     return Status(ErrorCodes::BadValue, "cleanerPeriod must be greater than 0s");
                 }
                 int r = env->cleaner_set_period(env, period);
@@ -1034,7 +1034,7 @@ namespace mongo {
             CleanerIterationsParameter() : ExportedServerParameter<uint32_t>(ServerParameterSet::getGlobal(), "cleanerIterations", &cmdLine.cleanerIterations, true, true) {}
 
             virtual Status validate(const uint32_t &iterations) {
-                if (iterations < 0) {
+                if (static_cast<int32_t>(iterations) < 0) {
                     return Status(ErrorCodes::BadValue, "cleanerIterations must be greater than 0");
                 }
                 int r = env->cleaner_set_iterations(env, iterations);
