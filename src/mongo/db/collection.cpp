@@ -418,6 +418,9 @@ namespace mongo {
     }
 
     void Collection::noteMultiKeyChanged() {
+        uassert(17329, str::stream() << _ns <<
+                ": cannot change the 'multikey' nature of an index, background index build in progress.",
+                !indexBuildInProgress());
         collectionMap(_ns)->update_ns(_ns, serialize(), true);
         resetTransient();
     }
@@ -1095,6 +1098,9 @@ namespace mongo {
     }
 
     void Collection::rebuildIndexes(const StringData &name, const BSONObj &options, BSONObjBuilder &result) {
+        uassert(17232, str::stream() << _ns << ": cannot rebuild indexes, a background index build in progress",
+                       !indexBuildInProgress());
+
         bool pkIndexChanged = false;
         bool someIndexChanged = false;
         if (name == "*") {
@@ -1124,8 +1130,7 @@ namespace mongo {
             const int i = _cd->findIndexByName(name);
             uassert(17231, str::stream() << "index not found: " << name,
                            i >= 0);
-            uassert(17232, str::stream() << "cannot rebuild a background index: " << name,
-                           i < nIndexes()); // i == _nIndexes is the hot index
+            verify(i < nIndexes()); // no hot index should be running
             BSONObjBuilder wasBuilder;
             if (_cd->rebuildIndex(i, options, wasBuilder)) {
                 IndexDetails &idx = _cd->idx(i);
@@ -2434,8 +2439,7 @@ namespace mongo {
             _dbs[i] = idx.db();
             _multiKeyTrackers[i].reset(new MultiKeyTracker(_dbs[i]));
         }
-        _loader.reset(new storage::Loader(_dbs.get(), n));
-        _loader->setPollMessagePrefix(str::stream() << "Loader build progress: " << _ns);
+        _loader.reset(new storage::Loader(_dbs.get(), n, str::stream() << "Loader build progress for " << _ns));
     }
 
     void BulkLoadedCollection::close(const bool abortingLoad, bool* indexBitsChanged) {

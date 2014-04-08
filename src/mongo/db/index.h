@@ -33,6 +33,8 @@
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/key.h"
 #include "mongo/db/storage/txn.h"
+#include "mongo/util/assert_util.h"
+#include "mongo/util/percentage_progress_meter.h"
 
 namespace mongo {
 
@@ -342,12 +344,14 @@ namespace mongo {
             return _db->db();
         }
         
-        struct hot_optimize_callback_extra {
-            hot_optimize_callback_extra(const int t) :
-                timeout(t) {
+        struct hot_optimize_callback_extra : public ExceptionSaver {
+            hot_optimize_callback_extra(const int t, const std::string &prefix) :
+                    timeout(t),
+                    pm(prefix) {
             }
             Timer timer;
             const int timeout;
+            PercentageProgressMeter pm;
         };
         static int hot_optimize_callback(void *extra, float progress);
 
