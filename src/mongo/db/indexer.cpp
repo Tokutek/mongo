@@ -150,8 +150,6 @@ namespace mongo {
     }
 
     void CollectionBase::HotIndexer::build() {
-        Lock::assertAtLeastReadLocked(_cl->_ns);
-
         if (_indexer.get() != NULL) {
             const int r = _indexer->build();
             if (r != 0) {
