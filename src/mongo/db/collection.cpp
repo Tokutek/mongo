@@ -3050,7 +3050,7 @@ namespace mongo {
         uint64_t index = findInMemoryPartition(id);
         // something very wrong if this is false, but sanity check
         // done at top should ensure this never happens
-        verify(index >= 0 && index < numPartitions());
+        verify(index < numPartitions());
         verify(_partitionIDs[index] == id);
 
         // now that we have index, clean up in-memory data structures
