@@ -809,6 +809,12 @@ namespace mongo {
     }
 
     static void _buildHotIndex(const char *ns, Message &m, const vector<BSONObj> objs) {
+        // We intend to take the DBWrite lock only to initiate and finalize the
+        // index build. Since we'll be releasing lock in between these steps, we
+        // take the operation lock here to ensure that we do not step down as primary.
+        RWLockRecursive::Shared oplock(operationLock);
+        uassert(16902, "not master", isMasterNs(ns));
+
         uassert(16905, "Can only build one index at a time.", objs.size() == 1);
 
         DEV {
@@ -819,8 +825,6 @@ namespace mongo {
 
         LOCK_REASON(lockReasonBegin, "initializing hot index build");
         scoped_ptr<Lock::DBWrite> lk(new Lock::DBWrite(ns, lockReasonBegin));
-
-        uassert(16902, "not master", isMasterNs(ns));
 
         const BSONObj &info = objs[0];
         const StringData &coll = info["ns"].Stringdata();
@@ -854,7 +858,6 @@ namespace mongo {
 
         LOCK_REASON(lockReasonCommit, "committing hot index build");
         lk.reset(new Lock::DBWrite(ns, lockReasonCommit));
-        uassert(16907, "not master: after indexer build but before commit", isMasterNs(ns));
 
         // Commit the index build
         {
