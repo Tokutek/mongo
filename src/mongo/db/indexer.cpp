@@ -28,6 +28,7 @@
 #include "mongo/db/collection.h"
 #include "mongo/db/collection_map.h"
 #include "mongo/util/assert_util.h"
+#include "mongo/util/progress_meter.h"
 #include "mongo/util/stringutils.h"
 
 namespace mongo {
@@ -141,11 +142,10 @@ namespace mongo {
             // will be set during index creation if multikeys are generated.
             // see storage::generate_keys()
             _multiKeyTracker.reset(new MultiKeyTracker(_idx->db()));
-            _indexer.reset(new storage::Indexer(_cl->getPKIndexBase().db(), _idx->db()));
-            _indexer->setPollMessagePrefix(str::stream() << "Hot index build progress: "
-                                                         << _cl->_ns << ", key "
-                                                         << _idx->keyPattern()
-                                                         << ":");
+            _indexer.reset(new storage::Indexer(_cl->getPKIndexBase().db(), _idx->db(),
+                                                str::stream() << "Background index build progress for "
+                                                              << _cl->_ns << ", key "
+                                                              << _idx->keyPattern()));
         }
     }
 
@@ -187,6 +187,12 @@ namespace mongo {
         if (_isSecondaryIndex) {
             IndexDetailsBase::Builder builder(*_idx);
 
+            IndexDetails::Stats idxStats = _cl->getPKIndex().getStats();
+            ProgressMeter pm(idxStats.count, 3, 1000, "estimated documents",
+                             mongoutils::str::stream() << "Foreground index build progress (collect phase) for "
+                                                       << _cl->_ns << ", key "
+                                                       << _idx->keyPattern());
+
             for (shared_ptr<Cursor> cursor(Cursor::make(_cl, 1, false));
                  cursor->ok(); cursor->advance()) {
                 BSONObj pk = cursor->currPK();
@@ -200,9 +206,14 @@ namespace mongo {
                 for (BSONObjSet::const_iterator ki = keys.begin(); ki != keys.end(); ++ki) {
                     builder.insertPair(*ki, &pk, obj);
                 }
+                if (pm.hit() && cc().curop()) {
+                    std::string status = pm.toString();
+                    cc().curop()->setMessage(status.c_str());
+                }
                 killCurrentOp.checkForInterrupt(); // uasserts if we should stop
             }
 
+            pm.finished();
             builder.done();
 
             // If the index is unique, check all adjacent keys for a duplicate.
