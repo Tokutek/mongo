@@ -54,7 +54,8 @@ namespace mongo {
         };
 
         // bindata bson type
-        const unsigned BinDataLenMask = 0xf0;  // lengths are powers of 2 of this value
+        // unused:
+        //const unsigned BinDataLenMask = 0xf0;  // lengths are powers of 2 of this value
         const unsigned BinDataTypeMask = 0x0f; // 0-7 as you would expect, 8-15 are 128+value.  see BinDataType.
         const int BinDataLenMax = 32;
         const int BinDataLengthToCode[] = { 
