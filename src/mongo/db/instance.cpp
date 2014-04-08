@@ -809,6 +809,12 @@ namespace mongo {
     }
 
     static void _buildHotIndex(const char *ns, Message &m, const vector<BSONObj> objs) {
+        // We intend to take the DBWrite lock only to initiate and finalize the
+        // index build. Since we'll be releasing lock in between these steps, we
+        // take the operation lock here to ensure that we do not step down as primary.
+        RWLockRecursive::Shared oplock(operationLock);
+        uassert(16902, "not master", isMasterNs(ns));
+
         uassert(16905, "Can only build one index at a time.", objs.size() == 1);
 
         DEV {
@@ -817,15 +823,13 @@ namespace mongo {
             verify(!sc.handlePossibleShardedMessage(m, 0));
         }
 
-        LOCK_REASON(lockReason, "building hot index");
-        scoped_ptr<Lock::DBWrite> lk(new Lock::DBWrite(ns, lockReason));
-
-        uassert(16902, "not master", isMasterNs(ns));
+        LOCK_REASON(lockReasonBegin, "initializing hot index build");
+        scoped_ptr<Lock::DBWrite> lk(new Lock::DBWrite(ns, lockReasonBegin));
 
         const BSONObj &info = objs[0];
         const StringData &coll = info["ns"].Stringdata();
 
-        scoped_ptr<Client::Transaction> transaction(new Client::Transaction(DB_SERIALIZABLE));
+        Client::Transaction transaction(DB_SERIALIZABLE);
         shared_ptr<CollectionIndexer> indexer;
 
         // Prepare the index build. Performs index validation and marks
@@ -837,7 +841,7 @@ namespace mongo {
                 // No error or action if the index already exists. We need to commit
                 // the transaction in case this is an ensure index on the _id field
                 // and the ns was created by getOrCreateCollection()
-                transaction->commit();
+                transaction.commit();
                 return;
             }
 
@@ -847,16 +851,13 @@ namespace mongo {
             addToNamespacesCatalog(IndexDetails::indexNamespace(coll, info["name"].String()));
         }
 
+        lk.reset();
+
         // Perform the index build
-        {
-            Lock::DBWrite::Downgrade dg(lk);
-            uassert(16906, "not master: after indexer setup but before build", isMasterNs(ns));
+        indexer->build();
 
-            Client::Context ctx(ns);
-            indexer->build();
-        }
-
-        uassert(16907, "not master: after indexer build but before commit", isMasterNs(ns));
+        LOCK_REASON(lockReasonCommit, "committing hot index build");
+        lk.reset(new Lock::DBWrite(ns, lockReasonCommit));
 
         // Commit the index build
         {
@@ -866,7 +867,7 @@ namespace mongo {
             verify(cl);
             cl->noteIndexBuilt();
         }
-        transaction->commit();
+        transaction.commit();
     }
 
     static void lockedReceivedInsert(const char *ns, Message &m, const vector<BSONObj> &objs, CurOp &op, const bool keepGoing) {

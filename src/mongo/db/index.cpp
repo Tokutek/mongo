@@ -477,18 +477,23 @@ namespace mongo {
     }
 
     int IndexDetailsBase::hot_optimize_callback(void *extra, float progress) {
-        try {
-            struct hot_optimize_callback_extra *info =
+        struct hot_optimize_callback_extra *info =
                 reinterpret_cast<hot_optimize_callback_extra *>(extra);
 
+        try {
             killCurrentOp.checkForInterrupt(); // uasserts if we should stop
             if (info->timeout > 0 && info->timer.seconds() > info->timeout) {
                 // optimize timed out
                 return 1;
             } else {
+                if (info->pm.report(progress) && cc().curop()) {
+                    std::string status = info->pm.toString();
+                    cc().curop()->setMessage(status.c_str());
+                }
                 return 0;
             }
-        } catch (DBException &e) {
+        } catch (std::exception &e) {
+            info->saveException(e);
             return -1;
         }
     }
@@ -503,12 +508,16 @@ namespace mongo {
             }
         }
 
+        std::stringstream pmss;
+        pmss << "Optimizing index " << indexNamespace() << " from " << leftSKey.key() << " to " << rightSKey.key();
+
         DBT left = leftSKey.dbt();
         DBT right = rightSKey.dbt();
-        struct hot_optimize_callback_extra extra(timeout);
+        struct hot_optimize_callback_extra extra(timeout, pmss.str());
         const int r = db()->hot_optimize(db(), &left, &right, hot_optimize_callback, &extra, loops_run);
         if (r < 0) { // we return -1 on interrupt, 1 on timeout (no "error" on timeout)
-            uasserted(16810, mongoutils::str::stream() << indexNamespace() << ": optimize killed.");
+            extra.throwException();
+            storage::handle_ydb_error(r);
         }
     }
 
@@ -586,14 +595,13 @@ namespace mongo {
     
     /* ---------------------------------------------------------------------- */
 
-    IndexDetailsBase::Builder::Builder(IndexDetailsBase &idx) :
-        _idx(idx), _db(_idx.db()), _loader(&_db, 1) {
-        _loader.setPollMessagePrefix(str::stream() << "Cold index build progress: "
-                                                   << idx.parentNS() << ", key "
-                                                   << idx.keyPattern()
-                                                   << ":");
-
-    }
+    IndexDetailsBase::Builder::Builder(IndexDetailsBase &idx)
+            : _idx(idx),
+              _db(_idx.db()),
+              _loader(&_db, 1,
+                      str::stream() << "Foreground index build progress (sort phase) for "
+                                    << idx.parentNS() << ", key "
+                                    << idx.keyPattern()) {}
 
     void IndexDetailsBase::Builder::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val) {
         storage::Key skey(key, pk);

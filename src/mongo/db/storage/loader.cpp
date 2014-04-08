@@ -30,9 +30,10 @@ namespace mongo {
 
         // TODO: Use a command line option for LOADER_COMPRESS_INTERMEDIATES
 
-        Loader::Loader(DB **dbs, const int n) :
-            _dbs(dbs), _n(n),
-            _loader(NULL), _closed(false) {
+        Loader::Loader(DB **dbs, const int n, const std::string &prefix)
+                : BuilderBase(prefix),
+                  _dbs(dbs), _n(n),
+                  _loader(NULL), _closed(false) {
 
             uint32_t db_flags = 0;
             uint32_t dbt_flags = 0;
