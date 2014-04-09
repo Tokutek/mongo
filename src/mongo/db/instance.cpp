@@ -851,13 +851,27 @@ namespace mongo {
             addToNamespacesCatalog(IndexDetails::indexNamespace(coll, info["name"].String()));
         }
 
-        lk.reset();
+        {
+            /**
+             * We really shouldn't do this anywhere if we can help it, this is a bit of a special
+             * case, so it's a local class.
+             */
+            class WriteLockReleaser : boost::noncopyable {
+                scoped_ptr<Lock::DBWrite> &_lk;
+              public:
+                WriteLockReleaser(scoped_ptr<Lock::DBWrite> &lk) : _lk(lk) {
+                    _lk.reset();
+                }
+                ~WriteLockReleaser() {
+                    LOCK_REASON(lockReasonCommit, "committing/aborting hot index build");
+                    _lk.reset(new Lock::DBWrite(ns, lockReasonCommit));
+                }
+            } wlr(lk);
 
-        // Perform the index build
-        indexer->build();
+            // Perform the index build
+            indexer->build();
+        }
 
-        LOCK_REASON(lockReasonCommit, "committing hot index build");
-        lk.reset(new Lock::DBWrite(ns, lockReasonCommit));
 
         // Commit the index build
         {
