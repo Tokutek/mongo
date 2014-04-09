@@ -858,13 +858,14 @@ namespace mongo {
              */
             class WriteLockReleaser : boost::noncopyable {
                 scoped_ptr<Lock::DBWrite> &_lk;
+                std::string _ns;
               public:
-                WriteLockReleaser(scoped_ptr<Lock::DBWrite> &lk) : _lk(lk) {
+                WriteLockReleaser(scoped_ptr<Lock::DBWrite> &lk, const StringData &ns) : _lk(lk), _ns(ns.toString()) {
                     _lk.reset();
                 }
                 ~WriteLockReleaser() {
                     LOCK_REASON(lockReasonCommit, "committing/aborting hot index build");
-                    _lk.reset(new Lock::DBWrite(ns, lockReasonCommit));
+                    _lk.reset(new Lock::DBWrite(_ns, lockReasonCommit));
                 }
             } wlr(lk);
 
