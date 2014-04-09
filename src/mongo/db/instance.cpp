@@ -867,7 +867,7 @@ namespace mongo {
                     LOCK_REASON(lockReasonCommit, "committing/aborting hot index build");
                     _lk.reset(new Lock::DBWrite(_ns, lockReasonCommit));
                 }
-            } wlr(lk);
+            } wlr(lk, ns);
 
             // Perform the index build
             indexer->build();
