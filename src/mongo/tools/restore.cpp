@@ -327,7 +327,7 @@ public:
             if ( _w > 0 ) {
                 string err = conn().getLastError(_curdb, false, false, _w);
                 if (!err.empty()) {
-                    error() << err;
+                    error() << err << endl;
                 }
             }
         }
