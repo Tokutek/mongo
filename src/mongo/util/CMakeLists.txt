@@ -31,6 +31,7 @@ target_link_libraries(foundation LINK_PUBLIC
   platform
   thread_name
   ${Boost_LIBRARIES}
+  ${TZ_LIBRARIES}
   )
 
 add_library(synchronization STATIC
