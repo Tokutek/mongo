@@ -693,7 +693,7 @@ DBCollection.prototype.addPartition = function( pivot ){
     if ( pivot == undefined) {
         return this._dbCommand( { addPartition : this._shortName } );
     }
-    return this._dbCommand( { addPartition : this._shortName , newPivot : pivot } );
+    return this._dbCommand( { addPartition : this._shortName , newMax : pivot } );
 }
 
 DBCollection.prototype.getPartitionInfo = function(){

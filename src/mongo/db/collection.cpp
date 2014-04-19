@@ -3070,7 +3070,7 @@ namespace mongo {
         if (numPartitions() > 1) {
             uassert(
                 17249, 
-                str::stream() <<"new pivot must be greater than last pivot, newPivot: " << newPivot.str() << 
+                str::stream() <<"new max must be greater than last pivot, newMax: " << newPivot.str() << 
                 " lastPivot: " <<_partitionPivots[numPartitions()-2].str(), 
                 newPivot.woCompare(_partitionPivots[numPartitions()-2], _ordering) > 0
                 );
@@ -3081,7 +3081,7 @@ namespace mongo {
         if (foundLast) {
             uassert(
                 17250, 
-                str::stream() << "new pivot must be greater than or equal to max element in collection, newPivot: " <<
+                str::stream() << "new max must be greater than or equal to max element in collection, newMax: " <<
                 newPivot.str() << " max element: " << currPK.str(), 
                 newPivot.woCompare(currPK, _ordering) >= 0);
         }
