@@ -48,19 +48,19 @@ assert.eq(18,  x["partitions"][0]["max"]["_id"]);
 assert.eq(MaxKey,  x["partitions"][1]["max"]["_id"]);
 
 // too low
-assert.commandFailed(db.runCommand({addPartition:tname, newPivot:{_id:12} }));
-assert.commandFailed(db.runCommand({addPartition:tname, newPivot:{_id:18}}));
+assert.commandFailed(db.runCommand({addPartition:tname, newMax:{_id:12} }));
+assert.commandFailed(db.runCommand({addPartition:tname, newMax:{_id:18}}));
 // no data in last partition
 assert.commandFailed(db.runCommand({addPartition:tname}));
-assert.commandWorked(db.runCommand({addPartition:tname, newPivot:{_id:24}}));
+assert.commandWorked(db.runCommand({addPartition:tname, newMax:{_id:24}}));
 
 // now let's insert more data
 for (i = 20; i < 40; i+=2) {
     t.insert({_id:i});
 }
-assert.commandFailed(db.runCommand({addPartition:tname, newPivot:{_id:18}}));
-assert.commandFailed(db.runCommand({addPartition:tname, newPivot:{_id:37}}));
-assert.commandWorked(db.runCommand({addPartition:tname, newPivot:{_id:38}}));
+assert.commandFailed(db.runCommand({addPartition:tname, newMax:{_id:18}}));
+assert.commandFailed(db.runCommand({addPartition:tname, newMax:{_id:37}}));
+assert.commandWorked(db.runCommand({addPartition:tname, newMax:{_id:38}}));
 
 x = db.runCommand({getPartitionInfo:tname});
 assert.eq(4, x.numPartitions);
@@ -75,8 +75,8 @@ assert.eq(MaxKey,  x["partitions"][3]["max"]["_id"]);
 
 // try an add and drop partition in an MST
 assert.commandWorked(db.beginTransaction());
-assert.commandFailed(db.runCommand({addPartition:tname, newPivot:{_id:38}}));
-assert.commandWorked(db.runCommand({addPartition:tname, newPivot:{_id:39}}));
+assert.commandFailed(db.runCommand({addPartition:tname, newMax:{_id:38}}));
+assert.commandWorked(db.runCommand({addPartition:tname, newMax:{_id:39}}));
 assert.eq(20, t.count());
 assert.commandWorked(db.runCommand({dropPartition:tname, id:0}));
 assert.eq(10, t.count());
@@ -109,7 +109,7 @@ assert.eq(MaxKey,  x["partitions"][3]["max"]["_id"]);
 // try just an add, and do a simple test that
 // things still work after the rollback
 assert.commandWorked(db.beginTransaction());
-assert.commandWorked(db.runCommand({addPartition:tname, newPivot:{_id:40}}));
+assert.commandWorked(db.runCommand({addPartition:tname, newMax:{_id:40}}));
 x = db.runCommand({getPartitionInfo:tname});
 assert.eq(5, x.numPartitions);
 assert.commandWorked(db.rollbackTransaction());
@@ -129,7 +129,7 @@ assert.eq(4, x.numPartitions);
 // we have even numbers from 0 to 40 inserted
 // we have partitions with pivots of 18, 24, 39, and MaxKey
 // let's add a 5th partition while we are at it
-assert.commandWorked(db.runCommand({addPartition:tname, newPivot:{_id:60}}));
+assert.commandWorked(db.runCommand({addPartition:tname, newMax:{_id:60}}));
 // let's insert some values
 for (i = 40; i < 80; i+=2) {
     t.insert({_id:i});

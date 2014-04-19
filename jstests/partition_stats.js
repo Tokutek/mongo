@@ -6,10 +6,10 @@ t = db[TestData.testName];
 t.drop();
 
 assert.commandWorked(db.runCommand({ create: TestData.testName, partitioned:1}));
-assert.commandWorked(db.runCommand({addPartition:TestData.testName, newPivot:{_id:10} }));
-assert.commandWorked(db.runCommand({addPartition:TestData.testName, newPivot:{_id:20} }));
-assert.commandWorked(db.runCommand({addPartition:TestData.testName, newPivot:{_id:30} }));
-assert.commandWorked(db.runCommand({addPartition:TestData.testName, newPivot:{_id:40} }));
+assert.commandWorked(db.runCommand({addPartition:TestData.testName, newMax:{_id:10} }));
+assert.commandWorked(db.runCommand({addPartition:TestData.testName, newMax:{_id:20} }));
+assert.commandWorked(db.runCommand({addPartition:TestData.testName, newMax:{_id:30} }));
+assert.commandWorked(db.runCommand({addPartition:TestData.testName, newMax:{_id:40} }));
 
 var st = t.stats();
 printjson(st);

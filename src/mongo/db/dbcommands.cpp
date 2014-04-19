@@ -1798,7 +1798,7 @@ namespace mongo {
         virtual void help( stringstream& help ) const {
             help << "add partition to a partitioned collection,\n" <<
                 "optionally provide pivot for last current partition\n." <<
-                "Example: {addPartition : \"foo\"} or {addPartition: \"foo\", newPivot: {_id: 1000}}";
+                "Example: {addPartition : \"foo\"} or {addPartition: \"foo\", newMax: {_id: 1000}}";
         }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
@@ -1817,7 +1817,7 @@ namespace mongo {
             Collection *cl = getCollection( ns );
             uassert( 17306, "addPartition no such collection", cl );
             uassert( 17307, "collection must be partitioned", cl->isPartitioned() );
-            BSONElement e = cmdObj["newPivot"];            
+            BSONElement e = cmdObj["newMax"];            
             PartitionedCollection *pc = cl->as<PartitionedCollection>();
             if (e.ok()) {
                 BSONObj pivot = e.embeddedObjectUserCheck();

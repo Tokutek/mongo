@@ -18,7 +18,7 @@ for (i = 100; i < 200; i++) {
 s = startParallelShell(' \
     t = db.part_ops; \
     tname = "part_ops"; \
-    assert.commandFailed(db.runCommand({addPartition:tname, newPivot:{_id:199}})); \
+    assert.commandFailed(db.runCommand({addPartition:tname, newMax:{_id:199}})); \
     assert.commandWorked(db.runCommand({addPartition:tname})); \
 ');
 
