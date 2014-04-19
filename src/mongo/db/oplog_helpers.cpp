@@ -52,7 +52,7 @@ static const char OP_STR_CAPPED_DELETE[] = "cd"; // delete from capped collectio
 static const char OP_STR_COMMENT[] = "n"; // a no-op
 static const char OP_STR_COMMAND[] = "c"; // command
 static const char OP_STR_DROP_PARTITION[] = "dp"; // drop partition from partitioned collection
-static const char OP_STR_ADD_PARTITION[] = "ap"; // drop partition from partitioned collection
+static const char OP_STR_ADD_PARTITION[] = "ap"; // add partition from partitioned collection
 static const char OP_STR_PARTITION_INFO[] = "pi"; // partition info from partitioned collection, used after create
 
 namespace mongo {
