@@ -293,7 +293,36 @@ namespace mongo {
         return coll == "system.users";
     }
 
+    // ------------------------------------------------------------------------
 
+    static BSONObj addIdField(const BSONObj &obj) {
+        if (obj.hasField("_id")) {
+            return obj;
+        } else {
+            // _id first, everything else after
+            BSONObjBuilder b;
+            OID oid;
+            oid.init();
+            b.append("_id", oid);
+            b.appendElements(obj);
+            return b.obj();
+        }
+    }
+
+    static BSONObj inheritIdField(const BSONObj &oldObj, const BSONObj &newObj) {
+        const BSONElement &e = newObj["_id"];
+        if (e.ok()) {
+            uassert( 13596 ,
+                     str::stream() << "cannot change _id of a document old:" << oldObj << " new:" << newObj,
+                     e.valuesEqual(oldObj["_id"]) );
+            return newObj;
+        } else {
+            BSONObjBuilder b;
+            b.append(oldObj["_id"]);
+            b.appendElements(newObj);
+            return b.obj();
+        }
+    }
 
     // Construct a brand new Collection with a certain primary key and set of options.
     //
@@ -367,6 +396,20 @@ namespace mongo {
         }
         return false;
     }
+
+    // inserts an object into this namespace, taking care of secondary indexes if they exist
+    void Collection::insertObject(BSONObj &obj, uint64_t flags) {
+        // note, we MUST initialize this variable, as it may not be set in call below
+        bool indexBitChanged = false;
+        if (_cd->requiresIDField()) {
+            obj = addIdField(obj);
+        }
+        _cd->insertObject(obj, flags, &indexBitChanged);
+        if (indexBitChanged) {
+            noteMultiKeyChanged();
+        }
+    }
+    
 
     // ------------------------------------------------------------------------
 
@@ -1749,36 +1792,6 @@ namespace mongo {
         return -1;
     }
 
-    // ------------------------------------------------------------------------
-
-    static BSONObj addIdField(const BSONObj &obj) {
-        if (obj.hasField("_id")) {
-            return obj;
-        } else {
-            // _id first, everything else after
-            BSONObjBuilder b;
-            OID oid;
-            oid.init();
-            b.append("_id", oid);
-            b.appendElements(obj);
-            return b.obj();
-        }
-    }
-
-    static BSONObj inheritIdField(const BSONObj &oldObj, const BSONObj &newObj) {
-        const BSONElement &e = newObj["_id"];
-        if (e.ok()) {
-            uassert( 13596 ,
-                     str::stream() << "cannot change _id of a document old:" << oldObj << " new:" << newObj,
-                     e.valuesEqual(oldObj["_id"]) );
-            return newObj;
-        } else {
-            BSONObjBuilder b;
-            b.append(oldObj["_id"]);
-            b.appendElements(newObj);
-            return b.obj();
-        }
-    }
 
     // ------------------------------------------------------------------------
 
@@ -1824,7 +1837,6 @@ namespace mongo {
 
     // inserts an object into this collection, taking care of secondary indexes if they exist
     void IndexedCollection::insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged) {
-        obj = addIdField(obj);
         const BSONObj pk = getValidatedPKFromObject(obj);
 
         // We skip unique checks if the primary key is something other than the _id index.
@@ -2238,7 +2250,6 @@ namespace mongo {
     }
 
     void CappedCollection::insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged) {
-        obj = addIdField(obj);
         _insertObject(obj, flags, indexBitChanged);
     }
 
@@ -2544,7 +2555,6 @@ namespace mongo {
     }
 
     void BulkLoadedCollection::insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged) {
-        obj = addIdField(obj);
         const BSONObj pk = getValidatedPKFromObject(obj);
 
         storage::Key sPK(pk, NULL);

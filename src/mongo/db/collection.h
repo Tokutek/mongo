@@ -229,6 +229,12 @@ namespace mongo {
 
         virtual bool isPartitioned() const = 0;
 
+        // returns true if the CollectionData requires an ID field to exist
+        // on insertions. If so, and an id is necessary, then the Collection 
+        // class will autogenerate one before calling
+        // CollectionData::insertObject
+        virtual bool requiresIDField() const = 0;
+
         // returns the maximum PK the collection's storage knows
         // of. If this CollectionData is part of a partitioned collection,
         // any newly added partition must be greater than or equal to
@@ -533,14 +539,7 @@ namespace mongo {
         //
         
         // inserts an object into this namespace, taking care of secondary indexes if they exist
-        void insertObject(BSONObj &obj, uint64_t flags = 0) {
-            // note, we MUST initialize this variable, as it may not be set in call below
-            bool indexBitChanged = false;
-            _cd->insertObject(obj, flags, &indexBitChanged);
-            if (indexBitChanged) {
-                noteMultiKeyChanged();
-            }
-        }
+        void insertObject(BSONObj &obj, uint64_t flags = 0);
 
         // deletes an object from this namespace, taking care of secondary indexes if they exist
         void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags = 0) {
@@ -1023,6 +1022,10 @@ namespace mongo {
             return false;
         }
 
+        bool requiresIDField() const {
+            return true;
+        }
+
         // Overridden to optimize the case where we have an _id primary key.
         BSONObj getValidatedPKFromObject(const BSONObj &obj) const;
 
@@ -1053,6 +1056,10 @@ namespace mongo {
 
         bool isPKHidden() const {
             return true;
+        }
+        
+        bool requiresIDField() const {
+            return false;
         }
 
     protected:
@@ -1164,6 +1171,10 @@ namespace mongo {
         // The given deltas are signed values that represent changes to the collection.
         // We need to roll back those changes. Therefore, we subtract from the current value.
         void noteAbort(const BSONObj &minPK, long long nDelta, long long sizeDelta);
+        
+        bool requiresIDField() const {
+            return true;
+        }
 
     protected:
         void _insertObject(const BSONObj &obj, uint64_t flags, bool* indexBitChanged);
@@ -1440,6 +1451,10 @@ namespace mongo {
 
         virtual bool isPartitioned() const {
             return true;
+        }
+
+        virtual bool requiresIDField() const {
+            return _partitions[0]->requiresIDField();
         }
 
         virtual bool getMaxPKForPartitionCap(BSONObj &result) const {
