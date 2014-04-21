@@ -7,7 +7,7 @@ benchArgs = { ops : [ { ns : t.getFullName() ,
                         query : { _id : { "#RAND_INT" : [ 0 , 5 , 4 ] } } ,
                         update : { $inc : { x : 1 } } } ] ,
               parallel : 2 ,
-              seconds : 1 ,
+              seconds : 5 ,
               totals : true ,
               host : db.getMongo().host }
 
@@ -26,7 +26,7 @@ for (var i = 0; i < 5; ++i) {
     var keys = []
     var totals = {}
     db.bench_test3.find().sort( { _id : 1 } ).forEach( function(z){ keys.push( z._id ); totals[z._id] = z.x } );
-
+    printjson(totals);
     // Rather than do this assert, since the updates sometimes get lock not granted, we try a few
     // times before failing the test
     // assert.eq( [ 0 , 4 , 8 , 12 , 16 ] , keys )
