@@ -28,6 +28,7 @@
 #include "mongo/util/md5.hpp"
 #include "mongo/util/file.h"
 #include "mongo/scripting/engine.h"
+#include "mongo/util/scopeguard.h"
 
 namespace mongo {
 
@@ -145,6 +146,7 @@ namespace mongo {
             stringstream ss;
             FILE* f = fopen(e.valuestrsafe(), "rb");
             uassert(CANT_OPEN_FILE, "couldn't open file", f );
+            ON_BLOCK_EXIT(fclose, f);
 
             md5digest d;
             md5_state_t st;
