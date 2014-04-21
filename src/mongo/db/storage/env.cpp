@@ -589,9 +589,10 @@ namespace mongo {
                         switch (row->type) {
                         case TOKUTIME:
                             return tokutime_to_seconds(row->value.num);
+                        case UNIXTIME:
+                            return static_cast<double>(*reinterpret_cast<const time_t *>(&row->value.num));
                         case DOUBLE:
                         case CHARSTR:
-                        case UNIXTIME:
                         case FS_STATE:
                         case UINT64:
                         case PARCOUNT:
@@ -768,6 +769,67 @@ namespace mongo {
                             b.append("longWaitCachePressure", lw);
                         }
                     }
+                    b.doneFast();
+                }
+                {
+                    BSONObjBuilder b(result.subobjStart("checkpoint"));
+                    status.appendInfo(b, "count", "CP_CHECKPOINT_COUNT", true);
+                    // CP_TIME_CHECKPOINT_DURATION is a time_t but we don't want it displayed as a date
+                    b.append("time", status.getDuration("CP_TIME_CHECKPOINT_DURATION"));
+                    {
+                        BSONObjBuilder lastb(b.subobjStart("last"));
+                        status.appendInfo(lastb, "begin", "CP_TIME_LAST_CHECKPOINT_BEGIN", true);
+                        lastb.doneFast();
+                    }
+                    {
+                        BSONObjBuilder lastb(b.subobjStart("lastComplete"));
+                        status.appendInfo(lastb, "begin", "CP_TIME_LAST_CHECKPOINT_BEGIN_COMPLETE", true);
+                        status.appendInfo(lastb, "end", "CP_TIME_LAST_CHECKPOINT_END", true);
+                        lastb.doneFast();
+                    }
+                    {
+                        BSONObjBuilder beginb(b.subobjStart("begin"));
+                        status.appendInfo(beginb, "time", "CP_BEGIN_TIME", true);
+                        {
+                            BSONObjBuilder lwb;
+                            status.appendInfo(lwb, "count", "CP_LONG_BEGIN_COUNT", false);
+                            status.appendInfo(lwb, "time", "CP_LONG_BEGIN_TIME", false);
+                            BSONObj lw = lwb.done();
+                            if (!lw.isEmpty()) {
+                                b.append("long", lw);
+                            }
+                        }
+                        beginb.doneFast();
+                    }
+                    {
+                        BSONObjBuilder writeb(b.subobjStart("write"));
+                        {
+                            BSONObjBuilder b2(writeb.subobjStart("nonleaf"));
+                            status.appendInfo(b2, "count", "FT_DISK_FLUSH_NONLEAF_FOR_CHECKPOINT", true);
+                            status.appendInfo(b2, "time", "FT_DISK_FLUSH_NONLEAF_TOKUTIME_FOR_CHECKPOINT", true);
+                            {
+                                BSONObjBuilder b3(b2.subobjStart("bytes"));
+                                status.appendInfo(b3, "uncompressed", "FT_DISK_FLUSH_NONLEAF_UNCOMPRESSED_BYTES_FOR_CHECKPOINT", true);
+                                status.appendInfo(b3, "compressed", "FT_DISK_FLUSH_NONLEAF_BYTES_FOR_CHECKPOINT", true);
+                                b3.doneFast();
+                            }
+                            b2.doneFast();
+                        }
+                        {
+                            BSONObjBuilder b2(writeb.subobjStart("leaf"));
+                            status.appendInfo(b2, "count", "FT_DISK_FLUSH_LEAF_FOR_CHECKPOINT", true);
+                            status.appendInfo(b2, "time", "FT_DISK_FLUSH_LEAF_TOKUTIME_FOR_CHECKPOINT", true);
+                            {
+                                BSONObjBuilder b3(b2.subobjStart("bytes"));
+                                status.appendInfo(b3, "uncompressed", "FT_DISK_FLUSH_LEAF_UNCOMPRESSED_BYTES_FOR_CHECKPOINT", true);
+                                status.appendInfo(b3, "compressed", "FT_DISK_FLUSH_LEAF_BYTES_FOR_CHECKPOINT", true);
+                                b3.doneFast();
+                            }
+                            b2.doneFast();
+                        }
+                        writeb.doneFast();
+                    }
+                    status.appendInfo(b, "fail", "CP_CHECKPOINT_COUNT_FAIL", false);
                     b.doneFast();
                 }
                 {
