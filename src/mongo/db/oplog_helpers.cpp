@@ -277,12 +277,12 @@ namespace mongo {
             LOCK_REASON(lockReason, "repl: hot index build");
             scoped_ptr<Lock::DBWrite> lk(new Lock::DBWrite(ns, lockReason));
             shared_ptr<CollectionIndexer> indexer;
+            const string &coll = row["ns"].String();
 
             {
                 Client::Context ctx(ns);
                 Collection *sysCl = getCollection(ns);
 
-                const string &coll = row["ns"].String();
                 Collection *cl = getCollection(coll);
                 if (cl->findIndexByKeyPattern(row["key"].Obj()) >= 0) {
                     // the index already exists, so this is a no-op
@@ -307,6 +307,9 @@ namespace mongo {
             {
                 Client::Context ctx(ns);
                 indexer->commit();
+                Collection *cl = getCollection(coll);
+                verify(cl);
+                cl->noteIndexBuilt();
             }
         }
 

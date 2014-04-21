@@ -132,9 +132,17 @@ namespace mongo {
         checkTooLarge(newObj);
         bool modsAreIndexed = useMods->isIndexed() > 0;
         bool forceFullUpdate = hasDynamicArray || !cl->updateObjectModsOk();
+        // adding cl->indexBuildInProgress() as a check below due to #1085
+        // This is a little heavyweight, as we whould be able to have modsAreIndexed
+        // take hot indexes into account. Unfortunately, that code right now is not
+        // factored cleanly enough to do nicely, so we just do the heavyweight check
+        // here. Hope to get this properly fixed soon.
+        uint64_t flags = (modsAreIndexed || cl->indexBuildInProgress()) ? 
+            0 : 
+            Collection::KEYS_UNAFFECTED_HINT;
         updateOneObject(cl, pk, obj, newObj,
             forceFullUpdate ? BSONObj() : updateobj, // if we have a dynamic array, force it to do a full overwrite
-            fromMigrate, modsAreIndexed ? 0 : Collection::KEYS_UNAFFECTED_HINT);
+            fromMigrate, flags);
 
         // must happen after updateOneObject
         if (forceFullUpdate) {
