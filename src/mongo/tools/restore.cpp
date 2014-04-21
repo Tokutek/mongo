@@ -66,6 +66,7 @@ public:
         ("noOptionsRestore" , "don't restore collection options")
         ("noIndexRestore" , "don't restore indexes")
         ("w" , po::value<int>()->default_value(0) , "minimum number of replicas per write. WARNING, setting w > 1 prevents the bulk load optimization." )
+        ("noLoader", "don't use bulk loader")
         ;
         add_hidden_options()
         ("dir", po::value<string>()->default_value("dump"), "directory to restore from")
@@ -101,6 +102,9 @@ public:
         _doBulkLoad = _w <= 1;
         if (!_doBulkLoad) {
             log() << "warning: not using bulk loader due to --w > 1" << endl;
+        }
+        if (hasParam( "noLoader" )) {
+            _doBulkLoad = false;
         }
         if (hasParam( "keepIndexVersion" )) {
             log() << "warning: --keepIndexVersion is deprecated in TokuMX" << endl;
@@ -279,7 +283,11 @@ public:
         if (_doBulkLoad) {
             RemoteLoader loader(conn(), _curdb, _curcoll, indexes, options);
             processFile( root );
-            loader.commit();
+            BSONObj res;
+            bool ok = loader.commit(&res);
+            if (!ok) {
+                error() << "Error committing load for " << _curdb << "." << _curcoll << ": " << res << endl;
+            }
         } else {
             // No bulk load. Create collection and indexes manually.
             if (!options.isEmpty()) {
@@ -317,10 +325,9 @@ public:
 
             // wait for insert to propagate to "w" nodes (doesn't warn if w used without replset)
             if ( _w > 0 ) {
-                verify( !_doBulkLoad );
                 string err = conn().getLastError(_curdb, false, false, _w);
                 if (!err.empty()) {
-                    error() << err;
+                    error() << err << endl;
                 }
             }
         }

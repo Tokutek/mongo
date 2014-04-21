@@ -31,6 +31,7 @@ add_library(mongocommon_util STATIC
   trace
   ramlog
   progress_meter
+  percentage_progress_meter
   concurrency/task
   concurrency/thread_pool
   password
