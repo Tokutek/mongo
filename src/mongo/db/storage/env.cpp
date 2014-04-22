@@ -589,9 +589,10 @@ namespace mongo {
                         switch (row->type) {
                         case TOKUTIME:
                             return tokutime_to_seconds(row->value.num);
+                        case UNIXTIME:
+                            return static_cast<double>(*reinterpret_cast<const time_t *>(&row->value.num));
                         case DOUBLE:
                         case CHARSTR:
-                        case UNIXTIME:
                         case FS_STATE:
                         case UINT64:
                         case PARCOUNT:
@@ -652,7 +653,10 @@ namespace mongo {
                 }
                 {
                     BSONObjBuilder b(result.subobjStart("log"));
-                    status.appendInfo(b, "bytesWritten", "LOGGER_BYTES_WRITTEN", true, scale);
+                    status.appendInfo(b, "count", "LOGGER_NUM_WRITES", true);
+                    status.appendInfo(b, "time", "LOGGER_TOKUTIME_WRITES", true);
+                    status.appendInfo(b, "bytes", "LOGGER_BYTES_WRITTEN", true, scale);
+                    status.appendInfo(b, "longWaitBuf", "LOGGER_WAIT_BUF_LONG", false);
                     b.doneFast();
                 }
                 {
@@ -732,7 +736,7 @@ namespace mongo {
                             {
                                 BSONObjBuilder b4(b.subobjStart("nonleaf"));
                                 status.appendInfo(b4, "count", "FT_FULL_EVICTIONS_NONLEAF", true);
-                                status.appendInfo(b4, "bytes", "FT_FULL_EVICTIONS_NONLEAF_BYTES", true);
+                                status.appendInfo(b4, "bytes", "FT_FULL_EVICTIONS_NONLEAF_BYTES", true, scale);
                                 {
                                     BSONObjBuilder b5(b.subobjStart("dirty"));
                                     status.appendInfo(b5, "count", "FT_DISK_FLUSH_NONLEAF", true);
@@ -745,7 +749,7 @@ namespace mongo {
                             {
                                 BSONObjBuilder b4(b.subobjStart("leaf"));
                                 status.appendInfo(b4, "count", "FT_FULL_EVICTIONS_LEAF", true);
-                                status.appendInfo(b4, "bytes", "FT_FULL_EVICTIONS_LEAF_BYTES", true);
+                                status.appendInfo(b4, "bytes", "FT_FULL_EVICTIONS_LEAF_BYTES", true, scale);
                                 {
                                     BSONObjBuilder b5(b.subobjStart("dirty"));
                                     status.appendInfo(b5, "count", "FT_DISK_FLUSH_LEAF", true);
@@ -767,6 +771,88 @@ namespace mongo {
                         if (!lw.isEmpty()) {
                             b.append("longWaitCachePressure", lw);
                         }
+                    }
+                    b.doneFast();
+                }
+                {
+                    BSONObjBuilder b(result.subobjStart("checkpoint"));
+                    status.appendInfo(b, "count", "CP_CHECKPOINT_COUNT", true);
+                    // CP_TIME_CHECKPOINT_DURATION is a time_t but we don't want it displayed as a date
+                    b.append("time", status.getDuration("CP_TIME_CHECKPOINT_DURATION"));
+                    {
+                        BSONObjBuilder lastb(b.subobjStart("last"));
+                        status.appendInfo(lastb, "begin", "CP_TIME_LAST_CHECKPOINT_BEGIN", true);
+                        lastb.doneFast();
+                    }
+                    {
+                        BSONObjBuilder lastb(b.subobjStart("lastComplete"));
+                        status.appendInfo(lastb, "begin", "CP_TIME_LAST_CHECKPOINT_BEGIN_COMPLETE", true);
+                        status.appendInfo(lastb, "end", "CP_TIME_LAST_CHECKPOINT_END", true);
+                        lastb.append("time", status.getDuration("CP_TIME_CHECKPOINT_DURATION_LAST"));
+                        lastb.doneFast();
+                    }
+                    {
+                        BSONObjBuilder beginb(b.subobjStart("begin"));
+                        status.appendInfo(beginb, "time", "CP_BEGIN_TIME", true);
+                        {
+                            BSONObjBuilder lwb;
+                            status.appendInfo(lwb, "count", "CP_LONG_BEGIN_COUNT", false);
+                            status.appendInfo(lwb, "time", "CP_LONG_BEGIN_TIME", false);
+                            BSONObj lw = lwb.done();
+                            if (!lw.isEmpty()) {
+                                b.append("long", lw);
+                            }
+                        }
+                        beginb.doneFast();
+                    }
+                    {
+                        BSONObjBuilder writeb(b.subobjStart("write"));
+                        {
+                            BSONObjBuilder b2(writeb.subobjStart("nonleaf"));
+                            status.appendInfo(b2, "count", "FT_DISK_FLUSH_NONLEAF_FOR_CHECKPOINT", true);
+                            status.appendInfo(b2, "time", "FT_DISK_FLUSH_NONLEAF_TOKUTIME_FOR_CHECKPOINT", true);
+                            {
+                                BSONObjBuilder b3(b2.subobjStart("bytes"));
+                                status.appendInfo(b3, "uncompressed", "FT_DISK_FLUSH_NONLEAF_UNCOMPRESSED_BYTES_FOR_CHECKPOINT", true, scale);
+                                status.appendInfo(b3, "compressed", "FT_DISK_FLUSH_NONLEAF_BYTES_FOR_CHECKPOINT", true, scale);
+                                b3.doneFast();
+                            }
+                            b2.doneFast();
+                        }
+                        {
+                            BSONObjBuilder b2(writeb.subobjStart("leaf"));
+                            status.appendInfo(b2, "count", "FT_DISK_FLUSH_LEAF_FOR_CHECKPOINT", true);
+                            status.appendInfo(b2, "time", "FT_DISK_FLUSH_LEAF_TOKUTIME_FOR_CHECKPOINT", true);
+                            {
+                                BSONObjBuilder b3(b2.subobjStart("bytes"));
+                                status.appendInfo(b3, "uncompressed", "FT_DISK_FLUSH_LEAF_UNCOMPRESSED_BYTES_FOR_CHECKPOINT", true, scale);
+                                status.appendInfo(b3, "compressed", "FT_DISK_FLUSH_LEAF_BYTES_FOR_CHECKPOINT", true, scale);
+                                b3.doneFast();
+                            }
+                            b2.doneFast();
+                        }
+                        writeb.doneFast();
+                    }
+                    status.appendInfo(b, "fail", "CP_CHECKPOINT_COUNT_FAIL", false);
+                    b.doneFast();
+                }
+                {
+                    BSONObjBuilder b(result.subobjStart("serializeTime"));
+                    {
+                        BSONObjBuilder b2(b.subobjStart("nonleaf"));
+                        status.appendInfo(b2, "serialize", "FT_NONLEAF_SERIALIZE_TOKUTIME", true);
+                        status.appendInfo(b2, "compress", "FT_NONLEAF_COMPRESS_TOKUTIME", true);
+                        status.appendInfo(b2, "decompress", "FT_NONLEAF_DECOMPRESS_TOKUTIME", true);
+                        status.appendInfo(b2, "deserialize", "FT_NONLEAF_DESERIALIZE_TOKUTIME", true);
+                        b2.doneFast();
+                    }
+                    {
+                        BSONObjBuilder b2(b.subobjStart("leaf"));
+                        status.appendInfo(b2, "serialize", "FT_LEAF_SERIALIZE_TOKUTIME", true);
+                        status.appendInfo(b2, "compress", "FT_LEAF_COMPRESS_TOKUTIME", true);
+                        status.appendInfo(b2, "decompress", "FT_LEAF_DECOMPRESS_TOKUTIME", true);
+                        status.appendInfo(b2, "deserialize", "FT_LEAF_DESERIALIZE_TOKUTIME", true);
+                        b2.doneFast();
                     }
                     b.doneFast();
                 }
