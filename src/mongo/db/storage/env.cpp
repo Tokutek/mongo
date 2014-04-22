@@ -837,6 +837,26 @@ namespace mongo {
                     b.doneFast();
                 }
                 {
+                    BSONObjBuilder b(result.subobjStart("serializeTime"));
+                    {
+                        BSONObjBuilder b2(b.subobjStart("nonleaf"));
+                        status.appendInfo(b2, "serialize", "FT_NONLEAF_SERIALIZE_TOKUTIME", true);
+                        status.appendInfo(b2, "compress", "FT_NONLEAF_COMPRESS_TOKUTIME", true);
+                        status.appendInfo(b2, "decompress", "FT_NONLEAF_DECOMPRESS_TOKUTIME", true);
+                        status.appendInfo(b2, "deserialize", "FT_NONLEAF_DESERIALIZE_TOKUTIME", true);
+                        b2.doneFast();
+                    }
+                    {
+                        BSONObjBuilder b2(b.subobjStart("leaf"));
+                        status.appendInfo(b2, "serialize", "FT_LEAF_SERIALIZE_TOKUTIME", true);
+                        status.appendInfo(b2, "compress", "FT_LEAF_COMPRESS_TOKUTIME", true);
+                        status.appendInfo(b2, "decompress", "FT_LEAF_DECOMPRESS_TOKUTIME", true);
+                        status.appendInfo(b2, "deserialize", "FT_LEAF_DESERIALIZE_TOKUTIME", true);
+                        b2.doneFast();
+                    }
+                    b.doneFast();
+                }
+                {
                     BSONObjBuilder b(result.subobjStart("locktree"));
                     {
                         BSONObjBuilder b2(b.subobjStart("size"));
