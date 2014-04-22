@@ -927,10 +927,10 @@ namespace mongo {
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
         cc().setOpSettings(settings);
 
-        if (coll == "system.indexes" &&
-                // Can only build non-unique indexes in the background, because the
-                // hot indexer does not know how to perform unique checks.
-                objs[0]["background"].trueValue() && !objs[0]["unique"].trueValue()) {
+        if (coll == "system.indexes" && objs[0]["background"].trueValue()) {
+            // Can only build non-unique indexes in the background, because the
+            // hot indexer does not know how to perform unique checks.
+            uassert(17330, "cannot build unique indexes in the background, change to a foreground index or remove the unique constraint", !objs[0]["unique"].trueValue());
             _buildHotIndex(ns, m, objs);
             return;
         }
