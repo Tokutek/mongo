@@ -733,7 +733,7 @@ namespace mongo {
                             {
                                 BSONObjBuilder b4(b.subobjStart("nonleaf"));
                                 status.appendInfo(b4, "count", "FT_FULL_EVICTIONS_NONLEAF", true);
-                                status.appendInfo(b4, "bytes", "FT_FULL_EVICTIONS_NONLEAF_BYTES", true);
+                                status.appendInfo(b4, "bytes", "FT_FULL_EVICTIONS_NONLEAF_BYTES", true, scale);
                                 {
                                     BSONObjBuilder b5(b.subobjStart("dirty"));
                                     status.appendInfo(b5, "count", "FT_DISK_FLUSH_NONLEAF", true);
@@ -746,7 +746,7 @@ namespace mongo {
                             {
                                 BSONObjBuilder b4(b.subobjStart("leaf"));
                                 status.appendInfo(b4, "count", "FT_FULL_EVICTIONS_LEAF", true);
-                                status.appendInfo(b4, "bytes", "FT_FULL_EVICTIONS_LEAF_BYTES", true);
+                                status.appendInfo(b4, "bytes", "FT_FULL_EVICTIONS_LEAF_BYTES", true, scale);
                                 {
                                     BSONObjBuilder b5(b.subobjStart("dirty"));
                                     status.appendInfo(b5, "count", "FT_DISK_FLUSH_LEAF", true);
@@ -810,8 +810,8 @@ namespace mongo {
                             status.appendInfo(b2, "time", "FT_DISK_FLUSH_NONLEAF_TOKUTIME_FOR_CHECKPOINT", true);
                             {
                                 BSONObjBuilder b3(b2.subobjStart("bytes"));
-                                status.appendInfo(b3, "uncompressed", "FT_DISK_FLUSH_NONLEAF_UNCOMPRESSED_BYTES_FOR_CHECKPOINT", true);
-                                status.appendInfo(b3, "compressed", "FT_DISK_FLUSH_NONLEAF_BYTES_FOR_CHECKPOINT", true);
+                                status.appendInfo(b3, "uncompressed", "FT_DISK_FLUSH_NONLEAF_UNCOMPRESSED_BYTES_FOR_CHECKPOINT", true, scale);
+                                status.appendInfo(b3, "compressed", "FT_DISK_FLUSH_NONLEAF_BYTES_FOR_CHECKPOINT", true, scale);
                                 b3.doneFast();
                             }
                             b2.doneFast();
@@ -822,8 +822,8 @@ namespace mongo {
                             status.appendInfo(b2, "time", "FT_DISK_FLUSH_LEAF_TOKUTIME_FOR_CHECKPOINT", true);
                             {
                                 BSONObjBuilder b3(b2.subobjStart("bytes"));
-                                status.appendInfo(b3, "uncompressed", "FT_DISK_FLUSH_LEAF_UNCOMPRESSED_BYTES_FOR_CHECKPOINT", true);
-                                status.appendInfo(b3, "compressed", "FT_DISK_FLUSH_LEAF_BYTES_FOR_CHECKPOINT", true);
+                                status.appendInfo(b3, "uncompressed", "FT_DISK_FLUSH_LEAF_UNCOMPRESSED_BYTES_FOR_CHECKPOINT", true, scale);
+                                status.appendInfo(b3, "compressed", "FT_DISK_FLUSH_LEAF_BYTES_FOR_CHECKPOINT", true, scale);
                                 b3.doneFast();
                             }
                             b2.doneFast();
