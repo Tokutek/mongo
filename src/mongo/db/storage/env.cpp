@@ -785,6 +785,7 @@ namespace mongo {
                         BSONObjBuilder lastb(b.subobjStart("lastComplete"));
                         status.appendInfo(lastb, "begin", "CP_TIME_LAST_CHECKPOINT_BEGIN_COMPLETE", true);
                         status.appendInfo(lastb, "end", "CP_TIME_LAST_CHECKPOINT_END", true);
+                        lastb.append("time", status.getDuration("CP_TIME_CHECKPOINT_DURATION_LAST"));
                         lastb.doneFast();
                     }
                     {
