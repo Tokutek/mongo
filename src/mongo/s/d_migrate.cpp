@@ -1745,38 +1745,78 @@ namespace mongo {
 
             {
                 // 0. copy system.namespaces entry if collection doesn't already exist
-                LOCK_REASON(lockReason, "sharding: creating collection and indexes for migrate");
-                Client::WriteContext ctx( ns, lockReason );
-                Client::Transaction txn(DB_SERIALIZABLE);
-                const string &dbname = cc().database()->name();
-
-                // Only copy if ns doesn't already exist
-                if (!getCollection(ns)) {
-                    string system_namespaces = dbname + ".system.namespaces";
-                    BSONObj entry = conn->findOne( system_namespaces, BSON( "name" << ns ) );
-                    if ( entry["options"].isABSONObj() ) {
-                        string errmsg;
-                        if ( ! userCreateNS( ns.c_str(), entry["options"].Obj(), errmsg, true ) )
-                            warning() << "failed to create collection with options: " << errmsg
-                                      << endl;
-                    }
+                vector<BSONObj> indexes;
+                for (auto_ptr<DBClientCursor> indexCursor = conn->getIndexes(ns); indexCursor->more(); ) {
+                    indexes.push_back(indexCursor->next().getOwned());
                 }
 
-                // 1. copy indexes
-
+                bool needCreate;
                 {
-                    auto_ptr<DBClientCursor> indexes = conn->getIndexes( ns );
-                    string system_indexes = dbname + ".system.indexes";
-                    while ( indexes->more() ) {
-                        BSONObj idx = indexes->next();
-                        insertObject( system_indexes.c_str() , idx, 0, true /* flag fromMigrate in oplog */ );
+                    LOCK_REASON(lockReason, "sharding: checking collection and indexes for migrate");
+                    Client::ReadContext ctx(ns, lockReason);
+                    Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
+
+                    Collection *cl = getCollection(ns);
+                    needCreate = cl == NULL;
+
+                    if (!needCreate) {
+                        for (vector<BSONObj>::const_iterator it = indexes.begin(); it != indexes.end(); ++it) {
+                            const BSONObj &idx = *it;
+                            if (cl->findIndexByKeyPattern(idx.getObjectField("key")) < 0) {
+                                warning() << "During migrate for collection " << ns << ", noticed that we are missing an index " << idx << "." << migrateLog;
+                                warning() << "You should schedule some time soon to build this index on this shard, or drop it elsewhere." << migrateLog;
+                            }
+                        }
                     }
+
+                    txn.commit();
                 }
 
-                txn.commit();
+                if (needCreate) {
+                    const string &dbname = cc().database()->name();
+                    string system_namespaces = getSisterNS(dbname, ".system.namespaces");
+                    BSONObj entry = conn->findOne(system_namespaces, BSON( "name" << ns ));
+
+                    LOCK_REASON(lockReason, "sharding: creating collection for migrate");
+                    Client::WriteContext ctx(ns, lockReason);
+                    Client::Transaction txn(DB_SERIALIZABLE);
+                    // Now that we have the write lock, check that the collection still doesn't
+                    // exist, otherwise it may be expensive to build the right indexes.
+                    Collection *cl = getCollection(ns);
+                    if (cl == NULL) {
+                        BSONObj opts = entry.getObjectField("options");
+                        if (!opts.isEmpty()) {
+                            string errmsg;
+                            if (!userCreateNS(ns, opts, errmsg, true)) {
+                                warning() << "failed to create collection " << ns << " with options " << opts << ": " << errmsg << migrateLog;
+                            }
+                        }
+                        cl = getOrCreateCollection(ns, true);
+                        massert(17331, mongoutils::str::stream() << "couldn't find collection " << ns << " after creating it while starting migration", cl);
+                        for (vector<BSONObj>::const_iterator it = indexes.begin(); it != indexes.end(); ++it) {
+                            const BSONObj &idxObj = *it;
+                            cl->ensureIndex(idxObj);
+                        }
+                    } else {
+                        LOG(0) << "During migrate for collection " << ns << ", it didn't exist but after getting the write lock, it now exists." << migrateLog;
+                        LOG(0) << "This could be a race, shouldn't happen, but is benign as long as the indexes are correct." << migrateLog;
+                        bool anyMissing = false;
+                        for (vector<BSONObj>::const_iterator it = indexes.begin(); it != indexes.end(); ++it) {
+                            const BSONObj &idx = *it;
+                            if (cl->findIndexByKeyPattern(idx.getObjectField("key")) < 0) {
+                                anyMissing = true;
+                                warning() << "The index " << idx << " seems to be missing." << migrateLog;
+                                warning() << "We'll proceed with the migration without that index for now, but you should build that index or drop it elsewhere soon." << migrateLog;
+                            }
+                        }
+                        if (!anyMissing) {
+                            LOG(0) << "All indexes are present." << migrateLog;
+                        }
+                    }
+                    txn.commit();
+                }
                 timing.done(1);
             }
-
 
             {
                 // 2. delete any data already in range
