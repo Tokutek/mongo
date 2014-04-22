@@ -653,7 +653,10 @@ namespace mongo {
                 }
                 {
                     BSONObjBuilder b(result.subobjStart("log"));
-                    status.appendInfo(b, "bytesWritten", "LOGGER_BYTES_WRITTEN", true, scale);
+                    status.appendInfo(b, "count", "LOGGER_NUM_WRITES", true);
+                    status.appendInfo(b, "time", "LOGGER_TOKUTIME_WRITES", true);
+                    status.appendInfo(b, "bytes", "LOGGER_BYTES_WRITTEN", true, scale);
+                    status.appendInfo(b, "longWaitBuf", "LOGGER_WAIT_BUF_LONG", false);
                     b.doneFast();
                 }
                 {
