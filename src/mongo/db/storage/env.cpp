@@ -662,28 +662,16 @@ namespace mongo {
                 FractalTreeEngineStatus status;
                 status.fetch();
 
-                status.appendPanic(result, false);
-                status.appendFilesystem(result, false);
                 {
                     NestedBuilder _n1(result, "fsync");
                     status.appendInfo(result, "count", "FS_FSYNC_COUNT", true);
                     status.appendInfo(result, "time", "FS_FSYNC_TIME", true);
-                    {
-                        BSONObjBuilder lwb;
-                        status.appendInfo(lwb, "count", "FS_LONG_FSYNC_COUNT", false);
-                        status.appendInfo(lwb, "time", "FS_LONG_FSYNC_TIME", false);
-                        BSONObj lw = lwb.done();
-                        if (!lw.isEmpty()) {
-                            result.b().append("longFsync", lw);
-                        }
-                    }
                 }
                 {
                     NestedBuilder _n1(result, "log");
                     status.appendInfo(result, "count", "LOGGER_NUM_WRITES", true);
                     status.appendInfo(result, "time", "LOGGER_TOKUTIME_WRITES", true);
                     status.appendInfo(result, "bytes", "LOGGER_BYTES_WRITTEN", true, scale);
-                    status.appendInfo(result, "longWaitBuf", "LOGGER_WAIT_BUF_LONG", false);
                 }
                 {
                     NestedBuilder _n1(result, "cachetable");
@@ -788,15 +776,6 @@ namespace mongo {
                             }
                         }
                     }
-                    {
-                        BSONObjBuilder lwb;
-                        status.appendInfo(lwb, "count", "CT_LONG_WAIT_PRESSURE_COUNT", false);
-                        status.appendInfo(lwb, "time", "CT_LONG_WAIT_PRESSURE_TIME", false);
-                        BSONObj lw = lwb.done();
-                        if (!lw.isEmpty()) {
-                            result.b().append("longWaitCachePressure", lw);
-                        }
-                    }
                 }
                 {
                     NestedBuilder _n1(result, "checkpoint");
@@ -813,15 +792,6 @@ namespace mongo {
                     {
                         NestedBuilder _n2(result, "begin");
                         status.appendInfo(result, "time", "CP_BEGIN_TIME", true);
-                        {
-                            BSONObjBuilder lwb;
-                            status.appendInfo(lwb, "count", "CP_LONG_BEGIN_COUNT", false);
-                            status.appendInfo(lwb, "time", "CP_LONG_BEGIN_TIME", false);
-                            BSONObj lw = lwb.done();
-                            if (!lw.isEmpty()) {
-                                result.b().append("long", lw);
-                            }
-                        }
                     }
                     {
                         NestedBuilder _n2(result, "write");
@@ -846,7 +816,6 @@ namespace mongo {
                             }
                         }
                     }
-                    status.appendInfo(result, "fail", "CP_CHECKPOINT_COUNT_FAIL", false);
                 }
                 {
                     NestedBuilder _n1(result, "serializeTime");
@@ -872,31 +841,48 @@ namespace mongo {
                         status.appendInfo(result, "current", "LTM_SIZE_CURRENT", true, scale);
                         status.appendInfo(result, "limit", "LTM_SIZE_LIMIT", true, scale);
                     }
-                    status.appendInfo(result, "requestsPending", "LTM_LOCK_REQUESTS_PENDING", false);
-                    {
-                        BSONObjBuilder lwb;
-                        status.appendInfo(lwb, "count", "LTM_LONG_WAIT_COUNT", false);
-                        status.appendInfo(lwb, "time", "LTM_LONG_WAIT_TIME", false);
-                        BSONObj lw = lwb.done();
-                        if (!lw.isEmpty()) {
-                            result.b().append("longWait", lw);
-                        }
-                    }
-                    {
-                        BSONObjBuilder lwb;
-                        status.appendInfo(lwb, "count", "LTM_LONG_WAIT_ESCALATION_COUNT", false);
-                        status.appendInfo(lwb, "time", "LTM_LONG_WAIT_ESCALATION_TIME", false);
-                        BSONObj lw = lwb.done();
-                        if (!lw.isEmpty()) {
-                            result.b().append("longWaitEscalation", lw);
-                        }
-                    }
                 }
                 {
                     NestedBuilder _n1(result, "compressionRatio");
                     status.appendInfo(result, "leaf", "FT_DISK_FLUSH_LEAF_COMPRESSION_RATIO", true);
                     status.appendInfo(result, "nonleaf", "FT_DISK_FLUSH_NONLEAF_COMPRESSION_RATIO", true);
                     status.appendInfo(result, "overall", "FT_DISK_FLUSH_OVERALL_COMPRESSION_RATIO", true);
+                }
+                {
+                    NestedBuilder _n1(result, "alerts");
+                    status.appendPanic(result, true);
+                    status.appendFilesystem(result, true);
+                    status.appendInfo(result, "locktreeRequestsPending", "LTM_LOCK_REQUESTS_PENDING", true);
+                    status.appendInfo(result, "checkpointFailures", "CP_CHECKPOINT_COUNT_FAIL", true);
+                    {
+                        NestedBuilder _n2(result, "longWaitEvents");
+                        status.appendInfo(result, "logBufferWait", "LOGGER_WAIT_BUF_LONG", true);
+                        {
+                            NestedBuilder _n3(result, "fsync");
+                            status.appendInfo(result, "count", "FS_LONG_FSYNC_COUNT", true);
+                            status.appendInfo(result, "time", "FS_LONG_FSYNC_TIME", true);
+                        }
+                        {
+                            NestedBuilder _n3(result, "cachePressure");
+                            status.appendInfo(result, "count", "CT_LONG_WAIT_PRESSURE_COUNT", true);
+                            status.appendInfo(result, "time", "CT_LONG_WAIT_PRESSURE_TIME", true);
+                        }
+                        {
+                            NestedBuilder _n3(result, "checkpointBegin");
+                            status.appendInfo(result, "count", "CP_LONG_BEGIN_COUNT", true);
+                            status.appendInfo(result, "time", "CP_LONG_BEGIN_TIME", true);
+                        }
+                        {
+                            NestedBuilder _n3(result, "locktreeWait");
+                            status.appendInfo(result, "count", "LTM_LONG_WAIT_COUNT", true);
+                            status.appendInfo(result, "time", "LTM_LONG_WAIT_TIME", true);
+                        }
+                        {
+                            NestedBuilder _n3(result, "locktreeWaitEscalation");
+                            status.appendInfo(result, "count", "LTM_LONG_WAIT_ESCALATION_COUNT", true);
+                            status.appendInfo(result, "time", "LTM_LONG_WAIT_ESCALATION_TIME", true);
+                        }
+                    }
                 }
 
                 return result.b().obj();
