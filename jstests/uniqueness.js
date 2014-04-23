@@ -32,6 +32,8 @@ assert( db.getLastError() , 7);
 assert( db.getLastError().match( /E11000/ ) );
 
 // Check for an error message when we index in the background and there are dups 
+// #1091: we don't support background unique index building right now
+if (0) {
 db.jstests_uniqueness2.drop();
 db.jstests_uniqueness2.insert({a:3});
 db.jstests_uniqueness2.insert({a:3});
@@ -41,6 +43,7 @@ db.resetError();
 db.jstests_uniqueness2.ensureIndex({a:1}, {unique:true,background:true});
 assert( db.getLastError() , 7);
 assert( db.getLastError().match( /E11000/ ) );
+}
 
 /* Check that if we update and remove _id, it gets added back by the DB */
 
