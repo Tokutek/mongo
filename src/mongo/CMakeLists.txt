@@ -629,6 +629,7 @@ install_executables(tokumx_tools
   mongo2toku
   mongofiles
   bsondump
+  toku2mongo
   )
 target_link_libraries(mongofiles gridfs)
 
