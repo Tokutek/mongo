@@ -155,6 +155,7 @@ namespace mongo {
         enum {
             OPLOG_VERSION_TEST = 1, // used for testing purposes, should NEVER be set to 1 in production
             OPLOG_VERSION_2 = 2, // initial version, associated with 1.4
+            OPLOG_VERSION_3 = 3, // associated with added entries for partitioned collections, 1.5
             OPLOG_VERSION_NEXT,
             OPLOG_VERSION_CURRENT = OPLOG_VERSION_NEXT - 1
         };
