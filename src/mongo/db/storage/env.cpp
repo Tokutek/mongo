@@ -741,21 +741,30 @@ namespace mongo {
                             NestedBuilder _n3(result, "partial");
                             {
                                 NestedBuilder _n4(result, "nonleaf");
-                                status.appendInfo(result, "count", "FT_PARTIAL_EVICTIONS_NONLEAF", true);
-                                status.appendInfo(result, "bytes", "FT_PARTIAL_EVICTIONS_NONLEAF_BYTES", true, scale);
+                                {
+                                    NestedBuilder _n5(result, "clean");
+                                    status.appendInfo(result, "count", "FT_PARTIAL_EVICTIONS_NONLEAF", true);
+                                    status.appendInfo(result, "bytes", "FT_PARTIAL_EVICTIONS_NONLEAF_BYTES", true, scale);
+                                }
                             }
                             {
                                 NestedBuilder _n4(result, "leaf");
-                                status.appendInfo(result, "count", "FT_PARTIAL_EVICTIONS_LEAF", true);
-                                status.appendInfo(result, "bytes", "FT_PARTIAL_EVICTIONS_LEAF_BYTES", true, scale);
+                                {
+                                    NestedBuilder _n5(result, "clean");
+                                    status.appendInfo(result, "count", "FT_PARTIAL_EVICTIONS_LEAF", true);
+                                    status.appendInfo(result, "bytes", "FT_PARTIAL_EVICTIONS_LEAF_BYTES", true, scale);
+                                }
                             }
                         }
                         {
                             NestedBuilder _n3(result, "full");
                             {
                                 NestedBuilder _n4(result, "nonleaf");
-                                status.appendInfo(result, "count", "FT_FULL_EVICTIONS_NONLEAF", true);
-                                status.appendInfo(result, "bytes", "FT_FULL_EVICTIONS_NONLEAF_BYTES", true, scale);
+                                {
+                                    NestedBuilder _n5(result, "clean");
+                                    status.appendInfo(result, "count", "FT_FULL_EVICTIONS_NONLEAF", true);
+                                    status.appendInfo(result, "bytes", "FT_FULL_EVICTIONS_NONLEAF_BYTES", true, scale);
+                                }
                                 {
                                     NestedBuilder _n5(result, "dirty");
                                     status.appendInfo(result, "count", "FT_DISK_FLUSH_NONLEAF", true);
@@ -765,8 +774,11 @@ namespace mongo {
                             }
                             {
                                 NestedBuilder _n4(result, "leaf");
-                                status.appendInfo(result, "count", "FT_FULL_EVICTIONS_LEAF", true);
-                                status.appendInfo(result, "bytes", "FT_FULL_EVICTIONS_LEAF_BYTES", true, scale);
+                                {
+                                    NestedBuilder _n5(result, "clean");
+                                    status.appendInfo(result, "count", "FT_FULL_EVICTIONS_LEAF", true);
+                                    status.appendInfo(result, "bytes", "FT_FULL_EVICTIONS_LEAF_BYTES", true, scale);
+                                }
                                 {
                                     NestedBuilder _n5(result, "dirty");
                                     status.appendInfo(result, "count", "FT_DISK_FLUSH_LEAF", true);
