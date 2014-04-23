@@ -40,7 +40,7 @@ namespace mongo {
     // to true
     static bool _logTxnOpsForReplication = false;
     static bool _logTxnOpsForSharding = false;
-    static void (*_logTxnToOplog)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) = NULL;
+    static void (*_logTxnToOplog)(GTID gtid, uint64_t timestamp, uint64_t hash, deque<BSONObj> ops) = NULL;
     static void (*_logTxnOpsRef)(GTID gtid, uint64_t timestamp, uint64_t hash, OID& oid) = NULL;
     static void (*_logOpsToOplogRef)(BSONObj o) = NULL;
     static bool (*_shouldLogOpForSharding)(const char *, const char *, const BSONObj &) = NULL;
@@ -63,7 +63,7 @@ namespace mongo {
         return _logTxnOpsForReplication;
     }
 
-    void setLogTxnToOplog(void (*f)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo)) {
+    void setLogTxnToOplog(void (*f)(GTID gtid, uint64_t timestamp, uint64_t hash, deque<BSONObj> ops)) {
         _logTxnToOplog = f;
     }
 
@@ -483,14 +483,8 @@ namespace mongo {
     void TxnOplog::writeOpsDirectlyToOplog(GTID gtid, uint64_t timestamp, uint64_t hash) {
         dassert(logTxnOpsForReplication());
         dassert(_logTxnToOplog);
-        // build array of in memory ops
-        BSONArrayBuilder b;
-        for (deque<BSONObj>::iterator it = _m.begin(); it != _m.end(); it++) {
-            b.append(*it);
-        }
-        BSONArray a = b.arr();
         // log ops
-        _logTxnToOplog(gtid, timestamp, hash, a);
+        _logTxnToOplog(gtid, timestamp, hash, _m);
     }
 
     void TxnOplog::writeTxnRefToOplog(GTID gtid, uint64_t timestamp, uint64_t hash) {

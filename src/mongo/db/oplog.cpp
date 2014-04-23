@@ -70,23 +70,6 @@ namespace mongo {
         }
     }
 
-    static void _logTransactionOps(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) {
-        LOCK_REASON(lockReason, "repl: logging to oplog");
-        Client::ReadContext ctx(rsoplog, lockReason);
-
-        BSONObjBuilder b;
-        addGTIDToBSON("_id", gtid, b);
-        b.appendDate("ts", timestamp);
-        b.append("h", (long long)hash);
-        b.append("a", true);
-        b.append("ops", opInfo);
-
-        BSONObj bb = b.done();
-        // write it to oplog
-        LOG(3) << "writing " << bb.toString(false, true) << " to master " << endl;
-        writeEntryToOplog(bb, true);
-    }
-
     // assumes it is locked on entry
     void logToReplInfo(GTID minLiveGTID, GTID minUnappliedGTID) {
         Client::Context ctx(rsOplogRefs , dbpath);
@@ -107,8 +90,26 @@ namespace mongo {
         replInfoDetails->insertObject(bb2, flags);
     }
     
-    void logTransactionOps(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) {
-        _logTransactionOps(gtid, timestamp, hash, opInfo);
+    void logTransactionOps(GTID gtid, uint64_t timestamp, uint64_t hash, deque<BSONObj> ops) {
+        LOCK_REASON(lockReason, "repl: logging to oplog");
+        Client::ReadContext ctx(rsoplog, lockReason);
+
+        BSONObjBuilder b;
+        addGTIDToBSON("_id", gtid, b);
+        b.appendDate("ts", timestamp);
+        b.append("h", (long long)hash);
+        b.append("a", true);
+
+        BSONArrayBuilder opInfoBuilder(b.subarrayStart("ops"));
+        for (deque<BSONObj>::iterator it = ops.begin(); it != ops.end(); it++) {
+            opInfoBuilder.append(*it);
+        }
+        opInfoBuilder.done();
+
+        BSONObj bb = b.done();
+        // write it to oplog
+        LOG(3) << "writing " << bb.toString(false, true) << " to master " << endl;
+        writeEntryToOplog(bb, true);
     }
 
     static void updateMaxRefGTID(BSONObj refMeta, uint64_t i, PartitionedCollection* pc, GTID gtid) {
