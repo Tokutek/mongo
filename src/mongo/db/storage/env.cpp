@@ -458,19 +458,15 @@ namespace mongo {
                 }
             }
 
-            void appendPanic(BSONObjBuilder &result, bool evenIfEmpty) const {
-                if (_panic != 0 || evenIfEmpty) {
-                    result.append("panic code", (long long) _panic);
-                    result.append("panic string", _panic_string);
-                }
+            void appendPanic(BSONObjBuilder &result) const {
+                result.append("panic code", (long long) _panic);
+                result.append("panic string", _panic_string);
             }
 
-            void appendFilesystem(BSONObjBuilder &result, bool evenIfGreen) const {
+            void appendFilesystem(BSONObjBuilder &result) const {
                 switch (_redzone_state) {
                     case FS_GREEN:
-                        if (evenIfGreen) {
-                            result.append("filesystem status", "OK");
-                        }
+                        result.append("filesystem status", "OK");
                         break;
                     case FS_YELLOW:
                         result.append("filesystem status", "Getting full...");
@@ -490,20 +486,16 @@ namespace mongo {
                 }
             }
 
-            static void appendRow(BSONObjBuilder &result, const StringData &field, TOKU_ENGINE_STATUS_ROW row, bool ifZero, int scale = 1) {
+            static void appendRow(BSONObjBuilder &result, const StringData &field, TOKU_ENGINE_STATUS_ROW row, int scale = 1) {
                 switch (row->type) {
                     case FS_STATE:
                     case UINT64:
-                        if (ifZero || row->value.num != 0) {
-                            result.appendNumber(field, (long long) row->value.num / scale);
-                        }
+                        result.appendNumber(field, (long long) row->value.num / scale);
                         break;
                     case CHARSTR:
                         {
                             StringData s(row->value.str);
-                            if (ifZero || !s.empty()) {
-                                result.append(field, s);
-                            }
+                            result.append(field, s);
                         }
                         break;
                     case UNIXTIME:
@@ -513,24 +505,18 @@ namespace mongo {
                         }
                         break;
                     case TOKUTIME:
-                        if (ifZero || row->value.num != 0) {
-                            result.appendNumber(field, tokutime_to_seconds(row->value.num));
-                        }
+                        result.appendNumber(field, tokutime_to_seconds(row->value.num));
                         break;
                     case PARCOUNT:
                         {
                             uint64_t v = read_partitioned_counter(row->value.parcount);
-                            if (ifZero || v != 0) {
-                                result.appendNumber(field, (long long) v / scale);
-                            }
+                            result.appendNumber(field, (long long) v / scale);
                         }
                         break;
                     case DOUBLE:
                         {
                             double v = row->value.dnum;
-                            if (ifZero || v != 0) {
-                                result.appendNumber(field, v);
-                            }
+                            result.appendNumber(field, v);
                         }
                         break;
                     default:
@@ -544,18 +530,18 @@ namespace mongo {
             }
 
             void appendInfo(BSONObjBuilder &result) {
-                appendPanic(result, true);
-                appendFilesystem(result, true);
+                appendPanic(result);
+                appendFilesystem(result);
                 for (uint64_t i = 0; i < _num_rows; ++i) {
-                    appendRow(result, _rows[i].keyname, &_rows[i], true);
+                    appendRow(result, _rows[i].keyname, &_rows[i]);
                 }
             }
 
-            void appendInfo(BSONObjBuilder &result, const StringData &field, const StringData &key, bool ifZero, int scale = 1) const {
+            void appendInfo(BSONObjBuilder &result, const StringData &field, const StringData &key, int scale = 1) const {
                 // well, this is annoying
                 for (uint64_t i = 0; i < _num_rows; ++i) {
                     if (key == _rows[i].keyname) {
-                        appendRow(result, field, &_rows[i], ifZero, scale);
+                        appendRow(result, field, &_rows[i], scale);
                         break;
                     }
                 }
@@ -664,22 +650,22 @@ namespace mongo {
 
                 {
                     NestedBuilder _n1(result, "fsync");
-                    status.appendInfo(result, "count", "FS_FSYNC_COUNT", true);
-                    status.appendInfo(result, "time", "FS_FSYNC_TIME", true);
+                    status.appendInfo(result, "count", "FS_FSYNC_COUNT");
+                    status.appendInfo(result, "time", "FS_FSYNC_TIME");
                 }
                 {
                     NestedBuilder _n1(result, "log");
-                    status.appendInfo(result, "count", "LOGGER_NUM_WRITES", true);
-                    status.appendInfo(result, "time", "LOGGER_TOKUTIME_WRITES", true);
-                    status.appendInfo(result, "bytes", "LOGGER_BYTES_WRITTEN", true, scale);
+                    status.appendInfo(result, "count", "LOGGER_NUM_WRITES");
+                    status.appendInfo(result, "time", "LOGGER_TOKUTIME_WRITES");
+                    status.appendInfo(result, "bytes", "LOGGER_BYTES_WRITTEN", scale);
                 }
                 {
                     NestedBuilder _n1(result, "cachetable");
                     {
                         NestedBuilder _n2(result, "size");
-                        status.appendInfo(result, "current", "CT_SIZE_CURRENT", true, scale);
-                        status.appendInfo(result, "writing", "CT_SIZE_WRITING", true, scale);
-                        status.appendInfo(result, "limit", "CT_SIZE_LIMIT", true, scale);
+                        status.appendInfo(result, "current", "CT_SIZE_CURRENT", scale);
+                        status.appendInfo(result, "writing", "CT_SIZE_WRITING", scale);
+                        status.appendInfo(result, "limit", "CT_SIZE_LIMIT", scale);
                     }
                     {
                         NestedBuilder _n2(result, "miss");
@@ -731,16 +717,16 @@ namespace mongo {
                                 NestedBuilder _n4(result, "nonleaf");
                                 {
                                     NestedBuilder _n5(result, "clean");
-                                    status.appendInfo(result, "count", "FT_PARTIAL_EVICTIONS_NONLEAF", true);
-                                    status.appendInfo(result, "bytes", "FT_PARTIAL_EVICTIONS_NONLEAF_BYTES", true, scale);
+                                    status.appendInfo(result, "count", "FT_PARTIAL_EVICTIONS_NONLEAF");
+                                    status.appendInfo(result, "bytes", "FT_PARTIAL_EVICTIONS_NONLEAF_BYTES", scale);
                                 }
                             }
                             {
                                 NestedBuilder _n4(result, "leaf");
                                 {
                                     NestedBuilder _n5(result, "clean");
-                                    status.appendInfo(result, "count", "FT_PARTIAL_EVICTIONS_LEAF", true);
-                                    status.appendInfo(result, "bytes", "FT_PARTIAL_EVICTIONS_LEAF_BYTES", true, scale);
+                                    status.appendInfo(result, "count", "FT_PARTIAL_EVICTIONS_LEAF");
+                                    status.appendInfo(result, "bytes", "FT_PARTIAL_EVICTIONS_LEAF_BYTES", scale);
                                 }
                             }
                         }
@@ -750,28 +736,28 @@ namespace mongo {
                                 NestedBuilder _n4(result, "nonleaf");
                                 {
                                     NestedBuilder _n5(result, "clean");
-                                    status.appendInfo(result, "count", "FT_FULL_EVICTIONS_NONLEAF", true);
-                                    status.appendInfo(result, "bytes", "FT_FULL_EVICTIONS_NONLEAF_BYTES", true, scale);
+                                    status.appendInfo(result, "count", "FT_FULL_EVICTIONS_NONLEAF");
+                                    status.appendInfo(result, "bytes", "FT_FULL_EVICTIONS_NONLEAF_BYTES", scale);
                                 }
                                 {
                                     NestedBuilder _n5(result, "dirty");
-                                    status.appendInfo(result, "count", "FT_DISK_FLUSH_NONLEAF", true);
-                                    status.appendInfo(result, "bytes", "FT_DISK_FLUSH_NONLEAF_UNCOMPRESSED_BYTES", true, scale);
-                                    status.appendInfo(result, "time", "FT_DISK_FLUSH_NONLEAF_TOKUTIME", true);
+                                    status.appendInfo(result, "count", "FT_DISK_FLUSH_NONLEAF");
+                                    status.appendInfo(result, "bytes", "FT_DISK_FLUSH_NONLEAF_UNCOMPRESSED_BYTES", scale);
+                                    status.appendInfo(result, "time", "FT_DISK_FLUSH_NONLEAF_TOKUTIME");
                                 }
                             }
                             {
                                 NestedBuilder _n4(result, "leaf");
                                 {
                                     NestedBuilder _n5(result, "clean");
-                                    status.appendInfo(result, "count", "FT_FULL_EVICTIONS_LEAF", true);
-                                    status.appendInfo(result, "bytes", "FT_FULL_EVICTIONS_LEAF_BYTES", true, scale);
+                                    status.appendInfo(result, "count", "FT_FULL_EVICTIONS_LEAF");
+                                    status.appendInfo(result, "bytes", "FT_FULL_EVICTIONS_LEAF_BYTES", scale);
                                 }
                                 {
                                     NestedBuilder _n5(result, "dirty");
-                                    status.appendInfo(result, "count", "FT_DISK_FLUSH_LEAF", true);
-                                    status.appendInfo(result, "bytes", "FT_DISK_FLUSH_LEAF_UNCOMPRESSED_BYTES", true, scale);
-                                    status.appendInfo(result, "time", "FT_DISK_FLUSH_LEAF_TOKUTIME", true);
+                                    status.appendInfo(result, "count", "FT_DISK_FLUSH_LEAF");
+                                    status.appendInfo(result, "bytes", "FT_DISK_FLUSH_LEAF_UNCOMPRESSED_BYTES", scale);
+                                    status.appendInfo(result, "time", "FT_DISK_FLUSH_LEAF_TOKUTIME");
                                 }
                             }
                         }
@@ -779,40 +765,40 @@ namespace mongo {
                 }
                 {
                     NestedBuilder _n1(result, "checkpoint");
-                    status.appendInfo(result, "count", "CP_CHECKPOINT_COUNT", true);
+                    status.appendInfo(result, "count", "CP_CHECKPOINT_COUNT");
                     // CP_TIME_CHECKPOINT_DURATION is a time_t but we don't want it displayed as a date
                     result.b().append("time", status.getDuration("CP_TIME_CHECKPOINT_DURATION"));
-                    status.appendInfo(result, "lastBegin", "CP_TIME_LAST_CHECKPOINT_BEGIN", true);
+                    status.appendInfo(result, "lastBegin", "CP_TIME_LAST_CHECKPOINT_BEGIN");
                     {
                         NestedBuilder _n2(result, "lastComplete");
-                        status.appendInfo(result, "begin", "CP_TIME_LAST_CHECKPOINT_BEGIN_COMPLETE", true);
-                        status.appendInfo(result, "end", "CP_TIME_LAST_CHECKPOINT_END", true);
+                        status.appendInfo(result, "begin", "CP_TIME_LAST_CHECKPOINT_BEGIN_COMPLETE");
+                        status.appendInfo(result, "end", "CP_TIME_LAST_CHECKPOINT_END");
                         result.b().append("time", status.getDuration("CP_TIME_CHECKPOINT_DURATION_LAST"));
                     }
                     {
                         NestedBuilder _n2(result, "begin");
-                        status.appendInfo(result, "time", "CP_BEGIN_TIME", true);
+                        status.appendInfo(result, "time", "CP_BEGIN_TIME");
                     }
                     {
                         NestedBuilder _n2(result, "write");
                         {
                             NestedBuilder _n3(result, "nonleaf");
-                            status.appendInfo(result, "count", "FT_DISK_FLUSH_NONLEAF_FOR_CHECKPOINT", true);
-                            status.appendInfo(result, "time", "FT_DISK_FLUSH_NONLEAF_TOKUTIME_FOR_CHECKPOINT", true);
+                            status.appendInfo(result, "count", "FT_DISK_FLUSH_NONLEAF_FOR_CHECKPOINT");
+                            status.appendInfo(result, "time", "FT_DISK_FLUSH_NONLEAF_TOKUTIME_FOR_CHECKPOINT");
                             {
                                 NestedBuilder _n4(result, "bytes");
-                                status.appendInfo(result, "uncompressed", "FT_DISK_FLUSH_NONLEAF_UNCOMPRESSED_BYTES_FOR_CHECKPOINT", true, scale);
-                                status.appendInfo(result, "compressed", "FT_DISK_FLUSH_NONLEAF_BYTES_FOR_CHECKPOINT", true, scale);
+                                status.appendInfo(result, "uncompressed", "FT_DISK_FLUSH_NONLEAF_UNCOMPRESSED_BYTES_FOR_CHECKPOINT", scale);
+                                status.appendInfo(result, "compressed", "FT_DISK_FLUSH_NONLEAF_BYTES_FOR_CHECKPOINT", scale);
                             }
                         }
                         {
                             NestedBuilder _n3(result, "leaf");
-                            status.appendInfo(result, "count", "FT_DISK_FLUSH_LEAF_FOR_CHECKPOINT", true);
-                            status.appendInfo(result, "time", "FT_DISK_FLUSH_LEAF_TOKUTIME_FOR_CHECKPOINT", true);
+                            status.appendInfo(result, "count", "FT_DISK_FLUSH_LEAF_FOR_CHECKPOINT");
+                            status.appendInfo(result, "time", "FT_DISK_FLUSH_LEAF_TOKUTIME_FOR_CHECKPOINT");
                             {
                                 NestedBuilder _n4(result, "bytes");
-                                status.appendInfo(result, "uncompressed", "FT_DISK_FLUSH_LEAF_UNCOMPRESSED_BYTES_FOR_CHECKPOINT", true, scale);
-                                status.appendInfo(result, "compressed", "FT_DISK_FLUSH_LEAF_BYTES_FOR_CHECKPOINT", true, scale);
+                                status.appendInfo(result, "uncompressed", "FT_DISK_FLUSH_LEAF_UNCOMPRESSED_BYTES_FOR_CHECKPOINT", scale);
+                                status.appendInfo(result, "compressed", "FT_DISK_FLUSH_LEAF_BYTES_FOR_CHECKPOINT", scale);
                             }
                         }
                     }
@@ -821,66 +807,66 @@ namespace mongo {
                     NestedBuilder _n1(result, "serializeTime");
                     {
                         NestedBuilder _n2(result, "nonleaf");
-                        status.appendInfo(result, "serialize", "FT_NONLEAF_SERIALIZE_TOKUTIME", true);
-                        status.appendInfo(result, "compress", "FT_NONLEAF_COMPRESS_TOKUTIME", true);
-                        status.appendInfo(result, "decompress", "FT_NONLEAF_DECOMPRESS_TOKUTIME", true);
-                        status.appendInfo(result, "deserialize", "FT_NONLEAF_DESERIALIZE_TOKUTIME", true);
+                        status.appendInfo(result, "serialize", "FT_NONLEAF_SERIALIZE_TOKUTIME");
+                        status.appendInfo(result, "compress", "FT_NONLEAF_COMPRESS_TOKUTIME");
+                        status.appendInfo(result, "decompress", "FT_NONLEAF_DECOMPRESS_TOKUTIME");
+                        status.appendInfo(result, "deserialize", "FT_NONLEAF_DESERIALIZE_TOKUTIME");
                     }
                     {
                         NestedBuilder _n2(result, "leaf");
-                        status.appendInfo(result, "serialize", "FT_LEAF_SERIALIZE_TOKUTIME", true);
-                        status.appendInfo(result, "compress", "FT_LEAF_COMPRESS_TOKUTIME", true);
-                        status.appendInfo(result, "decompress", "FT_LEAF_DECOMPRESS_TOKUTIME", true);
-                        status.appendInfo(result, "deserialize", "FT_LEAF_DESERIALIZE_TOKUTIME", true);
+                        status.appendInfo(result, "serialize", "FT_LEAF_SERIALIZE_TOKUTIME");
+                        status.appendInfo(result, "compress", "FT_LEAF_COMPRESS_TOKUTIME");
+                        status.appendInfo(result, "decompress", "FT_LEAF_DECOMPRESS_TOKUTIME");
+                        status.appendInfo(result, "deserialize", "FT_LEAF_DESERIALIZE_TOKUTIME");
                     }
                 }
                 {
                     NestedBuilder _n1(result, "locktree");
                     {
                         NestedBuilder _n2(result, "size");
-                        status.appendInfo(result, "current", "LTM_SIZE_CURRENT", true, scale);
-                        status.appendInfo(result, "limit", "LTM_SIZE_LIMIT", true, scale);
+                        status.appendInfo(result, "current", "LTM_SIZE_CURRENT", scale);
+                        status.appendInfo(result, "limit", "LTM_SIZE_LIMIT", scale);
                     }
                 }
                 {
                     NestedBuilder _n1(result, "compressionRatio");
-                    status.appendInfo(result, "leaf", "FT_DISK_FLUSH_LEAF_COMPRESSION_RATIO", true);
-                    status.appendInfo(result, "nonleaf", "FT_DISK_FLUSH_NONLEAF_COMPRESSION_RATIO", true);
-                    status.appendInfo(result, "overall", "FT_DISK_FLUSH_OVERALL_COMPRESSION_RATIO", true);
+                    status.appendInfo(result, "leaf", "FT_DISK_FLUSH_LEAF_COMPRESSION_RATIO");
+                    status.appendInfo(result, "nonleaf", "FT_DISK_FLUSH_NONLEAF_COMPRESSION_RATIO");
+                    status.appendInfo(result, "overall", "FT_DISK_FLUSH_OVERALL_COMPRESSION_RATIO");
                 }
                 {
                     NestedBuilder _n1(result, "alerts");
-                    status.appendPanic(result, true);
-                    status.appendFilesystem(result, true);
-                    status.appendInfo(result, "locktreeRequestsPending", "LTM_LOCK_REQUESTS_PENDING", true);
-                    status.appendInfo(result, "checkpointFailures", "CP_CHECKPOINT_COUNT_FAIL", true);
+                    status.appendPanic(result);
+                    status.appendFilesystem(result);
+                    status.appendInfo(result, "locktreeRequestsPending", "LTM_LOCK_REQUESTS_PENDING");
+                    status.appendInfo(result, "checkpointFailures", "CP_CHECKPOINT_COUNT_FAIL");
                     {
                         NestedBuilder _n2(result, "longWaitEvents");
-                        status.appendInfo(result, "logBufferWait", "LOGGER_WAIT_BUF_LONG", true);
+                        status.appendInfo(result, "logBufferWait", "LOGGER_WAIT_BUF_LONG");
                         {
                             NestedBuilder _n3(result, "fsync");
-                            status.appendInfo(result, "count", "FS_LONG_FSYNC_COUNT", true);
-                            status.appendInfo(result, "time", "FS_LONG_FSYNC_TIME", true);
+                            status.appendInfo(result, "count", "FS_LONG_FSYNC_COUNT");
+                            status.appendInfo(result, "time", "FS_LONG_FSYNC_TIME");
                         }
                         {
                             NestedBuilder _n3(result, "cachePressure");
-                            status.appendInfo(result, "count", "CT_LONG_WAIT_PRESSURE_COUNT", true);
-                            status.appendInfo(result, "time", "CT_LONG_WAIT_PRESSURE_TIME", true);
+                            status.appendInfo(result, "count", "CT_LONG_WAIT_PRESSURE_COUNT");
+                            status.appendInfo(result, "time", "CT_LONG_WAIT_PRESSURE_TIME");
                         }
                         {
                             NestedBuilder _n3(result, "checkpointBegin");
-                            status.appendInfo(result, "count", "CP_LONG_BEGIN_COUNT", true);
-                            status.appendInfo(result, "time", "CP_LONG_BEGIN_TIME", true);
+                            status.appendInfo(result, "count", "CP_LONG_BEGIN_COUNT");
+                            status.appendInfo(result, "time", "CP_LONG_BEGIN_TIME");
                         }
                         {
                             NestedBuilder _n3(result, "locktreeWait");
-                            status.appendInfo(result, "count", "LTM_LONG_WAIT_COUNT", true);
-                            status.appendInfo(result, "time", "LTM_LONG_WAIT_TIME", true);
+                            status.appendInfo(result, "count", "LTM_LONG_WAIT_COUNT");
+                            status.appendInfo(result, "time", "LTM_LONG_WAIT_TIME");
                         }
                         {
                             NestedBuilder _n3(result, "locktreeWaitEscalation");
-                            status.appendInfo(result, "count", "LTM_LONG_WAIT_ESCALATION_COUNT", true);
-                            status.appendInfo(result, "time", "LTM_LONG_WAIT_ESCALATION_TIME", true);
+                            status.appendInfo(result, "count", "LTM_LONG_WAIT_ESCALATION_COUNT");
+                            status.appendInfo(result, "time", "LTM_LONG_WAIT_ESCALATION_TIME");
                         }
                     }
                 }
