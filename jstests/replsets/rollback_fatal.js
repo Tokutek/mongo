@@ -1,13 +1,13 @@
 
 
-doTest = function (signal, txnMemLimit, startPort) {
+doTest = function (signal, txnLimit, startPort) {
 
     var num = 3;
     var host = getHostName();
     var name = "rollback_simple";
     var timeout = 60000;
 
-    var replTest = new ReplSetTest( {name: name, nodes: num, startPort:startPort, txnMemLimit: txnMemLimit} );
+    var replTest = new ReplSetTest( {name: name, nodes: num, startPort:startPort, txnMemLimit: txnLimit} );
     var conns = replTest.startSet();
     var port = replTest.ports;
     var config = {_id : name, members :

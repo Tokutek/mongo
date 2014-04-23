@@ -7,19 +7,11 @@ t.drop();
 
 // verify that we cannot create a partitioned collection
 // with a custom PK or with a capped collection
-assert.commandFailed(db.runCommand({ create: 'part_coll_simple', partitioned:1, primaryKey: { a: 1, _id: 1 } }));
 assert.commandFailed(db.runCommand({ create: 'part_coll_simple', partitioned:1, capped:1}));
 assert.commandFailed(db.runCommand({ create: 'part_coll_simple', partitioned:1, capped:1, primaryKey: { a: 1, _id: 1 } }));
 
 assert.commandWorked(db.runCommand({ create: 'part_coll_simple', partitioned:1}));
-assert.commandFailed(db.part_coll_simple.renameCollection("abra"));
 admin = db.getMongo().getDB( "admin" );
-assert.commandFailed( admin.runCommand( {renameCollection:db.getName() + ".part_coll_simple", to:"abra.abra"} ) );
-// verify that we cannot add an index
-x = t.ensureIndex({a:1});
-assert.eq(x.code, 17238);
-x = t.ensureIndex({a:1}, {background: true});
-assert.eq(x.code, 17242);
 
 // verify that we can drop and recreate
 t.drop();
@@ -190,36 +182,36 @@ doQueriesTest();
 t.drop();
 
 assert.commandWorked(db.runCommand({ create: 'part_coll_simple', partitioned:1}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:100}}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:200}}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:300}}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:400}}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:500}}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:600}}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:700}}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:800}}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:900}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:100}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:200}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:300}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:400}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:500}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:600}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:700}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:800}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:900}}));
 doWritesTest();
 t.drop();
 assert.commandWorked(db.runCommand({ create: 'part_coll_simple', partitioned:1}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:100}}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:200}}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:300}}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:400}}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:500}}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:600}}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:700}}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:800}}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:900}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:100}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:200}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:300}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:400}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:500}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:600}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:700}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:800}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:900}}));
 doQueriesTest();
 t.drop();
 
 assert.commandWorked(db.runCommand({ create: 'part_coll_simple', partitioned:1}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:100}}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:200}}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:300}}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:400}}));
-assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newPivot:{_id:500}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:100}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:200}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:300}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:400}}));
+assert.commandWorked(db.runCommand({addPartition:'part_coll_simple', newMax:{_id:500}}));
 for (i = 201; i <=300; i++) {
     t.insert({_id:i});
 }

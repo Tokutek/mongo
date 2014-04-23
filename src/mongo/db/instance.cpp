@@ -846,7 +846,7 @@ namespace mongo {
             }
 
             _insertObjects(ns, objs, false, 0, true);
-            indexer = cl->newIndexer(info, true);
+            indexer = cl->newHotIndexer(info);
             indexer->prepare();
             addToNamespacesCatalog(IndexDetails::indexNamespace(coll, info["name"].String()));
         }

@@ -18,7 +18,7 @@ for (i = 100; i < 200; i++) {
 s = startParallelShell(' \
     t = db.part_ops; \
     tname = "part_ops"; \
-    assert.commandFailed(db.runCommand({addPartition:tname, newPivot:{_id:199}})); \
+    assert.commandFailed(db.runCommand({addPartition:tname, newMax:{_id:199}})); \
     assert.commandWorked(db.runCommand({addPartition:tname})); \
 ');
 
@@ -31,7 +31,7 @@ db.rollbackTransaction();
 partInfo = db.runCommand({getPartitionInfo:"part_ops"});
 assert.eq(2, partInfo.numPartitions);
 // make sure we have the right pivot
-assert.eq(199, partInfo["partitions"][0]["max"][""]);
+assert.eq(199, partInfo["partitions"][0]["max"]["_id"]);
 
 for (i = 0; i < 200; i++) {
     x = t.find({_id:i});

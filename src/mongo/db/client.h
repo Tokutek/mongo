@@ -120,6 +120,23 @@ namespace mongo {
 
         LockState& lockState() { return _ls; }
 
+        class QuerySettings {
+        public:
+            QuerySettings(BSONObj query = BSONObj(), bool sortRequired = true) : 
+                _query(query.getOwned()), _sortRequired(sortRequired)
+            {
+            }
+            const BSONObj& getQuery() const {
+                return _query;
+            }
+            const bool& sortRequired() const {
+                return _sortRequired;
+            }
+        private:
+            BSONObj _query;
+            bool _sortRequired;
+        };
+
         /**
          * Creates a scope for the current thread inside of which it is possible to check whether a
          * message should be handled by the writeback mechanism, and inside of which it is safe to
@@ -278,6 +295,19 @@ namespace mongo {
             _opSettings = settings;
         }
 
+        QuerySettings querySettings() const {
+            return _querySettings;
+        }
+
+        void setQuerySettings(const QuerySettings& querySettings) {
+            _querySettings = querySettings;
+        }
+
+        void clearQuerySettings() {
+            QuerySettings settings;
+            _querySettings = settings;
+        }
+
         void setGloballyUninterruptible(bool val) {
             _globallyUninterruptible = val;
         }
@@ -357,6 +387,7 @@ namespace mongo {
         BSONObj _handshake;
         BSONObj _remoteId;
         OpSettings _opSettings;
+        QuerySettings _querySettings;
         // if true, this client cannot be uninterrupted by global events,
         // and _checkForInterrupt will return false even if we are globally
         // killed
@@ -519,4 +550,14 @@ namespace mongo {
 
     inline bool haveClient() { return currentClient.get() > 0; }
 
+    struct QuerySettingsHolder {
+        QuerySettingsHolder(BSONObj query, BSONObj sort) {
+            const Client::QuerySettings settings(query, !sort.isEmpty());
+            cc().setQuerySettings(settings);
+        }
+
+        ~QuerySettingsHolder() {
+            cc().clearQuerySettings();
+        }
+    };
 };

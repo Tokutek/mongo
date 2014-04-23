@@ -12,11 +12,11 @@ fooDB = f.getDB("foo");
 adminDB = f.getDB("admin");
 
 assert.commandWorked(fooDB.runCommand({create:"part", partitioned:1}));
-assert.commandWorked(fooDB.runCommand({addPartition:"part", newPivot:{_id: 10}}));
-assert.commandWorked(fooDB.runCommand({addPartition:"part", newPivot:{_id: 20}}));
-assert.commandWorked(fooDB.runCommand({addPartition:"part", newPivot:{_id: 30}}));
-assert.commandWorked(fooDB.runCommand({addPartition:"part", newPivot:{_id: 40}}));
-assert.commandWorked(fooDB.runCommand({addPartition:"part", newPivot:{_id: 50}}));
+assert.commandWorked(fooDB.runCommand({addPartition:"part", newMax:{_id: 10}}));
+assert.commandWorked(fooDB.runCommand({addPartition:"part", newMax:{_id: 20}}));
+assert.commandWorked(fooDB.runCommand({addPartition:"part", newMax:{_id: 30}}));
+assert.commandWorked(fooDB.runCommand({addPartition:"part", newMax:{_id: 40}}));
+assert.commandWorked(fooDB.runCommand({addPartition:"part", newMax:{_id: 50}}));
 assert.commandWorked(fooDB.runCommand({dropPartition:"part", id:0}));
 
 for( i = 0; i < 60; ++i ) {

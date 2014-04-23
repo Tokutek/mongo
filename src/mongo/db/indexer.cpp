@@ -76,38 +76,12 @@ namespace mongo {
     void CollectionBase::IndexerBase::prepare() {
         Lock::assertWriteLocked(_cl->_ns);
 
-        const StringData &name = _info["name"].Stringdata();
         const BSONObj &keyPattern = _info["key"].Obj();
-
-        massert(16922, "dropDups is not supported, we should have stripped it out earlier",
-                       !_info["dropDups"].trueValue());
-
-        uassert(12588, "cannot add index with a hot index build in progress",
-                       !_cl->_indexBuildInProgress);
-
-        uassert(12523, "no index name specified",
-                        _info["name"].ok());
-
-        uassert(16753, str::stream() << "index with name " << name << " already exists",
-                       _cl->findIndexByName(name) < 0);
-
-        uassert(16754, str::stream() << "index already exists with diff name " <<
-                       name << " " << keyPattern.toString(),
-                       _cl->findIndexByKeyPattern(keyPattern) < 0);
-
-        uassert(12505, str::stream() << "add index fails, too many indexes for " <<
-                       name << " key:" << keyPattern.toString(),
-                       _cl->nIndexes() < Collection::NIndexesMax);
 
         // The first index we create should be the pk index, when we first create the collection.
         if (!_isSecondaryIndex) {
             massert(16923, "first index should be pk index", keyPattern == _cl->_pk);
         }
-
-        // Note this ns in the rollback so if this transaction aborts, we'll
-        // close this ns, forcing the next user to reload in-memory metadata.
-        CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
-        rollback.noteNs(_cl->_ns);
 
         // Store the index in the _indexes array so that others know an
         // index with this name / key pattern exists and is being built.

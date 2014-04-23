@@ -198,6 +198,18 @@ namespace mongo {
     class FieldRangeVectorIterator;
     struct FieldInterval;
     
+    /** Helper class for deduping primary keys (_id keys) */
+    class PKDupSet {
+    public:
+        /** @return true if dup, otherwise return false and insert. */
+        bool getsetdup( const BSONObj &pk ) {
+            pair<set<BSONObj>::iterator, bool> p = _dups.insert(pk.copy());
+            return !p.second;
+        }
+    private:
+        set<BSONObj> _dups;
+    };
+
     // Class for storing rows bulk fetched from TokuMX
     class RowBuffer {
     public:
@@ -261,8 +273,7 @@ namespace mongo {
          */
         bool getsetdup(const BSONObj &pk) {
             if ( _multiKey ) {
-                pair<set<BSONObj>::iterator, bool> p = _dups.insert(pk.copy());
-                return !p.second;
+                return _dups.getsetdup(pk);
             }
             return false;
         }
@@ -376,7 +387,7 @@ namespace mongo {
         const IndexDetails &_idx;
         const Ordering _ordering;
 
-        set<BSONObj> _dups;
+        PKDupSet _dups;
         BSONObj _startKey;
         BSONObj _endKey;
         BSONObj _minUnsafeKey;
@@ -591,10 +602,67 @@ namespace mongo {
         friend class Cursor;
     };
 
+    //
+    // a helper class for cursors that run over partitioned collections,
+    // As of this writing, that is the PartitionedCursor and SortedPartitionedCursor
+    // This class stores the information necessary such that
+    // the PartitionedCursor may create a cursor over a partition at any time.
+    //
+    class SubPartitionCursorGenerator {
+    public:
+        // generate a cursor on partition with index of partitionIndex
+        virtual shared_ptr<Cursor> makeSubCursor(uint64_t partitionIndex) = 0;
+        virtual ~SubPartitionCursorGenerator() { }
+    protected:
+        SubPartitionCursorGenerator(
+            PartitionedCollection* pc,
+            const int idxNo,
+            const int direction,
+            const bool countCursor
+            ) :
+            _pc(pc),
+            _idxNo(idxNo),
+            _direction(direction),
+            _countCursor(countCursor)
+        {
+        }
+        PartitionedCollection* _pc; // collection we are running cursor over
+        const int _idxNo;
+        // variables that all cursors use
+        const int _direction;
+        const bool _countCursor;
+    };
+
+    // bad name
+    // a helper class for cursors that run over partitioned collections
+    // This class gives the cursor a mechanism for identifying which
+    // partitions the cursor needs to run over. The functions below
+    // are to allow the cursor a way to iterate over the indexes
+    class SubPartitionIDGenerator{
+    public:
+        virtual ~SubPartitionIDGenerator() { }
+        // get the current partition index that this class is identifying
+        virtual uint64_t getCurrentPartitionIndex() = 0;
+        // advance from the current partition index the cursor cares
+        // about to the next one. If lastIndex() is true, then this function
+        // masserts
+        virtual void advanceIndex() = 0;
+        // return true if the current partition index is the final one
+        // that the cursor cares about. If true, calls to advanceIndex
+        // will massert
+        virtual bool lastIndex() = 0;
+    };
+
     // class for cursor over Partitioned Collection
-    // This cursor assumes to be running over 
-    // the primary key, which is the _id index, and
-    // is also the key which we are partitioning over
+    // This cursor iterates over the necessary partitions
+    // one at a time returning results. That is, if we have
+    // two partitions to iterate over, we iterate over the first
+    // partition with user calls to advance() and current(),
+    // and once we are done with the first partition, we move
+    // on to the second. That means if the query is on an index
+    // that is not the partition/primary key (as of this writing, they
+    // are one and the same), then results may come out of order.
+    // If results must be in order, the caller should use a SortedPartitionedCursor
     class PartitionedCursor : public Cursor {
     public:
 
@@ -620,23 +688,26 @@ namespace mongo {
             return _currentCursor->indexKeyPattern();
         }
 
-        virtual string toString() const { return "PartitionedCursor"; }
+        virtual string toString() const {
+            if (_distributed) {
+                return "DistributedPartitionedCursor";
+            }
+            return "PartitionedCursor";
+        }
 
         virtual bool getsetdup(const BSONObj &pk) {
-            // Partitioned Collections cannot have multikey indexes
-            // as of now
-            verify(!isMultiKey());
+            if ( _multiKey ) {
+                return _dups.getsetdup(pk);
+            }
             return false;
         }
 
         virtual bool isMultiKey() const {
-            // TODO: make sure constructors verify this
-            return false;
+            return _multiKey;
         }
 
         virtual bool modifiedKeys() const {
-            verify(!isMultiKey());
-            return false;
+            return _multiKey;
         }
 
         virtual BSONObj prettyIndexBounds() const {
@@ -670,23 +741,19 @@ namespace mongo {
         void setTailable();
 
     private:
-        // used for table scans
-        // all of these assume to be running over the primary key
-        PartitionedCursor(PartitionedCollection* pc, const int direction, const bool countCursor);
-        PartitionedCursor(PartitionedCollection* pc, const BSONObj &startKey, const BSONObj &endKey,
-                          const bool endKeyInclusive,
-                          const int direction, const int numWanted,
-                          const bool countCursor);        
-        PartitionedCursor(PartitionedCollection* pc, const shared_ptr<FieldRangeVector> &bounds,
-                          const int singleIntervalLimit,
-                          const int direction, const int numWanted,
-                          const bool countCursor);
-
-        void makeSubCursor(uint64_t partitionIndex);
+        PartitionedCursor(
+            const bool distributed,
+            shared_ptr<SubPartitionCursorGenerator> subCursorGenerator,
+            shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator,
+            const bool multiKey
+            );
         void getNextSubCursor();
         void initializeSubCursor();
 
-        PartitionedCollection* _pc; // collection we are running cursor over
+        const bool _distributed;
+        shared_ptr<SubPartitionCursorGenerator> _subCursorGenerator;
+        shared_ptr<SubPartitionIDGenerator> _subPartitionIDGenerator;
+        const bool _multiKey;
         // cursor currently being used to retrieve documents
         shared_ptr<Cursor> _currentCursor;
         // number of documents scanned
@@ -694,39 +761,249 @@ namespace mongo {
         long long _prevNScanned;        
         shared_ptr< CoveredIndexMatcher > _matcher;
         shared_ptr<Projection::KeyOnly> _keyFieldsOnly;
-        // these make up the range of partitions we need to query
-        // the bounds are inclusive
-        uint64_t _startPartition;
-        uint64_t _endPartition;
-        uint64_t _currPartition; // current partition that we are iterating cursor over
-
-        // these variables are so we can
-        // create _currentCursor as we transition from one
-        // partition to the next
-        enum CursorType {
-            PC_TABLE_SCAN,
-            PC_RANGE_SCAN,
-            PC_BOUNDS_SCAN
-        } _cursorType;
-
-        // variables that all cursors use
-        const int _direction;
-        // variables for range scan and bounds scan
-        const int _numWanted;
-        const bool _countCursor;
-
-        // variables wanted for range scan
-        const BSONObj _startKey;
-        const BSONObj _endKey;
-        const bool _endKeyInclusive;
-
-        // variables wanted for bounds scan
-        const shared_ptr<FieldRangeVector> _bounds;
-        const int _singleIntervalLimit;
 
         bool _tailable;
+        PKDupSet _dups;
 
         friend class PartitionedCollection;
     };
 
+    // SPC stands for SortedPartitionedCursor, this is an element
+    // of the vector we maintain in SortedPartitionedCursors::_cursors
+    // first() is the cursor, second() is the partitionID, which is used
+    // in comparisons
+    typedef std::pair<shared_ptr<Cursor>, uint32_t > SPCSubCursor;
+    // a cursor over a partitioned collection that returns
+    // elements in sorted order (ove the key we are querying)
+    // That means we run cursors over all the necessary partitions
+    // simultaneously
+    class SortedPartitionedCursor : public Cursor {
+    public:
+
+        virtual bool ok() {
+            return (_cursors.front().first)->ok();
+        }
+
+        virtual BSONObj current() {
+            return _cursors.front().first->current();
+        }
+
+        virtual bool advance();
+
+        virtual BSONObj currKey() const {
+            return _cursors.front().first->currKey();
+        }
+
+        virtual BSONObj currPK() const {
+            return _cursors.front().first->currPK();
+        }
+
+        virtual BSONObj indexKeyPattern() const {
+            return _cursors.front().first->indexKeyPattern();
+        }
+
+        virtual string toString() const {
+            return "SortedPartitionedCursor";
+        }
+
+        virtual bool getsetdup(const BSONObj &pk) {
+            if ( _multiKey ) {
+                return _dups.getsetdup(pk);
+            }
+            return false;
+        }
+
+        virtual bool isMultiKey() const {
+            return _multiKey;
+        }
+
+        virtual bool modifiedKeys() const {
+            return _multiKey;
+        }
+
+        virtual BSONObj prettyIndexBounds() const {
+            return _cursors.front().first->prettyIndexBounds();
+        }
+
+        virtual long long nscanned() const {
+            long long ret = 0;
+            for (uint32_t i = 0; i < _cursors.size(); i++) {
+                ret += _cursors[i].first->nscanned();
+            }
+            return ret;
+        }
+
+        virtual CoveredIndexMatcher *matcher() const {
+            return _matcher.get();
+        }
+
+        virtual bool currentMatches( MatchDetails *details = 0 ) {
+            return _cursors.front().first->currentMatches(details);
+        }
+
+        virtual void setMatcher( shared_ptr< CoveredIndexMatcher > matcher ) {
+            _matcher = matcher;
+            for (uint32_t i = 0; i < _cursors.size(); i++) {
+                _cursors[i].first->setMatcher(matcher);
+            }
+        }
+
+        const Projection::KeyOnly *keyFieldsOnly() const { return _keyFieldsOnly.get(); }
+        void setKeyFieldsOnly( const shared_ptr<Projection::KeyOnly> &keyFieldsOnly ) {
+            _keyFieldsOnly = keyFieldsOnly;
+            // unsure if this is necessary
+            for (uint32_t i = 0; i < _cursors.size(); i++) {
+                _cursors[i].first->setKeyFieldsOnly(keyFieldsOnly);
+            }
+        }
+        bool tailable() const { return false; }
+        void setTailable() {
+            uasserted(0, "Cannot set a secondary index on a partitioned cursor to tailable");
+        }
+
+    private:
+        SortedPartitionedCursor(
+            const BSONObj idxPattern,
+            const int direction,
+            shared_ptr<SubPartitionCursorGenerator> subCursorGenerator,
+            shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator,
+            const bool multiKey
+            );
+        const int _direction;
+        const Ordering _ordering;
+        shared_ptr<SubPartitionCursorGenerator> _subCursorGenerator;
+        shared_ptr<SubPartitionIDGenerator> _subPartitionIDGenerator;
+        const bool _multiKey;
+
+        // number of documents scanned
+        // by previous cursors
+        shared_ptr< CoveredIndexMatcher > _matcher;
+        shared_ptr<Projection::KeyOnly> _keyFieldsOnly;
+
+        // cursors organized in a heap
+        vector< SPCSubCursor > _cursors;
+
+        PKDupSet _dups;
+
+        friend class PartitionedCollection;
+    };
+
+
+    // need better names
+
+    // for range scans
+    class RangePartitionCursorGenerator: public SubPartitionCursorGenerator {
+    public:
+        virtual shared_ptr<Cursor> makeSubCursor(uint64_t partitionIndex);
+        RangePartitionCursorGenerator(
+            PartitionedCollection* pc,
+            const int idxNo,
+            const int direction,
+            const bool countCursor,
+            const int numWanted,
+            const BSONObj startKey,
+            const BSONObj endKey,
+            const bool endKeyInclusive
+            ) :
+            SubPartitionCursorGenerator(pc, idxNo, direction, countCursor),
+            _numWanted(numWanted),
+            _startKey(startKey),
+            _endKey(endKey),
+            _endKeyInclusive(endKeyInclusive)
+        {
+        }
+    private:
+        const int _numWanted;
+        const BSONObj _startKey;
+        const BSONObj _endKey;
+        const bool _endKeyInclusive;
+    };
+
+    // for scans that use bounds
+    class BoundsPartitionCursorGenerator: public SubPartitionCursorGenerator {
+    public:
+        virtual shared_ptr<Cursor> makeSubCursor(uint64_t partitionIndex);
+        BoundsPartitionCursorGenerator(
+            PartitionedCollection* pc,
+            const int idxNo,
+            const int direction,
+            const bool countCursor,
+            const int numWanted,
+            const shared_ptr<FieldRangeVector> bounds,
+            const int singleIntervalLimit
+            ) :
+            SubPartitionCursorGenerator(pc, idxNo, direction, countCursor),
+            _numWanted(numWanted),
+            _bounds(bounds),
+            _singleIntervalLimit(singleIntervalLimit)
+        {
+        }
+    private:
+        const int _numWanted;
+        const shared_ptr<FieldRangeVector> _bounds;
+        const int _singleIntervalLimit;
+    };
+
+    // for full index/full collection scans
+    class TablePartitionCursorGenerator: public SubPartitionCursorGenerator {
+    public:
+        virtual shared_ptr<Cursor> makeSubCursor(uint64_t partitionIndex);
+        TablePartitionCursorGenerator(
+            PartitionedCollection* pc,
+            const int idxNo,
+            const int direction,
+            const bool countCursor,
+            const bool cursorOverPartitionKey
+            ) :
+            SubPartitionCursorGenerator(pc, idxNo, direction, countCursor),
+            _cursorOverPartitionKey(cursorOverPartitionKey)
+        {
+        }
+    private:
+        const bool _cursorOverPartitionKey;
+    };
+
+    class SubPartitionIDGeneratorImpl : public SubPartitionIDGenerator {
+    public:
+        SubPartitionIDGeneratorImpl(PartitionedCollection* pc, const int direction);
+        SubPartitionIDGeneratorImpl(
+            PartitionedCollection* pc,
+            const BSONObj &startKey,
+            const BSONObj &endKey,
+            const int direction
+            );        
+        SubPartitionIDGeneratorImpl(
+            PartitionedCollection* pc,
+            const shared_ptr<FieldRangeVector> &bounds,
+            const int direction
+            );
+        virtual uint64_t getCurrentPartitionIndex();
+        virtual void advanceIndex();
+        virtual bool lastIndex();
+    private:
+        uint64_t _currPartition;
+        const uint64_t _startPartition;
+        const uint64_t _endPartition;       
+        const int _direction;
+        void sanityCheckPartitionEndpoints();
+    };
+
+    class FilteredPartitionIDGeneratorImpl : public SubPartitionIDGenerator {
+    public:
+        // get the current partition index that this class is identifying
+        FilteredPartitionIDGeneratorImpl(
+            PartitionedCollection* pc,
+            const char* ns,
+            const ShardKeyPattern key,
+            const int direction
+            );
+        virtual uint64_t getCurrentPartitionIndex();
+        virtual void advanceIndex();
+        virtual bool lastIndex();
+    private:
+        vector<bool> _partitionsToRead;
+        uint64_t _currPartition;
+        uint64_t _endPartition;
+        const int _direction;
+    };
 } // namespace mongo

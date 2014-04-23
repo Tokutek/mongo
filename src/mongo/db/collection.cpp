@@ -39,6 +39,7 @@
 #include "mongo/platform/atomic_word.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/db/storage/assert_ids.h"
+#include "mongo/db/queryutil.h"
 
 namespace mongo {
 
@@ -106,9 +107,9 @@ namespace mongo {
 
     /* ------------------------------------------------------------------------- */
 
-    BSONObj CollectionBase::indexInfo(const BSONObj &keyPattern, bool unique, bool clustering, BSONObj options) const {
+    static BSONObj indexInfo(const string& ns, const BSONObj &keyPattern, bool unique, bool clustering, BSONObj options) {
         BSONObjBuilder b;
-        b.append("ns", _ns);
+        b.append("ns", ns);
         b.append("key", keyPattern);
         if (keyPattern == BSON("_id" << 1)) {
             b.append("name", "_id_");
@@ -292,7 +293,36 @@ namespace mongo {
         return coll == "system.users";
     }
 
+    // ------------------------------------------------------------------------
 
+    static BSONObj addIdField(const BSONObj &obj) {
+        if (obj.hasField("_id")) {
+            return obj;
+        } else {
+            // _id first, everything else after
+            BSONObjBuilder b;
+            OID oid;
+            oid.init();
+            b.append("_id", oid);
+            b.appendElements(obj);
+            return b.obj();
+        }
+    }
+
+    static BSONObj inheritIdField(const BSONObj &oldObj, const BSONObj &newObj) {
+        const BSONElement &e = newObj["_id"];
+        if (e.ok()) {
+            uassert( 13596 ,
+                     str::stream() << "cannot change _id of a document old:" << oldObj << " new:" << newObj,
+                     e.valuesEqual(oldObj["_id"]) );
+            return newObj;
+        } else {
+            BSONObjBuilder b;
+            b.append(oldObj["_id"]);
+            b.appendElements(newObj);
+            return b.obj();
+        }
+    }
 
     // Construct a brand new Collection with a certain primary key and set of options.
     //
@@ -317,6 +347,27 @@ namespace mongo {
         Lock::assertWriteLocked(_ns); 
         _queryCache.clearQueryCache();
         computeIndexKeys();
+    }
+
+    
+    void Collection::checkAddIndexOK(const BSONObj &info) {
+        Lock::assertWriteLocked(_ns);
+
+        const StringData &name = info["name"].Stringdata();
+        const BSONObj &keyPattern = info["key"].Obj();
+
+        massert(16922, "dropDups is not supported, we should have stripped it out earlier",
+                       !info["dropDups"].trueValue());
+
+        uassert(12588, "cannot add index with a hot index build in progress",
+                       nIndexesBeingBuilt() == nIndexes());
+
+        uassert(12523, "no index name specified",
+                        info["name"].ok());
+        uassert(12505, str::stream() << "add index fails, too many indexes for " <<
+                       name << " key:" << keyPattern.toString(),
+                       nIndexes() < Collection::NIndexesMax);
+        _cd->addIndexOK();
     }
 
     void Collection::computeIndexKeys() {
@@ -346,6 +397,20 @@ namespace mongo {
         return false;
     }
 
+    // inserts an object into this namespace, taking care of secondary indexes if they exist
+    void Collection::insertObject(BSONObj &obj, uint64_t flags) {
+        // note, we MUST initialize this variable, as it may not be set in call below
+        bool indexBitChanged = false;
+        if (_cd->requiresIDField()) {
+            obj = addIdField(obj);
+        }
+        _cd->insertObject(obj, flags, &indexBitChanged);
+        if (indexBitChanged) {
+            noteMultiKeyChanged();
+        }
+    }
+    
+
     // ------------------------------------------------------------------------
 
     CollectionBase::CollectionBase(const StringData &ns, const BSONObj &pkIndexPattern, const BSONObj &options) :
@@ -357,7 +422,7 @@ namespace mongo {
         TOKULOG(1) << "Creating collection " << ns << endl;
 
         // Create the primary key index, generating the info from the pk pattern and options.
-        BSONObj info = indexInfo(pkIndexPattern, true, true, options);
+        BSONObj info = indexInfo(_ns, pkIndexPattern, true, true, options);
         createIndex(info);
     }
 
@@ -884,10 +949,7 @@ namespace mongo {
     // Wrapper for offline (write locked) indexing.
     void CollectionBase::createIndex(const BSONObj &info) {
         const string sourceNS = info["ns"].String();
-
-        if (!Lock::isWriteLocked(_ns)) {
-            throw RetryWithWriteLock();
-        }
+        Lock::assertWriteLocked(_ns);
 
         shared_ptr<CollectionIndexer> indexer = newIndexer(info, false);
         indexer->prepare();
@@ -1061,6 +1123,7 @@ namespace mongo {
         // Invalidate cursors, then drop all of the indexes.
         ClientCursor::invalidate(_ns);
         dropIndexes("*", errmsg, result, true);
+        _cd->finishDrop();
         verify(nIndexes() == 0);
         removeFromNamespacesCatalog(_ns);
 
@@ -1222,6 +1285,24 @@ namespace mongo {
         resetTransient();
     }
 
+    bool Collection::ensureIndex(const BSONObj &info) {
+        if (!Lock::isWriteLocked(_ns)) {
+            throw RetryWithWriteLock();
+        }
+        checkAddIndexOK(info);
+        // Note this ns in the rollback so if this transaction aborts, we'll
+        // close this ns, forcing the next user to reload in-memory metadata.
+        CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
+        rollback.noteNs(_ns);
+        
+        bool ret = _cd->ensureIndex(info);
+        if (ret) {
+            addToNamespacesCatalog(IndexDetails::indexNamespace(_ns, info["name"].String()));
+            noteIndexBuilt();
+        }
+        return ret;
+    }
+
     void CollectionData::Stats::appendInfo(BSONObjBuilder &b, int scale) const {
         b.appendNumber("objects", (long long) count);
         b.appendNumber("avgObjSize", count == 0 ? 0.0 : double(size) / double(count));
@@ -1252,7 +1333,12 @@ namespace mongo {
         return true;
     }
 
+    shared_ptr<CollectionIndexer> CollectionBase::newHotIndexer(const BSONObj &info) {
+        return newIndexer(info, true);
+    }
+    
     // Get an indexer over this collection. Implemented in indexer.cpp
+    // This is just a helper function for createIndex and newHotIndexer
     shared_ptr<CollectionIndexer> CollectionBase::newIndexer(const BSONObj &info,
                                                                const bool background) {
         if (background) {
@@ -1300,6 +1386,23 @@ namespace mongo {
             }
             string logNs = cl.toString() + ".$cmd";
             OplogHelpers::logCommand(logNs.c_str(), options);
+            // now handle partitioned collections. It is a shame that
+            // this needs to be done. We want to make sure that the initial
+            // partition created by partitioned collections is identical
+            // on secondaries. Namely, that they have the same create time
+            // So, we need this special case code here.
+            if (options["partitioned"].trueValue()) {
+                BSONObj res;
+                Collection* cl = getCollection(ns);
+                massert(0, "Could not get collection we just created in userCreateNS", cl);
+                PartitionedCollection* pc = cl->as<PartitionedCollection>();
+                uint64_t numPartitions;
+                BSONArray partitionArray;
+                pc->getPartitionInfo(&numPartitions, &partitionArray);
+                vector<BSONElement> v;
+                partitionArray.elems(v);
+                OplogHelpers::logPartitionInfoAfterCreate(ns.rawData(), v);
+            }
         }
         return true;
     }
@@ -1689,40 +1792,10 @@ namespace mongo {
         return -1;
     }
 
-    // ------------------------------------------------------------------------
-
-    static BSONObj addIdField(const BSONObj &obj) {
-        if (obj.hasField("_id")) {
-            return obj;
-        } else {
-            // _id first, everything else after
-            BSONObjBuilder b;
-            OID oid;
-            oid.init();
-            b.append("_id", oid);
-            b.appendElements(obj);
-            return b.obj();
-        }
-    }
-
-    static BSONObj inheritIdField(const BSONObj &oldObj, const BSONObj &newObj) {
-        const BSONElement &e = newObj["_id"];
-        if (e.ok()) {
-            uassert( 13596 ,
-                     str::stream() << "cannot change _id of a document old:" << oldObj << " new:" << newObj,
-                     e.valuesEqual(oldObj["_id"]) );
-            return newObj;
-        } else {
-            BSONObjBuilder b;
-            b.append(oldObj["_id"]);
-            b.appendElements(newObj);
-            return b.obj();
-        }
-    }
 
     // ------------------------------------------------------------------------
 
-    BSONObj IndexedCollection::determinePrimaryKey(const BSONObj &options) {
+    static BSONObj getPrimaryKeyFromOptions(const BSONObj &options) {
         const BSONObj idPattern = BSON("_id" << 1);
         BSONObj pkPattern = idPattern;
         if (options["primaryKey"].ok()) {
@@ -1743,15 +1816,15 @@ namespace mongo {
     }
 
     IndexedCollection::IndexedCollection(const StringData &ns, const BSONObj &options) :
-        CollectionBase(ns, determinePrimaryKey(options), options),
-        // determinePrimaryKey() was called, so whatever the pk is, it
+        CollectionBase(ns, getPrimaryKeyFromOptions(options), options),
+        // getPrimaryKeyFromOptions() was called, so whatever the pk is, it
         // exists in _indexes. Thus, we know we have an _id primary key
         // if we can find an index with pattern "_id: 1" at this point.
         _idPrimaryKey(findIndexByKeyPattern(BSON("_id" << 1)) >= 0) {
         const int idxNo = findIndexByKeyPattern(BSON("_id" << 1));
         if (idxNo < 0) {
             // create a unique, non-clustering _id index here.
-            BSONObj info = indexInfo(BSON("_id" << 1), true, false, options);
+            BSONObj info = indexInfo(_ns, BSON("_id" << 1), true, false, options);
             createIndex(info);
         }
         verify(_idPrimaryKey == idx(findIndexByKeyPattern(BSON("_id" << 1))).clustering());
@@ -1764,7 +1837,6 @@ namespace mongo {
 
     // inserts an object into this collection, taking care of secondary indexes if they exist
     void IndexedCollection::insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged) {
-        obj = addIdField(obj);
         const BSONObj pk = getValidatedPKFromObject(obj);
 
         // We skip unique checks if the primary key is something other than the _id index.
@@ -2092,7 +2164,7 @@ namespace mongo {
         if (mayIndexId) {
             const BSONElement e = options["autoIndexId"];
             if (!e.ok() || e.trueValue()) {
-                BSONObj info = indexInfo(BSON("_id" << 1), true, false, options);
+                BSONObj info = indexInfo(_ns, BSON("_id" << 1), true, false, options);
                 createIndex(info);
             }
         }
@@ -2178,7 +2250,6 @@ namespace mongo {
     }
 
     void CappedCollection::insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged) {
-        obj = addIdField(obj);
         _insertObject(obj, flags, indexBitChanged);
     }
 
@@ -2484,7 +2555,6 @@ namespace mongo {
     }
 
     void BulkLoadedCollection::insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged) {
-        obj = addIdField(obj);
         const BSONObj pk = getValidatedPKFromObject(obj);
 
         storage::Key sPK(pk, NULL);
@@ -2521,6 +2591,10 @@ namespace mongo {
         uasserted( 16894, "Cannot perform drop/dropIndexes on of a collection under-going bulk load." );
     }
 
+    void BulkLoadedCollection::addIndexOK() {
+        uasserted(0, "Cannot create a hot index on a bulk loaded collection");
+    }
+
     // When closing a BulkLoadedCollection, we need to make sure the key trackers and
     // loaders are destructed before we call up to the parent destructor, because they
     // reference storage::Dictionaries that get destroyed in the parent destructor.
@@ -2548,32 +2622,51 @@ namespace mongo {
                                                           serialized["multiKeyIndexBits"].Long(),
                                                           newIndexesArray.arr());
     }
+    // make the serialized BSON for the meta partition
+    static BSONObj makeMetaPartitionedSerialized(string newNS) {
+        BSONArrayBuilder newIndexesArray;
+        // append a single BSONObj
+        newIndexesArray.append(indexInfo(newNS, BSON("_id" << 1), true, true,BSONObj()));
+        return Collection::serialize(newNS, BSONObj(), BSON("_id" << 1),
+                                                          0, //multiKeyIndexBits is 0
+                                                          newIndexesArray.arr());
+    }
+    
+    string getMetaCollectionName(const StringData &ns) {
+        mongo::StackStringBuilder ss;
+        ss << ns << "$$meta";
+        return ss.str();
+    }
+
+    string getPartitionName(const StringData &ns, uint64_t partitionID) {
+        mongo::StackStringBuilder ss;
+        ss << ns << "$$p" << partitionID;
+        return ss.str();
+    }
 
     //
     // constructor and methods that create a PartitionedCollection
     //
     PartitionedCollection::PartitionedCollection(const StringData &ns, const BSONObj &options) :
-        CollectionData(ns, BSON("_id" << 1)), // the pk MUST be _id:1, we verify below
+        CollectionData(ns, determinePrimaryKey(options)),
         _options(options.getOwned()),
-        _ordering(Ordering::make(BSONObj())) // dummy for now, we create it properly below
+        _ordering(Ordering::make(BSONObj())), // dummy for now, we create it properly below
+        _shardKeyPattern(_pk)
     {
         // MUST CALL initialize directly after this.
         // We can't call initialize here because it depends on virtual functions
     }
 
     void PartitionedCollection::initialize(const StringData &ns, const BSONObj &options) {
-        // verify that there is no defined primary key
-        uassert(17245, str::stream() << "Partitioned Collection cannot have a defined primary key: " << ns, !options["primaryKey"].ok());
-
         // create the meta collection
-        _metaCollection.reset(new IndexedCollection(getMetaCollectionName(ns), options));
+        // note that we create it with empty options
+        _metaCollection.reset(new IndexedCollection(getMetaCollectionName(ns), BSONObj()));
 
         // add the first partition
         appendNewPartition();
 
         // some sanity checks
         verify(numPartitions() == 1);
-        verify(_partitions[0]->nIndexes() == 1);
 
         // create the index details
         createIndexDetails();
@@ -2603,7 +2696,8 @@ namespace mongo {
         ) :
            CollectionData(serialized),
            _options(serialized["options"].Obj().getOwned()),
-           _ordering(Ordering::make(BSONObj())) // dummy for now, we create it properly below
+           _ordering(Ordering::make(BSONObj())), // dummy for now, we create it properly below
+           _shardKeyPattern(_pk)
     {
     }
 
@@ -2612,11 +2706,18 @@ namespace mongo {
         CollectionRenamer* renamer
         )
     {
+        // note, for now, this exists just to convert the oplog
+        // from a normal collection to a partitioned collection
+        // Theoretically, we could change this function
+        // to support changing any arbitrary collection to a partitioned
+        // collection with a single partition. But for now, that
+        // is just more functionality that needs to be tested
+        // and maintained, so not supporting it at the moment.
+        vector<BSONElement> indexes = serialized["indexes"].Array();
+        uassert(0, "there should only be one index", indexes.size() == 1);
+        
         // first operate as though we are creating a new
         // collection
-
-        // TODO: check that we have only one index
-        
         initialize(_ns, _options);
         verify(numPartitions() == 1);
         verify(_partitionIDs[0] == 0);
@@ -2625,13 +2726,14 @@ namespace mongo {
 
         // delete existing partition
         _partitions[0]->dropIndexDetails(0, false);
+        _partitions[0]->finishDrop();
         _partitions.erase(_partitions.begin());
 
-        renamer->renameCollection(_ns, getPartitionName(0));
+        renamer->renameCollection(_ns, getPartitionName(_ns, 0));
         //partition 0 ready to go
         BSONObj currCollSerialized = makePartitionedSerialized(
             serialized,
-            getPartitionName(0)
+            getPartitionName(_ns, 0)
             );
         _partitions.push_back(openExistingPartition(currCollSerialized));        
     }
@@ -2653,17 +2755,16 @@ namespace mongo {
     PartitionedCollection::PartitionedCollection(const BSONObj &serialized) :
         CollectionData(serialized),
         _options(serialized["options"].Obj().getOwned()),
-        _ordering(Ordering::make(BSONObj())) // dummy for now, we create it properly below
+        _ordering(Ordering::make(BSONObj())), // dummy for now, we create it properly below
+        _shardKeyPattern(_pk)
     {
         // MUST CALL initialize directly after this.
         // We can't call initialize here because it depends on virtual functions
     }
 
     void PartitionedCollection::initialize(const BSONObj &serialized) {
-        // verify that there is no defined primary key
-        uassert(17246, str::stream() << "Partitioned Collection cannot have a defined primary key: " << _ns, !_options["primaryKey"].ok());
         // open the metadata collection
-        BSONObj metaSerialized = makePartitionedSerialized(serialized, getMetaCollectionName(_ns));
+        BSONObj metaSerialized = makeMetaPartitionedSerialized(getMetaCollectionName(_ns));
         _metaCollection.reset(new IndexedCollection(metaSerialized));
         // now we need to query _metaCollection to get partition information
         for (shared_ptr<Cursor> c( Cursor::make(_metaCollection.get(), 1, false) ); c->ok() ; c->advance()) {
@@ -2673,7 +2774,7 @@ namespace mongo {
             uint64_t currID = curr["_id"].numberLong();
             BSONObj currCollSerialized = makePartitionedSerialized(
                 serialized,
-                getPartitionName(currID)
+                getPartitionName(_ns, currID)
                 );
             _partitions.push_back(openExistingPartition(currCollSerialized));
             // extract the pivot
@@ -2717,15 +2818,116 @@ namespace mongo {
         return ret;
     }
 
+    BSONObj PartitionedCollection::determinePrimaryKey(const BSONObj &options) {
+        return getPrimaryKeyFromOptions(options);
+    }
+
+    unsigned long long PartitionedCollection::getMultiKeyIndexBits() const {
+        // no secondary indexes, so no multi keys
+        uint64_t retval = 0;
+        for (uint64_t i = 0; i < numPartitions(); i++) {
+            retval |= _partitions[i]->getMultiKeyIndexBits();
+        }
+        return retval;
+    }
+
+    bool PartitionedCollection::isMultiKey(int idx) const {
+        for (uint64_t i = 0; i < numPartitions(); i++) {
+            if (_partitions[i]->isMultiKey(idx)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool PartitionedCollection::ensureIndex(const BSONObj &info) {
+        // Contract is for ensureIndex to
+        // check if index already exists. Therefore, this
+        // snippet is copied from CollectionBase
+        const BSONObj keyPattern = info["key"].Obj();
+        const int idx = findIndexByKeyPattern(keyPattern);
+        if (idx >= 0) {
+            return false;
+        }
+        for (uint64_t i = 0; i < numPartitions(); i++) {
+            BSONObjBuilder b;
+            uint64_t currID = _partitionIDs[i];
+            cloneBSONWithFieldChanged(b, info, "ns", getPartitionName(_ns, currID), false);
+            if (!_partitions[i]->ensureIndex(b.obj())) {
+                return false;
+            }
+        }
+        shared_ptr<PartitionedIndexDetails> details(
+            new PartitionedIndexDetails(
+                replaceNSField(info, _ns),
+                this,
+                _indexDetails.size()
+                )
+            );
+        _indexDetails.push_back(details);
+        return true;
+    }
+
     shared_ptr<Cursor> PartitionedCollection::makeCursor(
         const int direction, 
         const bool countCursor
         )
     {
-        shared_ptr<Cursor> ret(new PartitionedCursor(this, direction, countCursor));
+        // pass in an idxNo of 0, because we are assuming 0 is the pk
+        shared_ptr<SubPartitionCursorGenerator> subCursorGenerator (
+            new TablePartitionCursorGenerator(
+                this,
+                0,
+                direction,
+                countCursor,
+                true
+                )
+            );
+        shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator (
+            new SubPartitionIDGeneratorImpl(this, direction)
+            );
+        // pk cannot be multiKey, hence passing false for last parameter
+        shared_ptr<Cursor> ret (new PartitionedCursor(false, subCursorGenerator, subPartitionIDGenerator, false));
         return ret;
     }
     
+    shared_ptr<Cursor> PartitionedCollection::makeCursor(const IndexDetails &idx,
+                                    const int direction, 
+                                    const bool countCursor) {
+        bool isPK = isPKIndex(idx);
+        shared_ptr<SubPartitionCursorGenerator> subCursorGenerator (
+            new TablePartitionCursorGenerator(
+                this,
+                idxNo(idx),
+                direction,
+                countCursor,
+                isPK
+                )
+            );
+        shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator;
+        if (isPK) {
+            subPartitionIDGenerator.reset(new SubPartitionIDGeneratorImpl(this, direction));
+        }
+        else {
+            subPartitionIDGenerator.reset(new FilteredPartitionIDGeneratorImpl(this, _ns.c_str(), _shardKeyPattern, direction));
+        }
+        shared_ptr<Cursor> ret;
+        if (!isPK && cc().querySettings().sortRequired() && !subPartitionIDGenerator->lastIndex()) {
+            ret.reset(new SortedPartitionedCursor(
+                idx.keyPattern(),
+                direction,
+                subCursorGenerator,
+                subPartitionIDGenerator,
+                isMultiKey(idxNo(idx))
+                )
+                );
+        }
+        else {
+            ret.reset(new PartitionedCursor(!isPK, subCursorGenerator, subPartitionIDGenerator, isMultiKey(idxNo(idx))));
+        }
+        return ret;
+    }
+
     // index range scan between start/end
     shared_ptr<Cursor> PartitionedCollection::makeCursor(const IndexDetails &idx,
                                    const BSONObj &startKey, const BSONObj &endKey,
@@ -2733,19 +2935,39 @@ namespace mongo {
                                    const int direction, const int numWanted,
                                    const bool countCursor)
     {
-        // as of now, no secondary indexes
-        verify(idxNo(idx) == 0);
-        shared_ptr<Cursor> ret(
-            new PartitionedCursor(
-                this,
-                startKey,
-                endKey,
-                endKeyInclusive,
-                direction,
-                numWanted,
-                countCursor
-                )
+        bool isPK = isPKIndex(idx);
+        shared_ptr<SubPartitionCursorGenerator> subCursorGenerator ( new RangePartitionCursorGenerator(
+            this,
+            idxNo(idx),
+            direction,
+            countCursor,
+            numWanted,
+            startKey,
+            endKey,
+            endKeyInclusive
+            )
             );
+        shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator;
+        if (isPK) {
+            subPartitionIDGenerator.reset(new SubPartitionIDGeneratorImpl(this, startKey, endKey, direction));
+        }
+        else {
+            subPartitionIDGenerator.reset(new FilteredPartitionIDGeneratorImpl(this, _ns.c_str(), _shardKeyPattern, direction));
+        }
+        shared_ptr<Cursor> ret;
+        if (!isPK && cc().querySettings().sortRequired() && !subPartitionIDGenerator->lastIndex()) {
+            ret.reset(new SortedPartitionedCursor(
+                idx.keyPattern(),
+                direction,
+                subCursorGenerator,
+                subPartitionIDGenerator,
+                isMultiKey(idxNo(idx))
+                )
+                );
+        }
+        else {
+            ret.reset(new PartitionedCursor(!isPK, subCursorGenerator, subPartitionIDGenerator, isMultiKey(idxNo(idx))));
+        }
         return ret;
     }
     
@@ -2756,26 +2978,45 @@ namespace mongo {
                                    const int direction, const int numWanted,
                                    const bool countCursor)
     {
-        // as of now, no secondary indexes
-        verify(idxNo(idx) == 0);
-        shared_ptr<Cursor> ret(
-            new PartitionedCursor (
-                this,
-                bounds,
-                singleIntervalLimit,
-                direction,
-                numWanted,
-                countCursor
-                )
+        bool isPK = isPKIndex(idx);
+        shared_ptr<SubPartitionCursorGenerator> subCursorGenerator ( new BoundsPartitionCursorGenerator(
+            this,
+            idxNo(idx),
+            direction,
+            countCursor,
+            numWanted,
+            bounds,
+            singleIntervalLimit
+            )
             );
+        shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator;
+        if (isPK) {
+            subPartitionIDGenerator.reset(new SubPartitionIDGeneratorImpl(this, bounds, direction));
+        }
+        else {
+            subPartitionIDGenerator.reset(new FilteredPartitionIDGeneratorImpl(this, _ns.c_str(), _shardKeyPattern, direction));
+        }
+
+        shared_ptr<Cursor> ret;
+        if (!isPK && cc().querySettings().sortRequired() && !subPartitionIDGenerator->lastIndex()) {
+            ret.reset(new SortedPartitionedCursor(
+                idx.keyPattern(),
+                direction,
+                subCursorGenerator,
+                subPartitionIDGenerator,
+                isMultiKey(idxNo(idx))
+                )
+                );
+        }
+        else {
+            ret.reset(new PartitionedCursor(!isPK, subCursorGenerator, subPartitionIDGenerator, isMultiKey(idxNo(idx))));
+        }
         return ret;
     }
 
     void PartitionedCollection::sanityCheck() {
         verify(numPartitions() == _partitionPivots.size());
         verify(numPartitions() == _partitionIDs.size());
-        // verify that the last pivot is maxKey
-        verify( _partitionPivots[numPartitions() - 1][""].type() == MaxKey );
         // verify that pivots are increasing in order
         for (uint64_t i = 1; i < numPartitions(); i++) {
             BSONObj bigger = _partitionPivots[i];
@@ -2797,18 +3038,20 @@ namespace mongo {
     // called by constructors during initialization. Must be done
     // after meta collection and partitions instantiated
     void PartitionedCollection::createIndexDetails() {
-        shared_ptr<PartitionedIndexDetails> details;
-        BSONObj info = _partitions[0]->idx(0).info();
-        details.reset(
-            new PartitionedIndexDetails(
-                replaceNSField(info, _ns),
-                this,
-                0
-                )
-            );
-        _indexDetails.push_back(details);
+        for (int i = 0; i < nIndexes(); i++) {
+            shared_ptr<PartitionedIndexDetails> details;
+            BSONObj info = _partitions[0]->idx(i).info();
+            details.reset(
+                new PartitionedIndexDetails(
+                    replaceNSField(info, _ns),
+                    this,
+                    i
+                    )
+                );
+            _indexDetails.push_back(details);
+        }
         // initialize _ordering
-        _ordering = Ordering::make(details->keyPattern());
+        _ordering = Ordering::make(_indexDetails[0]->keyPattern());
     }
 
     // helper function for add partition
@@ -2827,8 +3070,8 @@ namespace mongo {
         if (numPartitions() > 1) {
             uassert(
                 17249, 
-                str::stream() <<"new pivot must be greater than last pivot, newPivot: " << newPivot.str() << 
-                " lastPivot: " <<_partitionPivots[numPartitions()-2].str(), 
+                str::stream() <<"new max must be greater than last max, newMax: " << newPivot.str() << 
+                " lastMax: " <<_partitionPivots[numPartitions()-2].str(), 
                 newPivot.woCompare(_partitionPivots[numPartitions()-2], _ordering) > 0
                 );
         }
@@ -2838,9 +3081,9 @@ namespace mongo {
         if (foundLast) {
             uassert(
                 17250, 
-                str::stream() << "new pivot must be greater than max element in collection, newPivot: " <<
+                str::stream() << "new max must be greater than or equal to max element in collection, newMax: " <<
                 newPivot.str() << " max element: " << currPK.str(), 
-                newPivot.woCompare(currPK, _ordering) > 0);
+                newPivot.woCompare(currPK, _ordering) >= 0);
         }
         overwritePivot(numPartitions()-1, newPivot);
     }
@@ -2878,7 +3121,26 @@ namespace mongo {
 
         // add new collection to vector of partitions
         shared_ptr<CollectionData> newPartition;
-        newPartition = makeNewPartition(getPartitionName(id), _options);
+        newPartition = makeNewPartition(getPartitionName(_ns, id), _options);
+        if (numPartitions() > 0) {
+            // if this is not the first partition, we need to make sure the
+            // secondary indexes match
+            for (int i = 0; i < _partitions[0]->nIndexes(); i++) {
+                BSONObj currInfo = _partitions[0]->idx(i).info();                
+                const BSONObj keyPattern = currInfo["key"].Obj();
+                // it's possible the index already exists (e.g. _id index or the pk)
+                const int index = newPartition->findIndexByKeyPattern(keyPattern);
+                if (index >= 0) {
+                    continue;
+                }
+                // we want to make sure any other secondary index actually works
+                BSONObjBuilder b;
+                cloneBSONWithFieldChanged(b, currInfo, "ns", getPartitionName(_ns, id), false);
+                bool ret = newPartition->ensureIndex(b.obj());
+                massert(0, str::stream() << "could not add index " << currInfo, ret);
+            }
+            massert(0, "could not add proper indexes", newPartition->nIndexes() == _partitions[0]->nIndexes());
+        }
         _partitions.push_back(newPartition);
 
         // add data to internal vectors
@@ -2894,13 +3156,10 @@ namespace mongo {
         uint64_t id = (numPartitions() == 0) ? 0 : _partitionIDs[numPartitions()-1] + 1;
 
         // make entry for metadata collection
-        // the pivot
-        BSONObjBuilder c(64);
-        c.appendMaxKey("");
         // doc to be inserted into meta collection
         BSONObjBuilder b(64);
         b.append("_id", (long long)id);
-        b.append("max", c.done());
+        b.append("max", getUpperBound());
         b.appendDate("createTime", curTimeMillis64());
 
         // write to metadata collection
@@ -2909,7 +3168,7 @@ namespace mongo {
         sanityCheck();
     }
 
-    // create partitions from the cloner
+    // create partitions from the cloner or replication (after a create)
     void PartitionedCollection::addClonedPartitionInfo(const vector<BSONElement> &partitionInfo) {
         uassert(17279, "Called addClonedPartitionInfo with more than one current partition", (numPartitions() == 1));
         // Note that the caller of this function needs to be REALLY careful
@@ -2922,9 +3181,23 @@ namespace mongo {
         
         // first drop the existing partition.
         dropPartitionInternal(_partitionIDs[0]);
-        // now add the rest of the partitions        
+        // now add the rest of the partitions
         for (vector<BSONElement>::const_iterator it = partitionInfo.begin(); it != partitionInfo.end(); it++) {
-            appendPartition(it->Obj());
+            // the keys are stored without their field names,
+            // in the "packed" format. Here we put the
+            // field names back. Probably not the most efficient code,
+            // but it does not need to be. This function probably is not called
+            // very often
+            BSONObj curr = it->Obj();
+            BSONObj pivot = curr["max"].Obj();
+            BSONObjBuilder strippedPivot;
+            for (BSONObjIterator it(pivot); it.more(); it.next()) {
+                BSONElement pivotElement = *it;
+                strippedPivot.appendAs(pivotElement, "");
+            }
+            BSONObjBuilder currWithFilledPivot;
+            cloneBSONWithFieldChanged(currWithFilledPivot, curr, "max", strippedPivot.done(), false);
+            appendPartition(currWithFilledPivot.obj());
         }
         sanityCheck();
     }
@@ -2966,7 +3239,7 @@ namespace mongo {
         verify(!indexBitChanged);
     }
 
-    void PartitionedCollection::addPartition() {
+    void PartitionedCollection::prepareAddPartition() {
         Lock::assertWriteLocked(_ns);
         sanityCheck();
         // ensure only one thread can modify partitions at a time
@@ -2981,39 +3254,63 @@ namespace mongo {
         _metaCollection->acquireTableLock();
         // kill all cursors first, this may be unnecessary, determine later
         ClientCursor::invalidate(_ns);
+    }
+
+    void PartitionedCollection::addPartition() {
+        prepareAddPartition();
         capLastPartition();
         appendNewPartition();
         sanityCheck();
     }
 
     void PartitionedCollection::manuallyAddPartition(const BSONObj& newPivot) {
-        Lock::assertWriteLocked(_ns);
-        sanityCheck();
-
-        CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
-        rollback.noteNs(_ns);
-
-        // ensure only one thread can modify partitions at a time
-        // if we have multiple multi-statement transactions adding partitions
-        // concurrently, things can get hairy (like closing during an abort).
-        // So, to keep this simple, only allowing one transaction the ability
-        // to drop or add a collection at a time
-        _metaCollection->acquireTableLock();
-        // kill all cursors first, this may be unnecessary, determine later
-        ClientCursor::invalidate(_ns);
+        prepareAddPartition();
         manuallyCapLastPartition(getValidatedPKFromObject(newPivot));
         appendNewPartition();
         sanityCheck();
     }
 
+    void PartitionedCollection::addPartitionFromOplog(const BSONObj& newPivot, const BSONObj &partitionInfo) {
+        prepareAddPartition();
+        manuallyCapLastPartition(newPivot);
+        appendPartition(partitionInfo);
+        sanityCheck();
+    }
+
+
+    // returns the partition info with field names for the pivots filled in
     void PartitionedCollection::getPartitionInfo(uint64_t* numPartitions, BSONArray* partitionArray) {
         BSONArrayBuilder b;
-        // for sanity checking
         uint64_t numPartitionsFoundInMeta = 0;
         for (shared_ptr<Cursor> c( Cursor::make(_metaCollection.get(), 1, false) ); c->ok() ; c->advance()) {
-            BSONObj curr = c->current();
-            b.append(curr);
             numPartitionsFoundInMeta++;
+        }
+        // reason we run through this twice is to make it simple
+        // to know when we are at the last element
+        shared_ptr<Cursor> c( Cursor::make(_metaCollection.get(), 1, false) );
+        for (uint64_t i = 0; i < numPartitionsFoundInMeta; i++) {
+            massert(0, "Bad cursor", c->ok());
+            BSONObj curr = c->current();
+            // the keys are stored without their field names,
+            // in the "packed" format. Here we put the
+            // field names back. Probably not the most efficient code,
+            // but it does not need to be. This function probably is not called
+            // very often
+            BSONObj pivot = curr["max"].Obj();
+            BSONObjBuilder filledPivot;
+            BSONObjIterator pkIT(_pk); 
+            BSONObjIterator pivotIT(pivot);
+            while (pivotIT.more()) {
+                BSONElement pivotElement = *pivotIT;
+                filledPivot.appendAs(pivotElement, (*pkIT).fieldName());
+                pivotIT.next();
+                pkIT.next();
+            }
+            massert(0, str::stream() << "There should be no more PK fields available for pivot " << curr, !pkIT.more());
+            BSONObjBuilder currWithFilledPivot;
+            cloneBSONWithFieldChanged(currWithFilledPivot, curr, "max", filledPivot.done(), false);
+            b.append(currWithFilledPivot.obj());
+            c->advance();
         }
         // note that we cannot just return numPartitions() for this
         // command, because this is done in the context of a transaction
@@ -3062,20 +3359,29 @@ namespace mongo {
         _partitionIDs.erase(_partitionIDs.begin() + index);
         // ugly way to "drop" a collection. Perhaps we need
         // a CollectionData method for this.
-        for (int i = 0; i < nIndexes(); i++) {
-            _partitions[index]->dropIndexDetails(i, false);
+        while (_partitions[index]->nIndexes() > 0) {
+            _partitions[index]->dropIndexDetails(0, false);
         }
+        _partitions[index]->finishDrop();
         
         // special case for dropping last partition, we have to fix up
         // the last pivot
         // note that numPartitions() may be 1 if called by addClonedPartitionInfo
         // in that case, we don't want to do this
         if ((index == numPartitions() - 1) && numPartitions() > 1) {
-            BSONObjBuilder c(64);
-            c.appendMaxKey("");
-            overwritePivot(numPartitions() - 2, c.done());
+            overwritePivot(numPartitions() - 2, getUpperBound());
         }
         _partitions.erase(_partitions.begin() + index);
+    }
+
+    void PartitionedCollection::finishDrop() {
+        // May want to later
+        // change CollectionData API to explicitly handle this
+        // challenge is dealing with metadata that Collection class
+        // is responsible for
+        verify(_metaCollection->nIndexes() == 1);
+        _metaCollection->dropIndexDetails(0, false);
+        _metaCollection->finishDrop();
     }
 
     // this is called by the user
@@ -3086,7 +3392,7 @@ namespace mongo {
         sanityCheck();
     }
     
-    int PartitionedCollection::partitionWithPK(const BSONObj& pk) const {
+    uint64_t PartitionedCollection::partitionWithPK(const BSONObj& pk) const {
         // if there is one partition, then the answer is easy
         if (numPartitions() == 1) {
             return 0;
@@ -3120,18 +3426,6 @@ namespace mongo {
         return low;
     }
 
-    string PartitionedCollection::getMetaCollectionName(const StringData &ns) {
-        mongo::StackStringBuilder ss;
-        ss << ns << "$$meta";
-        return ss.str();
-    }
-
-    string PartitionedCollection::getPartitionName(uint64_t partitionID) {
-        mongo::StackStringBuilder ss;
-        ss << _ns << "$$p" << partitionID;
-        return ss.str();
-    }
-    
     bool PartitionedCollection::rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &result) {
         bool changed = false;
         BSONObjBuilder b;
@@ -3185,6 +3479,22 @@ namespace mongo {
                                              uint64_t flags, bool* indexBitChanged) {
         int whichPartition = partitionWithPK(pk);
         _partitions[whichPartition]->updateObject(pk, oldObj, newObj, fromMigrate, flags, indexBitChanged);
+    }
+
+    BSONObj PartitionedCollection::getUpperBound() {
+        BSONObjBuilder c(64);
+        BSONObjIterator pkIter( _pk );
+        while( pkIter.more() ){
+            BSONElement elt = pkIter.next();
+            int order = elt.isNumber() ? elt.numberInt() : 1;
+            if( order > 0 ){
+                c.appendMaxKey( "" );
+            }
+            else {
+                c.appendMinKey( "" );
+            }
+        }
+        return c.obj();
     }
 
 } // namespace mongo

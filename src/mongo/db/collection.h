@@ -31,6 +31,7 @@
 #include "mongo/util/concurrency/rwlock.h"
 #include "mongo/util/concurrency/simplerwlock.h"
 #include "mongo/db/queryutil.h"
+#include "mongo/s/shardkey.h"
 
 namespace mongo {
 
@@ -228,11 +229,22 @@ namespace mongo {
 
         virtual bool isPartitioned() const = 0;
 
+        // returns true if the CollectionData requires an ID field to exist
+        // on insertions. If so, and an id is necessary, then the Collection 
+        // class will autogenerate one before calling
+        // CollectionData::insertObject
+        virtual bool requiresIDField() const = 0;
+
         // returns the maximum PK the collection's storage knows
         // of. If this CollectionData is part of a partitioned collection,
         // any newly added partition must be greater than or equal to
         // the value returned here
         virtual bool getMaxPKForPartitionCap(BSONObj &result) const = 0;
+
+        // called after dropping indexes
+        virtual void finishDrop() = 0;
+
+        virtual void addIndexOK() = 0;
 
         // struct for storing the accumulated states of a Collection
         // all values, except for nIndexes, are estimates
@@ -268,7 +280,7 @@ namespace mongo {
         // optional to implement, populate the obj builder with collection specific stats
         virtual void fillSpecificStats(BSONObjBuilder &result, int scale) const = 0;
 
-        virtual shared_ptr<CollectionIndexer> newIndexer(const BSONObj &info, const bool background) = 0;
+        virtual shared_ptr<CollectionIndexer> newHotIndexer(const BSONObj &info) = 0;
 
         virtual unsigned long long getMultiKeyIndexBits() const = 0;
 
@@ -446,14 +458,7 @@ namespace mongo {
         // Ensure that the given index exists, or build it if it doesn't.
         // @param info is the index spec (ie: { ns: "test.foo", key: { a: 1 }, name: "a_1", clustering: true })
         // @return whether or the the index was just built.
-        bool ensureIndex(const BSONObj &info) {
-            bool ret = _cd->ensureIndex(info);
-            if (ret) {
-                addToNamespacesCatalog(IndexDetails::indexNamespace(_ns, info["name"].String()));
-                noteIndexBuilt();
-            }
-            return ret;
-        }
+        bool ensureIndex(const BSONObj &info);
 
         void acquireTableLock() {
             _cd->acquireTableLock();
@@ -534,14 +539,7 @@ namespace mongo {
         //
         
         // inserts an object into this namespace, taking care of secondary indexes if they exist
-        void insertObject(BSONObj &obj, uint64_t flags = 0) {
-            // note, we MUST initialize this variable, as it may not be set in call below
-            bool indexBitChanged = false;
-            _cd->insertObject(obj, flags, &indexBitChanged);
-            if (indexBitChanged) {
-                noteMultiKeyChanged();
-            }
-        }
+        void insertObject(BSONObj &obj, uint64_t flags = 0);
 
         // deletes an object from this namespace, taking care of secondary indexes if they exist
         void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags = 0) {
@@ -614,8 +612,14 @@ namespace mongo {
             _cd->fillSpecificStats(result, scale);
         }
 
-        shared_ptr<CollectionIndexer> newIndexer(const BSONObj &info, const bool background) {
-            return _cd->newIndexer(info, background);
+        shared_ptr<CollectionIndexer> newHotIndexer(const BSONObj &info) {
+            checkAddIndexOK(info);
+            // Note this ns in the rollback so if this transaction aborts, we'll
+            // close this ns, forcing the next user to reload in-memory metadata.
+            CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
+            rollback.noteNs(_ns);
+            
+            return _cd->newHotIndexer(info);
         }
 
         //
@@ -651,6 +655,8 @@ namespace mongo {
         // Every index has an IndexDetails that describes it.
         IndexPathSet _indexedPaths;
         void resetTransient();
+        
+        void checkAddIndexOK(const BSONObj &info);
 
         /* query cache (for query optimizer) */
         QueryCache _queryCache;
@@ -781,6 +787,10 @@ namespace mongo {
 
         virtual bool getMaxPKForPartitionCap(BSONObj &result) const;
 
+        virtual void addIndexOK() { }
+
+        virtual void finishDrop() { }
+
         // Extracts and returns an owned BSONObj representing
         // the primary key portion of the given query, if each
         // portion of the primary key exists in the query and
@@ -872,6 +882,7 @@ namespace mongo {
         };
 
         shared_ptr<CollectionIndexer> newIndexer(const BSONObj &info, const bool background);
+        virtual shared_ptr<CollectionIndexer> newHotIndexer(const BSONObj &info);
 
         // optional to implement, populate the obj builder with collection specific stats
         virtual void fillSpecificStats(BSONObjBuilder &result, int scale) const {
@@ -950,11 +961,6 @@ namespace mongo {
         CollectionBase(const StringData& ns, const BSONObj &pkIndexPattern, const BSONObj &options);
         explicit CollectionBase(const BSONObj &serialized, bool* reserializeNeeded = NULL);
 
-
-        // create a new index with the given info for this namespace.
-        // generate an index info BSON for this namespace, with the same options
-        BSONObj indexInfo(const BSONObj &keyPattern, bool unique, bool clustering, BSONObj options) const;
-
         virtual void createIndex(const BSONObj &info);
         void checkIndexUniqueness(const IndexDetailsBase &idx);
 
@@ -999,8 +1005,6 @@ namespace mongo {
 
     class IndexedCollection : public CollectionBase {
     private:
-        BSONObj determinePrimaryKey(const BSONObj &options);
-
         const bool _idPrimaryKey;
 
     public:
@@ -1016,6 +1020,10 @@ namespace mongo {
         
         bool isPKHidden() const {
             return false;
+        }
+
+        bool requiresIDField() const {
+            return true;
         }
 
         // Overridden to optimize the case where we have an _id primary key.
@@ -1048,6 +1056,10 @@ namespace mongo {
 
         bool isPKHidden() const {
             return true;
+        }
+        
+        bool requiresIDField() const {
+            return false;
         }
 
     protected:
@@ -1159,6 +1171,10 @@ namespace mongo {
         // The given deltas are signed values that represent changes to the collection.
         // We need to roll back those changes. Therefore, we subtract from the current value.
         void noteAbort(const BSONObj &minPK, long long nDelta, long long sizeDelta);
+        
+        bool requiresIDField() const {
+            return true;
+        }
 
     protected:
         void _insertObject(const BSONObj &obj, uint64_t flags, bool* indexBitChanged);
@@ -1255,6 +1271,8 @@ namespace mongo {
 
         void dropIndexDetails(int idxNum, bool noteNs);
 
+        void addIndexOK();
+
     private:
         // When closing a BulkLoadedCollection, we need to make sure the key trackers and
         // loaders are destructed before we call up to the parent destructor, because they
@@ -1271,6 +1289,9 @@ namespace mongo {
         scoped_array< scoped_ptr<MultiKeyTracker> > _multiKeyTrackers;
         scoped_ptr<storage::Loader> _loader;
     };
+
+    string getMetaCollectionName(const StringData &ns);
+    string getPartitionName(const StringData &ns, uint64_t partitionID);
 
     class PartitionedCollection : public CollectionData {
     public:
@@ -1299,28 +1320,13 @@ namespace mongo {
             _metaCollection->close(aborting, indexBitsChanged);
         }
 
-        virtual bool ensureIndex(const BSONObj &info) {
-            // Contract is for ensureIndex to
-            // check if index already exists. Therefore, this
-            // snippet is copied from CollectionBase
-            const BSONObj keyPattern = info["key"].Obj();
-            const int i = findIndexByKeyPattern(keyPattern);
-            if (i >= 0) {
-                return false;
-            }
-            // now that we know it does not exist and we are ACTUALLY
-            // adding an index, uassert
-            uasserted(17238, "cannot add an index to a partitioned collection");
-        }
+        virtual bool ensureIndex(const BSONObj &info);
 
         virtual int nIndexesBeingBuilt() const {
-            return nIndexes();
+            return _partitions[0]->nIndexesBeingBuilt();
         }
 
         virtual IndexDetails& idx(int idxNo) const {
-            // for now, verify that it is 0, while partitioned collections
-            // don't support secondary indexes
-            verify( idxNo == 0 );
             return *_indexDetails[idxNo];
         }
 
@@ -1362,7 +1368,7 @@ namespace mongo {
         }
 
         virtual bool findByPK(const BSONObj &pk, BSONObj &result) const {
-            int whichPartition = partitionWithPK(pk);
+            uint64_t whichPartition = partitionWithPK(pk);
             return _partitions[whichPartition]->findByPK(pk, result);
         }
 
@@ -1383,12 +1389,12 @@ namespace mongo {
         }
         
         virtual void insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged) {
-            int whichPartition = partitionWithRow(obj);
+            uint64_t whichPartition = partitionWithRow(obj);
             _partitions[whichPartition]->insertObject(obj, flags, indexBitChanged);
         }
 
         virtual void deleteObject(const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
-            int whichPartition = partitionWithPK(pk);
+            uint64_t whichPartition = partitionWithPK(pk);
             _partitions[whichPartition]->deleteObject(pk, obj, flags);
         }
 
@@ -1407,7 +1413,7 @@ namespace mongo {
         virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
                                       const bool fromMigrate,
                                       uint64_t flags) {
-            int whichPartition = partitionWithPK(pk);
+            uint64_t whichPartition = partitionWithPK(pk);
             _partitions[whichPartition]->updateObjectMods(pk, updateObj, fromMigrate, flags);
         }
 
@@ -1429,14 +1435,6 @@ namespace mongo {
                 CollectionData *currColl = it->get();
                 currColl->dropIndexDetails(idxNum, false);
             }
-            // not sure I like this, but if we are dropping the primary key,
-            // then we are dropping the collection, which means we need
-            // to take care of the metaCollection as well. May want to later
-            // change CollectionData API to explicitly handle this
-            if (idxNum == 0) {
-                verify(_metaCollection->nIndexes() == 1);
-                _metaCollection->dropIndexDetails(0, false);
-            }
         }
         
         virtual void acquireTableLock() {
@@ -1455,26 +1453,24 @@ namespace mongo {
             return true;
         }
 
+        virtual bool requiresIDField() const {
+            return _partitions[0]->requiresIDField();
+        }
+
         virtual bool getMaxPKForPartitionCap(BSONObj &result) const {
             msgasserted(17311, "should not call getMaxPKForPartitionCap on a partitioned collection");
         }
 
         virtual void fillSpecificStats(BSONObjBuilder &result, int scale) const;
 
-        virtual shared_ptr<CollectionIndexer> newIndexer(const BSONObj &info, const bool background) {
+        virtual shared_ptr<CollectionIndexer> newHotIndexer(const BSONObj &info) {
             uasserted(17242, "Cannot create a hot index on a partitioned collection");
         }
 
-        virtual unsigned long long getMultiKeyIndexBits() const {
-            // no secondary indexes, so no multi keys
-            return 0;
-        }
+        virtual unsigned long long getMultiKeyIndexBits() const;
 
         // for now, no multikey indexes on partitioned collections
-        virtual bool isMultiKey(int i) const {
-            return false;
-        }
-
+        virtual bool isMultiKey(int i) const;
         
         // table scan
         virtual shared_ptr<Cursor> makeCursor(const int direction, const bool countCursor);
@@ -1482,12 +1478,7 @@ namespace mongo {
         // index-scan
         virtual shared_ptr<Cursor> makeCursor(const IndexDetails &idx,
                                         const int direction, 
-                                        const bool countCursor) {
-            // as of now, no secondary indexes, so this should
-            // just be a table scan
-            verify(idxNo(idx) == 0);
-            return makeCursor(direction, countCursor);
-        }
+                                        const bool countCursor);
 
         // index range scan between start/end
         virtual shared_ptr<Cursor> makeCursor(const IndexDetails &idx,
@@ -1503,15 +1494,51 @@ namespace mongo {
                                        const int direction, const int numWanted,
                                        const bool countCursor);
 
-        virtual shared_ptr<CollectionRenamer> getRenamer() {
-            uasserted(17294, "cannot rename a partitioned collection");
-        }
 
+        class Renamer : public CollectionRenamer {
+            shared_ptr<CollectionRenamer> _metaRenamer;
+            std::vector< shared_ptr<CollectionRenamer> > _partitionRenamers;
+            std::vector<uint64_t> _ids;
+        public:
+            Renamer(PartitionedCollection *pc) {
+                _metaRenamer = pc->_metaCollection->getRenamer();
+                for (uint64_t i = 0; i < pc->numPartitions(); i++) {
+                    _partitionRenamers.push_back(pc->_partitions[i]->getRenamer());
+                    _ids.push_back(pc->_partitionIDs[i]);
+                }
+            }
+
+            // not sure if it is necessary to pass in from, whether this is the
+            // same as _ns
+            virtual void renameCollection(const StringData& from, const StringData& to) {
+                _metaRenamer->renameCollection(
+                    getMetaCollectionName(from),
+                    getMetaCollectionName(to)
+                    );
+                uint64_t curr = 0;
+                for ( vector< shared_ptr<CollectionRenamer> >::const_iterator it = _partitionRenamers.begin(); 
+                      it != _partitionRenamers.end(); 
+                      it++
+                      )
+                {
+                    (*it)->renameCollection(
+                        getPartitionName(from, _ids[curr]),
+                        getPartitionName(to, _ids[curr])
+                        );
+                    curr++;
+                }
+            }
+        };
+        shared_ptr<CollectionRenamer> getRenamer() {
+            shared_ptr<CollectionRenamer> ret(new Renamer (this));
+            return ret;
+        }
 
         // functions for adding/dropping partitions
         void dropPartition(uint64_t id);
         void addPartition();
         void manuallyAddPartition(const BSONObj& newPivot);
+        void addPartitionFromOplog(const BSONObj& newPivot, const BSONObj &partitionInfo);
         void getPartitionInfo(uint64_t* numPartitions, BSONArray* partitionArray);
         void addClonedPartitionInfo(const vector<BSONElement> &partitionInfo);
         BSONObj getPartitionMetadata(uint64_t index);
@@ -1529,7 +1556,10 @@ namespace mongo {
             return _partitions[idx];
         }
         // states which partition the row or PK belongs to
-        int partitionWithPK(const BSONObj& pk) const;
+        uint64_t partitionWithPK(const BSONObj& pk) const;
+        uint64_t partitionWithRow(const BSONObj& row) const {
+            return partitionWithPK(getValidatedPKFromObject(row));
+        }
         shared_ptr<CollectionData> getMetaCollection() {
             return _metaCollection;
         }
@@ -1537,6 +1567,10 @@ namespace mongo {
         static shared_ptr<PartitionedCollection> make(const StringData &ns, const BSONObj &options);
         static shared_ptr<PartitionedCollection> make(const BSONObj &serialized, CollectionRenamer* renamer);
         static shared_ptr<PartitionedCollection> make(const BSONObj &serialized);
+
+        virtual void finishDrop();
+        void addIndexOK() { }
+
     protected:
         // make constructors
         // called in appendNewPartition. This is the method (that can be overridden),
@@ -1549,19 +1583,17 @@ namespace mongo {
         PartitionedCollection(const BSONObj &serialized);
         void initialize(const StringData &ns, const BSONObj &options);
         void initialize(const BSONObj &serialized, CollectionRenamer* renamer);
-        void initialize(const BSONObj &serialized);
+        void initialize(const BSONObj &serialized);        
+        virtual BSONObj determinePrimaryKey(const BSONObj &options);
     private:
         void createIndexDetails();
         void sanityCheck();
-        string getMetaCollectionName(const StringData &ns);
-        int partitionWithRow(const BSONObj& row) const {
-            return partitionWithPK(getValidatedPKFromObject(row));
-        }
 
         // function used internally to drop a partition
         void dropPartitionInternal(uint64_t id);
-        // returns name of the IndexedCollection for an associated partition
-        string getPartitionName(uint64_t partitionID);
+        // helper function that runs common code for the various
+        // methods that add a partition
+        void prepareAddPartition();
         // helper function, adds a partition as specified by partitionInfo
         // used by appendNewPartition and createPartitionsFromClone
         void appendPartition(BSONObj partitionInfo);
@@ -1580,6 +1612,10 @@ namespace mongo {
         // finds the index into our vectors that has stuff (collection, pivot, etc...)
         // according to this id
         uint64_t findInMemoryPartition(uint64_t id);
+
+        // return upper bound
+        BSONObj getUpperBound();
+
 
         // options to be used when creating new partitions
         BSONObj _options;
@@ -1605,6 +1641,9 @@ namespace mongo {
         // then partition i stores values x such that 100 < x <= 200
         std::vector<BSONObj> _partitionPivots;
         Ordering _ordering; // used for comparisons
+
+        // for makeCursor, to determine what partitions we needto visit
+        const ShardKeyPattern _shardKeyPattern;
     };
 
     // for legacy oplogs that were not partitioned. So we can open them just long enough
