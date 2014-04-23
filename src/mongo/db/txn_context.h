@@ -44,7 +44,7 @@ namespace mongo {
     void disableLogTxnOpsForSharding(void);
     bool shouldLogTxnOpForSharding(const char *opstr, const char *ns, const BSONObj &obj);
     bool shouldLogTxnUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj);
-    void setLogTxnToOplog(void (*)(GTID gtid, uint64_t timestamp, uint64_t hash, deque<BSONObj> ops));
+    void setLogTxnToOplog(void (*)(GTID gtid, uint64_t timestamp, uint64_t hash, const deque<BSONObj>& ops));
     void setLogTxnRefToOplog(void (*f)(GTID gtid, uint64_t timestamp, uint64_t hash, OID& oid));
     void setLogOpsToOplogRef(void (*f)(BSONObj o));
     void setOplogInsertStats(TimerStats *oplogInsertStats, Counter64 *oplogInsertBytesStats);

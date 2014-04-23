@@ -90,7 +90,7 @@ namespace mongo {
         replInfoDetails->insertObject(bb2, flags);
     }
     
-    void logTransactionOps(GTID gtid, uint64_t timestamp, uint64_t hash, deque<BSONObj> ops) {
+    void logTransactionOps(GTID gtid, uint64_t timestamp, uint64_t hash, const deque<BSONObj>& ops) {
         LOCK_REASON(lockReason, "repl: logging to oplog");
         Client::ReadContext ctx(rsoplog, lockReason);
 
@@ -101,7 +101,7 @@ namespace mongo {
         b.append("a", true);
 
         BSONArrayBuilder opInfoBuilder(b.subarrayStart("ops"));
-        for (deque<BSONObj>::iterator it = ops.begin(); it != ops.end(); it++) {
+        for (deque<BSONObj>::const_iterator it = ops.begin(); it != ops.end(); it++) {
             opInfoBuilder.append(*it);
         }
         opInfoBuilder.done();

@@ -40,7 +40,7 @@ namespace mongo {
     // to true
     static bool _logTxnOpsForReplication = false;
     static bool _logTxnOpsForSharding = false;
-    static void (*_logTxnToOplog)(GTID gtid, uint64_t timestamp, uint64_t hash, deque<BSONObj> ops) = NULL;
+    static void (*_logTxnToOplog)(GTID gtid, uint64_t timestamp, uint64_t hash, const deque<BSONObj>& ops) = NULL;
     static void (*_logTxnOpsRef)(GTID gtid, uint64_t timestamp, uint64_t hash, OID& oid) = NULL;
     static void (*_logOpsToOplogRef)(BSONObj o) = NULL;
     static bool (*_shouldLogOpForSharding)(const char *, const char *, const BSONObj &) = NULL;
@@ -63,7 +63,7 @@ namespace mongo {
         return _logTxnOpsForReplication;
     }
 
-    void setLogTxnToOplog(void (*f)(GTID gtid, uint64_t timestamp, uint64_t hash, deque<BSONObj> ops)) {
+    void setLogTxnToOplog(void (*f)(GTID gtid, uint64_t timestamp, uint64_t hash, const deque<BSONObj>& ops)) {
         _logTxnToOplog = f;
     }
 
