@@ -69,6 +69,7 @@
 
 #include "mongo/s/d_logic.h"
 #include "mongo/s/stale_exception.h" // for SendStaleConfigException
+#include "mongo/util/fail_point_service.h"
 #include "mongo/util/goodies.h"
 #include "mongo/util/mongoutils/str.h"
 #include "mongo/util/time_support.h"
@@ -808,6 +809,11 @@ namespace mongo {
         return ok;
     }
 
+    // for failure injection around hot indexing
+    MONGO_FP_DECLARE(hotIndexUnlockedBeforeBuild);
+    // a fail point that acts like a condition variable
+    MONGO_FP_DECLARE(hotIndexSleepCond);
+
     static void _buildHotIndex(const char *ns, Message &m, const vector<BSONObj> objs) {
         // We intend to take the DBWrite lock only to initiate and finalize the
         // index build. Since we'll be releasing lock in between these steps, we
@@ -869,10 +875,19 @@ namespace mongo {
                 }
             } wlr(lk, ns);
 
+            MONGO_FAIL_POINT_BLOCK(hotIndexUnlockedBeforeBuild, data) {
+                const BSONObj &info = data.getData(); 
+                if (info["sleep"].trueValue()) {
+                    // sleep until the hotIndexSleepCond fail point is active
+                    while (!MONGO_FAIL_POINT(hotIndexSleepCond)) {
+                        sleep(1);
+                    }
+                }
+            }
+
             // Perform the index build
             indexer->build();
         }
-
 
         // Commit the index build
         {
