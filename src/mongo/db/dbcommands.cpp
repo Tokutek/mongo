@@ -993,7 +993,6 @@ namespace mongo {
                 uassert( 10026 ,  "source namespace does not exist", cl );
                 capped = cl->isCapped();
                 partitioned = cl->isPartitioned();
-                uassert(17295, "cannot rename a partitioned collection", !cl->isPartitioned());
                 uassert(17332, "cannot rename collection: background index build in progress", !cl->indexBuildInProgress());
             }
 
