@@ -3,7 +3,7 @@ Section: devel
 Priority: optional
 Maintainer: Leif Walsh <leif.walsh@gmail.com>
 Standards-Version: 3.9.5
-Build-Depends: debhelper (>= 7), libpcre3, libpcre3-dev, cmake, libboost1.35-dev | libboost1.37-dev | libboost1.38-dev | libboost1.40-dev | libboost1.42-dev | libboost1.48-dev | libboost1.49-dev | libboost1.53-dev, libboost-thread1.35-dev | libboost-thread1.37-dev | libboost-thread1.38-dev | libboost-thread1.40-dev | libboost-thread1.42-dev | libboost-thread1.48-dev | libboost-thread1.49-dev | libboost-thread1.53-dev, libboost-filesystem1.35-dev | libboost-filesystem1.37-dev | libboost-filesystem1.38-dev | libboost-filesystem1.40-dev | libboost-filesystem1.42-dev | libboost-filesystem1.48-dev | libboost-filesystem1.49-dev | libboost-filesystem1.53-dev, libboost-program-options1.35-dev | libboost-program-options1.37-dev | libboost-program-options1.38-dev | libboost-program-options1.40-dev | libboost-program-options1.42-dev | libboost-program-options1.48-dev | libboost-program-options1.49-dev | libboost-program-options1.53-dev, libboost-date-time1.35-dev | libboost-date-time1.37-dev | libboost-date-time1.38-dev | libboost-date-time1.40-dev | libboost-date-time1.42-dev | libboost-date-time1.48-dev | libboost-date-time1.49-dev | libboost-date-time1.53-dev, libpcap-dev, libreadline-dev, zlib1g-dev
+Build-Depends: debhelper (>= 7), libpcre3, libpcre3-dev, cmake, libboost-dev, libboost-thread-dev, libboost-filesystem-dev, libboost-program-options-dev, libboost-date-time-dev, libpcap-dev, libreadline-dev, zlib1g-dev
 Homepage: http://www.tokutek.com/products/tokumx-for-mongodb
 Vcs-Browser: https://github.com/Tokutek/mongo
 Vcs-Git: git://github.com/Tokutek/mongo.git
@@ -50,7 +50,7 @@ Description: object/document-oriented database (client apps)
 
 Package: tokumx-dev
 Architecture: amd64 i386
-Depends: ${misc:Depends}, python2.5 | python2.6 | python2.7, libboost1.35-dev | libboost1.37-dev | libboost1.38-dev | libboost1.40-dev | libboost1.42-dev | libboost1.48-dev | libboost1.49-dev | libboost1.53-dev, libboost-thread1.35-dev | libboost-thread1.37-dev | libboost-thread1.38-dev | libboost-thread1.40-dev | libboost-thread1.42-dev | libboost-thread1.48-dev | libboost-thread1.49-dev | libboost-thread1.53-dev, libboost-filesystem1.35-dev | libboost-filesystem1.37-dev | libboost-filesystem1.38-dev | libboost-filesystem1.40-dev | libboost-filesystem1.42-dev | libboost-filesystem1.48-dev | libboost-filesystem1.49-dev | libboost-filesystem1.53-dev, libboost-program-options1.35-dev | libboost-program-options1.37-dev | libboost-program-options1.38-dev | libboost-program-options1.40-dev | libboost-program-options1.42-dev | libboost-program-options1.48-dev | libboost-program-options1.49-dev | libboost-program-options1.53-dev, libboost-date-time1.35-dev | libboost-date-time1.37-dev | libboost-date-time1.38-dev | libboost-date-time1.40-dev | libboost-date-time1.42-dev | libboost-date-time1.48-dev | libboost-date-time1.49-dev | libboost-date-time1.53-dev, tokumx-common
+Depends: ${misc:Depends}, python2.5 | python2.6 | python2.7, libboost-dev, libboost-thread-dev, libboost-filesystem-dev, libboost-program-options-dev, libboost-date-time-dev, tokumx-common
 Conflicts: mongodb-dev
 Description: object/document-oriented database (development)
  TokuMX is a high-performance version of MongoDB using Fractal
