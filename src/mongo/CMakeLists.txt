@@ -733,39 +733,6 @@ if (BUILD_TESTING)
     )
 endif ()
 
-find_library(GCC_S_LIBRARY NAMES gcc_s PATHS
-  /lib64
-  /lib/x86_64-linux-gnu
-  /usr/local/gcc-4.7/lib64
-  /usr/local/gcc-4.7/lib/x86_64-linux-gnu
-  /usr/local/gcc-4.7.3/lib64
-  /usr/local/gcc-4.7.3/lib/x86_64-linux-gnu
-  )
-if (NOT GCC_S_LIBRARY MATCHES NOTFOUND)
-  get_filename_component(GCC_S_LIBRARY_DIR "${GCC_S_LIBRARY}" PATH)
-  file(GLOB GCC_S_LIBRARY_FILES "${GCC_S_LIBRARY_DIR}/libgcc_s.so*")
-  install(FILES ${GCC_S_LIBRARY_FILES}
-    DESTINATION ${INSTALL_LIBDIR}
-    COMPONENT tokumx_libs_extra
-    )
-endif ()
-find_library(STDCXX_LIBRARY NAMES stdc++ PATHS
-  /usr/lib64
-  /usr/lib/x86_64-linux-gnu
-  /usr/local/gcc-4.7/lib64
-  /usr/local/gcc-4.7/lib/x86_64-linux-gnu
-  /usr/local/gcc-4.7.3/lib64
-  /usr/local/gcc-4.7.3/lib/x86_64-linux-gnu
-  )
-if (NOT STDCXX_LIBRARY MATCHES NOTFOUND)
-  get_filename_component(STDCXX_LIBRARY_DIR "${STDCXX_LIBRARY}" PATH)
-  file(GLOB STDCXX_LIBRARY_FILES "${STDCXX_LIBRARY_DIR}/libstdc++.so*")
-  install(FILES ${STDCXX_LIBRARY_FILES}
-    DESTINATION ${INSTALL_LIBDIR}
-    COMPONENT tokumx_libs_extra
-    )
-endif ()
-
 if (BUILD_TESTING)
   set(js_cxx_ctest_root "${CMAKE_BINARY_DIR}/ctest/mongo/cxx")
   set(js_cxx_dbpath "${js_cxx_ctest_root}/db")
