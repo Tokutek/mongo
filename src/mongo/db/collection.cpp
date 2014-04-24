@@ -1394,7 +1394,7 @@ namespace mongo {
             if (options["partitioned"].trueValue()) {
                 BSONObj res;
                 Collection* cl = getCollection(ns);
-                massert(0, "Could not get collection we just created in userCreateNS", cl);
+                massert(17333, "Could not get collection we just created in userCreateNS", cl);
                 PartitionedCollection* pc = cl->as<PartitionedCollection>();
                 uint64_t numPartitions;
                 BSONArray partitionArray;
@@ -2592,7 +2592,7 @@ namespace mongo {
     }
 
     void BulkLoadedCollection::addIndexOK() {
-        uasserted(0, "Cannot create a hot index on a bulk loaded collection");
+        uasserted(17334, "Cannot create a hot index on a bulk loaded collection");
     }
 
     // When closing a BulkLoadedCollection, we need to make sure the key trackers and
@@ -2714,7 +2714,7 @@ namespace mongo {
         // is just more functionality that needs to be tested
         // and maintained, so not supporting it at the moment.
         vector<BSONElement> indexes = serialized["indexes"].Array();
-        uassert(0, "there should only be one index", indexes.size() == 1);
+        uassert(17335, "there should only be one index", indexes.size() == 1);
         
         // first operate as though we are creating a new
         // collection
@@ -3132,9 +3132,9 @@ namespace mongo {
                 BSONObjBuilder b;
                 cloneBSONWithFieldChanged(b, currInfo, "ns", getPartitionName(_ns, id), false);
                 bool ret = newPartition->ensureIndex(b.obj());
-                massert(0, str::stream() << "could not add index " << currInfo, ret);
+                massert(17336, str::stream() << "could not add index " << currInfo, ret);
             }
-            massert(0, "could not add proper indexes", newPartition->nIndexes() == _partitions[0]->nIndexes());
+            massert(17337, "could not add proper indexes", newPartition->nIndexes() == _partitions[0]->nIndexes());
         }
         _partitions.push_back(newPartition);
 
@@ -3280,7 +3280,7 @@ namespace mongo {
         // to know when we are at the last element
         uint64_t numPartitionsFoundInMeta = 0;
         for (shared_ptr<Cursor> c( Cursor::make(_metaCollection.get(), 1, false) ); c->ok() ; c->advance(), numPartitionsFoundInMeta++) {
-            massert(0, "Bad cursor", c->ok());
+            massert(17338, "Bad cursor", c->ok());
             BSONObj curr = c->current();
             // the keys are stored without their field names,
             // in the "packed" format. Here we put the
@@ -3297,7 +3297,7 @@ namespace mongo {
                 pivotIT.next();
                 pkIT.next();
             }
-            massert(0, str::stream() << "There should be no more PK fields available for pivot " << curr, !pkIT.more());
+            massert(17339, str::stream() << "There should be no more PK fields available for pivot " << curr, !pkIT.more());
             BSONObjBuilder currWithFilledPivot;
             cloneBSONWithFieldChanged(currWithFilledPivot, curr, "max", filledPivot.done(), false);
             b.append(currWithFilledPivot.obj());

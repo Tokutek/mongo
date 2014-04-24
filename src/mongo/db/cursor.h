@@ -858,7 +858,7 @@ namespace mongo {
         }
         bool tailable() const { return false; }
         void setTailable() {
-            uasserted(0, "Cannot set a secondary index on a partitioned cursor to tailable");
+            uasserted(17348, "Cannot set a secondary index on a partitioned cursor to tailable");
         }
 
     private:

@@ -1830,7 +1830,7 @@ namespace mongo {
             }
             // now that we have added the partition, take care of the oplog
             uint64_t numPartitions = pc->numPartitions();
-            massert(0, str::stream() << "bad numPartitions after adding a partition " << numPartitions, numPartitions > 1);
+            massert(17347, str::stream() << "bad numPartitions after adding a partition " << numPartitions, numPartitions > 1);
             // this partition has the pivot that was capped
             BSONObj oldEnd = pc->getPartitionMetadata(numPartitions - 2);
             // this is the newly added partition

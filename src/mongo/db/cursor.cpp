@@ -379,7 +379,7 @@ namespace mongo {
             comparator
             );
         shared_ptr<Cursor> currentCursor = _cursors.back().first;
-        massert(0, "cursor should be ok", currentCursor->ok());
+        massert(17340, "cursor should be ok", currentCursor->ok());
         currentCursor->advance();
         std::push_heap(_cursors.begin(), _cursors.end(), comparator);
         return ok();
@@ -480,10 +480,10 @@ namespace mongo {
     void SubPartitionIDGeneratorImpl::sanityCheckPartitionEndpoints() {
         // sanity check
         if (_direction > 0) {
-            massert(0, str::stream() << "bad _endPartition " << _endPartition << " and _startPartition " << _startPartition, _endPartition >= _startPartition);
+            massert(17341, str::stream() << "bad _endPartition " << _endPartition << " and _startPartition " << _startPartition, _endPartition >= _startPartition);
         }
         else {
-            massert(0, str::stream() << "bad _endPartition " << _endPartition << " and _startPartition " << _startPartition, _startPartition >= _endPartition);
+            massert(17342, str::stream() << "bad _endPartition " << _endPartition << " and _startPartition " << _startPartition, _startPartition >= _endPartition);
         }
     }
 
@@ -492,7 +492,7 @@ namespace mongo {
     }
 
     void SubPartitionIDGeneratorImpl::advanceIndex() {
-        massert(0, "cannot advanceIndex, at end", !lastIndex());
+        massert(17343, "cannot advanceIndex, at end", !lastIndex());
         if (_direction > 0) {
             _currPartition++;
         }
@@ -575,8 +575,8 @@ namespace mongo {
             _currPartition = maxPartitionToRead;
             _endPartition = minPartitionToRead;
         }
-        massert(0, "bad _endPartition", _partitionsToRead[_endPartition]);
-        massert(0, "bad _currPartition", _partitionsToRead[_currPartition]);
+        massert(17344, "bad _endPartition", _partitionsToRead[_endPartition]);
+        massert(17345, "bad _currPartition", _partitionsToRead[_currPartition]);
     }
 
     uint64_t FilteredPartitionIDGeneratorImpl::getCurrentPartitionIndex() {
@@ -584,7 +584,7 @@ namespace mongo {
     }
     
     void FilteredPartitionIDGeneratorImpl::advanceIndex() {
-        massert(0, "cannot advanceIndex, at end", !lastIndex());
+        massert(17346, "cannot advanceIndex, at end", !lastIndex());
         if (_direction > 0) {
             _currPartition++;
             while (!_partitionsToRead[_currPartition]) {
