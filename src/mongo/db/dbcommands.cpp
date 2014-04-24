@@ -1023,7 +1023,7 @@ namespace mongo {
 
             // renaming across databases, so we must copy all
             // the data and then remove the source collection.
-            uassert(17295, "cannot rename a partitioned collection", !partitioned);
+            uassert(17295, "cannot rename a partitioned collection across databases", !partitioned);
             BSONObjBuilder spec;
             if ( capped ) {
                 spec.appendBool( "capped", true );

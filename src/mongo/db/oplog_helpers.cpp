@@ -286,7 +286,7 @@ namespace mongo {
         void logPartitionInfoAfterCreate(const char *ns, const vector<BSONElement> &partitionInfo) {
             if (logTxnOpsForReplication()) {
                 BSONObjBuilder b;
-                BSONArrayBuilder barr;
+                BSONArrayBuilder arrayBuilder;
                 if (isLocalNs(ns)) {
                     return;
                 }
@@ -294,9 +294,9 @@ namespace mongo {
                 appendNsStr(ns, &b);
                 for (vector<BSONElement>::const_iterator it = partitionInfo.begin(); it != partitionInfo.end(); it++) {
                     BSONObj curr = it->Obj();
-                    barr.append(curr);
+                    arrayBuilder.append(curr);
                 }
-                b.append(KEY_STR_ROW, barr.arr());
+                b.append(KEY_STR_ROW, arrayBuilder.arr());
                 cc().txn().logOpForReplication(b.obj());
             }
         }

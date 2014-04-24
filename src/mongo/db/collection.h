@@ -1327,17 +1327,17 @@ namespace mongo {
         }
 
         virtual IndexDetails& idx(int idxNo) const {
-            return *_indexDetails[idxNo];
+            return *_indexDetailsVector[idxNo];
         }
 
         virtual int idxNo(const IndexDetails& idx) const {
-            for (PartitionedIndexVector::const_iterator it = _indexDetails.begin(); 
-                 it != _indexDetails.end();
+            for (PartitionedIndexVector::const_iterator it = _indexDetailsVector.begin(); 
+                 it != _indexDetailsVector.end();
                  ++it)
             {
                 const IndexDetails *index = it->get();
                 if (index == &idx) {
-                    return it - _indexDetails.begin();
+                    return it - _indexDetailsVector.begin();
                 }
             }
             msgasserted(17244, "E12000 idxNo fails");
@@ -1362,7 +1362,7 @@ namespace mongo {
             return isPK;
         }
         virtual IndexDetails &getPKIndex() const {
-            IndexDetails &idx = *_indexDetails[0];
+            IndexDetails &idx = *_indexDetailsVector[0];
             dassert(idx.keyPattern() == _pk);
             return idx;
         }
@@ -1427,7 +1427,7 @@ namespace mongo {
                 CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
                 rollback.noteNs(_ns);
             }
-            _indexDetails.erase(_indexDetails.begin() + idxNum);
+            _indexDetailsVector.erase(_indexDetailsVector.begin() + idxNum);
             for (IndexCollVector::const_iterator it = _partitions.begin(); 
                  it != _partitions.end(); 
                  ++it) 
@@ -1584,7 +1584,6 @@ namespace mongo {
         void initialize(const StringData &ns, const BSONObj &options);
         void initialize(const BSONObj &serialized, CollectionRenamer* renamer);
         void initialize(const BSONObj &serialized);        
-        virtual BSONObj determinePrimaryKey(const BSONObj &options);
     private:
         void createIndexDetails();
         void sanityCheck();
@@ -1627,7 +1626,7 @@ namespace mongo {
         shared_ptr<IndexedCollection> _metaCollection;
 
         typedef std::vector<shared_ptr<PartitionedIndexDetails> > PartitionedIndexVector;
-        PartitionedIndexVector _indexDetails; // one per index, which at this time means only one total
+        PartitionedIndexVector _indexDetailsVector; // one per index, which at this time means only one total
 
         // vector storing the ids of the partitions
         // This information is also stored in _metaCollection, but is cached

@@ -2648,7 +2648,7 @@ namespace mongo {
     // constructor and methods that create a PartitionedCollection
     //
     PartitionedCollection::PartitionedCollection(const StringData &ns, const BSONObj &options) :
-        CollectionData(ns, determinePrimaryKey(options)),
+        CollectionData(ns, getPrimaryKeyFromOptions(options)),
         _options(options.getOwned()),
         _ordering(Ordering::make(BSONObj())), // dummy for now, we create it properly below
         _shardKeyPattern(_pk)
@@ -2818,12 +2818,7 @@ namespace mongo {
         return ret;
     }
 
-    BSONObj PartitionedCollection::determinePrimaryKey(const BSONObj &options) {
-        return getPrimaryKeyFromOptions(options);
-    }
-
     unsigned long long PartitionedCollection::getMultiKeyIndexBits() const {
-        // no secondary indexes, so no multi keys
         uint64_t retval = 0;
         for (uint64_t i = 0; i < numPartitions(); i++) {
             retval |= _partitions[i]->getMultiKeyIndexBits();
@@ -2861,10 +2856,10 @@ namespace mongo {
             new PartitionedIndexDetails(
                 replaceNSField(info, _ns),
                 this,
-                _indexDetails.size()
+                _indexDetailsVector.size()
                 )
             );
-        _indexDetails.push_back(details);
+        _indexDetailsVector.push_back(details);
         return true;
     }
 
@@ -3048,10 +3043,10 @@ namespace mongo {
                     i
                     )
                 );
-            _indexDetails.push_back(details);
+            _indexDetailsVector.push_back(details);
         }
         // initialize _ordering
-        _ordering = Ordering::make(_indexDetails[0]->keyPattern());
+        _ordering = Ordering::make(_indexDetailsVector[0]->keyPattern());
     }
 
     // helper function for add partition
@@ -3281,14 +3276,10 @@ namespace mongo {
     // returns the partition info with field names for the pivots filled in
     void PartitionedCollection::getPartitionInfo(uint64_t* numPartitions, BSONArray* partitionArray) {
         BSONArrayBuilder b;
-        uint64_t numPartitionsFoundInMeta = 0;
-        for (shared_ptr<Cursor> c( Cursor::make(_metaCollection.get(), 1, false) ); c->ok() ; c->advance()) {
-            numPartitionsFoundInMeta++;
-        }
         // reason we run through this twice is to make it simple
         // to know when we are at the last element
-        shared_ptr<Cursor> c( Cursor::make(_metaCollection.get(), 1, false) );
-        for (uint64_t i = 0; i < numPartitionsFoundInMeta; i++) {
+        uint64_t numPartitionsFoundInMeta = 0;
+        for (shared_ptr<Cursor> c( Cursor::make(_metaCollection.get(), 1, false) ); c->ok() ; c->advance(), numPartitionsFoundInMeta++) {
             massert(0, "Bad cursor", c->ok());
             BSONObj curr = c->current();
             // the keys are stored without their field names,
@@ -3310,7 +3301,6 @@ namespace mongo {
             BSONObjBuilder currWithFilledPivot;
             cloneBSONWithFieldChanged(currWithFilledPivot, curr, "max", filledPivot.done(), false);
             b.append(currWithFilledPivot.obj());
-            c->advance();
         }
         // note that we cannot just return numPartitions() for this
         // command, because this is done in the context of a transaction
@@ -3452,8 +3442,8 @@ namespace mongo {
             _options = newOptions.getOwned();
             // Update the IndexDetails with new info() which contains the new options, so that when
             // Collection::rebuildIndexes serializes us, we give it the right indexes info.
-            for (PartitionedIndexVector::iterator it = _indexDetails.begin(); it != _indexDetails.end(); ++it) {
-                size_t idxNum = it - _indexDetails.begin();
+            for (PartitionedIndexVector::iterator it = _indexDetailsVector.begin(); it != _indexDetailsVector.end(); ++it) {
+                size_t idxNum = it - _indexDetailsVector.begin();
                 BSONObj info = _partitions[0]->idx(idxNum).info();
                 it->reset(new PartitionedIndexDetails(replaceNSField(info, _ns), this, idxNum));
             }
