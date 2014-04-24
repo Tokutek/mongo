@@ -82,7 +82,7 @@ namespace mongo {
         massert(16922, "dropDups is not supported, we should have stripped it out earlier",
                        !_info["dropDups"].trueValue());
 
-        uassert(12588, "cannot add index with a hot index build in progress",
+        uassert(12588, "cannot add index: a hot index build is in progress",
                        !_cl->_indexBuildInProgress);
 
         uassert(12523, "no index name specified",
