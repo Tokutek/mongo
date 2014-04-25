@@ -1121,7 +1121,7 @@ namespace mongo {
                 BSONObjBuilder b;
                 b.append( "name", *i );
 
-                {
+                if (!getenv("TOKUMX_SHOW_NO_SIZES")){
                     LOCK_REASON(lockReason, "listDatabases: getting db size");
                     Client::ReadContext rc( getSisterNS(*i, "system.namespaces"), lockReason );
                     size_t uncompressedSize = 0;

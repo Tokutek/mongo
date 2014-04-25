@@ -986,7 +986,7 @@ namespace mongo {
                 e->names.push_back(string((char *) key->data, length - 3));
             }
         }
-        return 0;
+        return TOKUDB_CURSOR_CONTINUE;
     } 
 
     void getDatabaseNames( vector< string > &names) {
