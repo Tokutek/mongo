@@ -134,7 +134,7 @@ This package provides the header files and C++ driver for TokuMX.
 %setup
 
 %clean
-rm -rf ${RPM_BUILD_ROOT}
+rm -rf %{buildroot}
 
 %build
 mkdir -p opt
@@ -156,7 +156,7 @@ mkdir -p opt
     -D USE_SYSTEM_PCRE=OFF \
     -D TOKUMX_STRIP_BINARIES=OFF \
     -D TOKUMX_SET_RPATH=OFF \
-    -D CMAKE_INSTALL_PREFIX=${RPM_BUILD_ROOT}/%{_prefix} \
+    -D CMAKE_INSTALL_PREFIX=%{buildroot}/%{_prefix} \
     -D BUILD_TESTING=OFF \
     -D INSTALL_LIBDIR=%{_lib}/%{product_name} \
     -D CMAKE_INSTALL_RPATH=%{_libdir}/%{product_name} \
@@ -181,37 +181,37 @@ make -C opt %{?_smp_mflags}
   cmake -D COMPONENT=tokumx_client_headers -P cmake_install.cmake && \
   cmake -D COMPONENT=tokumx_client_libs -P cmake_install.cmake)
 
-install -p -dm755 ${RPM_BUILD_ROOT}%{_docdir}/%{product_name}/licenses
-mv ${RPM_BUILD_ROOT}%{_prefix}/GNU-AGPL-3.0        ${RPM_BUILD_ROOT}%{_docdir}/%{product_name}/licenses
-mv ${RPM_BUILD_ROOT}%{_prefix}/README-TOKUKV       ${RPM_BUILD_ROOT}%{_docdir}/%{product_name}/licenses
-mv ${RPM_BUILD_ROOT}%{_prefix}/THIRD-PARTY-NOTICES ${RPM_BUILD_ROOT}%{_docdir}/%{product_name}/licenses
-mv ${RPM_BUILD_ROOT}%{_prefix}/NEWS                ${RPM_BUILD_ROOT}%{_docdir}/%{product_name}
-mv ${RPM_BUILD_ROOT}%{_prefix}/README              ${RPM_BUILD_ROOT}%{_docdir}/%{product_name}
+install -p -dm755 %{buildroot}%{_docdir}/%{product_name}/licenses
+mv %{buildroot}%{_prefix}/GNU-AGPL-3.0        %{buildroot}%{_docdir}/%{product_name}/licenses
+mv %{buildroot}%{_prefix}/README-TOKUKV       %{buildroot}%{_docdir}/%{product_name}/licenses
+mv %{buildroot}%{_prefix}/THIRD-PARTY-NOTICES %{buildroot}%{_docdir}/%{product_name}/licenses
+mv %{buildroot}%{_prefix}/NEWS                %{buildroot}%{_docdir}/%{product_name}
+mv %{buildroot}%{_prefix}/README              %{buildroot}%{_docdir}/%{product_name}
 
-install -p -Dm755 ${RPM_BUILD_ROOT}%{_prefix}/scripts/tokumxstat.py ${RPM_BUILD_ROOT}%{_datadir}/%{product_name}/scripts/tokumxstat.py
-rm -rf ${RPM_BUILD_ROOT}%{_prefix}/scripts
+install -p -Dm755 %{buildroot}%{_prefix}/scripts/tokumxstat.py %{buildroot}%{_datadir}/%{product_name}/scripts/tokumxstat.py
+rm -rf %{buildroot}%{_prefix}/scripts
 
-mkdir -p ${RPM_BUILD_ROOT}%{_sharedstatedir}/%{product_name}
-mkdir -p ${RPM_BUILD_ROOT}%{_localstatedir}/log/%{product_name}
-mkdir -p ${RPM_BUILD_ROOT}%{_localstatedir}/run/%{product_name}
+mkdir -p %{buildroot}%{_sharedstatedir}/%{product_name}
+mkdir -p %{buildroot}%{_localstatedir}/log/%{product_name}
+mkdir -p %{buildroot}%{_localstatedir}/run/%{product_name}
 
 %if 0%{?fedora} >= 15
-install -p -dm755 ${RPM_BUILD_ROOT}%{_unitdir}
-install -p -Dm644 %{SOURCE5} ${RPM_BUILD_ROOT}%{_libdir}/../lib/tmpfiles.d/%{product_name}.conf
-install -p -Dm644 %{SOURCE6} ${RPM_BUILD_ROOT}%{_unitdir}/%{product_name}.service
+install -p -dm755 %{buildroot}%{_unitdir}
+install -p -Dm644 %{SOURCE5} %{buildroot}%{_libdir}/../lib/tmpfiles.d/%{product_name}.conf
+install -p -Dm644 %{SOURCE6} %{buildroot}%{_unitdir}/%{product_name}.service
 %else
 install -p -Dm755 %{SOURCE1} $RPM_BUILD_ROOT%{_initddir}/%{product_name}
 %endif
 
-install -p -Dm644 %{SOURCE2} ${RPM_BUILD_ROOT}%{_sysconfdir}/logrotate.d/%{product_name}
-install -p -Dm644 %{SOURCE3} ${RPM_BUILD_ROOT}%{_sysconfdir}/%{product_name}.conf
-sed -i'' -e "s#@LIBDIR@#"%{_libdir}"#" ${RPM_BUILD_ROOT}%{_sysconfdir}/%{product_name}.conf
-install -p -Dm644 %{SOURCE4} ${RPM_BUILD_ROOT}%{_sysconfdir}/sysconfig/%{product_name}
+install -p -Dm644 %{SOURCE2} %{buildroot}%{_sysconfdir}/logrotate.d/%{product_name}
+install -p -Dm644 %{SOURCE3} %{buildroot}%{_sysconfdir}/%{product_name}.conf
+sed -i'' -e "s#@LIBDIR@#"%{_libdir}"#" %{buildroot}%{_sysconfdir}/%{product_name}.conf
+install -p -Dm644 %{SOURCE4} %{buildroot}%{_sysconfdir}/sysconfig/%{product_name}
 
-install -dm755 ${RPM_BUILD_ROOT}%{_mandir}/man1
-install -p -m644 -t ${RPM_BUILD_ROOT}%{_mandir}/man1 debian/*.1
+install -dm755 %{buildroot}%{_mandir}/man1
+install -p -m644 -t %{buildroot}%{_mandir}/man1 debian/*.1
 
-mv ${RPM_BUILD_ROOT}%{_libdir}/%{product_name}/libmongoclient.so ${RPM_BUILD_ROOT}%{_libdir}
+mv %{buildroot}%{_libdir}/%{product_name}/libmongoclient.so %{buildroot}%{_libdir}
 
 %post -p /sbin/ldconfig
 
