@@ -326,21 +326,12 @@ fi
 %{_mandir}/man1/mongostat.1*
 %{_mandir}/man1/mongotop.1*
 
-%{_datadir}/%{product_name}/scripts/tokumxstat.py*
+%{_datadir}/%{product_name}
 
 %files common
-%doc %{_docdir}/%{product_name}/licenses/GNU-AGPL-3.0
-%doc %{_docdir}/%{product_name}/licenses/README-TOKUKV
-%doc %{_docdir}/%{product_name}/licenses/THIRD-PARTY-NOTICES
-%doc %{_docdir}/%{product_name}/README
-%doc %{_docdir}/%{product_name}/NEWS
 
-%{_libdir}/%{product_name}/libHotBackup.so
-%{_libdir}/%{product_name}/libtokufractaltree.so
-%{_libdir}/%{product_name}/libtokuportability.so
-%if 0%{tokumx_enterprise}
-%{_libdir}/%{product_name}/plugins
-%endif
+%doc %{_docdir}/%{product_name}
+%{_libdir}/%{product_name}
 
 %files -n lib%{name}
 
@@ -348,7 +339,7 @@ fi
 
 %files -n lib%{name}-devel
 
-%{_includedir}
+%{_includedir}/*
 
 %files server
 %{_bindir}/mongod
