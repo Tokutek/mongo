@@ -21,6 +21,7 @@
 #include <string>
 #include <boost/thread/xtime.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/version.hpp>
 
 #include "mongo/bson/util/misc.h"  // Date_t
 
