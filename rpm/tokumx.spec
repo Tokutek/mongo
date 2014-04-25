@@ -201,7 +201,7 @@ install -p -dm755 %{buildroot}%{_unitdir}
 install -p -Dm644 %{SOURCE5} %{buildroot}%{_libdir}/../lib/tmpfiles.d/%{product_name}.conf
 install -p -Dm644 %{SOURCE6} %{buildroot}%{_unitdir}/%{product_name}.service
 %else
-install -p -Dm755 %{SOURCE1} $RPM_BUILD_ROOT%{_initddir}/%{product_name}
+install -p -Dm755 %{SOURCE1} %{buildroot}%{_initddir}/%{product_name}
 %endif
 
 install -p -Dm644 %{SOURCE2} %{buildroot}%{_sysconfdir}/logrotate.d/%{product_name}
