@@ -1,4 +1,9 @@
 %global product_name tokumx
+%if 0%{?rhel:1}
+%if %{rhel} <= 5
+%define _sharedstatedir /var/lib
+%endif
+%endif
 
 %if 0%{tokumx_enterprise}
 Name: tokumx-enterprise
