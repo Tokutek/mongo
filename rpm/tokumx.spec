@@ -201,7 +201,11 @@ install -p -dm755 %{buildroot}%{_unitdir}
 install -p -Dm644 %{SOURCE5} %{buildroot}%{_libdir}/../lib/tmpfiles.d/%{product_name}.conf
 install -p -Dm644 %{SOURCE6} %{buildroot}%{_unitdir}/%{product_name}.service
 %else
+%if 0%{?rhel} >= 6
 install -p -Dm755 %{SOURCE1} %{buildroot}%{_initddir}/%{product_name}
+%else
+install -p -Dm755 %{SOURCE1} %{buildroot}%{_initrddir}/%{product_name}
+%endif
 %endif
 
 install -p -Dm644 %{SOURCE2} %{buildroot}%{_sysconfdir}/logrotate.d/%{product_name}
@@ -356,7 +360,11 @@ fi
 %{_unitdir}/%{product_name}.service
 %{_libdir}/../lib/tmpfiles.d/%{product_name}.conf
 %else
+%if 0%{?rhel} >= 6
 %{_initddir}/%{product_name}
+%else
+%{_initrddir}/%{product_name}
+%endif
 %endif
 
 %changelog
