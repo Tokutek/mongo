@@ -58,7 +58,8 @@ namespace mongo {
     }
 
     StatusWithMatchExpression MatchExpressionParser::_parseNot( const char* name,
-                                                      const BSONElement& e ) {
+                                                                const BSONElement& e,
+                                                                int level ) {
         if ( e.type() == RegEx ) {
             StatusWithMatchExpression s = _parseRegexElement( name, e );
             if ( !s.isOK() )
@@ -78,7 +79,7 @@ namespace mongo {
             return StatusWithMatchExpression( ErrorCodes::BadValue, "$not cannot be empty" );
 
         std::auto_ptr<AndMatchExpression> theAnd( new AndMatchExpression() );
-        Status s = _parseSub( name, notObject, theAnd.get() );
+        Status s = _parseSub( name, notObject, theAnd.get(), level );
         if ( !s.isOK() )
             return StatusWithMatchExpression( s );
 
