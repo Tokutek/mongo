@@ -1004,7 +1004,7 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             cmdLine.fastupdatesIgnoreErrors = true;
         }
         if (params.count("ignoreSizeInShowDBs")) {
-            cmdLine.ignoreSizeInShowDBs = true
+            cmdLine.ignoreSizeInShowDBs = true;
         }
         if (params.count("checkpointPeriod")) {
             cmdLine.checkpointPeriod = params["checkpointPeriod"].as<uint32_t>();
