@@ -1121,7 +1121,7 @@ namespace mongo {
                 BSONObjBuilder b;
                 b.append( "name", *i );
 
-                {
+                if (!cmdLine.ignoreSizeInShowDBs) {
                     LOCK_REASON(lockReason, "listDatabases: getting db size");
                     Client::ReadContext rc( getSisterNS(*i, "system.namespaces"), lockReason );
                     size_t uncompressedSize = 0;

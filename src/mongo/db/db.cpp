@@ -776,6 +776,7 @@ static void buildOptionsDescriptions(po::options_description *pVisible,
     ("tmpDir", po::value<string>(), "directory to store temporary bulk loader files (default is --dbpath)")
     ("gdb", "go into a gdb-friendly mode (development use only).")
     ("gdbPath", po::value<string>(), "if specified, debugging information will be gathered on fatal error by launching gdb at the given path")
+    ("ignoreSizeInShowDBs", "ignore size when running show dbs")
     ("ipv6", "enable IPv6 support (disabled by default)")
     ("journal", "DEPRECATED")
     ("journalCommitInterval", po::value<uint32_t>(), "how often to fsync recovery log (same as logFlushPeriod)")
@@ -1001,6 +1002,9 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
         }
         if (params.count("fastupdatesIgnoreErrors")) {
             cmdLine.fastupdatesIgnoreErrors = true;
+        }
+        if (params.count("ignoreSizeInShowDBs")) {
+            cmdLine.ignoreSizeInShowDBs = true
         }
         if (params.count("checkpointPeriod")) {
             cmdLine.checkpointPeriod = params["checkpointPeriod"].as<uint32_t>();
