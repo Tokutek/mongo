@@ -1773,8 +1773,7 @@ namespace mongo {
                 }
 
                 if (needCreate) {
-                    const string &dbname = cc().database()->name();
-                    string system_namespaces = getSisterNS(dbname, ".system.namespaces");
+                    string system_namespaces = getSisterNS(ns, "system.namespaces");
                     BSONObj entry = conn->findOne(system_namespaces, BSON( "name" << ns ));
 
                     LOCK_REASON(lockReason, "sharding: creating collection for migrate");
