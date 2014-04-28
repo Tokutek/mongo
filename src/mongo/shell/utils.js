@@ -761,7 +761,22 @@ shellHelper.show = function (what) {
     }
 
     if (what == "collections" || what == "tables") {
-        db.getCollectionNames().forEach(function (x) { print(x) });
+        var colls = db.getCollectionNames();
+        var size  = {};
+        var uncompressedSize = {};
+        colls.forEach(function (x) {
+          var c = db.runCommand({collStats : x, scale : 1}); 
+          uncompressedSize[x] = c.storageSize
+          size[x] = c.size + c.totalIndexSize
+        });
+        var names = colls.sort();
+        names.forEach(function(n) {
+          if (size[n] > 1) {
+                print(n + "\t" + shellHelper._prettyBytes(uncompressedSize[n]) + " (uncompressed),\t" + shellHelper._prettyBytes(size[n]) + " (compressed)");
+            } else {
+                print(n + "\t(empty)");
+            }
+        });
         return "";
     }
 
