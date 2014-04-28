@@ -1790,11 +1790,10 @@ namespace mongo {
                                 warning() << "failed to create collection " << ns << " with options " << opts << ": " << errmsg << migrateLog;
                             }
                         }
-                        cl = getOrCreateCollection(ns, true);
-                        massert(17331, mongoutils::str::stream() << "couldn't find collection " << ns << " after creating it while starting migration", cl);
+                        string system_indexes = getSisterNS(ns, "system.indexes");
                         for (vector<BSONObj>::const_iterator it = indexes.begin(); it != indexes.end(); ++it) {
                             const BSONObj &idxObj = *it;
-                            cl->ensureIndex(idxObj);
+                            insertObject(system_indexes.c_str(), idxObj, 0, true /* flag fromMigrate in oplog */);
                         }
                     } else {
                         LOG(0) << "During migrate for collection " << ns << ", it didn't exist but after getting the write lock, it now exists." << migrateLog;
@@ -1824,7 +1823,7 @@ namespace mongo {
 
                 BSONObj indexKeyPattern;
                 if ( !findShardKeyIndexPattern_locked( ns, shardKeyPattern, &indexKeyPattern ) ) {
-                    errmsg = "collection or index dropped during migrate";
+                    errmsg = "collection doesn't have the shard key indexed during migrate";
                     warning() << errmsg << endl;
                     state = FAIL;
                     return;
