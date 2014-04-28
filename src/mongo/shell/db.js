@@ -789,21 +789,22 @@ DB.prototype.getPrevError = function(){
     return this.runCommand( { getpreverror : 1 } );
 }
 
+DB.prototype.forEachCollectionName = function(callback) {
+    var nsLength = this._name.length + 1;
+    this.getCollection('system.namespaces').find().forEach(function (doc) {
+        if (doc.name.indexOf('$') >= 0 && doc.name.indexOf('.oplog.$') < 0) {
+            return;
+        }
+
+        callback(doc.name.substring(nsLength));
+    });
+}
+
 DB.prototype.getCollectionNames = function(){
     var all = [];
-
-    var nsLength = this._name.length + 1;
-    
-    var c = this.getCollection( "system.namespaces" ).find();
-    while ( c.hasNext() ){
-        var name = c.next().name;
-        
-        if ( name.indexOf( "$" ) >= 0 && name.indexOf( ".oplog.$" ) < 0 )
-            continue;
-        
-        all.push( name.substring( nsLength ) );
-    }
-    
+    this.forEachCollectionName(function (n) {
+        all.push(n);
+    });
     return all.sort();
 }
 
