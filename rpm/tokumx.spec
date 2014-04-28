@@ -7,10 +7,10 @@
 
 %if 0%{tokumx_enterprise}
 Name: tokumx-enterprise
-Obsoletes: mongo, mongo-10gen, mongo-10gen-unstable, mongo-stable, mongodb, mongodb-server, tokumx
+Obsoletes: mongo, mongodb, mongo-stable, mongo-10gen, mongo-10gen-enterprise, mongo-10gen-unstable, mongo-10gen-unstable-shell, mongo-10gen-unstable-tools, mongodb-org, mongodb-org-shell, mongodb-org-tools, mongodb-org-unstable, mongodb-org-unstable-shell, mongodb-org-unstable-tools, tokumx
 %else
 Name: tokumx
-Obsoletes: mongo, mongo-10gen, mongo-10gen-unstable, mongo-stable, mongodb, mongodb-server
+Obsoletes: mongo, mongodb, mongo-stable, mongo-10gen, mongo-10gen-enterprise, mongo-10gen-unstable, mongo-10gen-unstable-shell, mongo-10gen-unstable-tools, mongodb-org, mongodb-org-shell, mongodb-org-tools, mongodb-org-unstable, mongodb-org-unstable-shell, mongodb-org-unstable-tools
 Conflicts: tokumx-enterprise
 %endif
 Version: %{?tokumx_version}%{!?tokumx_version:1.4.0}
@@ -88,8 +88,9 @@ Requires(preun): chkconfig
 Requires(postun): initscripts
 %endif
 %if 0%{tokumx_enterprise}
-Obsoletes: tokumx-server
+Obsoletes: mongodb-server, mongo-10gen-server, mongo-10gen-unstable-server, mongodb-org-mongos, mongodb-org-server, mongodb-org-unstable-mongos, mongodb-org-unstable-server, tokumx-server
 %else
+Obsoletes: mongodb-server, mongo-10gen-server, mongo-10gen-unstable-server, mongodb-org-mongos, mongodb-org-server, mongodb-org-unstable-mongos, mongodb-org-unstable-server
 Conflicts: tokumx-enterprise-server
 %endif
 
