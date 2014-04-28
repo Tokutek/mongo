@@ -14,7 +14,7 @@ Depends:
     tokumx-clients (= ${binary:Version}),
     tokumx-server (= ${binary:Version}),
     ${misc:Depends}
-Conflicts: mongodb
+Conflicts: mongodb, mongodb-stable, mongodb-unstable, mongodb-nightly, mongodb-10gen, mongodb-10gen-unstable, mongodb-org, mongodb-org-unstable
 Description: object/document-oriented database (metapackage)
  TokuMX is a high-performance version of MongoDB using Fractal
  Tree indexes to store indexes and data.  TokuMX is
@@ -31,7 +31,7 @@ Description: object/document-oriented database (metapackage)
 Package: tokumx-clients
 Architecture: amd64
 Depends: ${shlibs:Depends}, ${misc:Depends}, tokumx-common (= ${binary:Version}), python2.5 | python2.6 | python2.7
-Conflicts: mongodb-clients
+Conflicts: mongodb-clients, mongodb-10gen-unstable-shell, mongodb-10gen-unstable-tools, mongodb-org-shell, mongodb-org-tools, mongodb-org-unstable-shell, mongodb-org-unstable-tools
 Description: object/document-oriented database (client apps)
  TokuMX is a high-performance version of MongoDB using Fractal
  Tree indexes to store indexes and data.  TokuMX is
@@ -72,7 +72,7 @@ Package: tokumx-server
 Architecture: amd64
 Depends: ${shlibs:Depends}, ${misc:Depends}, tokumx-common (= ${binary:Version})
 Pre-Depends: adduser
-Conflicts: mongodb-server
+Conflicts: mongodb-server, mongodb-10gen-unstable-mongos, mongodb-10gen-unstable-server, mongodb-org-mongos, mongodb-org-server, mongodb-org-unstable-mongos, mongodb-org-unstable-server
 Description: object/document-oriented database (server package)
  TokuMX is a high-performance version of MongoDB using Fractal
  Tree indexes to store indexes and data.  TokuMX is
