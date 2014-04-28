@@ -113,7 +113,9 @@ assert.eq( 0 , secondary.count() , "s count after drop" )
 // NOTE
 //   the following bypasses the sharding layer and writes straight to the servers
 //   this is not supported at all but we'd like to leave this backdoor for now
+//   If you want to do this you must create the collection the same way as on other servers
 primary.save( { num : 1 } );
+assert.commandWorked(s.getOther( primary.name ).getDB( "test" ).createCollection('foo', {primaryKey: {num: 1, _id: 1}}));
 secondary.save( { num : 4 } );
 assert.eq( 1 , primary.count() , "p count after drop and save" )
 assert.eq( 1 , secondary.count() , "s count after drop and save " )
