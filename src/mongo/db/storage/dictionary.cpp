@@ -86,29 +86,25 @@ namespace mongo {
         // - pageSize
         static BSONObj fillDefaultAttributes(const BSONObj &info) {
             // zlib compression
-            std::string compression = defaultCompression;
+            const std::string compression = (info.hasField("compression")
+                                             ? info["compression"].valuestrsafe()
+                                             : defaultCompression);
 
             // 4mb fractal tree nodes
-            int pageSize = defaultPageSize;
+            const int pageSize = (info.hasField("pageSize")
+                                  ? BytesQuantity<int>(info["pageSize"])
+                                  : defaultPageSize);
 
             // 64kb basement nodes
-            int readPageSize = defaultReadPageSize;
+            const int readPageSize = (info.hasField("readPageSize")
+                                      ? BytesQuantity<int>(info["readPageSize"])
+                                      : defaultReadPageSize);
 
             // fractal tree fanout is 16
-            int fanout = defaultFanout;
+            const int fanout = (info.hasField("fanout")
+                                ? info["fanout"].numberInt()
+                                : defaultFanout);
 
-            if (info.hasField("compression")) {
-                compression = info["compression"].valuestrsafe(); 
-            }
-            if (info.hasField("readPageSize")) {
-                readPageSize = BytesQuantity<int>(info["readPageSize"]);
-            }
-            if (info.hasField("pageSize")) {
-                pageSize = BytesQuantity<int>(info["pageSize"]);
-            }
-            if (info.hasField("fanout")) {
-                fanout = info["fanout"].numberInt();
-            }
             return BSON("compression" << compression <<
                         "readPageSize" << readPageSize <<
                         "pageSize" << pageSize <<
