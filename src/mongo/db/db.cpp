@@ -313,6 +313,7 @@ namespace mongo {
             DISK_VERSION_2 = 2,  // 1.4.0: changed how ints with abs value larger than 2^52 are packed (#820)
             DISK_VERSION_3 = 3,  // 1.4.0+hotfix.1: moved upgrade of system.users collections into DiskFormatVersion framework (#978)
             DISK_VERSION_4 = 4,  // 1.4.1: remove old partitioned collection entries from system.namespaces (#967)
+            DISK_VERSION_5 = 5,  // 1.4.2: #1087, fix indexes that were not properly serialized
             DISK_VERSION_NEXT,
             DISK_VERSION_CURRENT = DISK_VERSION_NEXT - 1,
             MIN_SUPPORTED_VERSION = 1,
@@ -391,6 +392,40 @@ namespace mongo {
             }
             string dbpath = cc().database()->path();
             Database::closeDatabase(dbname, dbpath);
+            _pm->hit();
+            return Status::OK();
+        }
+
+        static Status fixMissingIndexesInNS(const StringData &dbname) {
+            string ns = getSisterNS(dbname, "system.indexes");
+            Client::Context ctx(ns);
+            Collection *sysIndexes = getCollection(ns);
+            if (sysIndexes == NULL) {
+                return Status(ErrorCodes::InternalError, mongoutils::str::stream() << "didn't find system.indexes collection for db " << dbname);
+            }
+            for (shared_ptr<Cursor> cursor = Cursor::make(sysIndexes); cursor->ok(); cursor->advance()) {
+                BSONObj cur = cursor->current();
+                if (!cur["background"].trueValue()) {
+                    continue;
+                }
+                StringData collns = cur["ns"].Stringdata();
+                Collection *cl = getCollection(collns);
+                // It's possible for the collection to have been dropped.  If so, need to clean up
+                // system.indexes and system.namespaces because those entries may not have been
+                // deleted by the collection's drop.
+                if (!cl || cl->indexIsOrphaned(cur)) {
+                    // Don't warn the user if the collection was dropped.
+                    if (cl) {
+                        warning() << "Found an orphaned secondary index on collection " << collns << ": " << cur << startupWarningsLog;
+                        warning() << "This is due to issue #1087 (https://github.com/Tokutek/mongo/issues/1087)." << startupWarningsLog;
+                        warning() << "You will need to rebuild this index after this upgrade is complete." << startupWarningsLog;
+                        warning() << "To do this, run this command in the shell:" << startupWarningsLog;
+                        warning() << "> use " << dbname << startupWarningsLog;
+                        warning() << "> db.system.indexes.insert(" << cur << ")" << startupWarningsLog;
+                    }
+                    cleanupOrphanedIndex(cur);
+                }
+            }
             _pm->hit();
             return Status::OK();
         }
@@ -477,6 +512,21 @@ namespace mongo {
                     ScopedPMH scpmh(_pm, &pm);
 
                     Status s = applyToDatabaseNames(&DiskFormatVersion::cleanupPartitionedNamespacesEntries);
+                    if (!s.isOK()) {
+                        return s;
+                    }
+
+                    break;
+                }
+                case DISK_VERSION_5: {
+                    verify(Lock::isW());
+                    verify(cc().hasTxn());
+
+                    ProgressMeter pmObj(_numNamespaces, 3, 1, "databases", upgradeLogPrefix);
+                    ProgressMeterHolder pm(pmObj);
+                    ScopedPMH scpmh(_pm, &pm);
+
+                    Status s = applyToDatabaseNames(&DiskFormatVersion::fixMissingIndexesInNS);
                     if (!s.isOK()) {
                         return s;
                     }

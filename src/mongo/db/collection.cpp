@@ -105,6 +105,27 @@ namespace mongo {
         return cl;
     }
 
+    // This method is ONLY used during an upgrade in db.cpp.
+    // Due to #1087, when moving from 1.4.{0|1} to 1.4.2, we may have
+    // an index that is not referenced in the .ns file. We need to remove it.
+    // We know for sure that it was an index belonging to a CollectionBase, because
+    // partitioned collections could not have secondary indexes. Therefore, we
+    // can assume the secondary index can be managed with an IndexDetailsBase
+    // (as all secondary indexes of CollectionBase were in 1.4.2) and we follow the
+    // relevant steps of Collection::dropIndex and CollectionBase::dropIndexDetails
+    void cleanupOrphanedIndex(const BSONObj& info) {
+        shared_ptr<IndexDetailsBase> idx(IndexDetailsBase::make(info, false));
+        StringData collns = info["ns"].Stringdata();
+        // This code was taken from 1.4.1's implementation of Collection::dropIndex,
+        // as that had the code for how to remove an index.
+        removeFromNamespacesCatalog(idx->indexNamespace());
+        if (nsToCollectionSubstring(collns) != "system.indexes") {
+            removeFromIndexesCatalog(collns, idx->indexName());
+        }
+        // Drop the index.
+        idx->kill_idx();
+    }
+
     /* ------------------------------------------------------------------------- */
 
     static BSONObj indexInfo(const string& ns, const BSONObj &keyPattern, bool unique, bool clustering, BSONObj options) {

@@ -64,6 +64,9 @@ namespace mongo {
     void addToIndexesCatalog(const BSONObj &info);
     void addToNamespacesCatalog(const StringData &name, const BSONObj *options = NULL);
 
+    // Used for upgrade 1.4.{0|1} to 1.4.2, due to #1087
+    void cleanupOrphanedIndex(const BSONObj& info);
+
     // Rename a namespace within current 'client' db.
     // (Arguments should include db name)
     void renameCollection(const StringData &from, const StringData &to);
@@ -620,6 +623,29 @@ namespace mongo {
             rollback.noteNs(_ns);
             
             return _cd->newHotIndexer(info);
+        }
+
+        // Needed for fixing #1087. This should never be called otherwise.
+        // Returns true if the index specified in info was not serialized as part of the collection.
+        bool indexIsOrphaned(const BSONObj &info) {
+            StringData name = info["name"].Stringdata();
+            // The name is what determines the dname in the fractal tree, so this is what we check.
+            int idxNum = _cd->findIndexByName(name);
+            if (idxNum < 0) {
+                // We could not find an index with this name, index is orphaned.
+                return true;
+            }
+
+            // We found an index with this name, looks like it isn't orphaned.  Do a sanity check
+            // and make sure the key is what we expect it to be as well.
+            // TODO: We might want to also check the rest of info matches.
+            massert(17333, mongoutils::str::stream()
+                    << "Found an index whose name matches (" << name << ") "
+                    << "but its key does not match (expected " << info.getObjectField("key")
+                    << ", found " << _cd->idx(idxNum).keyPattern() << ").",
+                    _cd->findIndexByKeyPattern(info.getObjectField("key")) == idxNum);
+
+            return false;
         }
 
         //
