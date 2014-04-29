@@ -401,7 +401,7 @@ namespace mongo {
             Client::Context ctx(ns);
             Collection *sysIndexes = getCollection(ns);
             if (sysIndexes == NULL) {
-                return Status(ErrorCodes::InternalError, mongoutils::str::stream() << "didn't find system.namespaces collection for db " << dbname);
+                return Status(ErrorCodes::InternalError, mongoutils::str::stream() << "didn't find system.indexes collection for db " << dbname);
             }
             for (shared_ptr<Cursor> cursor = Cursor::make(sysIndexes); cursor->ok(); cursor->advance()) {
                 BSONObj cur = cursor->current();
