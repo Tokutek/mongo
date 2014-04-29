@@ -134,7 +134,8 @@ files.forEach(function(x) {
             'part_convert|' +
             'part_coll_simple|' +
             'partition_ops_multithread|' +
-            'pk_unique_check_param' +
+            'pk_unique_check_param|' +
+            'indexer_bg_unit' +
         ')\.js$');
 
     if (failsInShardingPattern.test(x.name)) {
