@@ -19,6 +19,7 @@
 #include "mongo/base/units.h"
 #include "mongo/db/client.h"
 #include "mongo/db/descriptor.h"
+#include "mongo/db/server_parameters.h"
 #include "mongo/db/storage/dictionary.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/util/mongoutils/str.h"
@@ -71,6 +72,11 @@ namespace mongo {
             }
         }
 
+        MONGO_EXPORT_SERVER_PARAMETER(defaultCompression, std::string, "zlib");
+        MONGO_EXPORT_SERVER_PARAMETER(defaultPageSize, BytesQuantity<int>, StringData("4MB"));
+        MONGO_EXPORT_SERVER_PARAMETER(defaultReadPageSize, BytesQuantity<int>, StringData("64KB"));
+        MONGO_EXPORT_SERVER_PARAMETER(defaultFanout, int, 16);
+
         // Get an object with default attribute values, overriden 
         // by anyting present in the given info object.
         //
@@ -80,16 +86,16 @@ namespace mongo {
         // - pageSize
         static BSONObj fillDefaultAttributes(const BSONObj &info) {
             // zlib compression
-            string compression = "zlib";
-
-            // 64kb basement nodes
-            int readPageSize = 64 * 1024;
+            std::string compression = defaultCompression;
 
             // 4mb fractal tree nodes
-            int pageSize = 4 * 1024 * 1024;
+            int pageSize = defaultPageSize;
+
+            // 64kb basement nodes
+            int readPageSize = defaultReadPageSize;
 
             // fractal tree fanout is 16
-            int fanout = 16;
+            int fanout = defaultFanout;
 
             if (info.hasField("compression")) {
                 compression = info["compression"].valuestrsafe(); 
