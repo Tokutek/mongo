@@ -1,6 +1,160 @@
 tokumx news
 ===========
 
+tokumx 1.4.2
+------------
+Release date: TBD
+
+General
+~~~~~~~
+
+    - This release is focused on bug fixes since 1.4.1.
+
+    - Please take special note of issues #1085 and #1087, if you are
+      affected by them you may need to drop and re-create some indexes to
+      make sure they are consistent with the primary key.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Added new `mongod` server parameters that control the default
+      parameters used when creating new collections and indexes:
+
+       - `defaultCompression` (default `"zlib"`)
+       - `defaultPageSize` (default `"4MB"`)
+       - `defaultReadPageSize` (default `"64KB"`)
+
+      Use the `setParameter` command line option, or the
+      `getParameter`/`setParameter` commands to control these values,
+      e.g. `mongod --setParameter=defaultCompression="quicklz"` or
+      `db.setParameter('defaultCompression', 'quicklz')`.
+
+      Also added new `mongorestore` command line options that, if set,
+      determine the default parameters used for restoring new collections
+      and indexes, unless they are specified in the `metadata.json` file.
+      If the `mongorestore` options are not set, the `mongod`'s values are
+      used instead:
+
+        - `defaultCompression`
+        - `defaultPageSize`
+        - `defaultReadPageSize`
+
+      These options are specified as normal options, e.g.
+      `mongorestore --defaultCompression "quicklz"`.  (#377)
+
+    - The engine-specific information in serverStatus() has been expanded,
+      including some new information for existing sections, and a new
+      `ft.checkpoint` section.  See the user's guide for more details.
+      (Tokutek/ft-index#219, #1090)
+
+    - Background index build operations no longer hold a read lock on
+      their database.  This eliminates the possibility that another thread
+      can stall the system by trying to acquire a write lock, which would
+      greedily block other operations until the index build finished.
+      (#1035)
+
+    - The `--rowcount` argument to `mongostat` now works with multiple
+      servers.  (#1040)
+
+    - Added better progress reporting for index building, bulk loading
+      with `mongorestore`, `reIndex` operations, and disk format version
+      upgrade on startup.  This information is available in the log and in
+      `db.currentOp()`.  (#1048, #1052, #1053)
+
+    - The shell's `show collections` now reports uncompressed and
+      compressed sizes like `show dbs`.  (#1102)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Optimized the operation of opening a database when there are a large
+      number of databases already open.  (Tokutek/ft-index#225)
+
+    - In sharded clusters, new databases now have their primary shard
+      chosen correctly, according to total uncompressed data size, rather
+      than always to the first shard.  (#422)
+
+    - Chunk migrations in sharded clusters now just warn about missing
+      indexes.
+
+      Chunk migrations used to check that the recipient shard had the same
+      indexes as the donor shard, and would build any missing indexes at
+      that point.  This situation could arise from a user aborted index
+      build, if some shards finished building before the abort.  In this
+      case, it would cause migrations to force an expensive index build at
+      unpredictable times.  With this change, users should watch for these
+      messages, but can now choose when to schedule the index build.
+      (#1045)
+
+    - Fixed a starvation interaction between a long-running `reIndex`
+      operation and a `setShardVersion` (which is used by several sharding
+      components).  (#1047)
+
+    - Fixed the default location for `pluginsDir` in deb and rpm packages.
+      (#1051)
+
+    - Fixed a crash that could occur with large range queries and drivers
+      that use connection pools.  (#1058)
+
+    - Fixed a deadlock when upgrading the disk format version with a large
+      number of databases.  (#1059)
+
+    - Several fixes to the `mongorestore` tool, including adding an option
+      to disable the bulk loader (`--noLoader`) and better error
+      checking.  (#1064)
+
+    - Merged fixes from upstream through 2.4.10:  (#1077)
+
+      - https://jira.mongodb.org/browse/SERVER-9259[SERVER-9259]
+      - https://jira.mongodb.org/browse/SERVER-11560[SERVER-11560]
+      - https://jira.mongodb.org/browse/SERVER-12034[SERVER-12034]
+      - https://jira.mongodb.org/browse/SERVER-12132[SERVER-12132]
+      - https://jira.mongodb.org/browse/SERVER-12548[SERVER-12548]
+      - https://jira.mongodb.org/browse/SERVER-12908[SERVER-12908]
+      - https://jira.mongodb.org/browse/SERVER-13249[SERVER-13249]
+      - https://jira.mongodb.org/browse/SERVER-13333[SERVER-13333]
+      - https://jira.mongodb.org/browse/SERVER-13376[SERVER-13376]
+
+    - Fixed a bug in `update` that could cause a background index being
+      concurrently built to not reflect the result of the update if the
+      building index's key was affected by the update.
+
+      This bug existed in 1.4.0 and 1.4.1; any indexes built in the
+      background with those versions should be dropped and recreated if it
+      is possible that there were updates that would have affected the
+      index's key while it was building.  (#1085)
+
+    - Fixed an issue where background index builds replicated to
+      secondaries did not have their metadata properly maintained by 1.4.0
+      and 1.4.1 secondaries.  This can cause updates to those indexes to
+      not be reflected on the secondaries' versions of those indexes,
+      which is similar to #1085, but this state lasts longer than just
+      during the index build as in #1085.
+
+      This can but does not necessarily also cause those indexes to be
+      inaccessible after a server reboot, and upgrading to 1.4.2 will
+      clean up those indexes (they will be dropped and will report to the
+      log how to rebuild them).  Any background indexes that were
+      replicated to secondaries running 1.4.0 and 1.4.1, if they are not
+      cleaned up by this mechanism, should be dropped and recreated.
+
+      This can be done by starting the secondary without the `--replSet`
+      option or config file directive to take it out of the set, building
+      the index while it's not in the set, then starting it with the
+      `--replSet` option to get it back into the set.  Before doing this,
+      you should add arbiters if needed to make sure there will be enough
+      other nodes in the set to keep the primary from stepping down.  This
+      procedure is described in
+      http://docs.mongodb.org/manual/tutorial/build-indexes-on-replica-sets/[Build indexes on replica sets].
+      (#1087)
+
+    - A unique index cannot be built in the background.  In previous
+      versions such an index was turned into a foreground index, now an
+      error is returned that lets the user choose what to do.  (#1091)
+
+
 tokumx 1.4.1
 ------------
 Release date: 2014-03-25
