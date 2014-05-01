@@ -1110,6 +1110,20 @@ namespace mongo {
             }
         } cleanerIterationsParameter;
 
+        class CompressBuffersBeforeEvictionParameter : public ExportedServerParameter<bool> {
+            bool doCompressBuffers;
+          public:
+            CompressBuffersBeforeEvictionParameter() : ExportedServerParameter<bool>(ServerParameterSet::getGlobal(), "compressBuffersBeforeEviction", &doCompressBuffers, true, true) {}
+
+            virtual Status validate(const bool &newVal) {
+                doCompressBuffers = newVal;
+                db_env_set_compress_buffers_before_eviction(doCompressBuffers);
+                return Status::OK();
+            }
+        } compressBuffersBeforeEvictionParameter;
+
+        // These do not need set functions because the ydb uses a callback
+        // to read cmdLine.lockTimeout / cmdLine.loaderMaxMemory 
         ExportedServerParameter<uint64_t> lockTimeoutParameter(ServerParameterSet::getGlobal(), "lockTimeout", &cmdLine.lockTimeout, true, true);
         ExportedServerParameter<BytesQuantity<uint64_t> > loaderMaxMemoryParameter(ServerParameterSet::getGlobal(), "loaderMaxMemory", &cmdLine.loaderMaxMemory, true, true);
 
