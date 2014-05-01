@@ -26,6 +26,7 @@
 #include "mongo/util/time_support.h"
 #include "mongo/util/net/hostandport.h"
 #include "mongo/util/progress_meter.h"
+#include "mongo/util/background.h"
 
 namespace mongo {
 
@@ -248,6 +249,7 @@ namespace mongo {
         ProgressMeter _progressMeter;
         volatile bool _killed;
         LockStat _lockStat;
+        int _tid;
         
         // this is how much "extra" time a query might take
         // a writebacklisten for example will block for 30s 
@@ -255,4 +257,13 @@ namespace mongo {
         long long _expectedLatencyMs; 
                                      
     };
+
+    class CurOpMonitor : public BackgroundJob {
+    public:
+        string name() const { return "CurOpMonitor"; }
+        void run();
+
+        static void start();
+    };
+
 }

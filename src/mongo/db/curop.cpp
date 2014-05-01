@@ -21,6 +21,12 @@
 #include "mongo/db/commands/server_status.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/database.h"
+#include "mongo/db/server_parameters.h"
+
+#ifndef _WIN32
+#include <unistd.h>
+#include <sys/syscall.h>
+#endif
 
 namespace mongo {
 
@@ -37,6 +43,11 @@ namespace mongo {
         _reset();
         _op = 0;
         _ns.clear();
+#ifndef _WIN32
+        _tid = (int) syscall(SYS_gettid);
+#else
+        _tid = -1;
+#endif
     }
 
     void CurOp::_reset() {
@@ -214,5 +225,45 @@ namespace mongo {
             idhackCounter.increment();
         if ( scanAndOrder )
             scanAndOrderCounter.increment();
+    }
+
+    // Useful for development, can catch stalls with millisecond granularity
+    MONGO_EXPORT_SERVER_PARAMETER(curOpAlarmMillis, int, 0);
+    void CurOpMonitor::run() {
+        Client::initThread("curopmonitor");
+        Client &me = cc();
+        while (!inShutdown()) {
+            if (curOpAlarmMillis > 0) {
+                scoped_lock lk(Client::clientsMutex);
+                for (set<Client*>::iterator i = Client::clients.begin(); i != Client::clients.end(); i++) {
+                    Client *client = *i;
+                    if (client == &me) {
+                        continue;
+                    }
+                    CurOp *op = client->curop();
+                    if (op && *op->getNS() && op->isStarted() && op->displayInCurop()) {
+                        const long long ms = op->elapsedMillis();
+                        if (ms >= curOpAlarmMillis) {
+                            warning() << "op taking a long time, aborting: "
+                                      << "(elapsed " << ms << ", threshold " << curOpAlarmMillis << ")"
+                                      << endl;
+                            warning() << op->debug().report(*op);
+                            abort();
+                        }
+                    }
+                }
+            }
+            if (curOpAlarmMillis > 0) {
+                usleep(5 * 1000); // tight poll when alarm is set
+            } else {
+                sleepsecs(2); // slow poll when no alarm is set
+            }
+        }
+        cc().shutdown();
+    }
+
+    CurOpMonitor _curOpMonitor;
+    void CurOpMonitor::start() {
+        _curOpMonitor.go();
     }
 }

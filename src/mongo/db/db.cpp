@@ -711,6 +711,7 @@ namespace mongo {
         snapshotThread.go();
         d.clientCursorMonitor.go();
         PeriodicTask::theRunner->go();
+        CurOpMonitor::start();
         if (missingRepl) {
             // a warning was logged earlier
         }
