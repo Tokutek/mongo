@@ -639,7 +639,7 @@ namespace mongo {
             // We found an index with this name, looks like it isn't orphaned.  Do a sanity check
             // and make sure the key is what we expect it to be as well.
             // TODO: We might want to also check the rest of info matches.
-            massert(17333, mongoutils::str::stream()
+            massert(17349, mongoutils::str::stream()
                     << "Found an index whose name matches (" << name << ") "
                     << "but its key does not match (expected " << info.getObjectField("key")
                     << ", found " << _cd->idx(idxNum).keyPattern() << ").",
