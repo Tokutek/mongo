@@ -46,9 +46,9 @@ DB.prototype.getParameter = function(){
         for (var i = 0; i < all.length; ++i) {
             cmd[all[i]] = 1;
         }
-        res = this.runCommand(cmd);
+        res = this.adminCommand(cmd);
     } else {
-        res = this.runCommand({getParameter: '*'});
+        res = this.adminCommand({getParameter: '*'});
     }
     if (!res.ok) {
         throw res.errmsg;
@@ -78,7 +78,7 @@ DB.prototype.setParameter = function(param, value){
         }
         cmd[param] = value;
     }
-    return this.runCommand(cmd);
+    return this.adminCommand(cmd);
 }
 
 DB.prototype.stats = function(scale){
