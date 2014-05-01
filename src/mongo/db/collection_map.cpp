@@ -122,7 +122,7 @@ namespace mongo {
                 const string &ns = obj["ns"].String();
                 e->tofill.push_back(ns);
             }
-            return 0;
+            return TOKUDB_CURSOR_CONTINUE;
         }
         catch (std::exception &ex) {
             e->saveException(ex);
