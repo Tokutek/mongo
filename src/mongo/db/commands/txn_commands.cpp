@@ -32,6 +32,9 @@ namespace mongo {
                                            std::vector<Privilege> *out) {
             ActionSet actions;
             actions.addAction(ActionType::transactionCommands);
+            if (cmdObj["isolation"].valuestringdatasafe() == "serializable") {
+                actions.addAction(ActionType::beginSerializableTransaction);
+            }
             // This doesn't really need to be specific to this dbname, but it ensures that you are
             // authed as someone and aren't just anonymous.  This means that if you're running with
             // auth, you need to issue transaction commands against a db that you have privileges

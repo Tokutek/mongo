@@ -107,6 +107,7 @@ namespace {
         // Read-write role
         readWriteRoleActions.addAllActionsFromSet(readRoleActions);
         readWriteRoleActions.addAction(ActionType::addPartition);
+        readWriteRoleActions.addAction(ActionType::beginSerializableTransaction);
         readWriteRoleActions.addAction(ActionType::cloneCollectionTarget);
         readWriteRoleActions.addAction(ActionType::convertToCapped);
         readWriteRoleActions.addAction(ActionType::convertToPartitioned);

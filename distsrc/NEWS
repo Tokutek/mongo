@@ -154,6 +154,12 @@ Bug fixes
       versions such an index was turned into a foreground index, now an
       error is returned that lets the user choose what to do.  (#1091)
 
+    - Beginning a serializable multi-statement transaction
+      (`db.beginTransaction('serializable')`) now requires the `readWrite`
+      role on servers running with authorization.  This prevents users
+      with only the `read` role from creating serializable transactions
+      and running queries that take document-level locks.  (#1112)
+
 
 tokumx 1.4.1
 ------------
