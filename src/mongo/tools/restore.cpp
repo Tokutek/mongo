@@ -53,6 +53,10 @@ public:
     string _curcoll;
     set<string> _users; // For restoring users with --drop
 
+    std::string _defaultCompression;
+    BytesQuantity<int> _defaultPageSize;
+    BytesQuantity<int> _defaultReadPageSize;
+
     Restore() : BSONTool( "restore" ),
         _drop(false), _restoreOptions(false), _restoreIndexes(false),
         _w(0), _doBulkLoad(false) {
@@ -67,6 +71,9 @@ public:
         ("noIndexRestore" , "don't restore indexes")
         ("w" , po::value<int>()->default_value(0) , "minimum number of replicas per write. WARNING, setting w > 1 prevents the bulk load optimization." )
         ("noLoader", "don't use bulk loader")
+        ("defaultCompression", po::value(&_defaultCompression)->default_value(""), "default compression method to use for collections and indexes (unless otherwise specified in metadata.json)")
+        ("defaultPageSize", po::value(&_defaultPageSize)->default_value(0), "default pageSize value to use for collections and indexes (unless otherwise specified in metadata.json)")
+        ("defaultReadPageSize", po::value(&_defaultReadPageSize)->default_value(0), "default readPageSize value to use for collections and indexes (unless otherwise specified in metadata.json)")
         ;
         add_hidden_options()
         ("dir", po::value<string>()->default_value("dump"), "directory to restore from")
@@ -273,12 +280,13 @@ public:
                 // Need to make sure the ns field gets updated to
                 // the proper _curdb + _curns value, if we're
                 // restoring to a different database.
-                const BSONObj indexObj = renameIndexNs(it->Obj());
-                indexes.push_back(indexObj);
+                // Also need to update the options with any defaults specified on the command line
+                indexes.push_back(updateOptions(renameIndexNs(it->Obj())));
             }
         }
-        const BSONObj options = _restoreOptions && metadataObject.hasField("options") ?
-                                metadataObject["options"].Obj() : BSONObj();
+        const BSONObj options = updateOptions(_restoreOptions && metadataObject.hasField("options")
+                                              ? metadataObject["options"].Obj()
+                                              : BSONObj());
 
         if (_doBulkLoad) {
             RemoteLoader loader(conn(), _curdb, _curcoll, indexes, options);
@@ -334,6 +342,35 @@ public:
     }
 
 private:
+
+    BSONObj updateOptions(const BSONObj &originalOptions) {
+        BSONObjBuilder newOptsBuilder;
+        bool compressionSpecified = false;
+        bool pageSizeSpecified = false;
+        bool readPageSizeSpecified = false;
+        for (BSONObjIterator optsIter(originalOptions); optsIter.more(); ++optsIter) {
+            BSONElement opt = *optsIter;
+            StringData optname(opt.fieldName());
+            if (optname == "compression") {
+                compressionSpecified = true;
+            } else if (optname == "pageSize") {
+                pageSizeSpecified = true;
+            } else if (optname == "readPageSize") {
+                readPageSizeSpecified = true;
+            }
+            newOptsBuilder.append(opt);
+        }
+        if (!compressionSpecified && !_defaultCompression.empty()) {
+            newOptsBuilder.append("compression", _defaultCompression);
+        }
+        if (!pageSizeSpecified && ((int) _defaultPageSize) != 0) {
+            newOptsBuilder.append("pageSize", (int) _defaultPageSize);
+        }
+        if (!readPageSizeSpecified && ((int) _defaultReadPageSize) != 0) {
+            newOptsBuilder.append("readPageSize", (int) _defaultReadPageSize);
+        }
+        return newOptsBuilder.obj();
+    }
 
     BSONObj parseMetadataFile(string filePath) {
         long long fileSize = boost::filesystem::file_size(filePath);

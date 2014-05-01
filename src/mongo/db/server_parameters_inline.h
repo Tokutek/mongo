@@ -54,6 +54,11 @@ namespace mongo {
     }
 
     template<>
+    inline Status ExportedServerParameter<BytesQuantity<int> >::setFromString( const string& str ) {
+        return set(BytesQuantity<int>::fromString(str));
+    }
+
+    template<>
     inline Status ExportedServerParameter<BytesQuantity<uint64_t> >::setFromString( const string& str ) {
         return set(BytesQuantity<uint64_t>::fromString(str));
     }
@@ -93,10 +98,13 @@ namespace mongo {
     }
 
     template<>
+    inline void ExportedServerParameter<BytesQuantity<int> >::append( BSONObjBuilder& b, const string& name ) {
+        b.append( name, (int) *_value );
+    }
+
+    template<>
     inline void ExportedServerParameter<BytesQuantity<uint64_t> >::append( BSONObjBuilder& b, const string& name ) {
         b.append( name, (long long) *_value );
     }
-
-
 
 }
