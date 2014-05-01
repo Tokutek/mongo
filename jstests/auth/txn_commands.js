@@ -9,12 +9,19 @@ adminDB.addUser({user:'admin',
 
 adminDB.auth('admin', 'password');
 
-function checkTransactionCommands(loginDB, testDB) {
+function checkTransactionCommands(loginDB, testDB, serializableOk) {
     loginDB.logout();
     assert.commandFailed(testDB.beginTransaction());
     loginDB.auth('spencer', 'password');
     assert.commandWorked(testDB.beginTransaction());
     assert.commandWorked(testDB.rollbackTransaction());
+    var res = testDB.beginTransaction('serializable');
+    if (serializableOk) {
+        assert.commandWorked(res);
+        assert.commandWorked(testDB.rollbackTransaction());
+    } else {
+        assert.commandFailed(res);
+    }
     loginDB.logout();
 }
 
@@ -26,7 +33,7 @@ function checkTransactionCommands(loginDB, testDB) {
     assert.eq(null, authedTestDB.getLastError());
 
     var testDB = conn.getDB('txn_commands_compat_ro');
-    checkTransactionCommands(testDB, testDB);
+    checkTransactionCommands(testDB, testDB, false);
 }
 {
     var authedTestDB = adminDB.getSiblingDB('txn_commands_compat_rw');
@@ -36,7 +43,7 @@ function checkTransactionCommands(loginDB, testDB) {
     assert.eq(null, authedTestDB.getLastError());
 
     var testDB = conn.getDB('txn_commands_compat_rw');
-    checkTransactionCommands(testDB, testDB);
+    checkTransactionCommands(testDB, testDB, true);
 }
 
 var goodRoles = [
@@ -56,7 +63,7 @@ for (var i = 0; i < goodRoles.length; ++i) {
     assert.eq(null, authedTestDB.getLastError());
 
     var testDB = conn.getDB('txn_commands_' + goodRoles[i][0])
-    checkTransactionCommands(testDB, testDB);
+    checkTransactionCommands(testDB, testDB, goodRoles[i][0] == 'readWrite');
 }
 
 goodRoles = [
@@ -75,5 +82,5 @@ for (var i = 0; i < goodRoles.length; ++i) {
     assert.eq(null, adminDB.getLastError());
 
     var testDB = conn.getDB('txn_commands_' + goodRoles[i][0]);
-    checkTransactionCommands(adminDB, testDB);
+    checkTransactionCommands(adminDB, testDB, goodRoles[i][0] == 'readWriteAnyDatabase');
 }

@@ -9,6 +9,7 @@
 "backupStart",
 "backupStatus",
 "backupThrottle",
+"beginSerializableTransaction",
 "captrunc",
 "checkpoint",
 "clean",
