@@ -73,6 +73,17 @@ doTest = function (signal, startPort, txnLimit, expireHours, expireDays, rewindT
     assert.commandWorked(conns[0].getDB("admin").runCommand({replSetExpireOplog:1, expireOplogDays:expireDays, expireOplogHours:expireHours}));
 
     sleep(2000); // give the background thread a chance to do what it needs to do, add the partition
+    assert.soon( function(){
+        oplogPartitionInfo = conns[0].getDB("local").runCommand({getPartitionInfo:"oplog.rs"});
+        refsPartitionInfo = conns[0].getDB("local").runCommand({getPartitionInfo:"oplog.refs"});
+        if (expectPartitionAdded) {
+            return (oplogPartitionInfo.numPartitions == 2);
+        }
+        else {
+            return (oplogPartitionInfo.numPartitions == 1);
+        }
+    });
+
     oplogPartitionInfo = conns[0].getDB("local").runCommand({getPartitionInfo:"oplog.rs"});
     refsPartitionInfo = conns[0].getDB("local").runCommand({getPartitionInfo:"oplog.refs"});
 
@@ -140,6 +151,17 @@ doOtherTest = function (signal, startPort, txnLimit, expireHours, expireDays, re
     assert.commandWorked(conns[0].getDB("admin").runCommand({replSetExpireOplog:1, expireOplogDays:expireDays, expireOplogHours:expireHours}));
 
     sleep(2000); // give the background thread a chance to do what it needs to do, add the partition
+    assert.soon( function(){
+        oplogPartitionInfo = conns[0].getDB("local").runCommand({getPartitionInfo:"oplog.rs"});
+        if (expectPartitionDropped) {
+            return (oplogPartitionInfo.numPartitions == 2);
+        }
+        else {
+            return (oplogPartitionInfo.numPartitions == 3);
+        }
+    });
+
+
     oplogPartitionInfo = conns[0].getDB("local").runCommand({getPartitionInfo:"oplog.rs"});
     refsPartitionInfo = conns[0].getDB("local").runCommand({getPartitionInfo:"oplog.refs"});
 
@@ -232,6 +254,13 @@ doThirdTest = function (signal, startPort, txnLimit) {
     assert.commandWorked(conns[1].getDB("admin").runCommand({replSetExpireOplog:1, expireOplogDays:0, expireOplogHours:1}));
 
     sleep(2000); // give the background thread a chance to do what it needs to do, add the partition
+    assert.soon( function(){
+        oplogPartitionInfo = conns[1].getDB("local").runCommand({getPartitionInfo:"oplog.rs"});
+        printjson(oplogPartitionInfo);
+        return (oplogPartitionInfo["partitions"][0]["_id"] == 2);
+    });
+
+
     oplogPartitionInfo = conns[1].getDB("local").runCommand({getPartitionInfo:"oplog.rs"});
     refsPartitionInfo = conns[1].getDB("local").runCommand({getPartitionInfo:"oplog.refs"});
 
