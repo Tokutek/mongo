@@ -84,9 +84,27 @@ namespace mongo {
         return &nestableLocks[db]->stats;
     }
 
+    long long Lock::nestableWriteLockWaiters(Nestable db) {
+        return nestableLocks[db]->writeLockWaiters();
+    }
+
     class WrapperForQLock { 
         QLock q;
+        AtomicInt64 _writeLockWaiters;
+        class WaiterManager : boost::noncopyable {
+            AtomicInt64 &_val;
+          public:
+            WaiterManager(AtomicInt64 &val) : _val(val) {
+                _val.addAndFetch(1);
+            }
+            ~WaiterManager() {
+                _val.subtractAndFetch(1);
+            }
+        };
+
     public:
+        WrapperForQLock() : _writeLockWaiters(0) {}
+
         LockStat stats;
 
         void lock_r() { 
@@ -97,6 +115,7 @@ namespace mongo {
         
         void lock_w() { 
             verify( threadState() == 0 );
+            WaiterManager wm(_writeLockWaiters);
             lockState().lockedStart( 'w' );
             q.lock_w(); 
         }
@@ -114,6 +133,7 @@ namespace mongo {
                 log() << "can't lock_W, threadState=" << (int) ls.threadState() << endl;
                 fassert(16114,false);
             }
+            WaiterManager wm(_writeLockWaiters);
             ls.lockedStart( 'W' );
             {
                 q.lock_W();
@@ -159,10 +179,24 @@ namespace mongo {
         }
 
         // todo timing stats? : 
-        void W_to_R()                        { q.W_to_R(); }
-        void R_to_W()                        { q.R_to_W(); }
-        bool w_to_X() { return q.w_to_X(); }
-        void X_to_w() { q.X_to_w(); }
+        void W_to_R() {
+            q.W_to_R();
+        }
+        void R_to_W() {
+            WaiterManager wm(_writeLockWaiters);
+            q.R_to_W();
+        }
+        bool w_to_X() {
+            return q.w_to_X();
+        }
+        void X_to_w() {
+            WaiterManager wm(_writeLockWaiters);
+            q.X_to_w();
+        }
+
+        long long writeLockWaiters() const {
+            return _writeLockWaiters.loadRelaxed();
+        }
 
     private:
         void _unlock_R() {
@@ -177,6 +211,10 @@ namespace mongo {
         return &qlk.stats;
     }
     
+    long long Lock::globalWriteLockWaiters() {
+        return qlk.writeLockWaiters();
+    }
+
     int Lock::isLocked() {
         return threadState();
     }
