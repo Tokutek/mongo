@@ -549,6 +549,7 @@ namespace mongo {
         incRBID();
         try {
             shared_ptr<DBClientCursor> rollbackCursor = r.getRollbackCursor(ourLast);
+            uassert(17334, "rollback failed to get a cursor to start reading backwards from.", rollbackCursor.get());
             while (rollbackCursor->more()) {
                 BSONObj remoteObj = rollbackCursor->next();
                 GTID remoteGTID = getGTIDFromBSON("_id", remoteObj);
