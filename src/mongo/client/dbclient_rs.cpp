@@ -111,71 +111,20 @@ namespace mongo {
      */
     set<string> _secOkCmdList;
 
-    MONGO_INITIALIZER(PopulateReadPrefSecOkCmdList)(::mongo::InitializerContext* context) {
-        _secOkCmdList.insert("aggregate");
-        _secOkCmdList.insert("collStats");
-        _secOkCmdList.insert("count");
-        _secOkCmdList.insert("distinct");
-        _secOkCmdList.insert("dbStats");
-        _secOkCmdList.insert("geoNear");
-        _secOkCmdList.insert("geoSearch");
-        _secOkCmdList.insert("geoWalk");
-        _secOkCmdList.insert("group");
-
-        return Status::OK();
-    }
-
-    /**
-     * @param ns the namespace of the query.
-     * @param queryOptionFlags the flags for the query.
-     * @param queryObj the query object to check.
-     *
-     * @return true if the given query can be sent to a secondary node without taking the
-     *     slaveOk flag into account.
-     */
-    bool _isQueryOkToSecondary(const string& ns, int queryOptionFlags, const BSONObj& queryObj) {
-        if (queryOptionFlags & QueryOption_SlaveOk) {
-            return true;
+    class PopulateReadPrefSecOkCmdList {
+    public:
+        PopulateReadPrefSecOkCmdList() {
+            _secOkCmdList.insert("aggregate");
+            _secOkCmdList.insert("collStats");
+            _secOkCmdList.insert("count");
+            _secOkCmdList.insert("distinct");
+            _secOkCmdList.insert("dbStats");
+            _secOkCmdList.insert("geoNear");
+            _secOkCmdList.insert("geoSearch");
+            _secOkCmdList.insert("geoWalk");
+            _secOkCmdList.insert("group");
         }
-
-        // _secOkCmdList was not initialized! mongo::runGlobalInitializersOrDie
-        // probably was not called.
-        fassert(17017, !_secOkCmdList.empty());
-
-        if (!Query::hasReadPreference(queryObj)) {
-            return false;
-        }
-
-        if (ns.find(".$cmd") == string::npos) {
-            return true;
-        }
-
-        BSONObj actualQueryObj;
-        if (strcmp(queryObj.firstElement().fieldName(), "query") == 0) {
-            actualQueryObj = queryObj["query"].embeddedObject();
-        }
-        else {
-            actualQueryObj = queryObj;
-        }
-
-        const string cmdName = actualQueryObj.firstElementFieldName();
-        if (_secOkCmdList.count(cmdName) == 1) {
-            return true;
-        }
-
-        if (cmdName == "mapReduce" || cmdName == "mapreduce") {
-            if (!actualQueryObj.hasField("out")) {
-                return false;
-            }
-
-            BSONElement outElem(actualQueryObj["out"]);
-            if (outElem.isABSONObj() && outElem["inline"].trueValue()) {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    } _populateReadPrefSecOkCmdList;
 
     /**
      * Selects the right node given the nodes to pick from and the preference.
@@ -279,15 +228,18 @@ namespace mongo {
      *
      * @param query the raw query document
      *
-     * @return the read preference setting. If the tags field was not present, it will contain one
-     *      empty tag document {} which matches any tag.
+     * @return the read preference setting if a read preference exists, otherwise the default read
+     *         preference of Primary_Only. If the tags field was not present, it will contain one
+     *         empty tag document {} which matches any tag.
      *
      * @throws AssertionException if the read preference object is malformed
      */
-    ReadPreferenceSetting* _extractReadPref(const BSONObj& query) {
-        ReadPreference pref = mongo::ReadPreference_SecondaryPreferred;
+    ReadPreferenceSetting* _extractReadPref(const BSONObj& query, int queryOptions) {
 
         if (Query::hasReadPreference(query)) {
+
+            ReadPreference pref = mongo::ReadPreference_SecondaryPreferred;
+
             BSONElement readPrefElement;
 
             if (query.hasField(Query::ReadPrefField.name())) {
@@ -338,9 +290,17 @@ namespace mongo {
 
                 return new ReadPreferenceSetting(pref, tags);
             }
+            else {
+                TagSet tags(BSON_ARRAY(BSONObj()));
+                return new ReadPreferenceSetting(pref, tags);
+            }
         }
 
+        // Default read pref is primary only or secondary preferred with slaveOK
         TagSet tags(BSON_ARRAY(BSONObj()));
+        ReadPreference pref =
+            queryOptions & QueryOption_SlaveOk ?
+                mongo::ReadPreference_SecondaryPreferred : mongo::ReadPreference_PrimaryOnly;
         return new ReadPreferenceSetting(pref, tags);
     }
 
@@ -409,7 +369,6 @@ namespace mongo {
     // delete ReplicaSetMonitors from ReplicaSetMonitor::remove.
     ReplicaSetMonitor::~ReplicaSetMonitor() {
         scoped_lock lk ( _lock );
-        log() << "deleting replica set monitor for: " << _getServerAddress_inlock() << endl;
         _cacheServerAddresses_inlock();
         pool.removeHost( _getServerAddress_inlock() );
         _nodes.clear();
@@ -1505,6 +1464,55 @@ namespace mongo {
         return rsm->getServerAddress();
     }
 
+    // Internal implementation of isSecondaryQuery, takes previously-parsed read preference
+    static bool _isSecondaryQuery( const string& ns,
+                                   const BSONObj& queryObj,
+                                   const ReadPreferenceSetting& readPref ) {
+
+        // If the read pref is primary only, this is not a secondary query
+        if (readPref.pref == ReadPreference_PrimaryOnly) return false;
+
+        if (ns.find(".$cmd") == string::npos) {
+            return true;
+        }
+
+        // This is a command with secondary-possible read pref
+        // Only certain commands are supported for secondary operation.
+
+        BSONObj actualQueryObj;
+        if (strcmp(queryObj.firstElement().fieldName(), "query") == 0) {
+            actualQueryObj = queryObj["query"].embeddedObject();
+        }
+        else {
+            actualQueryObj = queryObj;
+        }
+
+        const string cmdName = actualQueryObj.firstElementFieldName();
+        if (_secOkCmdList.count(cmdName) == 1) {
+            return true;
+        }
+
+        if (cmdName == "mapReduce" || cmdName == "mapreduce") {
+            if (!actualQueryObj.hasField("out")) {
+                return false;
+            }
+
+            BSONElement outElem(actualQueryObj["out"]);
+            if (outElem.isABSONObj() && outElem["inline"].trueValue()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool DBClientReplicaSet::isSecondaryQuery( const string& ns,
+                                               const BSONObj& queryObj,
+                                               int queryOptions ) {
+        auto_ptr<ReadPreferenceSetting> readPref( _extractReadPref( queryObj, queryOptions ) );
+        return _isSecondaryQuery( ns, queryObj, *readPref );
+    }
+
     DBClientConnection * DBClientReplicaSet::checkMaster() {
         ReplicaSetMonitorPtr monitor = _getMonitor();
         HostAndPort h = monitor->getMaster();
@@ -1597,6 +1605,18 @@ namespace mongo {
         return _getMonitor()->isAnyNodeOk();
     }
 
+    void DBClientReplicaSet::authPrimary(const BSONObj& params) {
+        _auth(params);
+    }
+
+    bool DBClientReplicaSet::authPrimary( const string &dbname,
+                                          const string &username,
+                                          const string &password_text,
+                                          string& errmsg,
+                                          bool digestPassword ) {
+        return auth( dbname, username, password_text, errmsg, digestPassword );
+    }
+
     void DBClientReplicaSet::_auth(const BSONObj& params) {
         DBClientConnection * m = checkMaster();
 
@@ -1622,6 +1642,98 @@ namespace mongo {
 
         // now that it does, we should save so that for a new node we can auth
         _auths[params[saslCommandPrincipalSourceFieldName].str()] = params.getOwned();
+    }
+
+    bool DBClientReplicaSet::authAny( const string &dbname,
+                                      const string &username,
+                                      const string &password_text,
+                                      string& errmsg,
+                                      bool digestPassword ) {
+        try {
+            authAny(BSON(saslCommandMechanismFieldName << "MONGODB-CR" <<
+                         saslCommandPrincipalSourceFieldName << dbname <<
+                         saslCommandPrincipalFieldName << username <<
+                         saslCommandPasswordFieldName << password_text <<
+                         saslCommandDigestPasswordFieldName << digestPassword));
+            return true;
+        } catch(const UserException& ex) {
+            if (ex.getCode() != ErrorCodes::AuthenticationFailed)
+                throw;
+            errmsg = ex.what();
+            return false;
+        }
+    }
+
+    static bool isAuthenticationException( const DBException& ex ) {
+        return ex.getCode() == ErrorCodes::AuthenticationFailed;
+    }
+
+    void DBClientReplicaSet::authAny( const BSONObj& params ) {
+
+        // We prefer to authenticate against a primary, but otherwise a secondary is ok too
+        // Empty tag matches every secondary
+        TagSet tags(BSON_ARRAY(BSONObj()));
+        shared_ptr<ReadPreferenceSetting> readPref(
+            new ReadPreferenceSetting( ReadPreference_PrimaryPreferred, tags ) );
+
+        LOG(3) << "dbclient_rs authentication of " << _getMonitor()->getName() << endl;
+
+        // NOTE that we retry MAX_RETRY + 1 times, since we're always primary preferred we don't
+        // fallback to the primary.
+        Status lastNodeStatus = Status::OK();
+        for ( size_t retry = 0; retry < MAX_RETRY + 1; retry++ ) {
+            try {
+                DBClientConnection* conn = selectNodeUsingTags( readPref );
+
+                if ( conn == NULL ) {
+                    break;
+                }
+
+                conn->auth( params );
+
+                // Cache the new auth information since we've now validated it's good
+                _auths[params[saslCommandPrincipalSourceFieldName].str()] = params.getOwned();
+
+                // Ensure the only child connection open is the one we authenticated against - other
+                // child connections may not have full authentication information.
+                // NOTE: _lastSlaveOkConn may or may not be the same as _master
+                dassert(_lastSlaveOkConn.get() == conn || _master.get() == conn);
+                if ( conn != _lastSlaveOkConn.get() ) {
+                    _lastSlaveOkHost = HostAndPort();
+                    _lastSlaveOkConn.reset();
+                }
+                if ( conn != _master.get() ) {
+                    _masterHost = HostAndPort();
+                    _master.reset();
+                }
+
+                return;
+            }
+            catch ( const DBException &ex ) {
+
+                // We care if we can't authenticate (i.e. bad password) in credential params.
+                if ( isAuthenticationException( ex ) ) {
+                    throw;
+                }
+
+                StringBuilder errMsgB;
+                errMsgB << "can't authenticate against replica set node "
+                        << _lastSlaveOkHost.toString();
+                lastNodeStatus = ex.toStatus( errMsgB.str() );
+
+                LOG(1) << lastNodeStatus.reason() << endl;
+                invalidateLastSlaveOkCache();
+            }
+        }
+
+        if ( lastNodeStatus.isOK() ) {
+            StringBuilder assertMsgB;
+            assertMsgB << "Failed to authenticate, no good nodes in " << _getMonitor()->getName();
+            uasserted( ErrorCodes::NodeNotFound, assertMsgB.str() );
+        }
+        else {
+            uasserted( lastNodeStatus.code(), lastNodeStatus.reason() );
+        }
     }
 
     void DBClientReplicaSet::logout(const string &dbname, BSONObj& info) {
@@ -1672,9 +1784,8 @@ namespace mongo {
                                                        int queryOptions,
                                                        int batchSize) {
 
-        if ( _isQueryOkToSecondary( ns, queryOptions, query.obj ) ) {
-
-            shared_ptr<ReadPreferenceSetting> readPref(_extractReadPref(query.obj));
+        shared_ptr<ReadPreferenceSetting> readPref( _extractReadPref( query.obj, queryOptions ) );
+        if ( _isSecondaryQuery( ns, query.obj, *readPref ) ) {
 
             LOG( 3 ) << "dbclient_rs query using secondary or tagged node selection in "
                                 << _getMonitor()->getName() << ", read pref is "
@@ -1722,9 +1833,9 @@ namespace mongo {
                                         const Query& query,
                                         const BSONObj *fieldsToReturn,
                                         int queryOptions) {
-        if (_isQueryOkToSecondary(ns, queryOptions, query.obj)) {
 
-            shared_ptr<ReadPreferenceSetting> readPref(_extractReadPref(query.obj));
+        shared_ptr<ReadPreferenceSetting> readPref( _extractReadPref( query.obj, queryOptions ) );
+        if ( _isSecondaryQuery( ns, query.obj, *readPref ) ) {
 
             LOG( 3 ) << "dbclient_rs findOne using secondary or tagged node selection in "
                                 << _getMonitor()->getName() << ", read pref is "
@@ -1876,17 +1987,15 @@ namespace mongo {
             _lazyState = LazyState();
 
         const int lastOp = toSend.operation();
-        bool slaveOk = false;
 
         if (lastOp == dbQuery) {
             // TODO: might be possible to do this faster by changing api
             DbMessage dm(toSend);
             QueryMessage qm(dm);
 
-            const bool slaveOk = qm.queryOptions & QueryOption_SlaveOk;
-            if (_isQueryOkToSecondary(qm.ns, qm.queryOptions, qm.query)) {
-
-                shared_ptr<ReadPreferenceSetting> readPref(_extractReadPref(qm.query));
+            shared_ptr<ReadPreferenceSetting> readPref( _extractReadPref( qm.query,
+                                                                          qm.queryOptions ) );
+            if ( _isSecondaryQuery( qm.ns, qm.query, *readPref ) ) {
 
                 LOG( 3 ) << "dbclient_rs say using secondary or tagged node selection in "
                                     << _getMonitor()->getName() << ", read pref is "
@@ -1914,7 +2023,7 @@ namespace mongo {
                         conn->say(toSend);
 
                         _lazyState._lastOp = lastOp;
-                        _lazyState._slaveOk = slaveOk;
+                        _lazyState._isSecondaryQuery = true;
                         _lazyState._lastClient = conn;
                     }
                     catch ( const DBException& DBExcep ) {
@@ -1940,7 +2049,7 @@ namespace mongo {
             *actualServer = master->getServerAddress();
 
         _lazyState._lastOp = lastOp;
-        _lazyState._slaveOk = slaveOk;
+        _lazyState._isSecondaryQuery = false;
         // Don't retry requests to primary since there is only one host to try
         _lazyState._retries = MAX_RETRY;
         _lazyState._lastClient = master;
@@ -1985,7 +2094,7 @@ namespace mongo {
         if( nReturned == 1 ) dataObj = BSONObj( data );
 
         // Check if we should retry here
-        if( _lazyState._lastOp == dbQuery && _lazyState._slaveOk ){
+        if( _lazyState._lastOp == dbQuery && _lazyState._isSecondaryQuery ){
 
             // Check the error code for a slave not secondary error
             if( nReturned == -1 ||
@@ -2040,9 +2149,9 @@ namespace mongo {
             QueryMessage qm(dm);
             ns = qm.ns;
 
-            if (_isQueryOkToSecondary(ns, qm.queryOptions, qm.query)) {
-
-                shared_ptr<ReadPreferenceSetting> readPref(_extractReadPref(qm.query));
+            shared_ptr<ReadPreferenceSetting> readPref( _extractReadPref( qm.query,
+                                                                          qm.queryOptions ) );
+            if ( _isSecondaryQuery( ns, qm.query, *readPref ) ) {
 
                 LOG( 3 ) << "dbclient_rs call using secondary or tagged node selection in "
                                     << _getMonitor()->getName() << ", read pref is "

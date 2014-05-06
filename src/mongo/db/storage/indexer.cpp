@@ -22,8 +22,9 @@ namespace mongo {
 
     namespace storage {
 
-        Indexer::Indexer(DB *src_db, DB *dest_db) :
-            _dest_db(dest_db), _indexer(NULL), _closed(false) {
+        Indexer::Indexer(DB *src_db, DB *dest_db, const std::string &prefix)
+                : BuilderBase(prefix),
+                  _dest_db(dest_db), _indexer(NULL), _closed(false) {
             uint32_t db_flags = 0;
             uint32_t indexer_flags = 0;
             DB_ENV *env = storage::env;

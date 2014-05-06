@@ -234,7 +234,7 @@ namespace mongo {
             const Shard& s = *it;
             ShardStatus status = s.getStatus();
             shardInfo[ s.getName() ] = ShardInfo( s.getMaxSize(),
-                                                  status.mapped(),
+                                                  status.datasize(),
                                                   s.isDraining(),
                                                   status.hasOpsQueued(),
                                                   s.tags(),
@@ -461,6 +461,7 @@ namespace mongo {
                         conn.done();
                         warning() << "Skipping balancing round because data inconsistency"
                                   << " was detected amongst the config servers." << endl;
+                        sleepsecs( sleepTime );
                         continue;
                     }
 

@@ -26,7 +26,7 @@
 #include "mongo/db/json.h"
 #include "mongo/db/kill_current_op.h"
 #include "mongo/db/lasterror.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/query.h"
@@ -41,23 +41,18 @@ namespace mongo {
 
 namespace QueryTests {
 
-    bool findById(const char *ns, const BSONObj &query, BSONObj &result) {
-        NamespaceDetails *d = nsdetails(ns);
-        return d != NULL ? d->findById(query, result) : false;
-    }
-
     class Base {
         Client::Transaction _transaction;
         Lock::GlobalWrite lk;
         Client::Context _context;
     public:
-        Base() : _transaction(DB_SERIALIZABLE), _context( ns() ) {
+        Base() : _transaction(DB_SERIALIZABLE), lk(mongo::unittest::EMPTY_STRING), _context( ns() ) {
             addIndex( fromjson( "{\"a\":1}" ) );
         }
         ~Base() {
             try {
-                for( boost::shared_ptr<Cursor> c( BasicCursor::make( nsdetails(ns()) ) ); c->ok(); c->advance() ) {
-                    deleteOneObject( nsdetails(ns()), c->currPK(), c->current() );
+                for( boost::shared_ptr<Cursor> c( BasicCursor::make( getCollection(ns()) ) ); c->ok(); c->advance() ) {
+                    deleteOneObject( getCollection(ns()), c->currPK(), c->current() );
                 }
                 _transaction.commit();
                 DBDirectClient cl;
@@ -99,8 +94,7 @@ namespace QueryTests {
             BSONObj query = fromjson( "{$or:[{b:2},{c:3}]}" );
             BSONObj ret;
             // Check findOne() returning object.
-            NamespaceDetails *d = nsdetails( ns() );
-            ASSERT( d->findOne( query, ret, true ) );
+            ASSERT( Collection::findOne( ns(), query, ret, true ) );
             ASSERT_EQUALS( string( "b" ), ret.firstElement().fieldName() );
         }
     };
@@ -111,17 +105,16 @@ namespace QueryTests {
             insert( BSON( "b" << 2 << "_id" << 0 ) );
             BSONObj query = fromjson( "{b:2}" );
             BSONObj ret;
-            NamespaceDetails *d = nsdetails( ns() );
 
             // Check findOne() returning object, allowing unindexed scan.
-            ASSERT( d->findOne( query, ret, false ) );
+            ASSERT( Collection::findOne( ns(), query, ret, false ) );
             
             // Check findOne() returning object, requiring indexed scan without index.
-            ASSERT_THROWS( d->findOne( query, ret, true ), MsgAssertionException );
+            ASSERT_THROWS( Collection::findOne( ns(), query, ret, true ), MsgAssertionException );
 
             addIndex( BSON( "b" << 1 ) );
             // Check findOne() returning object, requiring indexed scan with index.
-            ASSERT( d->findOne( query, ret, false ) );
+            ASSERT( Collection::findOne( ns(), query, ret, false ) );
         }
     };
     
@@ -183,7 +176,7 @@ namespace QueryTests {
 
             {
                 // Check internal server handoff to getmore.
-                Lock::DBWrite lk(ns);
+                Lock::DBWrite lk(ns, mongo::unittest::EMPTY_STRING);
                 Client::Context ctx( ns );
                 ClientCursor::Pin clientCursor( cursorId );
                 ASSERT( clientCursor.c()->pq );
@@ -523,7 +516,7 @@ namespace QueryTests {
         }
         void run() {
             const char *ns = "unittests.querytests.OplogReplaySlaveReadTill";
-            Lock::DBWrite lk(ns);
+            Lock::DBWrite lk(ns, mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns );
             
             BSONObj info;
@@ -946,7 +939,7 @@ namespace QueryTests {
     class DirectLocking : public ClientBase {
     public:
         void run() {
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( "unittests.DirectLocking" );
             client().remove( "a.b", BSONObj() );
             ASSERT_EQUALS( "unittests", cc().database()->name() );
@@ -1066,7 +1059,7 @@ namespace QueryTests {
             string err;
 
             {
-                Client::WriteContext ctx( "unittests" );
+                Client::WriteContext ctx( "unittests", mongo::unittest::EMPTY_STRING );
                 Client::Transaction txn(DB_SERIALIZABLE);
                 // note that extents are always at least 4KB now - so this will get rounded up a bit.
                 ASSERT( userCreateNS( ns() , fromjson( "{ capped : true , size : 2000 }" ) , err , false ) );
@@ -1102,7 +1095,7 @@ namespace QueryTests {
         }
 
         void insertNext() {
-            Client::ReadContext ctx("unittests");
+            Client::ReadContext ctx("unittests", mongo::unittest::EMPTY_STRING);
             Client::Transaction txn(DB_SERIALIZABLE);
             BSONObjBuilder b;
             b.appendOID("_id", 0, true);
@@ -1114,88 +1107,12 @@ namespace QueryTests {
         int _n;
     };
 
-    class HelperTest : public CollectionBase {
-    public:
-
-        HelperTest() : CollectionBase( "helpertest" ) {
-        }
-
-        void run() {
-            Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx( "unittests" );
-
-            for ( int i=0; i<50; i++ ) {
-                insert( ns() , BSON( "_id" << i << "x" << i * 2 ) );
-            }
-
-            ASSERT_EQUALS( 50 , count() );
-
-            BSONObj res;
-            NamespaceDetails *d = nsdetails( ns() );
-            ASSERT( d->findOne( BSON( "_id" << 20 ) , res , true ) );
-            ASSERT_EQUALS( 40 , res["x"].numberInt() );
-
-            ASSERT( findById( ns() , BSON( "_id" << 20 ) , res ) );
-            ASSERT_EQUALS( 40 , res["x"].numberInt() );
-
-            ASSERT( ! findById( ns() , BSON( "_id" << 200 ) , res ) );
-
-            unsigned long long slow , fast;
-
-            int n = 10000;
-            DEV n = 1000;
-            {
-                Timer t;
-                for ( int i=0; i<n; i++ ) {
-                    ASSERT( d->findOne( BSON( "_id" << 20 ) , res , true ) );
-                }
-                slow = t.micros();
-            }
-            {
-                Timer t;
-                for ( int i=0; i<n; i++ ) {
-                    ASSERT( findById( ns() , BSON( "_id" << 20 ) , res ) );
-                }
-                fast = t.micros();
-            }
-
-            cerr << "HelperTest  slow:" << slow << " fast:" << fast << endl;
-            transaction.commit();
-        }
-    };
-
-    class HelperByIdTest : public CollectionBase {
-    public:
-
-        HelperByIdTest() : CollectionBase( "helpertestbyid" ) {
-        }
-
-        void run() {
-            Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx( "unittests" );
-
-            for ( int i=0; i<1000; i++ ) {
-                insert( ns() , BSON( "_id" << i << "x" << i * 2 ) );
-            }
-            for ( int i=0; i<1000; i+=2 ) {
-                client_.remove( ns() , BSON( "_id" << i ) );
-            }
-
-            BSONObj res;
-            for ( int i=0; i<1000; i++ ) {
-                bool found = findById( ns() , BSON( "_id" << i ) , res );
-                ASSERT_EQUALS( i % 2 , int(found) );
-            }
-            transaction.commit();
-        }
-    };
-
     class ClientCursorTest : public CollectionBase {
         ClientCursorTest() : CollectionBase( "clientcursortest" ) {
         }
 
         void run() {
-            Client::WriteContext ctx( "unittests" );
+            Client::WriteContext ctx( "unittests", mongo::unittest::EMPTY_STRING );
 
             for ( int i=0; i<1000; i++ ) {
                 insert( ns() , BSON( "_id" << i << "x" << i * 2 ) );
@@ -1283,7 +1200,7 @@ namespace QueryTests {
     public:
         CollectionInternalBase( const char *nsLeaf ) :
           CollectionBase( nsLeaf ),
-          _lk( ns() ),
+          _lk( ns(), mongo::unittest::EMPTY_STRING ),
           _ctx( ns() ) {
         }
     private:
@@ -1340,7 +1257,7 @@ namespace QueryTests {
             long long cursorId = cursor->getCursorId();
             
             {
-                Client::WriteContext ctx( ns() );
+                Client::WriteContext ctx( ns(), mongo::unittest::EMPTY_STRING );
                 ClientCursor::Pin pinCursor( cursorId );
   
                 ASSERT_THROWS( client().killCursor( cursorId ), MsgAssertionException );
@@ -1632,8 +1549,6 @@ namespace QueryTests {
             add< SymbolStringSame >();
             // TokuMX does not have this race condition
             //add< TailableCappedRaceCondition >();
-            add< HelperTest >();
-            add< HelperByIdTest >();
             add< FindingStartPartiallyFull >();
             add< FindingStartStale >();
             add< WhatsMyUri >();

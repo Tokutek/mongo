@@ -36,9 +36,27 @@
 
 namespace mongo {
 
-    class NamespaceDetails;
+    class Collection;
 
-    void deleteOneObject(NamespaceDetails *details, const BSONObj &pk, const BSONObj &obj, uint64_t flags = 0);
+    void deleteOneObject(Collection *cl, const BSONObj &pk, const BSONObj &obj, uint64_t flags = 0);
+
+    /**
+     * Takes a range, specified by a min and max, and an index, specified by
+     * keyPattern, and removes all the documents in that range found by iterating
+     * over the given index. Caller is responsible for insuring that min/max are
+     * compatible with the given keyPattern (e.g min={a:100} is compatible with
+     * keyPattern={a:1,b:1} since it can be extended to {a:100,b:minKey}, but
+     * min={b:100} is not compatible).
+     *
+     * Does oplog the individual document deletions.
+     */
+    long long deleteIndexRange(const string &ns,
+                               const BSONObj &min, 
+                               const BSONObj &max, 
+                               const BSONObj &keyPattern,
+                               const bool maxInclusive = false, 
+                               const bool fromMigrate = false,
+                               uint64_t flags = 0);
 
     // System-y version of deleteObjects that allows you to delete from the system collections, used to be god = true.
     long long _deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop);

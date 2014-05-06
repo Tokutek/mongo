@@ -19,7 +19,7 @@
  */
 
 #include "mongo/pch.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/query_optimizer_internal.h"
 #include "mongo/db/querypattern.h"
@@ -1615,7 +1615,7 @@ namespace QueryUtilTests {
             Lock::DBWrite _lk;
             Client::Context _ctx;
         public:
-            IndexBase() : _lk(ns()), _ctx( ns() ) , indexNum_( 0 ) {
+            IndexBase() : _lk(ns(), mongo::unittest::EMPTY_STRING), _ctx( ns() ) , indexNum_( 0 ) {
                 string err;
                 // TODO: Create this index
             }
@@ -1627,14 +1627,14 @@ namespace QueryUtilTests {
             }
         protected:
             static const char *ns() { return "unittests.FieldRangeSetPairTests"; }
-            static NamespaceDetails *nsd() { return nsdetails( ns() ); }
+            static Collection *nsd() { return getCollection( ns() ); }
             IndexDetails *index( const BSONObj &key ) {
                 stringstream ss;
                 ss << indexNum_++;
                 string name = ss.str();
                 client_.resetIndexCache();
                 client_.ensureIndex( ns(), key, false, name.c_str() );
-                NamespaceDetails *d = nsd();
+                Collection *d = nsd();
                 verify(d != NULL);
                 for( int i = 0; i < d->nIndexes(); ++i ) {
                     if ( d->idx(i).keyPattern() == key /*indexName() == name*/ || ( d->idx(i).isIdIndex() && IndexDetails::isIdIndexPattern( key ) ) )
@@ -1644,7 +1644,8 @@ namespace QueryUtilTests {
                 return 0;
             }
             int indexno( const BSONObj &key ) {
-                return nsd()->idxNo( *index(key) );
+                IndexDetails &idx = *index(key);
+                return nsd()->idxNo( idx );
             }
             static DBDirectClient client_;
         private:
@@ -1679,11 +1680,11 @@ namespace QueryUtilTests {
                 
                 // Record the a:1 index for the query's single and multi key query patterns.
                 QueryPattern singleKey = FieldRangeSet( ns(), query, true, true ).pattern( sort );
-                nsd()->registerCachedQueryPlanForPattern( singleKey,
+                nsd()->getQueryCache().registerCachedQueryPlanForPattern( singleKey,
                                                        CachedQueryPlan( BSON( "a" << 1 ), 1,
                                                         CandidatePlanCharacter( true, true ) ) );
                 QueryPattern multiKey = FieldRangeSet( ns(), query, false, true ).pattern( sort );
-                nsd()->registerCachedQueryPlanForPattern( multiKey,
+                nsd()->getQueryCache().registerCachedQueryPlanForPattern( multiKey,
                                                        CachedQueryPlan( BSON( "a" << 1 ), 5,
                                                         CandidatePlanCharacter( true, true ) ) );
                 
@@ -1696,8 +1697,8 @@ namespace QueryUtilTests {
                 QueryUtilIndexed::clearIndexesForPatterns( frsp, sort );
                 
                 // Check that the recorded query plans were cleared.
-                ASSERT_EQUALS( BSONObj(), nsd()->cachedQueryPlanForPattern( singleKey ).indexKey() );
-                ASSERT_EQUALS( BSONObj(), nsd()->cachedQueryPlanForPattern( multiKey ).indexKey() );
+                ASSERT_EQUALS( BSONObj(), nsd()->getQueryCache().cachedQueryPlanForPattern( singleKey ).indexKey() );
+                ASSERT_EQUALS( BSONObj(), nsd()->getQueryCache().cachedQueryPlanForPattern( multiKey ).indexKey() );
             }
         };
 
@@ -1717,7 +1718,7 @@ namespace QueryUtilTests {
                 
                 // A multikey index query plan is returned if recorded.
                 QueryPattern multiKey = FieldRangeSet( ns(), query, false, true ).pattern( sort );
-                nsd()->registerCachedQueryPlanForPattern( multiKey,
+                nsd()->getQueryCache().registerCachedQueryPlanForPattern( multiKey,
                                                        CachedQueryPlan( BSON( "a" << 1 ), 5,
                                                         CandidatePlanCharacter( true, true ) ) );
                 ASSERT_EQUALS( BSON( "a" << 1 ),
@@ -1725,7 +1726,7 @@ namespace QueryUtilTests {
 
                 // A non multikey index query plan is preferentially returned if recorded.
                 QueryPattern singleKey = FieldRangeSet( ns(), query, true, true ).pattern( sort );
-                nsd()->registerCachedQueryPlanForPattern( singleKey,
+                nsd()->getQueryCache().registerCachedQueryPlanForPattern( singleKey,
                                                        CachedQueryPlan( BSON( "b" << 1 ), 5,
                                                         CandidatePlanCharacter( true, true ) ) );
                 ASSERT_EQUALS( BSON( "b" << 1 ),

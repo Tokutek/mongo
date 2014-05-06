@@ -20,7 +20,7 @@ function ops(q) {
 print("start shell");
 
 // sleep for a second for each (of 100) documents; can be killed in between documents & test should complete before 100 seconds 
-s1 = startParallelShell("db.jstests_currentop.count( { '$where': function() { sleep(1000); } } )");
+s1 = startParallelShell("db.getSiblingDB('" + db.getName() + "').jstests_currentop.count( { '$where': function() { sleep(1000); } } )");
 
 print("sleep");
 sleep(1000);
@@ -36,23 +36,35 @@ print()
 // need to wait for read to start
 print("wait have some ops");
 assert.soon( function(){
-    return ops( { "locks.^test": "r", "ns": "test.jstests_currentop" } ).length + 
-        ops({ "locks.^test": "R", "ns": "test.jstests_currentop" }).length >= 1;
+    var obj1 = {};
+    obj1["locks.^" + db.getName()] = "r";
+    obj1["ns"] = db.getName() + ".jstests_currentop";
+    var obj2 = {};
+    obj2["locks.^" + db.getName()] = "R";
+    obj2["ns"] = db.getName() + ".jstests_currentop";
+    return ops(obj1).length + 
+        ops(obj2).length >= 1;
 }, "have_some_ops");
 print("ok");
     
-s2 = startParallelShell( "db.jstests_currentop.update( { '$where': function() { sleep(150); } }, { 'num': 1 }, false, true ); db.getLastError()" );
+s2 = startParallelShell( "db.getSiblingDB('" + db.getName() + "').jstests_currentop.update( { '$where': function() { sleep(150); } }, { 'num': 1 }, false, true ); db.getLastError()" );
 
 o = [];
 
 function f() {
-    o = ops({ "ns": "test.jstests_currentop" });
+    o = ops({ "ns": db.getName() + ".jstests_currentop" });
 
     printjson(o);
 
-    var writes = ops({ "locks.^test": "w", "ns": "test.jstests_currentop" }).length;
+    var wobj = {};
+    wobj["locks.^" + db.getName()] = "w";
+    wobj["ns"] = db.getName() + ".jstests_currentop";
+    var writes = ops(wobj).length;
 
-    var readops = ops({ "locks.^test": "r", "ns": "test.jstests_currentop" });
+    var robj = {};
+    robj["locks.^" + db.getName()] = "r";
+    robj["ns"] = db.getName() + ".jstests_currentop";
+    var readops = ops(robj);
     print("readops:");
     printjson(readops);
     var reads = readops.length;

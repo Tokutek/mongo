@@ -36,6 +36,7 @@
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/commands.h"
+#include "mongo/db/command_cursors.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/interrupt_status_mongod.h"
 #include "mongo/db/pipeline/accumulator.h"
@@ -50,87 +51,6 @@
 namespace mongo {
 
     extern const int MaxBytesToReturnToClientAtOnce;
-
-    static bool isCursorCommand(BSONObj cmdObj) {
-        BSONElement cursorElem = cmdObj["cursor"];
-        if (cursorElem.eoo())
-            return false;
-
-        uassert(16954, "cursor field must be missing or an object",
-                cursorElem.type() == Object);
-
-        BSONObj cursor = cursorElem.embeddedObject();
-        BSONElement batchSizeElem = cursor["batchSize"];
-        if (batchSizeElem.eoo()) {
-            uassert(16955, "cursor object can't contain fields other than batchSize",
-                cursor.isEmpty());
-        }
-        else {
-            uassert(16956, "cursor.batchSize must be a number",
-                    batchSizeElem.isNumber());
-
-            // This can change in the future, but for now all negatives are reserved.
-            uassert(16957, "Cursor batchSize must not be negative",
-                    batchSizeElem.numberLong() >= 0);
-        }
-
-        return true;
-    }
-
-    static void handleCursorCommand(CursorId id, BSONObj& cmdObj, BSONObjBuilder& result) {
-        BSONElement batchSizeElem = cmdObj.getFieldDotted("cursor.batchSize");
-        const long long batchSize = batchSizeElem.isNumber()
-                                    ? batchSizeElem.numberLong()
-                                    : 101; // same as query
-
-        // Using limited cursor API that ignores many edge cases. Should be sufficient for commands.
-        ClientCursor::Pin pin(id);
-        ClientCursor* cursor = pin.c();
-
-        massert(16958, "Cursor shouldn't have been deleted",
-                cursor);
-
-        // Make sure this cursor won't disappear on us
-        fassert(16959, !cursor->c()->shouldDestroyOnNSDeletion());
-
-        try {
-            const string cursorNs = cursor->ns(); // we need this after cursor may have been deleted
-
-            // can't use result BSONObjBuilder directly since it won't handle exceptions correctly.
-            BSONArrayBuilder resultsArray;
-            const int byteLimit = MaxBytesToReturnToClientAtOnce;
-            for (int objs = 0;
-                    objs < batchSize && cursor->ok() && resultsArray.len() <= byteLimit;
-                    objs++) {
-                // TODO may need special logic if cursor->current() would cause results to be > 16MB
-                resultsArray.append(cursor->current());
-                cursor->advance();
-            }
-
-            // The initial ok() on a cursor may be very expensive so we don't do it when batchSize
-            // is 0 since that indicates a desire for a fast return.
-            if (batchSize != 0 && !cursor->ok()) {
-                // There is no more data. Kill the cursor.
-                pin.release();
-                ClientCursor::erase(id);
-                id = 0;
-                cursor = NULL; // make it an obvious error to use cursor after this point
-            }
-
-            BSONObjBuilder cursorObj(result.subobjStart("cursor"));
-            cursorObj.append("id", id);
-            cursorObj.append("ns", cursorNs);
-            cursorObj.append("firstBatch", resultsArray.arr());
-            cursorObj.done();
-        }
-        catch (...) {
-            // Clean up cursor on way out of scope.
-            pin.release();
-            ClientCursor::erase(id);
-            throw;
-        }
-    }
-
 
     class PipelineCursor : public Cursor {
     public:
@@ -177,8 +97,10 @@ namespace mongo {
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return noTxnFlags(); }
         virtual bool canRunInMultiStmtTxn() const { return true; }
-        virtual OpSettings getOpSettings() const { return OpSettings(); }
+        virtual OpSettings getOpSettings() const { return OpSettings().setBulkFetch(true); }
         virtual bool slaveOk() const;
+        // aggregate is like a query, we don't need to hold this lock
+        virtual bool requiresShardedOperationScope() const { return false; }
         virtual void help(stringstream &help) const;
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
@@ -383,7 +305,8 @@ namespace mongo {
             CursorId id;
             {
                 // Set up cursor
-                Client::ReadContext ctx(ns);
+                LOCK_REASON(lockReason, "aggregate: creating aggregation cursor");
+                Client::ReadContext ctx(ns, lockReason);
                 shared_ptr<Cursor> cursor(new PipelineCursor(pPipeline));
                 // cc will be owned by cursor manager
                 ClientCursor* cc = new ClientCursor(0, cursor, ns, cmdObj.getOwned());

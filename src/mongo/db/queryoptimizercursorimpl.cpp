@@ -29,7 +29,7 @@
 
 #include "mongo/pch.h"
 #include "mongo/client/dbclientinterface.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/queryoptimizercursorimpl.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/cursor.h"
@@ -328,29 +328,19 @@ namespace mongo {
             return shared_ptr<Cursor>();
         }
         
+        Collection *cl = getCollection(_ns);
         const int numWanted = _parsedQuery ? _parsedQuery->getSkip() + _parsedQuery->getNumToReturn() : 0;
         if ( _planPolicy.permitOptimalNaturalPlan() && _query.isEmpty() && _order.isEmpty() ) {
             // Table-scan
-            NamespaceDetails *d = nsdetails(_ns);
-            if ( d != NULL && _planPolicy.requestCountingCursor() ) {
-                // All one-to-one indexes indexes have the same count.
-                //
-                // Utilize an IndexScanCountCursor over the smallest one
-                // of them for best performance.
-                return shared_ptr<Cursor>( new IndexScanCountCursor(d, d->findSmallestOneToOneIndex()) );
-            } else {
-                return shared_ptr<Cursor>( BasicCursor::make(d) );
-            }
+            return Cursor::make(cl, 1, _planPolicy.requestCountingCursor());
         }
-        if ( isSimpleIdQuery( _query ) ) {
-            NamespaceDetails *d = nsdetails( _ns );
-            if ( d ) {
-                int idxNo = d->findIdIndex();
-                if ( idxNo >= 0 ) {
-                    IndexDetails& i = d->idx( idxNo );
-                    BSONObj key = i.getKeyFromQuery( _query );
-                    return shared_ptr<Cursor>( IndexCursor::make( d, i, key, key, true, 1, numWanted ) );
-                }
+
+        if (cl != NULL && isSimpleIdQuery(_query)) {
+            const int idxNo = cl->findIdIndex();
+            if (idxNo >= 0) {
+                IndexDetails &idx = cl->idx(idxNo);
+                const BSONObj key = idx.getKeyFromQuery(_query);
+                return Cursor::make(cl, idx, key, key, true, 1, numWanted);
             }
         }
         

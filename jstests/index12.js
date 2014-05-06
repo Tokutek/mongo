@@ -6,7 +6,7 @@ c.drop();
 
 s = startParallelShell (
 ' for( i = 0; i < 100; ++i ) {' +
-'    db.getSisterDB( "admin" ).runCommand( {renameCollection:"test.jstests_index12", to:"test.jstests_index12b"} );' +
+'    db.getSisterDB( "admin" ).runCommand( {renameCollection:db.getName() + ".jstests_index12", to:db.getName() + ".jstests_index12b"} );' +
 '    db.jstests_index12b.drop();' +
 '    sleep( 30 );' +
 ' }'

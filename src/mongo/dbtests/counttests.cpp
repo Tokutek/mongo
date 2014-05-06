@@ -20,7 +20,6 @@
 #include <boost/thread/thread.hpp>
 
 #include "mongo/db/cursor.h"
-#include "mongo/db/dbhelpers.h"
 #include "mongo/db/json.h"
 #include "mongo/db/ops/count.h"
 #include "mongo/db/ops/delete.h"
@@ -34,14 +33,14 @@ namespace CountTests {
         Client::Transaction _transaction;
         Client::WriteContext _context;
     public:
-        Base() : _transaction(DB_SERIALIZABLE), _context(ns()) {
+        Base() : _transaction(DB_SERIALIZABLE), _context(ns(), mongo::unittest::EMPTY_STRING) {
             addIndex( fromjson( "{\"a\":1}" ) );
         }
         ~Base() {
             try {
-                for( boost::shared_ptr<Cursor> c( BasicCursor::make( nsdetails(ns()) ) );
+                for( boost::shared_ptr<Cursor> c( BasicCursor::make( getCollection(ns()) ) );
                      c->ok(); c->advance() ) {
-                    deleteOneObject( nsdetails(ns()) , c->currPK(), c->current() );
+                    deleteOneObject( getCollection(ns()) , c->currPK(), c->current() );
                 }
                 _transaction.commit();
                 DBDirectClient cl;
@@ -69,7 +68,7 @@ namespace CountTests {
             insert( fromjson( s ) );
         }
         static void insert( const BSONObj &o ) {
-            insertObject( ns(), o, NamespaceDetails::NO_UNIQUE_CHECKS );
+            insertObject( ns(), o, Collection::NO_UNIQUE_CHECKS );
         }
         static BSONObj countCommand( const BSONObj &query ) {
             return BSON( "query" << query );

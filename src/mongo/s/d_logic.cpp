@@ -43,42 +43,57 @@ using namespace std;
 
 namespace mongo {
 
-    bool _handlePossibleShardedMessage( Message &m, DbResponse* dbresponse ) {
+    static inline bool opCaresAboutSharding(int op) {
+        return op >= 2000 && op < 3000 && op != dbGetMore;  // cursors are weird
+    }
+
+    void _checkPossiblyShardedMessage(Message &m) {
+        int op = m.operation();
+        if (!opCaresAboutSharding(op)) {
+            return;
+        }
+        DbMessage d(m);
+        _checkPossiblyShardedMessage(op, d.getns());
+    }
+
+    void _checkPossiblyShardedMessage(int op, const string &ns) {
         DEV verify( shardingState.enabled() );
 
-        int op = m.operation();
-        if ( op < 2000
-                || op >= 3000
-                || op == dbGetMore  // cursors are weird
-           )
-            return false;
+        if (!opCaresAboutSharding(op)) {
+            return;
+        }
 
-        DbMessage d(m);
-        const char *ns = d.getns();
         string errmsg;
         // We don't care about the version here, since we're returning it later in the writeback
         ConfigVersion received, wanted;
         if ( shardVersionOk( ns , errmsg, received, wanted ) ) {
-            return false;
+            return;
         }
 
+        throw MustHandleShardedMessage(errmsg, received, wanted);
+    }
+
+    void MustHandleShardedMessage::handleShardedMessage(Message &m, DbResponse *dbresponse) const {
+        int op = m.operation();
+        DbMessage d(m);
+        StringData ns = d.getns();
         bool getsAResponse = doesOpGetAResponse( op );
 
         LOG(1) << "connection sharding metadata does not match for collection " << ns
-               << ", will retry (wanted : " << wanted << ", received : " << received << ")"
+               << ", will retry (wanted : " << _wanted << ", received : " << _received << ")"
                << ( getsAResponse ? "" : " (queuing writeback)" ) << endl;
 
-        if( getsAResponse ){
+        if (getsAResponse) {
             verify( dbresponse );
             BufBuilder b( 32768 );
             b.skip( sizeof( QueryResult ) );
             {
                 BSONObjBuilder bob;
 
-                bob.append( "$err", errmsg );
+                bob.append( "$err", _shardingError );
                 bob.append( "ns", ns );
-                wanted.addToBSON( bob, "vWanted" );
-                received.addToBSON( bob, "vReceived" );
+                _wanted.addToBSON( bob, "vWanted" );
+                _received.addToBSON( bob, "vReceived" );
 
                 BSONObj obj = bob.obj();
 
@@ -99,44 +114,41 @@ namespace mongo {
 
             dbresponse->response = resp;
             dbresponse->responseTo = m.header()->id;
-            return true;
-        }
+        } else {
+            uassert(9517, "cannot queue a writeback operation to the writeback queue",
+                    (d.reservedField() & Reserved_FromWriteback) == 0);
 
-        uassert(9517, "cannot queue a writeback operation to the writeback queue",
-                (d.reservedField() & Reserved_FromWriteback) == 0);
+            const OID& clientID = ShardedConnectionInfo::get(false)->getID();
+            massert( 10422 ,  "write with bad shard config and no server id!" , clientID.isSet() );
 
-        const OID& clientID = ShardedConnectionInfo::get(false)->getID();
-        massert( 10422 ,  "write with bad shard config and no server id!" , clientID.isSet() );
+            // We need to check this here, since otherwise we'll get errors wrapping the writeback -
+            // not just here, but also when returning as a command result.
+            // We choose 1/2 the overhead of the internal maximum so that we can still handle ops of
+            // 16MB exactly.
+            massert( 16437, "data size of operation is too large to queue for writeback",
+                     m.dataSize() < BSONObjMaxInternalSize - (8 * 1024));
 
-        // We need to check this here, since otherwise we'll get errors wrapping the writeback -
-        // not just here, but also when returning as a command result.
-        // We choose 1/2 the overhead of the internal maximum so that we can still handle ops of
-        // 16MB exactly.
-        massert( 16437, "data size of operation is too large to queue for writeback",
-                 m.dataSize() < BSONObjMaxInternalSize - (8 * 1024));
+            LOG(1) << "writeback queued for " << m.toString() << endl;
 
-        LOG(1) << "writeback queued for " << m.toString() << endl;
+            BSONObjBuilder b;
+            b.appendBool( "writeBack" , true );
+            b.append( "ns" , ns );
+            b.append( "connectionId" , cc().getConnectionId() );
+            b.append( "instanceIdent" , prettyHostName() );
+            _wanted.addToBSON( b );
+            _received.addToBSON( b, "yourVersion" );
 
-        BSONObjBuilder b;
-        b.appendBool( "writeBack" , true );
-        b.append( "ns" , ns );
-        b.append( "connectionId" , cc().getConnectionId() );
-        b.append( "instanceIdent" , prettyHostName() );
-        wanted.addToBSON( b );
-        received.addToBSON( b, "yourVersion" );
-
-        b.appendBinData( "msg" , m.header()->len , bdtCustom , (char*)(m.singleData()) );
-        LOG(2) << "writing back msg with len: " << m.header()->len << " op: " << m.operation() << endl;
+            b.appendBinData( "msg" , m.header()->len , bdtCustom , (char*)(m.singleData()) );
+            LOG(2) << "writing back msg with len: " << m.header()->len << " op: " << m.operation() << endl;
         
-        // we pass the builder to queueWriteBack so that it can select the writebackId
-        // this is important so that the id is guaranteed to be ascending 
-        // that is important since mongos assumes if its seen a greater writeback
-        // that all former have been processed
-        OID writebackID = writeBackManager.queueWriteBack( clientID.str() , b );
+            // we pass the builder to queueWriteBack so that it can select the writebackId
+            // this is important so that the id is guaranteed to be ascending 
+            // that is important since mongos assumes if its seen a greater writeback
+            // that all former have been processed
+            OID writebackID = writeBackManager.queueWriteBack( clientID.str() , b );
 
-        lastError.getSafe()->writeback( writebackID );
-
-        return true;
+            lastError.getSafe()->writeback( writebackID );
+        }
     }
 
 }

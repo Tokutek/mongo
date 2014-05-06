@@ -56,8 +56,6 @@ namespace mongo {
 
     extern BSONObj id_obj;
     
-    bool opForSlaveTooOld(uint64_t ts);
-
     class ClientCursor : private boost::noncopyable {
         friend class CmdCursorInfo;
     public:
@@ -110,7 +108,12 @@ namespace mongo {
                     return;
                 if ( _c ) {
                     // be careful in case cursor was deleted by someone else
-                    ClientCursor::erase( _id );
+                    if (_id == INVALID_CURSOR_ID) {
+                        delete _c;
+                    }
+                    else {
+                        ClientCursor::erase( _id );
+                    }
                 }
                 if ( c ) {
                     _c = c;
@@ -159,9 +162,13 @@ namespace mongo {
         };
         
         ClientCursor(int queryOptions, const shared_ptr<Cursor>& c, const string& ns,
-                     BSONObj query = BSONObj(), const bool inMultiStatementTxn = false );
+                     BSONObj query = BSONObj(), const bool inMultiStatementTxn = false,
+                     bool createCursorID = true);
 
         ~ClientCursor();
+
+        // Initializes cursorID        
+        void initCursorID();
 
         // ***************  basic accessors *******************
 
@@ -284,10 +291,10 @@ namespace mongo {
          * @param millis amount of idle passed time since last call
          */
         bool shouldTimeout( unsigned millis );
+        void resetIdleAge();
 
         void storeOpForSlave( BSONObj curr );
         void updateSlaveLocation( CurOp& curop );
-        bool lastOpForSlaveTooOld();
 
         unsigned idleTime() const { return _idleAgeMillis; }
         
@@ -341,7 +348,6 @@ namespace mongo {
         // data for replication, this will hold the point that the slave has
         // read up to. Used for write concern
         GTID _slaveReadTill;
-        uint64_t _slaveReadTillTS;
 
         unsigned _idleAgeMillis;                 // how long has the cursor been around, relative to server idle time
 
@@ -357,6 +363,7 @@ namespace mongo {
     public:
         shared_ptr<ParsedQuery> pq;
         shared_ptr<Projection> fields; // which fields query wants returned
+        static int idleAgeTimeoutMillis;
 
     private: // static members
 

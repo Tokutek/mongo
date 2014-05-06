@@ -19,7 +19,7 @@
 
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/opsettings.h"
 #include "mongo/util/log.h"
 
@@ -84,6 +84,7 @@ namespace mongo {
         virtual void help(stringstream& h) const { h << "Validate contents of a namespace by scanning its data structures for correctness.  Slow.\n"
                                                         "Add full:true option to do a more thorough check"; }
 
+        virtual bool requiresShardedOperationScope() const { return false; }
         virtual LockType locktype() const { return READ; }
         //{ validate: "collectionnamewithoutthedbpart" [, scandata: <bool>] [, full: <bool> } */
         virtual bool requiresSync() const { return false; }
@@ -98,11 +99,11 @@ namespace mongo {
 
         bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
             string ns = dbname + "." + cmdObj.firstElement().valuestrsafe();
-            NamespaceDetails * d = nsdetails(ns);
+            Collection *cl = getCollection(ns);
             if ( !cmdLine.quiet )
                 tlog() << "CMD: validate " << ns << endl;
 
-            if ( ! d ) {
+            if ( ! cl ) {
                 errmsg = "ns not found";
                 return false;
             }

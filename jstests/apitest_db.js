@@ -2,7 +2,7 @@
  *   Tests for the db object enhancement
  */
 
-assert( "test" == db, "wrong database currently not test" );
+assert( db.getName() == db, "wrong database currently not " + db.getName() );
 
 dd = function( x ){
     //print( x );
@@ -29,14 +29,14 @@ dd( "c" );
  */
  
 db.getCollection( "test" ).drop();
-db.getCollection( "system.namespaces" ).find().forEach( function(x) { assert(x.name != "test.test"); });
+db.getCollection( "system.namespaces" ).find().forEach( function(x) { assert(x.name != db.getName() + ".test"); });
 
 dd( "d" );
  
 db.createCollection("test");
 var found = false;
-db.getCollection( "system.namespaces" ).find().forEach( function(x) {  if (x.name == "test.test") found = true; });
-assert(found, "found test.test in system.namespaces");
+db.getCollection( "system.namespaces" ).find().forEach( function(x) {  if (x.name == db.getName() + ".test") found = true; });
+assert(found, "found " + db.getName() + ".test in system.namespaces");
 
 dd( "e" );
 

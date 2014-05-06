@@ -28,7 +28,7 @@
 #include "mongo/client/dbclient_rs.h"
 #include "mongo/client/sasl_client_authenticate.h"
 #include "mongo/db/json.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/txn_complete_hooks.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/platform/posix_fadvise.h"
@@ -239,7 +239,8 @@ namespace mongo {
                 ::_exit(EXIT_FAILURE);
             }
 
-            storage::startup(&_txnCompleteHooks);
+            extern storage::UpdateCallback _storageUpdateCallback;
+            storage::startup(&_txnCompleteHooks, &_storageUpdateCallback);
         }
 
         if ( _params.count( "db" ) )

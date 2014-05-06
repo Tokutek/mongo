@@ -519,10 +519,65 @@ namespace mongo {
         virtual bool call( Message &toSend, Message &response, bool assertOk=true , string * actualServer = 0 );
         virtual bool callRead( Message& toSend , Message& response ) { return checkMaster()->callRead( toSend , response ); }
 
+        /**
+         *  Authenticate using supplied credentials.  Authenticates against the primary node, fails
+         *  if node is down.
+         *  Credentials are cached for future connections.
+         *
+         *  See DBClientWithCommands::auth() for more details.
+         *
+         *  This is the default authentication mode for DBClientReplicaSet connections.
+         */
+        void authPrimary(const BSONObj& params);
+
+        /**
+         * Same as above, but authorizes access to a particular database.
+         *
+         * See DBClientWithCommands::auth() for more details.
+         */
+        bool authPrimary(const string &dbname,
+                         const string &username,
+                         const string &password_text,
+                         string& errmsg,
+                         bool digestPassword);
+
+        /**
+         * Authenticate using supplied credentials.  Prefers authentication against the primary
+         * node, will fall back to a secondary and retry if the primary node is down but
+         * secondaries are still available.
+         * Credentials are cached for future connections.
+         *
+         * See DBClientWithCommands::auth() for more details.
+         */
+        void authAny(const BSONObj& params);
+
+        /**
+         * Same as above, but authorizes access to a particular database.
+         *
+         * See DBClientWithCommands::auth() for more details.
+         */
+        bool authAny( const string &dbname,
+                      const string &username,
+                      const string &password_text,
+                      string& errmsg,
+                      bool digestPassword );
+
+        /*
+         * Returns whether a query or command can be sent to secondaries based on the query object
+         * and options.
+         *
+         * @param ns the namespace of the query.
+         * @param queryObj the query object to check.
+         * @param queryOptions the query options
+         *
+         * @return true if the query/cmd could potentially be sent to a secondary, false otherwise
+         */
+        static bool isSecondaryQuery( const string& ns,
+                                      const BSONObj& queryObj,
+                                      int queryOptions );
 
     protected:
-        /** Authorize.  Authorizes all nodes as needed
-        */
+
         virtual void _auth(const BSONObj& params);
 
         virtual void sayPiggyBack( Message &toSend ) { checkMaster()->say( toSend ); }
@@ -607,10 +662,12 @@ namespace mongo {
          */
         class LazyState {
         public:
-            LazyState() : _lastClient( NULL ), _lastOp( -1 ), _slaveOk( false ), _retries( 0 ) {}
+            LazyState() :
+                _lastClient( NULL ), _lastOp( -1 ), _isSecondaryQuery( false ), _retries( 0 ) {
+            }
             DBClientConnection* _lastClient;
             int _lastOp;
-            bool _slaveOk;
+            bool _isSecondaryQuery;
             int _retries;
 
         } _lazyState;

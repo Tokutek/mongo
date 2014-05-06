@@ -441,7 +441,7 @@ namespace mongo {
                     }
                 }
 
-                if ( ns.find( ".system." ) != string::npos ) {
+                if ( NamespaceString::isSystem(ns) ) {
                     errmsg = "can't shard system namespaces";
                     return false;
                 }
@@ -460,6 +460,12 @@ namespace mongo {
                 if ( res["options"].type() == Object &&
                      res["options"].embeddedObject()["capped"].trueValue() ) {
                     errmsg = "can't shard capped collection";
+                    conn->done();
+                    return false;
+                }
+                if ( res["options"].type() == Object &&
+                     res["options"].embeddedObject()["partitioned"].trueValue() ) {
+                    errmsg = "can't shard partitioned collection";
                     conn->done();
                     return false;
                 }
@@ -609,19 +615,60 @@ namespace mongo {
                 //    Only need to call ensureIndex on primary shard, since indexes get copied to
                 //    receiving shard whenever a migrate occurs.
                 else {
-                    BSONElement ce = cmdObj["clustering"];
-                    bool clustering = (ce.ok() ? ce.trueValue() : true);
-                    // call ensureIndex with cache=false, see SERVER-1691
-                    bool ensureSuccess = conn->get()->ensureIndex(ns,
-                                                                  proposedKey,
-                                                                  careAboutUnique,
-                                                                  clustering,
-                                                                  "",
-                                                                  false);
-                    if ( ! ensureSuccess ) {
-                        errmsg = "ensureIndex failed to create index on primary shard";
-                        conn->done();
-                        return false;
+                    bool collectionExists;
+                    {
+                        BSONObj res;
+                        BSONObjBuilder cmd;
+                        BSONArrayBuilder b(cmd.subarrayStart("_collectionsExist"));
+                        b.append(ns);
+                        b.doneFast();
+                        collectionExists = conn->get()->runCommand(config->getName(), cmd.done(), res);
+                    }
+                    bool onlyId = proposedKey.nFields() == 1 && proposedKey["_id"].ok();
+                    bool onlyHashed = proposedKey.nFields() == 1 && StringData(proposedKey.firstElement().valuestrsafe()) == "hashed";
+                    if (!collectionExists && !onlyId && !onlyHashed && !careAboutUnique) {
+                        BSONObjBuilder cmd;
+                        cmd.append("create", NamespaceString(ns).coll);
+                        BSONObjBuilder pk(cmd.subobjStart("primaryKey"));
+                        pk.appendElements(proposedKey);
+                        bool containsId = false;
+                        for (BSONObjIterator it(proposedKey); it.more(); ) {
+                            BSONElement e = it.next();
+                            if (StringData(e.fieldName()) == "_id") {
+                                uassert(17212, "_id must be ascending if present in shard key", e.numberLong() == 1);
+                                uassert(17213, "_id:1 must be last field in shard key, if present", !it.more());
+                                containsId = true;
+                            }
+                        }
+                        if (!containsId) {
+                            pk.append("_id", 1);
+                        }
+                        BSONObj pkObj = pk.done();
+
+                        LOG(0) << "sharding non-existent collection, creating " << ns << " with a primary key on " << pkObj << endl;
+
+                        BSONObj res;
+                        bool createSuccess = conn->get()->runCommand(config->getName(), cmd.done(), res);
+                        if (!createSuccess) {
+                            errmsg = "create failed to create collection on primary shard: " + res["errmsg"].String();
+                            conn->done();
+                            return false;
+                        }
+                    } else {
+                        BSONElement ce = cmdObj["clustering"];
+                        bool clustering = (ce.ok() ? ce.trueValue() : true);
+                        // call ensureIndex with cache=false, see SERVER-1691
+                        bool ensureSuccess = conn->get()->ensureIndex(ns,
+                                                                      proposedKey,
+                                                                      careAboutUnique,
+                                                                      clustering,
+                                                                      "",
+                                                                      false);
+                        if ( ! ensureSuccess ) {
+                            errmsg = "ensureIndex failed to create index on primary shard";
+                            conn->done();
+                            return false;
+                        }
                     }
                 }
 
@@ -704,7 +751,7 @@ namespace mongo {
                 result << "collectionsharded" << ns;
 
                 // only initially move chunks when using a hashed shard key
-                if (isHashedShardKey) {
+                if (isHashedShardKey && isEmpty) {
 
                     // Reload the new config info.  If we created more than one initial chunk, then
                     // we need to move them around to balance.
@@ -1437,8 +1484,9 @@ namespace mongo {
             vector<Shard> shards;
             Shard::getAllShards( shards );
 
-            map<string,long long> sizes;
-            map< string,shared_ptr<BSONObjBuilder> > dbShardInfo;
+            map<string, long long> uncompressedSizes;
+            map<string, long long> compressedSizes;
+            map<string, shared_ptr<BSONObjBuilder> > dbShardInfo;
 
             for ( vector<Shard>::iterator i=shards.begin(); i!=shards.end(); i++ ) {
                 Shard s = *i;
@@ -1449,51 +1497,65 @@ namespace mongo {
                     BSONObj theDB = j.next().Obj();
 
                     string name = theDB["name"].String();
-                    long long size = theDB["sizeOnDisk"].numberLong();
+                    size_t uncompressedSize = theDB["size"].numberLong();
+                    size_t compressedSize = theDB["sizeOnDisk"].numberLong();
 
-                    long long& totalSize = sizes[name];
-                    if ( size == 1 ) {
-                        if ( totalSize <= 1 )
-                            totalSize = 1;
+                    uncompressedSizes[name] += uncompressedSize;
+
+                    long long& totalCompressedSize = compressedSizes[name];
+                    if (compressedSize == 1) {
+                        if (totalCompressedSize <= 1) {
+                            totalCompressedSize = 1;
+                        }
                     }
-                    else
-                        totalSize += size;
+                    else {
+                        totalCompressedSize += compressedSize;
+                    }
 
                     shared_ptr<BSONObjBuilder>& bb = dbShardInfo[name];
                     if ( ! bb.get() )
                         bb.reset( new BSONObjBuilder() );
-                    bb->appendNumber( s.getName() , size );
+                    BSONObjBuilder shardb(bb->subobjStart(s.getName()));
+                    shardb.appendNumber("size", uncompressedSize);
+                    shardb.appendNumber("sizeOnDisk", compressedSize);
+                    shardb.doneFast();
                 }
 
             }
 
-            long long totalSize = 0;
+            size_t totalUncompressedSize = 0;
+            size_t totalCompressedSize = 0;
 
-            BSONArrayBuilder bb( result.subarrayStart( "databases" ) );
-            for ( map<string,long long>::iterator i=sizes.begin(); i!=sizes.end(); ++i ) {
-                string name = i->first;
+            BSONArrayBuilder bb(result.subarrayStart("databases"));
+            for (map<string, long long>::iterator i = uncompressedSizes.begin(); i != uncompressedSizes.end(); ++i) {
+                const string &name = i->first;
 
-                if ( name == "local" ) {
+                if (name == "local") {
                     // we don't return local
                     // since all shards have their own independent local
                     continue;
                 }
 
-                if ( name == "config" || name == "admin" ) {
+                if (name == "config" || name == "admin") {
                     //always get this from the config servers
                     continue;
                 }
 
-                long long size = i->second;
-                totalSize += size;
+                map<string, long long>::iterator ci = compressedSizes.find(name);
 
-                BSONObjBuilder temp;
-                temp.append( "name" , name );
-                temp.appendNumber( "sizeOnDisk" , size );
-                temp.appendBool( "empty" , size == 1 );
-                temp.append( "shards" , dbShardInfo[name]->obj() );
+                long long uncompressedSize = i->second;
+                totalUncompressedSize += uncompressedSize;
+                long long compressedSize = ci->second;
+                totalCompressedSize += compressedSize;
 
-                bb.append( temp.obj() );
+                BSONObjBuilder temp(bb.subobjStart());
+                temp.append("name", name);
+                temp.appendNumber("size", uncompressedSize);
+                temp.appendNumber("sizeOnDisk", compressedSize);
+                temp.appendBool("empty", uncompressedSize == 1);
+                temp.append("shards", dbShardInfo[name]->obj());
+
+                temp.doneFast();
             }
             
             { // get config db from the config servers (first one)
@@ -1501,18 +1563,23 @@ namespace mongo {
                         ScopedDbConnection::getInternalScopedDbConnection(
                                 configServer.getPrimary().getConnString(), 30));
                 BSONObj x;
-                if ( conn->get()->simpleCommand( "config" , &x , "dbstats" ) ){
-                    BSONObjBuilder b;
-                    b.append( "name" , "config" );
-                    b.appendBool( "empty" , false );
-                    if ( x["fileSize"].type() )
-                        b.appendAs( x["fileSize"] , "sizeOnDisk" );
-                    else
-                        b.append( "sizeOnDisk" , 1 );
-                    bb.append( b.obj() );
-                }
-                else {
-                    bb.append( BSON( "name" << "config" ) );
+                if (conn->get()->simpleCommand("config", &x, "dbstats")) {
+                    BSONObjBuilder b(bb.subobjStart());
+                    b.append("name", "config");
+                    b.appendBool("empty", false);
+                    if (x["dataSize"].ok()) {
+                        b.appendAs(x["dataSize"], "size");
+                    } else {
+                        b.append("size", 1);
+                    }
+                    if (x["storageSize"].ok()) {
+                        b.appendAs(x["storageSize"], "sizeOnDisk");
+                    } else {
+                        b.append("sizeOnDisk", 1);
+                    }
+                    b.doneFast();
+                } else {
+                    bb.append(BSON( "name" << "config" ));
                 }
                 conn->done();
             }
@@ -1522,26 +1589,32 @@ namespace mongo {
                         ScopedDbConnection::getInternalScopedDbConnection(
                                 configServer.getPrimary().getConnString(), 30));
                 BSONObj x;
-                if ( conn->get()->simpleCommand( "admin" , &x , "dbstats" ) ){
-                    BSONObjBuilder b;
-                    b.append( "name" , "admin" );
-                    b.appendBool( "empty" , false );
-                    if ( x["fileSize"].type() )
-                        b.appendAs( x["fileSize"] , "sizeOnDisk" );
-                    else
-                        b.append( "sizeOnDisk" , 1 );
-                    bb.append( b.obj() );
+                if (conn->get()->simpleCommand("admin", &x, "dbstats")) {
+                    BSONObjBuilder b(bb.subobjStart());;
+                    b.append("name", "admin");
+                    b.appendBool("empty", false);
+                    if (x["dataSize"].ok()) {
+                        b.appendAs(x["dataSize"], "size");
+                    } else {
+                        b.append("size", 1);
+                    }
+                    if (x["storageSize"].ok()) {
+                        b.appendAs(x["storageSize"], "sizeOnDisk");
+                    } else {
+                        b.append("sizeOnDisk", 1);
+                    }
+                    b.doneFast();
                 }
                 else {
-                    bb.append( BSON( "name" << "admin" ) );
+                    bb.append(BSON( "name" << "admin" ));
                 }
                 conn->done();
             }
 
             bb.done();
 
-            result.appendNumber( "totalSize" , totalSize );
-            result.appendNumber( "totalSizeMb" , totalSize / ( 1024 * 1024 ) );
+            result.appendNumber("totalSize", double(totalCompressedSize));
+            result.appendNumber("totalUncompressedSize", double(totalUncompressedSize));
 
             return 1;
         }

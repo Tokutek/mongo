@@ -87,10 +87,10 @@ namespace mongo {
     public:
         HeartbeatInfo()
                 : _id(0xffffffff), hbstate(MemberState::RS_UNKNOWN), health(-1.0),
-	  downSince(0), opTime(0), purgedInfoAvailable(false), lastPurgedTS(0), skew(INT_MIN), authIssue(false), ping(0) {}
+                  downSince(0), opTime(0), skew(INT_MIN), authIssue(false), ping(0), oplogVersion(0) {}
         HeartbeatInfo(unsigned id)
                 : _id(id), hbstate(MemberState::RS_UNKNOWN), health(-1.0), upSince(0),
-                  downSince(0), lastHeartbeat(0), opTime(0), purgedInfoAvailable(false), lastPurgedTS(0), skew(INT_MIN), authIssue(false), ping(0) {}
+                  downSince(0), lastHeartbeat(0), opTime(0), skew(INT_MIN), authIssue(false), ping(0), oplogVersion(0) {}
         unsigned id() const { return _id; }
         MemberState hbstate;
         double health;
@@ -105,13 +105,11 @@ namespace mongo {
         GTID lastUnappliedGTID;
         GTID minLiveGTID;
         GTID minUnappliedGTID;
-		bool purgedInfoAvailable;
-		GTID lastPurgedGTID;
-		uint64_t lastPurgedTS;
         int skew;
         bool authIssue;
         unsigned int ping; // milliseconds
         static unsigned int numPings;
+        uint32_t oplogVersion;
 
         bool up() const { return health > 0; }
 

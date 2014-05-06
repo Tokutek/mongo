@@ -27,11 +27,7 @@ s.adminCommand( { enablesharding : dbname } );
 s.adminCommand( { shardcollection : ns , key: { a : 1 } } );
 
 // start a parallel shell that deletes things
-startMongoProgramNoConnect( "mongo" ,
-                            "--host" , getHostName() ,
-                            "--port" , st.s0.port ,
-                            "--eval" , "sleep(2000); var bigstr = 'a'; while (bigstr.length < 1024) { bigstr += bigstr; }; print('Doing update'); db." + coll + ".update({}, {'$set': {'x': bigstr} }, {multi: true}); print('Update finished');" ,
-                            dbname );
+join = startParallelShell("db = db.getSiblingDB('" + dbname + "'); sleep(2000); var bigstr = 'a'; while (bigstr.length < 1024) { bigstr += bigstr; }; print('Doing update'); db." + coll + ".update({}, {'$set': {'x': bigstr} }, {multi: true}); print('Update finished');", st.s0.port);
 
 print('Moving chunk');
 // migrate while deletions are happening
@@ -41,6 +37,8 @@ var moveResult =  s.adminCommand( { moveChunk : ns ,
 // check if migration worked
 assert( moveResult.ok , "migration didn't work while doing updates" );
 print('Chunk move finished');
+
+join();
 
 t.find().forEach(function(o) { assert(o.x); assert(o.x.length == 1024); });
 

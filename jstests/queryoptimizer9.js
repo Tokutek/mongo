@@ -12,6 +12,7 @@ function hasCachedPlan() {
 }
 
 t.ensureIndex( { a:1 } );
+t.ensureIndex( { b:1 } ); // there should be two candidate query plans
 t.save( { a:1 } );
 
 recordQueryPlan();

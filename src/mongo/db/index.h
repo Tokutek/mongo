@@ -45,12 +45,16 @@
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/key.h"
 #include "mongo/db/storage/txn.h"
+#include "mongo/util/assert_util.h"
+#include "mongo/util/percentage_progress_meter.h"
 
 namespace mongo {
 
     class Cursor; 
-    class NamespaceDetails;
+    class Collection;
     class FieldRangeSet;
+    class IndexDetailsBase;
+    class PartitionedCollection;
 
     // Represents an index of a collection.
     class IndexDetails : boost::noncopyable {
@@ -58,15 +62,6 @@ namespace mongo {
         // Only creates internals, useful for tests.
         IndexDetails(const BSONObj &info);
 
-        // Creates an IndexDetails subclass of the appropriate type.
-        //
-        // Currently, we have:
-        // - Regular indexes
-        // - Hashed indexes
-        // In the future:
-        // - Geo indexes?
-        // - FTS indexes?
-        static shared_ptr<IndexDetails> make(const BSONObj &info, const bool may_create = true);
         virtual ~IndexDetails();
 
         // @return the "special" name for this index.
@@ -100,16 +95,6 @@ namespace mongo {
         virtual BSONElement missingField() const {
             return nullElt;
         }
-
-        // Closes the underlying ydb dictionary.
-        void close();
-
-        /* pull out the relevant key objects from obj, so we
-           can index them.  Note that the set is multiple elements
-           only when it's a "multikey" array.
-           keys will be left empty if key not found in the object.
-        */
-        void getKeysFromObject(const BSONObj &obj, BSONObjSet &keys) const;
 
         BSONObj getKeyFromQuery(const BSONObj& query) const {
             return query.extractFieldsUnDotted(_keyPattern);
@@ -196,55 +181,16 @@ namespace mongo {
             return _info;
         }
 
-        /** delete this index. */
-        void kill_idx();
-
-        enum toku_compression_method getCompressionMethod() const;
-        uint32_t getPageSize() const;
-        uint32_t getReadPageSize() const;
-        void getStat64(DB_BTREE_STAT64* stats) const;
-        void optimize(const storage::Key &leftSKey, const storage::Key &rightSKey,
-                      const bool sendOptimizeMessage, uint64_t* loops_run);
-        void acquireTableLock();
-
-        struct UniqueCheckExtra : public ExceptionSaver {
-            const storage::Key &newKey;
-            const Descriptor &descriptor;
-            bool &isUnique;
-            std::exception *ex;
-            UniqueCheckExtra(const storage::Key &sKey, const Descriptor &d, bool &u) :
-                newKey(sKey), descriptor(d), isUnique(u), ex(NULL) {
-            }
-        };
-        static int uniqueCheckCallback(const DBT *key, const DBT *val, void *extra);
-        void uniqueCheck(const BSONObj &key, const BSONObj &pk) const;
-        void uassertedDupKey(const BSONObj &key) const;
-
-        template<class Callback>
-        void getKeyAfterBytes(const storage::Key &startKey, uint64_t skipLen, Callback &cb) const;
-
         // Index access statistics
         struct AccessStats {
-#pragma pack(8)
-            // If each word sits on its own cache line, we prevent false-sharing
-            // in the cache and reduce cache-invalidation stalls.
-            struct CacheLineWord : AtomicWord<uint64_t> {
-                char _pad[64 - sizeof(AtomicWord<uint64_t>)];
-            };
-#pragma pack()
-            BOOST_STATIC_ASSERT(sizeof(CacheLineWord) == 64);
-            CacheLineWord queries;
-            CacheLineWord nscanned;
-            CacheLineWord nscannedObjects;
-            CacheLineWord inserts;
-            CacheLineWord deletes;
-            // Not sure how to capture updates just yet
-            //CacheLineWord updates;
+            // ensures that the next member does not sit on the same cacheline as any real data.
+            AtomicWordOnCacheLine _dummyCounter;
+            AtomicWordOnCacheLine queries;
+            AtomicWordOnCacheLine nscanned;
+            AtomicWordOnCacheLine nscannedObjects;
+            AtomicWordOnCacheLine inserts;
+            AtomicWordOnCacheLine deletes;
         };
-
-        const AccessStats &getAccessStats() const {
-            return _accessStats;
-        }
 
         // Book-keeping for index access, displayed in db.stats()
         void noteQuery(const long long nscanned, const long long nscannedObjects) const {
@@ -267,6 +213,8 @@ namespace mongo {
             uint32_t pageSize;
             uint32_t readPageSize;
             enum toku_compression_method compressionMethod;
+            uint32_t fanout;
+
             uint64_t queries;
             uint64_t nscanned;
             uint64_t nscannedObjects;
@@ -280,6 +228,7 @@ namespace mongo {
                       pageSize(0),
                       readPageSize(0),
                       compressionMethod(TOKU_ZLIB_METHOD),
+                      fanout(0),
                       queries(0),
                       nscanned(0),
                       nscannedObjects(0),
@@ -290,26 +239,114 @@ namespace mongo {
 
         Stats getStats() const;
 
-        class Cursor : public storage::Cursor {
-        public:
-            Cursor(const IndexDetails &idx, const int flags = 0) :
-                storage::Cursor(idx.db(), flags) {
+        // functions that subclasses MUST implement
+        virtual enum toku_compression_method getCompressionMethod() const = 0;
+        virtual uint32_t getFanout() const = 0;
+        virtual uint32_t getPageSize() const = 0;
+        virtual uint32_t getReadPageSize() const = 0;
+        virtual void getStat64(DB_BTREE_STAT64* stats) const = 0;
+
+        // find a way to remove this eventually and have callers get
+        // access to IndexDetailsBase directly somehow
+        // This is a workaround to get going for now
+        virtual shared_ptr<storage::Cursor> getCursor(const int flags) const = 0;
+
+    protected:
+        // Info about the index. Stored on disk in the database.ns dictionary
+        // for this database as a BSON object.
+        // Can only be modified by changeAttributes
+        BSONObj _info;
+
+        // Precomputed values from _info, for speed.
+        const BSONObj _keyPattern;
+        const bool _unique;
+        const bool _sparse;
+        const bool _clustering;
+
+    private:
+        mutable AccessStats _accessStats;
+    };
+
+    class IndexDetailsBase : public IndexDetails {
+    public:
+        // Creates an IndexDetails subclass of the appropriate type.
+        //
+        // Currently, we have:
+        // - Regular indexes
+        // - Hashed indexes
+        // In the future:
+        // - Geo indexes?
+        // - FTS indexes?
+        static shared_ptr<IndexDetailsBase> make(const BSONObj &info, const bool may_create = true);
+
+        IndexDetailsBase(const BSONObj& info);
+
+        virtual ~IndexDetailsBase();
+
+        // Closes the underlying ydb dictionary.
+        void close();
+        /** delete this index. */
+        void kill_idx();
+
+        /* pull out the relevant key objects from obj, so we
+           can index them.  Note that the set is multiple elements
+           only when it's a "multikey" array.
+           keys will be left empty if key not found in the object.
+        */
+        void getKeysFromObject(const BSONObj &obj, BSONObjSet &keys) const;
+        // Send an update message.
+        void updatePair(const BSONObj &key, const BSONObj *pk, const BSONObj &msg, uint64_t flags);
+        
+        struct UniqueCheckExtra : public ExceptionSaver {
+            const storage::Key &newKey;
+            const Descriptor &descriptor;
+            bool &isUnique;
+            std::exception *ex;
+            UniqueCheckExtra(const storage::Key &sKey, const Descriptor &d, bool &u) :
+                newKey(sKey), descriptor(d), isUnique(u), ex(NULL) {
             }
         };
+        static int uniqueCheckCallback(const DBT *key, const DBT *val, void *extra);
+        void uniqueCheck(const BSONObj &key, const BSONObj &pk) const;
+        void uassertedDupKey(const BSONObj &key) const;
+        void optimize(const storage::Key &leftSKey, const storage::Key &rightSKey,
+                      const bool sendOptimizeMessage, const int timeout,
+                      uint64_t* loops_run);
+
+        void acquireTableLock();
+
+        shared_ptr<storage::Cursor> getCursor(const int flags) const {
+            shared_ptr<storage::Cursor> ret;
+            ret.reset(new storage::Cursor(db(), flags));
+            return ret;
+        }
 
         class Builder {
         public:
-            Builder(IndexDetails &idx);
+            Builder(IndexDetailsBase &idx);
 
             void insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val);
 
             void done();
 
         private:
-            IndexDetails &_idx;
+            IndexDetailsBase &_idx;
             DB *_db;
             storage::Loader _loader;
         };
+
+        // change attributes of the underlying storage::Dictionary
+        // @return true if something was modified
+        bool changeAttributes(const BSONObj &info, BSONObjBuilder &wasBuilder);
+
+        enum toku_compression_method getCompressionMethod() const;
+        uint32_t getFanout() const;
+        uint32_t getPageSize() const;
+        uint32_t getReadPageSize() const;
+        void getStat64(DB_BTREE_STAT64* stats) const;
+
+        template<class Callback>
+        void getKeyAfterBytes(const storage::Key &startKey, uint64_t skipLen, Callback &cb) const;    
 
     protected:
         // Open ydb dictionary representing the index on disk.
@@ -318,18 +355,17 @@ namespace mongo {
         DB *db() const {
             return _db->db();
         }
-
-        static int hot_opt_callback(void *extra, float progress);
-
-        // Info about the index. Stored on disk in the database.ns dictionary
-        // for this database as a BSON object.
-        const BSONObj _info;
-
-        // Precomputed values from _info, for speed.
-        const BSONObj _keyPattern;
-        const bool _unique;
-        const bool _sparse;
-        const bool _clustering;
+        
+        struct hot_optimize_callback_extra : public ExceptionSaver {
+            hot_optimize_callback_extra(const int t, const std::string &prefix) :
+                    timeout(t),
+                    pm(prefix) {
+            }
+            Timer timer;
+            const int timeout;
+            PercentageProgressMeter pm;
+        };
+        static int hot_optimize_callback(void *extra, float progress);
 
         // Used to describe the index to the ydb layer.
         //
@@ -338,21 +374,19 @@ namespace mongo {
         // in by subclass constructors.
         scoped_ptr<Descriptor> _descriptor;
 
-    private:
-        mutable AccessStats _accessStats;
-
+    private:        
         // Must be called after constructor. Opens the ydb dictionary
         // using _descriptor, which is set by subclass constructors.
         //
-        // Only IndexDetails::make() calls the constructor / open.
+        // Only IndexDetailsBase::make() calls the constructor / open.
         bool open(const bool may_create);
 
-        friend class NamespaceDetails;
+        friend class CollectionBase;
         friend class BulkLoadedCollection;
     };
 
     template<class Callback>
-    void IndexDetails::getKeyAfterBytes(const storage::Key &startKey, uint64_t skipLen, Callback &cb) const {
+    void IndexDetailsBase::getKeyAfterBytes(const storage::Key &startKey, uint64_t skipLen, Callback &cb) const {
         class CallbackWrapper {
             Callback &_cb;
           public:
@@ -389,7 +423,7 @@ namespace mongo {
         if (cbw.ex != NULL) {
             throw *cbw.ex;
         }
-    }
+    }    
 
     // Sets db->app_private to a bool that gets set
     // if storage::generate_keys() generates multikeys.
@@ -413,6 +447,33 @@ namespace mongo {
     private:
         DB *_db;
         bool _multiKey;
+    };
+
+    // IndexDetails class for PartitionedCollections
+    class PartitionedIndexDetails : public IndexDetails {
+    public:
+        PartitionedIndexDetails(const BSONObj &info, PartitionedCollection* pc, int idxNum) : 
+            IndexDetails(info),
+            _pc(pc),
+            _idxNum(idxNum)
+        {
+        }
+        virtual enum toku_compression_method getCompressionMethod() const;
+        virtual uint32_t getFanout() const;
+        virtual uint32_t getPageSize() const;
+        virtual uint32_t getReadPageSize() const;
+        virtual void getStat64(DB_BTREE_STAT64* stats) const;
+
+        // find a way to remove this eventually and have callers get
+        // access to IndexDetailsBase directly somehow
+        // This is a workaround to get going for now
+        virtual shared_ptr<storage::Cursor> getCursor(const int flags) const;
+    private:
+        // This cannot be a shared_ptr, as this is a circular reference
+        // _pic has a reference to this as well.
+        PartitionedCollection* _pc;
+        int _idxNum;
+
     };
 
 } // namespace mongo

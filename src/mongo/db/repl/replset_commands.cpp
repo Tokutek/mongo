@@ -235,7 +235,8 @@ namespace mongo {
                 // later.  of course it could be stuck then, but this check lowers the risk if weird things
                 // are up - we probably don't want a change to apply 30 minutes after the initial attempt.
                 time_t t = time(0);
-                Lock::GlobalWrite lk;
+                LOCK_REASON(lockReason, "repl: testing write lock time");
+                Lock::GlobalWrite lk(lockReason);
                 if( time(0)-t > 20 ) {
                     errmsg = "took a long time to get write lock, so not initiating.  Initiate when server less busy?";
                     return false;
@@ -604,28 +605,17 @@ namespace mongo {
             bool foundLocally = false;
             // now let's find the oplog entry
             {
-                Client::ReadContext ctx(rsoplog);
+                LOCK_REASON(lockReason, "repl: looking for oplog entry to undo");
+                Client::ReadContext ctx(rsoplog, lockReason);
                 Client::Transaction transaction(DB_TXN_READ_ONLY | DB_READ_UNCOMMITTED);
-                NamespaceDetails *d = nsdetails( rsoplog );
-                foundLocally = d != NULL && d->findOne( q.done(), oplogEntry);
+                foundLocally = Collection::findOne(rsoplog, q.done(), oplogEntry);
+                transaction.commit();
             }
             if (!foundLocally) {
                 errmsg = "GTID not found in oplog";
                 return false;
             }
             try {
-                // This assumes the user is running this command
-                // after startup. We are not doing anything here to protect
-                // against possible races with starting up the machine
-                //
-                // Also, these pointers will remain set
-                // we are not protecting against the case where
-                // the user drops and recreates any oplog related
-                // files.
-                if (!oplogFilesOpen()) {
-                    Lock::DBRead lk("local");
-                    openOplogFiles();
-                }
                 bool purgeEntry = true;
                 if (cmdObj.hasElement("keepEntry")) {
                     purgeEntry = false;
@@ -675,11 +665,8 @@ namespace mongo {
                 return false;
             }
 
-            Lock::DBRead lk("local");
-            if (!oplogFilesOpen()) {
-                Lock::DBRead lk("local");
-                openOplogFiles();
-            }
+            LOCK_REASON(lockReason, "repl: logging info");
+            Lock::DBRead lk("local", lockReason);
             Client::Transaction transaction(DB_SERIALIZABLE);
             logToReplInfo(minLiveGTID, minUnappliedGTID);
             transaction.commit();
@@ -688,4 +675,78 @@ namespace mongo {
         }
     } cmdLogReplInfo;
 
+    class CmdReplAddPartition : public ReplSetCommand {
+    public:
+        virtual bool canRunInMultiStmtTxn() const { return false; }
+        virtual void help( stringstream &help ) const {
+            help << "add a partition to the oplog and oplog.refs collections\n";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::replAddPartition);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
+    
+        CmdReplAddPartition() : ReplSetCommand("replAddPartition") { }
+    
+        // This command is not meant to be run in a concurrent manner. Assumes user is running this in
+        // a controlled setting.
+        virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            addOplogPartitions();
+            return true;
+        }
+    } cmdReplAddPartition;
+
+    class CmdReplTrimOplog: public ReplSetCommand {
+    public:
+        virtual bool canRunInMultiStmtTxn() const { return false; }
+        virtual void help( stringstream &help ) const {
+            // TODO: add more here
+            help << "trim oplog and oplog.refs collections\n" <<
+                "Either pass {ts : Date} or {GTID : gtid}";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::replTrimOplog);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
+
+        CmdReplTrimOplog() : ReplSetCommand("replTrimOplog") { }
+
+        // This command is not meant to be run in a concurrent manner. Assumes user is running this in
+        // a controlled setting.
+        virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            BSONElement tse = cmdObj["ts"];
+            BSONElement gtide = cmdObj["gtid"];
+            if (tse.ok() && gtide.ok()) {
+                errmsg = "Can supply either gtid or ts, but not both";
+                return false;
+            }
+            if (!tse.ok() && !gtide.ok()) {
+                errmsg = "Must supply either ts or gtid as parameter for trimming";
+                return false;
+            }
+            if (tse.ok()) {
+                if (tse.type() != mongo::Date) {
+                    errmsg = "Must supply a date for the ts field";
+                    return false;
+                }
+                trimOplogWithTS(tse._numberLong());
+            }
+            else if (gtide.ok()) {
+                // do some sanity checks
+                if (!isValidGTID(gtide)) {
+                    errmsg = "gtid is not valid and cannot be parsed";
+                    return false;
+                }
+                GTID gtid = getGTIDFromBSON("gtid",cmdObj);
+                trimOplogwithGTID(gtid);
+            }
+            return true;
+        }
+    } cmdTrimOplog;
 }

@@ -1,0 +1,10 @@
+debian/bsondump.1
+debian/mongo.1
+debian/mongodump.1
+debian/mongoexport.1
+debian/mongofiles.1
+debian/mongoimport.1
+debian/mongorestore.1
+debian/mongosniff.1
+debian/mongostat.1
+debian/mongotop.1

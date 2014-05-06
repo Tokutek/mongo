@@ -13,7 +13,7 @@ mast.agg.insert({});
 mast.getLastError(2);
 
 // wait to make sure the inserts were applied on the secondary, not just copied over
-sleep(1000);
+replTest.awaitReplication();
 
 var res = slav.agg.aggregate({$group: {_id: null, count: {$sum: 1}}});
 assert.commandWorked(res);

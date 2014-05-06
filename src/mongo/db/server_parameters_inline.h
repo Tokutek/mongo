@@ -79,7 +79,12 @@ namespace mongo {
         if (val == ULLONG_MAX) {
             return Status(ErrorCodes::BadValue, strerror(errno));
         }
-        return set( atoi(str.c_str() ) );
+        return set( val );
+    }
+
+    template<>
+    inline Status ExportedServerParameter<BytesQuantity<int> >::setFromString( const string& str ) {
+        return set(BytesQuantity<int>::fromString(str));
     }
 
     template<>
@@ -122,10 +127,13 @@ namespace mongo {
     }
 
     template<>
+    inline void ExportedServerParameter<BytesQuantity<int> >::append( BSONObjBuilder& b, const string& name ) {
+        b.append( name, (int) *_value );
+    }
+
+    template<>
     inline void ExportedServerParameter<BytesQuantity<uint64_t> >::append( BSONObjBuilder& b, const string& name ) {
         b.append( name, (long long) *_value );
     }
-
-
 
 }

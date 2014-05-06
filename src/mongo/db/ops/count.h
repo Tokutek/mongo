@@ -29,7 +29,7 @@
  *    it in the license file.
  */
 
-#include "../jsobj.h"
+#include "mongo/db/jsobj.h"
 
 namespace mongo {
     

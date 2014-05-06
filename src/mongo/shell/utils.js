@@ -697,6 +697,19 @@ shellHelper.it = function(){
     shellPrintHelper( ___it___ );
 }
 
+shellHelper._prettyBytes = function(bytes) {
+    var units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+    var i = 0;
+    while (i < units.length) {
+        if (bytes < 1024) {
+            break;
+        }
+        bytes /= 1024;
+        ++i;
+    }
+    return bytes.toFixed(2) + units[i];
+}
+
 shellHelper.show = function (what) {
     assert(typeof what == "string");
 
@@ -748,18 +761,24 @@ shellHelper.show = function (what) {
     }
 
     if (what == "collections" || what == "tables") {
-        db.getCollectionNames().forEach(function (x) { print(x) });
+        db.forEachCollectionName(function (n) {
+            var c = db.runCommand({collStats : n, scale : 1});
+            var uncompressedSize = c.size + c.totalIndexSize;
+            var compressedSize = c.storageSize + c.totalIndexStorageSize;
+            print(n + "\t" + shellHelper._prettyBytes(uncompressedSize) + " (uncompressed),\t" + shellHelper._prettyBytes(compressedSize) + " (compressed)");
+        });
         return "";
     }
 
     if (what == "dbs" || what == "databases") {
         var dbs = db.getMongo().getDBs();
         var size = {};
-        dbs.databases.forEach(function (x) { size[x.name] = x.sizeOnDisk; });
+        var uncompressedSize = {};
+        dbs.databases.forEach(function (x) { size[x.name] = x.sizeOnDisk; uncompressedSize[x.name] = x.size; });
         var names = dbs.databases.map(function (z) { return z.name; }).sort();
         names.forEach(function (n) {
             if (size[n] > 1) {
-                print(n + "\t" + size[n] / 1024 / 1024 / 1024 + "GB");
+                print(n + "\t" + shellHelper._prettyBytes(uncompressedSize[n]) + " (uncompressed),\t" + shellHelper._prettyBytes(size[n]) + " (compressed)");
             } else {
                 print(n + "\t(empty)");
             }
@@ -944,6 +963,12 @@ rs.help = function () {
     print("\trs.remove(hostportstr)          remove a host from the replica set (disconnects)");
     print("\trs.slaveOk()                    shorthand for db.getMongo().setSlaveOk()");
     print();
+    print("\trs.addPartition()               { replAddPartition : 1 }, add a partition to oplog and oplog.refs");
+    print("\trs.oplogPartitionInfo()         get partition information for oplog collection");
+    print("\trs.oplogRefsPartitionInfo()     get partition information for oplog.refs collection");
+    print("\trs.trimToTS(date)               drop partitions with data preceding date from oplog and oplog.refs");
+    print("\trs.trimToGTID(GTIDBinData)      drop partitions with data preceding GTIDBinData from oplog and oplog.refs");
+    print();
     print("\tdb.isMaster()                   check who is primary");
     print("\tdb.printReplicationInfo()       check oplog size and time range");
     print();
@@ -955,6 +980,7 @@ rs.slaveOk = function (value) { return db.getMongo().setSlaveOk(value); }
 rs.status = function () { return db._adminCommand("replSetGetStatus"); }
 rs.isMaster = function () { return db.isMaster(); }
 rs.initiate = function (c) { return db._adminCommand({ replSetInitiate: c }); }
+rs.addPartition = function () { return db._adminCommand("replAddPartition"); }
 rs._runCmd = function (c) {
     // after the command, catch the disconnect and reconnect if necessary
     var res = null;
@@ -1033,6 +1059,24 @@ rs.remove = function (hn) {
 
     return "error: couldn't find "+hn+" in "+tojson(c.members);
 };
+
+rs.oplogPartitionInfo = function () {
+    var s = db.getSisterDB("local");
+    return s.runCommand({getPartitionInfo:"oplog.rs"});
+}
+
+rs.oplogRefsPartitionInfo = function () {
+    var s = db.getSisterDB("local");
+    return s.runCommand({getPartitionInfo:"oplog.refs"});
+}
+
+rs.trimToTS = function(timeParam) {
+    return db._adminCommand({replTrimOplog:1, ts:timeParam});
+}
+
+rs.trimToGTID = function(gtidParam) {
+    return db._adminCommand({replTrimOplog:1, gtid:gtidParam});
+}
 
 rs.debug = {};
 

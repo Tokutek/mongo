@@ -9,11 +9,31 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
+PRODUCT?=tokumx
 
 configure: configure-stamp
 configure-stamp:
 	dh_testdir
         # Add here commands to configure the package.
+	@mkdir -p opt
+	(cd opt; \
+	  cmake \
+	    -D CMAKE_BUILD_TYPE=Release \
+	    -D TOKU_DEBUG_PARANOID=OFF \
+	    -D USE_VALGRIND=OFF \
+	    -D USE_CTAGS=OFF \
+	    -D USE_ETAGS=OFF \
+	    -D USE_GTAGS=OFF \
+	    -D USE_CSCOPE=OFF \
+	    -D USE_BDB=OFF \
+	    -D USE_SYSTEM_BOOST=ON \
+	    -D USE_SYSTEM_PCRE=ON \
+	    -D BUILD_TESTING=OFF \
+	    -D TOKUMX_SET_RPATH=OFF \
+	    -D CMAKE_INSTALL_RPATH=/usr/lib/tokumx \
+	    -D INSTALL_LIBDIR=lib/tokumx \
+	    -D TOKUMX_STRIP_BINARIES=OFF \
+	    ..)
 
 	touch configure-stamp
 
@@ -24,9 +44,10 @@ build-stamp: configure-stamp
 	dh_testdir
 
         # Add here commands to compile the package.
-	scons 
-        #docbook-to-man debian/mongodb.sgml > mongodb.1
-	ls debian/*.1 > debian/mongodb.manpages
+	(cd opt; $(MAKE))
+        #docbook-to-man debian/tokumx.sgml > tokumx.1
+	ls debian/*.1 | grep -v 'mongod\.1' | grep -v 'mongos\.1' > debian/$(PRODUCT)-clients.manpages
+	ls debian/mongod.1 debian/mongos.1 > debian/$(PRODUCT)-server.manpages
 
 	touch $@
 
@@ -35,27 +56,12 @@ clean:
 	dh_testroot
 	rm -f build-stamp configure-stamp
 
-	# FIXME: scons freaks out at the presence of target files
-	# under debian/mongodb.
-	#scons -c
-	rm -rf $(CURDIR)/debian/mongodb
-	rm -f config.log
-	rm -f mongo
-	rm -f mongod
-	rm -f mongoimportjson
-	rm -f mongoexport
-	rm -f mongorestore
-	rm -f mongodump
-	rm -f mongofiles
-	rm -f .sconsign.dblite
-	rm -f libmongoclient.a
-	rm -rf client/*.o
-	rm -rf tools/*.o
-	rm -rf shell/*.o
-	rm -rf .sconf_temp
-	rm -f buildscripts/*.pyc 
-	rm -f *.pyc
-	rm -f buildinfo.cpp
+	$(RM) -r $(CURDIR)/debian/$(PRODUCT)-clients
+	$(RM) -r $(CURDIR)/debian/$(PRODUCT)-common
+	$(RM) -r $(CURDIR)/debian/$(PRODUCT)-dev
+	$(RM) -r $(CURDIR)/debian/$(PRODUCT)-server
+	$(RM) -r opt
+
 	dh_clean debian/files
 
 install: build
@@ -64,13 +70,25 @@ install: build
 	dh_prep
 	dh_installdirs
 
-	scons --prefix=$(CURDIR)/debian/mongodb/usr install
-	mkdir -p $(CURDIR)/debian/mongodb/etc
-	cp $(CURDIR)/debian/mongodb.conf $(CURDIR)/debian/mongodb/etc/mongodb.conf 
+	(cd opt; \
+	  cmake -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/$(PRODUCT)-server/usr -D COMPONENT=tokumx_server -P cmake_install.cmake && \
+	  cmake -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/$(PRODUCT)-clients/usr -D COMPONENT=tokumx_tools -P cmake_install.cmake && \
+	  cmake -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/$(PRODUCT)-server/usr -D COMPONENT=tokumx_plugins -P cmake_install.cmake && \
+	  cmake -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/$(PRODUCT)-common/usr -D COMPONENT=tokukv_libs_shared -P cmake_install.cmake && \
+	  cmake -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/$(PRODUCT)-common/usr -D COMPONENT=tokubackup_libs_shared -P cmake_install.cmake && \
+	  cmake -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/$(PRODUCT)-dev/usr -D COMPONENT=tokumx_client_headers -P cmake_install.cmake && \
+	  cmake -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/$(PRODUCT)-dev/usr -D COMPONENT=tokumx_client_libs -P cmake_install.cmake)
 
-	mkdir -p $(CURDIR)/debian/mongodb/usr/share/lintian/overrides/
-	install -m 644 $(CURDIR)/debian/lintian-overrides \
-		$(CURDIR)/debian/mongodb/usr/share/lintian/overrides/mongodb
+	install -p -Dm644 $(CURDIR)/debian/tokumx.conf $(CURDIR)/debian/$(PRODUCT)-server/etc/tokumx.conf
+	install -p -Dm755 $(CURDIR)/debian/$(PRODUCT)-clients/usr/scripts/tokumxstat.py $(CURDIR)/debian/$(PRODUCT)-clients/usr/share/tokumx/scripts/tokumxstat.py
+	$(RM) -r $(CURDIR)/debian/$(PRODUCT)-clients/usr/scripts
+
+	mv $(CURDIR)/debian/$(PRODUCT)-dev/usr/lib/tokumx/* $(CURDIR)/debian/$(PRODUCT)-dev/usr/lib
+	rmdir $(CURDIR)/debian/$(PRODUCT)-dev/usr/lib/tokumx
+
+	echo 'distsrc/GNU-AGPL-3.0'         > $(CURDIR)/debian/$(PRODUCT)-common.docs
+	echo 'distsrc/README'              >> $(CURDIR)/debian/$(PRODUCT)-common.docs
+	echo 'distsrc/THIRD-PARTY-NOTICES' >> $(CURDIR)/debian/$(PRODUCT)-common.docs
 
 # Build architecture-independent files here.
 binary-indep: build install
@@ -81,24 +99,45 @@ binary-arch: build install
 	dh_testdir
 	dh_testroot
 	dh_installchangelogs 
+
+# this has to happen after installchangelogs or it'll break installchangelogs
+	install -p -Dm644 $(CURDIR)/distsrc/NEWS $(CURDIR)/debian/$(PRODUCT)-common/usr/share/doc/tokumx/changelog
+	gzip -9 $(CURDIR)/debian/$(PRODUCT)-common/usr/share/doc/tokumx/changelog
+	install -p -Dm644 $(CURDIR)/src/third_party/ft-index/README-TOKUDB $(CURDIR)/debian/$(PRODUCT)-common/usr/share/doc/tokumx/README-TOKUKV
+
+	if [ x"tokumx" != x"$(PRODUCT)" ]; then \
+	    for suffix in preinst postinst prerm postrm; do \
+	        mv debian/tokumx-server.$$suffix debian/$(PRODUCT)-server.$$suffix; \
+	    done; \
+	    for suffix in config postinst templates; do \
+	        mv debian/tokumx-common.$$suffix debian/$(PRODUCT)-common.$$suffix; \
+	    done; \
+	fi
+
 	dh_installdocs
 	dh_installexamples
 #	dh_install
 #	dh_installmenu
-#	dh_installdebconf	
+	dh_installdebconf	
 #	dh_installlogrotate
 #	dh_installemacsen
 #	dh_installpam
 #	dh_installmime
-	dh_installinit
+
+	for suffix in init upstart; do \
+	    mv debian/tokumx-server.$$suffix debian/$(PRODUCT)-server.tokumx.$$suffix; \
+	done
+
+	dh_installinit --name=tokumx
 #	dh_installinfo
 	dh_installman
 	dh_link
-	dh_strip
+	dh_strip --dbg-package=$(PRODUCT)-dbg
 	dh_compress
 	dh_fixperms
 	dh_installdeb
 	dh_shlibdeps
+	dh_python2
 	dh_gencontrol
 	dh_md5sums
 	dh_builddeb

@@ -31,10 +31,13 @@
 
 #include "pch.h"
 
+#include "mongo/base/counter.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/query_optimizer.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
+#include "mongo/db/server_parameters.h"
+#include "mongo/db/commands/server_status.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/query.h"
 #include "mongo/db/ops/update.h"
@@ -43,308 +46,332 @@
 
 namespace mongo {
 
-    void updateOneObject(
-        NamespaceDetails *d, 
-        const BSONObj &pk, 
-        const BSONObj &oldObj, 
-        const BSONObj &newObj, 
-        const LogOpUpdateDetails &logDetails,
-        uint64_t flags
-        ) 
-    {
-        BSONObj newObjModified = newObj;
-        d->updateObject(pk, oldObj, newObjModified, flags);
-        if (logDetails.logop) {
-            const string &ns = d->ns();
-            OpLogHelpers::logUpdate(
-                ns.c_str(),
-                pk,
-                oldObj,
-                newObjModified,
-                logDetails.fromMigrate
-                );
+    static bool hasClusteringSecondaryKey(Collection *cl) {
+        for (int i = 0; i < cl->nIndexesBeingBuilt(); i++) {
+            IndexDetails &idx = cl->idx(i);
+            if (!cl->isPKIndex(idx) && idx.clustering()) {
+                // has a clustering secondary key
+                return true;
+            }
         }
-        d->notifyOfWriteOp();
+        // no clustering secondary keys
+        return false;
     }
 
-    static void checkNoMods( const BSONObj &o ) {
-        BSONObjIterator i( o );
-        while( i.moreWithEOO() ) {
-            BSONElement e = i.next();
-            if ( e.eoo() )
-                break;
-            uassert( 10154 ,  "Modifiers and non-modifiers cannot be mixed", e.fieldName()[ 0 ] != '$' );
+    void updateOneObject(Collection *cl, const BSONObj &pk, 
+                         const BSONObj &oldObj, BSONObj &newObj, 
+                         const BSONObj &updateobj,
+                         const bool fromMigrate,
+                         uint64_t flags) {
+        if (flags & Collection::KEYS_UNAFFECTED_HINT && !updateobj.isEmpty() && !hasClusteringSecondaryKey(cl)) {
+            // - operator style update gets applied as an update message
+            // - does not maintain sencondary indexes so we can only do it
+            // when no indexes were affected
+            cl->updateObjectMods(pk, updateobj, fromMigrate, flags);
+        } else {
+            cl->updateObject(pk, oldObj, newObj, fromMigrate, flags);
+        }
+        cl->notifyOfWriteOp();
+    }
+
+    static void checkNoMods(const BSONObj &obj) {
+        for (BSONObjIterator i(obj); i.more(); ) {
+            const BSONElement &e = i.next();
+            uassert(10154, "Modifiers and non-modifiers cannot be mixed", e.fieldName()[0] != '$');
         }
     }
 
-    static void checkTooLarge(const BSONObj& newObj) {
-        uassert( 12522 , "$ operator made object too large" , newObj.objsize() <= BSONObjMaxUserSize );
+    static void checkTooLarge(const BSONObj &obj) {
+        uassert(12522, "$ operator made object too large", obj.objsize() <= BSONObjMaxUserSize);
     }
 
-    static void updateUsingMods(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj,
-                                ModSetState &mss, const bool modsAreIndexed,
-                                const LogOpUpdateDetails &logDetails) {
+    ExportedServerParameter<bool> _fastupdatesParameter(
+            ServerParameterSet::getGlobal(), "fastupdates", &cmdLine.fastupdates, true, true);
+    ExportedServerParameter<bool> _fastupdatesIgnoreErrorsParameter(
+            ServerParameterSet::getGlobal(), "fastupdatesIgnoreErrors", &cmdLine.fastupdatesIgnoreErrors, true, true);
 
-        BSONObj newObj = mss.createNewFromMods();
-        checkTooLarge( newObj );
-        TOKULOG(3) << "updateUsingMods used mod set, transformed " << obj << " to " << newObj << endl;
+    static Counter64 fastupdatesErrors;
+    static ServerStatusMetricField<Counter64> fastupdatesIgnoredErrorsDisplay("fastupdates.errors", &fastupdatesErrors);
 
-        updateOneObject( d, pk, obj, newObj, logDetails,
-                         modsAreIndexed ? 0 : NamespaceDetails::KEYS_UNAFFECTED_HINT );
+    // Apply an update message supplied by a collection to
+    // some row in an in IndexDetails (for fast ydb updates).
+    //
+    class ApplyUpdateMessage : public storage::UpdateCallback {
+        // @param pkQuery - the pk with field names, for proper default obj construction
+        //                  in mods.createNewFromQuery().
+        BSONObj applyMods(const BSONObj &oldObj, const BSONObj &msg) {
+            try {
+                // The update message is simply an update object, supplied by the user.
+                ModSet mods(msg);
+                auto_ptr<ModSetState> mss = mods.prepare(oldObj, false);
+                const BSONObj newObj = mss->createNewFromMods();
+                checkTooLarge(newObj);
+                return newObj;
+            } catch (const std::exception &ex) {
+                // Applying an update message in this fashion _always_ ignores errors.
+                // That is the risk you take when using --fastupdates.
+                //
+                // We will print such errors to the server's error log no more than once per 5 seconds.
+                if (!cmdLine.fastupdatesIgnoreErrors && _loggingTimer.millisReset() > 5000) {
+                    problem() << "* Failed to apply \"--fastupdate\" updateobj message! "
+                                 "This means an update operation that appeared successful actually failed." << endl;
+                    problem() << "* It probably should not be happening in production. To ignore these errors, "
+                                 "set the server parameter fastupdatesIgnoreErrors=true" << endl;
+                    problem() << "*    doc: " << oldObj << endl;
+                    problem() << "*    updateobj: " << msg << endl;
+                    problem() << "*    exception: " << ex.what() << endl;
+                }
+                fastupdatesErrors.increment(1);
+                return oldObj;
+            }
+        }
+    private:
+        Timer _loggingTimer;
+    } _storageUpdateCallback; // installed as the ydb update callback in db.cpp via set_update_callback
+
+    static void updateUsingMods(const char *ns, Collection *cl, const BSONObj &pk, const BSONObj &obj,
+                                const BSONObj &updateobj, shared_ptr<ModSet> mods, MatchDetails* details,
+                                const bool fromMigrate) {
+        ModSet *useMods = mods.get();
+        auto_ptr<ModSet> mymodset;
+        bool hasDynamicArray = mods->hasDynamicArray();
+        if (details->hasElemMatchKey() && hasDynamicArray) {
+            useMods = mods->fixDynamicArray(details->elemMatchKey());
+            mymodset.reset(useMods);
+        }
+        auto_ptr<ModSetState> mss = useMods->prepare(obj, false /* not an insertion */);
+        BSONObj newObj = mss->createNewFromMods();
+        checkTooLarge(newObj);
+        bool modsAreIndexed = useMods->isIndexed() > 0;
+        bool forceFullUpdate = hasDynamicArray || !cl->updateObjectModsOk();
+        // adding cl->indexBuildInProgress() as a check below due to #1085
+        // This is a little heavyweight, as we whould be able to have modsAreIndexed
+        // take hot indexes into account. Unfortunately, that code right now is not
+        // factored cleanly enough to do nicely, so we just do the heavyweight check
+        // here. Hope to get this properly fixed soon.
+        uint64_t flags = (modsAreIndexed || cl->indexBuildInProgress()) ? 
+            0 : 
+            Collection::KEYS_UNAFFECTED_HINT;
+        updateOneObject(cl, pk, obj, newObj,
+            forceFullUpdate ? BSONObj() : updateobj, // if we have a dynamic array, force it to do a full overwrite
+            fromMigrate, flags);
+
+        // must happen after updateOneObject
+        if (forceFullUpdate) {
+            OplogHelpers::logUpdate(ns, pk, obj, newObj, fromMigrate);
+        }
+        else {
+            OplogHelpers::logUpdateModsWithRow(ns, pk, obj, updateobj, fromMigrate);
+        }
     }
 
-    static void updateNoMods(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj,
-                             const BSONObj &updateobj, const LogOpUpdateDetails &logDetails) {
-
-        BSONElementManipulator::lookForTimestamps( updateobj );
-        checkNoMods( updateobj );
-        TOKULOG(3) << "updateNoMods replacing pk " << pk << ", obj " << obj << " with updateobj " << updateobj << endl;
-
-        updateOneObject( d, pk, obj, updateobj, logDetails );
+    static void updateNoMods(const char *ns, Collection *cl, const BSONObj &pk, const BSONObj &obj, BSONObj &updateobj,
+                             const bool fromMigrate) {
+        // This is incredibly un-intiutive, but it takes a const BSONObj
+        // and modifies it in-place if a timestamp needs to be set.
+        BSONElementManipulator::lookForTimestamps(updateobj);
+        checkNoMods(updateobj);
+        updateOneObject(cl, pk, obj, updateobj, BSONObj(), fromMigrate, 0);
+        // must happen after updateOneObject
+        OplogHelpers::logUpdate(ns, pk, obj, updateobj, fromMigrate);
     }
 
-    static void checkBulkLoad(const StringData &ns) {
-        uassert(16893, str::stream() <<
-                       "Cannot update a collection under-going bulk load: " << ns,
+    static UpdateResult upsertAndLog(Collection *cl, const BSONObj &patternOrig,
+                                     const BSONObj &updateobj, const bool isOperatorUpdate,
+                                     ModSet *mods, bool fromMigrate) {
+        const string &ns = cl->ns();
+        uassert(16893, str::stream() << "Cannot upsert a collection under-going bulk load: " << ns,
                        ns != cc().bulkLoadNS());
-    }
 
-    static void insertAndLog(const char *ns, NamespaceDetails *d, BSONObj &newObj,
-                             bool logop, bool fromMigrate) {
-
-        checkNoMods( newObj );
-        TOKULOG(3) << "insertAndLog for upsert: " << newObj << endl;
-
-        // We cannot pass NamespaceDetails::NO_UNIQUE_CHECKS because we still need to check secondary indexes.
-        // We know if we are in this function that we did a query for the object and it didn't exist yet, so the unique check on the PK won't fail.
-        // To prove this to yourself, look at the callers of insertAndLog and see that they return an UpdateResult that says the object didn't exist yet.
-        checkBulkLoad(ns);
-        insertOneObject(d, newObj);
-        if (logop) {
-            OpLogHelpers::logInsert(ns, newObj);
+        BSONObj newObj = updateobj;
+        if (isOperatorUpdate) {
+            newObj = mods->createNewFromQuery(patternOrig);
+            cc().curop()->debug().fastmodinsert = true;
+        } else {
+            cc().curop()->debug().upsert = true;
         }
+
+        checkNoMods(newObj);
+        insertOneObject(cl, newObj);
+        OplogHelpers::logInsert(ns.c_str(), newObj, fromMigrate);
+        return UpdateResult(0, isOperatorUpdate, 1, newObj);
     }
 
-    static UpdateResult _updateById(const BSONObj &idQuery,
-                                    bool isOperatorUpdate,
-                                    ModSet* mods,
-                                    NamespaceDetails* d,
-                                    const BSONObj& updateobj,
-                                    BSONObj patternOrig,
-                                    bool logop,
-                                    bool fromMigrate = false) {
+    static UpdateResult updateByPK(const char *ns, Collection *cl,
+                            const BSONObj &pk, const BSONObj &patternOrig,
+                            const BSONObj &updateobj,
+                            const bool upsert,
+                            const bool fromMigrate,
+                            uint64_t flags) {
+        // Create a mod set for $ style updates.
+        shared_ptr<ModSet> mods;
+        const bool isOperatorUpdate = updateobj.firstElementFieldName()[0] == '$';
+        if (isOperatorUpdate) {
+            mods.reset(new ModSet(updateobj, cl->indexKeys()));
+        }
 
         BSONObj obj;
         ResultDetails queryResult;
-        if ( mods && mods->hasDynamicArray() ) {
+        if (mods && mods->hasDynamicArray()) {
             queryResult.matchDetails.requestElemMatchKey();
         }
 
-        const bool found = queryByIdHack(d, idQuery,
-                                         patternOrig, obj,
-                                         &queryResult);
-        if ( !found ) {
-            // no upsert support in _updateById yet, so we are done.
-            return UpdateResult( 0 , 0 , 0 , BSONObj() );
+        const bool found = queryByPKHack(cl, pk, patternOrig, obj, &queryResult);
+        if (!found) {
+            if (!upsert) {
+                return UpdateResult(0, 0, 0, BSONObj());
+            }
+            return upsertAndLog(cl, patternOrig, updateobj, isOperatorUpdate, mods.get(), fromMigrate);
         }
 
-        const BSONObj &pk = idQuery.firstElement().wrap("");
-
-        /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
-           regular ones at the moment. */
-        LogOpUpdateDetails logDetails(logop, fromMigrate);
-        if ( isOperatorUpdate ) {
-            ModSet* useMods = mods;
-            auto_ptr<ModSet> mymodset;
-            if ( queryResult.matchDetails.hasElemMatchKey() && mods->hasDynamicArray() ) {
-                useMods = mods->fixDynamicArray( queryResult.matchDetails.elemMatchKey() );
-                mymodset.reset( useMods );
-            }
-
-            // mod set update, ie: $inc: 10 increments by 10.
-            auto_ptr<ModSetState> mss = useMods->prepare( obj, false /* not an insertion */ );
-            updateUsingMods( d, pk, obj, *mss, useMods->isIndexed() > 0, logDetails );
-            return UpdateResult( 1 , 1 , 1 , BSONObj() );
-
-        } // end $operator update
-
-        // replace-style update
-        updateNoMods( d, pk, obj, updateobj, logDetails );
-        return UpdateResult( 1 , 0 , 1 , BSONObj() );
+        if (isOperatorUpdate) {
+            updateUsingMods(ns, cl, pk, obj, updateobj, mods, &queryResult.matchDetails, fromMigrate);
+        } else {
+            // replace-style update
+            BSONObj copy = updateobj.copy();
+            updateNoMods(ns, cl, pk, obj, copy, fromMigrate);
+        }
+        return UpdateResult(1, isOperatorUpdate, 1, BSONObj());
     }
 
-    UpdateResult _updateObjects( const char* ns,
-                                 const BSONObj& updateobj,
-                                 const BSONObj& patternOrig,
-                                 bool upsert,
-                                 bool multi,
-                                 bool logop ,
-                                 OpDebug& debug,
-                                 bool fromMigrate,
-                                 const QueryPlanSelectionPolicy& planPolicy ) {
+    BSONObj invertUpdateMods(const BSONObj &updateobj) {
+        BSONObjBuilder b(updateobj.objsize());
+        for (BSONObjIterator i(updateobj); i.more(); ) {
+            const BSONElement &e = i.next();
+            verify(str::equals(e.fieldName(), "$inc"));
+            BSONObjBuilder inc(b.subobjStart("$inc"));
+            for (BSONObjIterator o(e.Obj()); o.more(); ) {
+                const BSONElement &fieldToInc = o.next();
+                verify(fieldToInc.isNumber());
+                const long long invertedValue = -fieldToInc.numberLong();
+                inc.append(fieldToInc.fieldName(), invertedValue);
+            }
+            inc.done();
+        }
+        return b.obj();
+    }
 
+    static UpdateResult _updateObjects(const char *ns,
+                                       const BSONObj &updateobj,
+                                       const BSONObj &patternOrig,
+                                       const bool upsert, const bool multi,
+                                       const bool fromMigrate) {
         TOKULOG(2) << "update: " << ns
                    << " update: " << updateobj
                    << " query: " << patternOrig
                    << " upsert: " << upsert << " multi: " << multi << endl;
 
-        debug.updateobj = updateobj;
+        Collection *cl = getOrCreateCollection(ns, true);
 
-        NamespaceDetails *d = getAndMaybeCreateNS(ns, logop);
-
-        auto_ptr<ModSet> mods;
-        const bool isOperatorUpdate = updateobj.firstElementFieldName()[0] == '$';
-
-        if ( isOperatorUpdate ) {
-            mods.reset( new ModSet(updateobj, d->indexKeys()) );
+        // Fast-path for simple primary key updates.
+        //
+        // - We don't do it for capped collections since  their documents may not grow,
+        // and the fast path doesn't know if docs grow until the update message is applied.
+        // - We don't do it if multi=true because semantically we're not supposed to, if
+        // the update ends up being a replace-style upsert. See jstests/update_multi6.js
+        if (!multi && !cl->isCapped()) {
+            const BSONObj pk = cl->getSimplePKFromQuery(patternOrig);
+            if (!pk.isEmpty()) {
+                return updateByPK(ns, cl, pk, patternOrig, updateobj,
+                                  upsert, fromMigrate, 0);
+            }
         }
 
-        if (d->mayFindById()) {
-            const BSONObj idQuery = getSimpleIdQuery(patternOrig);
-            if (!idQuery.isEmpty()) {
-                UpdateResult result = _updateById( idQuery,
-                                                   isOperatorUpdate,
-                                                   mods.get(),
-                                                   d,
-                                                   updateobj,
-                                                   patternOrig,
-                                                   logop,
-                                                   fromMigrate);
-                if ( result.existing || ! upsert ) {
-                    return result;
-                }
+        // Run a regular update using the query optimizer.
+
+        set<BSONObj> seenObjects;
+        MatchDetails details;
+        shared_ptr<ModSet> mods;
+
+        const bool isOperatorUpdate = updateobj.firstElementFieldName()[0] == '$';
+        if (isOperatorUpdate) {
+            mods.reset(new ModSet(updateobj, cl->indexKeys()));
+            if (mods->hasDynamicArray()) {
+                details.requestElemMatchKey();
             }
         }
 
         int numModded = 0;
-        debug.nscanned = 0;
-        shared_ptr<Cursor> c = getOptimizedCursor( ns, patternOrig, BSONObj(), planPolicy );
-
-        if( c->ok() ) {
-            set<BSONObj> seenObjects;
-            MatchDetails details;
-            do {
-
-                debug.nscanned++;
-
-                if ( mods.get() && mods->hasDynamicArray() ) {
-                    details.requestElemMatchKey();
-                }
-
-                if ( !c->currentMatches( &details ) ) {
-                    c->advance();
-                    continue;
-                }
-
-                BSONObj currPK = c->currPK();
-                if ( c->getsetdup( currPK ) ) {
-                    c->advance();
-                    continue;
-                }
-
-                BSONObj currentObj = c->current();
-
-                /* look for $inc etc.  note as listed here, all fields to inc must be this type, you can't set some
-                   regular ones at the moment. */
-                LogOpUpdateDetails logDetails(logop, fromMigrate);
-                if ( isOperatorUpdate ) {
-
-                    if ( multi ) {
-                        // Make our own copies of the currPK and currentObj before we invalidate
-                        // them by advancing the cursor.
-                        currPK = currPK.getOwned();
-                        currentObj = currentObj.getOwned();
-
-                        // Advance past the document to be modified - SERVER-5198,
-                        while ( c->ok() && currPK == c->currPK() ) {
-                            c->advance();
-                        }
-
-                        // Multi updates need to do their own deduplication because updates may modify the
-                        // keys the cursor is in the process of scanning over.
-                        if ( seenObjects.count( currPK ) ) {
-                            continue;
-                        } else {
-                            seenObjects.insert( currPK );
-                        }
-                    }
-
-                    ModSet* useMods = mods.get();
-
-                    auto_ptr<ModSet> mymodset;
-                    if ( details.hasElemMatchKey() && mods->hasDynamicArray() ) {
-                        useMods = mods->fixDynamicArray( details.elemMatchKey() );
-                        mymodset.reset( useMods );
-                    }
-
-                    auto_ptr<ModSetState> mss = useMods->prepare( currentObj,
-                                                                  false /* not an insertion */ );
-                    updateUsingMods( d, currPK, currentObj, *mss, useMods->isIndexed() > 0, logDetails );
-
-                    numModded++;
-                    if ( ! multi )
-                        return UpdateResult( 1 , 1 , numModded , BSONObj() );
-
-                    continue;
-                } // end if operator is update
-
-                uassert( 10158 ,  "multi update only works with $ operators" , ! multi );
-
-                updateNoMods( d, currPK, currentObj, updateobj, logDetails );
-
-                return UpdateResult( 1 , 0 , 1 , BSONObj() );
-            } while ( c->ok() );
-        } // endif
-
-        if ( numModded )
-            return UpdateResult( 1 , 1 , numModded , BSONObj() );
-
-        if ( upsert ) {
-            BSONObj newObj = updateobj;
-            if ( updateobj.firstElementFieldName()[0] == '$' ) {
-                // upsert of an $operation. build a default object
-                BSONObj newObj = mods->createNewFromQuery( patternOrig );
-                debug.fastmodinsert = true;
-                insertAndLog( ns, d, newObj, logop, fromMigrate );
-                return UpdateResult( 0 , 1 , 1 , newObj );
+        cc().curop()->debug().nscanned = 0;
+        for (shared_ptr<Cursor> c = getOptimizedCursor(ns, patternOrig); c->ok(); ) {
+            cc().curop()->debug().nscanned++;
+            BSONObj currPK = c->currPK();
+            if (c->getsetdup(currPK)) {
+                c->advance();
+                continue;
             }
-            uassert( 10159 ,  "multi update only works with $ operators" , ! multi );
-            debug.upsert = true;
-            insertAndLog( ns, d, newObj, logop, fromMigrate );
-            return UpdateResult( 0 , 0 , 1 , newObj );
+            if (!c->currentMatches(&details)) {
+                c->advance();
+                continue;
+            }
+
+            BSONObj currentObj = c->current();
+            if (!isOperatorUpdate) {
+                // replace-style update only affects a single matching document
+                uassert(10158, "multi update only works with $ operators", !multi);
+                BSONObj copy = updateobj.copy();
+                updateNoMods(ns, cl, currPK, currentObj, copy, fromMigrate);
+                return UpdateResult(1, 0, 1, BSONObj());
+            }
+
+            // operator-style updates may affect many documents
+            if (multi) {
+                // Advance past the document to be modified - SERVER-5198,
+                // First, get owned copies of currPK/currObj, which live in the cursor.
+                currPK = currPK.getOwned();
+                currentObj = currentObj.getOwned();
+                while (c->ok() && currPK == c->currPK()) {
+                    c->advance();
+                }
+
+                // Multi updates need to do their own deduplication because updates may modify the
+                // keys the cursor is in the process of scanning over.
+                if ( seenObjects.count(currPK) ) {
+                    continue;
+                } else {
+                    seenObjects.insert(currPK);
+                }
+            }
+
+            updateUsingMods(ns, cl, currPK, currentObj, updateobj, mods, &details, fromMigrate);
+            numModded++;
+
+            if (!multi) {
+                break;
+            }
         }
 
-        return UpdateResult( 0 , isOperatorUpdate , 0 , BSONObj() );
-    }
-
-    void validateUpdate( const char* ns , const BSONObj& updateobj, const BSONObj& patternOrig ) {
-        uassert( 10155 , "cannot update reserved $ collection", NamespaceString::normal(ns) );
-        if ( NamespaceString::isSystem(ns) ) {
-            /* dm: it's very important that system.indexes is never updated as IndexDetails
-               has pointers into it */
-            uassert( 10156,
-                     str::stream() << "cannot update system collection: "
-                                   << ns << " q: " << patternOrig << " u: " << updateobj,
-                     legalClientSystemNS( ns , true ) );
+        if (numModded) {
+            // We've modified something, so we're done.
+            return UpdateResult(1, 1, numModded, BSONObj());
         }
+        if (!upsert) {
+            // We haven't modified anything, but we're not trying to upsert, so we're done.
+            return UpdateResult(0, isOperatorUpdate, numModded, BSONObj());
+        }
+
+        if (!isOperatorUpdate) {
+            uassert(10159, "multi update only works with $ operators", !multi);
+        }
+        // Upsert a new object
+        return upsertAndLog(cl, patternOrig, updateobj, isOperatorUpdate, mods.get(), fromMigrate);
     }
 
-    UpdateResult updateObjects( const char* ns,
-                                const BSONObj& updateobj,
-                                const BSONObj& patternOrig,
-                                bool upsert,
-                                bool multi,
-                                bool logop ,
-                                OpDebug& debug,
-                                bool fromMigrate,
-                                const QueryPlanSelectionPolicy& planPolicy ) {
-
-        validateUpdate( ns , updateobj , patternOrig );
+    UpdateResult updateObjects(const char *ns,
+                               const BSONObj &updateobj, const BSONObj &patternOrig,
+                               const bool upsert, const bool multi,
+                               const bool fromMigrate) {
+        uassert(10155, "cannot update reserved $ collection", NamespaceString::normal(ns));
+        if (NamespaceString::isSystem(ns)) {
+            uassert(10156, str::stream() << "cannot update system collection: " << ns <<
+                                            " q: " << patternOrig << " u: " << updateobj,
+                           legalClientSystemNS(ns , true));
+        }
 
         UpdateResult ur = _updateObjects(ns, updateobj, patternOrig,
-                                         upsert, multi, logop,
-                                         debug, fromMigrate, planPolicy );
-        debug.nupdated = ur.num;
+                                         upsert, multi, fromMigrate);
+
+        cc().curop()->debug().nupdated = ur.num;
         return ur;
     }
 

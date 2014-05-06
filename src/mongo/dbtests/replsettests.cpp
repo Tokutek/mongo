@@ -138,7 +138,7 @@ namespace ReplSetTests {
         DBDirectClient *client() const { return &client_; }
 
         static void insert( const BSONObj &o, bool god = false ) {
-            Lock::DBWrite lk(ns());
+            Lock::DBWrite lk(ns(), mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             insertObject( ns(), o );
         }
@@ -148,15 +148,15 @@ namespace ReplSetTests {
         }
 
         void drop() {
-            Client::WriteContext c(ns());
+            Client::WriteContext c(ns(), mongo::unittest::EMPTY_STRING);
             string errmsg;
             BSONObjBuilder result;
 
-            if (nsdetails(ns()) == NULL) {
+            Collection *d = getCollection(ns());
+            if (d != NULL) {
+                d->drop(errmsg, result);
                 return;
             }
-
-            dropCollection( string(ns()), errmsg, result );
         }
         void setup() {
             // setup background sync instance
@@ -191,10 +191,12 @@ namespace ReplSetTests {
 
         void dropCapped() {
             Client::Context c(_cappedNs);
-            if (nsdetails(_cappedNs) != NULL) {
+            Collection *d = getCollection(_cappedNs);
+            if (d != NULL) {
                 string errmsg;
                 BSONObjBuilder result;
-                dropCollection( string(_cappedNs), errmsg, result );
+                d->drop(errmsg, result);
+                return;
             }
         }
 
@@ -214,7 +216,7 @@ namespace ReplSetTests {
             return o;
         }
     public:
-        CappedInitialSync() : _cappedNs("unittests.foo.bar"), _lk(_cappedNs) {
+        CappedInitialSync() : _cappedNs("unittests.foo.bar"), _lk(_cappedNs, mongo::unittest::EMPTY_STRING) {
             dropCapped();
             create();
         }
@@ -235,11 +237,11 @@ namespace ReplSetTests {
         }
 
         void run() {
-            Lock::DBWrite lk(_cappedNs);
+            Lock::DBWrite lk(_cappedNs, mongo::unittest::EMPTY_STRING);
 
             BSONObj op = updateFail();
 
-            Sync s("");
+            //Sync s("");
             // TODO: decide if this ought to be restored one day
             //verify(!s.shouldRetry(op));
         }
@@ -280,7 +282,7 @@ namespace ReplSetTests {
 
             // check _id index created
             Client::Context ctx(cappedNs());
-            NamespaceDetails *nsd = nsdetails(cappedNs());
+            Collection *nsd = getCollection(cappedNs());
             verify(nsd->findIdIndex() > -1);
         }
     };
@@ -308,7 +310,7 @@ namespace ReplSetTests {
             // this changed in 2.1.2
             // we now have indexes on capped collections
             Client::Context ctx(cappedNs());
-            NamespaceDetails *nsd = nsdetails(cappedNs());
+            Collection *nsd = getCollection(cappedNs());
             verify(nsd->findIdIndex() >= 0);
         }
     };
@@ -319,7 +321,7 @@ namespace ReplSetTests {
                    int version = 0) {
             OpTime ts;
             {
-                Lock::GlobalWrite lk;
+                Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
                 ts = OpTime::_now();
             }
 

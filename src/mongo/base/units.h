@@ -25,6 +25,7 @@
 #include "mongo/base/parse_number.h"
 #include "mongo/base/status.h"
 #include "mongo/base/string_data.h"
+#include "mongo/bson/bsonobj.h"
 #include "mongo/bson/bsontypes.h"
 #include "mongo/bson/oid.h"
 #include "mongo/bson/bsonelement.h"
@@ -117,7 +118,8 @@ namespace mongo {
                     _value = fromString(e.Stringdata());
                 } else {
                     uassert(17015, mongoutils::str::stream() << "element is not a number: " << e.wrap(), e.isNumber());
-                    _value = e.numberInt();
+                    bool ok = e.coerce(&_value);
+                    uassert(17316, mongoutils::str::stream() << "couldn't coerce to a number: " << e.wrap(), ok);
                 }
             }
         }

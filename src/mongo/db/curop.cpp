@@ -209,7 +209,6 @@ namespace mongo {
 
     static ServerStatusMetricField<Counter64> displayIdhack( "operation.idhack", &idhackCounter );
     static ServerStatusMetricField<Counter64> displayScanAndOrder( "operation.scanAndOrder", &scanAndOrderCounter );
-    static ServerStatusMetricField<Counter64> displayFastMod( "operation.fastmod", &fastmodCounter );
 
     void OpDebug::recordStats() {
         if ( nreturned > 0 )
@@ -227,7 +226,5 @@ namespace mongo {
             idhackCounter.increment();
         if ( scanAndOrder )
             scanAndOrderCounter.increment();
-        if ( fastmod )
-            fastmodCounter.increment();
     }
 }

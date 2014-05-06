@@ -83,7 +83,7 @@ namespace mongo {
                 }
                 catch ( StaleConfigException& e ) {
                     if ( loops <= 0 )
-                        throw e;
+                        throw;
 
                     loops--;
                     log() << "retrying command: " << q.query << endl;

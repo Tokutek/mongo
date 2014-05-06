@@ -33,7 +33,7 @@
 
 #include <boost/checked_delete.hpp>
 
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/index.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/cursor.h"
@@ -72,10 +72,10 @@ namespace mongo {
      * is not an array.  This index will not be built if any
      * array values of the hashed field exist.
      */
-    class HashedIndex : public IndexDetails {
+    class HashedIndex : public IndexDetailsBase {
     public:
         HashedIndex(const BSONObj &info) :
-            IndexDetails(info),
+            IndexDetailsBase(info),
             _hashedField(_keyPattern.firstElement().fieldName()),
             // Default seed/version to 0 if not specified or not an integer.
             _seed(_info["seed"].numberInt()),
@@ -132,7 +132,7 @@ namespace mongo {
             const shared_ptr<CoveredIndexMatcher> forceDocMatcher(
                     new CoveredIndexMatcher(query, BSONObj()));
 
-            NamespaceDetails *d = nsdetails(parentNS());
+            Collection *cl = getCollection(parentNS());
 
             // Construct a new query based on the hashes of the previous point-intervals
             // e.g. {a : {$in : [ hash(1) , hash(3) , hash(6) ]}}
@@ -142,10 +142,10 @@ namespace mongo {
             for (vector<FieldInterval>::const_iterator i = intervals.begin();
                  i != intervals.end(); ++i ){
                 if (!i->equality()){
-                    const shared_ptr<mongo::Cursor> exhaustiveCursor(
-                            new IndexScanCursor(d, *this, 1));
-                    exhaustiveCursor->setMatcher(forceDocMatcher);
-                    return exhaustiveCursor;
+                    const shared_ptr<mongo::Cursor> cursor =
+                        mongo::Cursor::make(cl, *this, 1);
+                    cursor->setMatcher(forceDocMatcher);
+                    return cursor;
                 }
                 inArray.append(HashKeyGenerator::makeSingleKey(i->_lower._bound, _seed, _hashVersion));
             }
@@ -157,8 +157,9 @@ namespace mongo {
             FieldRangeSet newfrs("" , newQuery, true, true);
             shared_ptr<FieldRangeVector> newVector(
                     new FieldRangeVector(newfrs, _keyPattern, 1));
-            const shared_ptr<mongo::Cursor> cursor(
-                    IndexCursor::make(d, *this, newVector, false, 1, numWanted));
+
+            const shared_ptr<mongo::Cursor> cursor =
+                mongo::Cursor::make(cl, *this, newVector, false, 1, numWanted);
             cursor->setMatcher(forceDocMatcher);
             return cursor;
         }
@@ -190,8 +191,8 @@ namespace mongo {
         return special;
     }
 
-    shared_ptr<IndexDetails> IndexDetails::make(const BSONObj &info, const bool may_create) {
-        shared_ptr<IndexDetails> idx;
+    shared_ptr<IndexDetailsBase> IndexDetailsBase::make(const BSONObj &info, const bool may_create) {
+        shared_ptr<IndexDetailsBase> idx;
         const string special = findSpecialIndexName(info["key"].Obj());
         if (special == "hashed") {
             idx.reset(new HashedIndex(info));
@@ -199,33 +200,49 @@ namespace mongo {
             if (special != "") {
                 warning() << "cannot find special index [" << special << "]" << endl;
             }
-            idx.reset(new IndexDetails(info));
+            idx.reset(new IndexDetailsBase(info));
         }
         bool ok = idx->open(may_create);
         if (!ok) {
-            // This signals NamespaceDetails::make that we got ENOENT due to #673
-            return shared_ptr<IndexDetails>();
+            // This signals Collection::make that we got ENOENT due to #673
+            return shared_ptr<IndexDetailsBase>();
         }
         return idx;
     }
 
+    static BSONObj stripDropDups(const BSONObj &obj) {
+        BSONObjBuilder b;
+        for (BSONObjIterator it(obj); it.more(); ) {
+            BSONElement e = it.next();
+            if (StringData(e.fieldName()) == "dropDups") {
+                warning() << "dropDups is not supported because it deletes arbitrary data." << endl;
+                warning() << "We'll proceed without it but if there are duplicates, the index build will fail." << endl;
+            } else {
+                b.append(e);
+            }
+        }
+        return b.obj();
+    }
+
     IndexDetails::IndexDetails(const BSONObj &info) :
-        _info(info.copy()),
+        _info(stripDropDups(info)),
         _keyPattern(info["key"].Obj().copy()),
         _unique(info["unique"].trueValue()),
         _sparse(info["sparse"].trueValue()),
-        _clustering(info["clustering"].trueValue()),
-        _descriptor(new Descriptor(_keyPattern, false, 0, _sparse, _clustering)) {
+        _clustering(info["clustering"].trueValue()) {
         verify(!_info.isEmpty());
         verify(!_keyPattern.isEmpty());
     }
 
+    IndexDetailsBase::IndexDetailsBase(const BSONObj& info) :
+        IndexDetails(info),
+        _descriptor(new Descriptor(_keyPattern, false, 0, _sparse, _clustering)) {
+    }
+
+
     // Open the dictionary. Creates it if necessary.
-    bool IndexDetails::open(const bool may_create) {
+    bool IndexDetailsBase::open(const bool may_create) {
         const string dname = indexNamespace();
-        if (may_create) {
-            addNewNamespaceToCatalog(dname);
-        }
 
         TOKULOG(1) << "Opening IndexDetails " << dname << endl;
         try {
@@ -238,19 +255,22 @@ namespace mongo {
                 keyPattern() == oldSystemUsersKeyPattern) {
                 // We're upgrading the system.users collection, and we are missing the old index.
                 // That's ok, we'll signal the caller about this by returning a NULL pointer from
-                // IndexDetails::make.  See #673
+                // IndexDetailsBase::make.  See #673
                 return false;
             }
-            // Unlike for NamespaceIndex, this dictionary must exist on disk if we think it should
-            // exist.  This error only gets thrown if may_create is false, which happens when we're
-            // trying to open a collection for which we have serialized info.  Therefore, this is a
-            // fatal non-user error.
+            // This dictionary must exist on disk if we think it should exist.
+            // This error only gets thrown if may_create is false, which happens when we're
+            // trying to open a collection for which we have serialized info.
+            // Therefore, this is a fatal non-user error.
             msgasserted(16988, mongoutils::str::stream() << "dictionary " << dname
                                << " should exist, but we got ENOENT");
         }
     }
 
     IndexDetails::~IndexDetails() {
+    }
+
+    IndexDetailsBase::~IndexDetailsBase() {
         try {
             close();
         } catch (DBException &ex) {
@@ -259,7 +279,7 @@ namespace mongo {
         }
     }
 
-    void IndexDetails::close() {
+    void IndexDetailsBase::close() {
         if (_db) {
             shared_ptr<storage::Dictionary> db = _db;
             _db.reset();
@@ -282,21 +302,43 @@ namespace mongo {
         return -1;
     }
 
-    void IndexDetails::kill_idx() {
+    void IndexDetailsBase::kill_idx() {
         const string ns = indexNamespace();
-        const string parentns = parentNS();
 
         close();
         storage::db_remove(ns);
-
-        // Removing this index's ns from the system.indexes/namespaces catalog.
-        removeNamespaceFromCatalog(ns);
-        if (nsToCollectionSubstring(parentns) != "system.indexes") {
-            removeFromSysIndexes(parentns, indexName());
-        }
     }
 
-    void IndexDetails::getKeysFromObject(const BSONObj &obj, BSONObjSet &keys) const {
+    bool IndexDetailsBase::changeAttributes(const BSONObj &info, BSONObjBuilder &wasBuilder) {
+        if (!_db->changeAttributes(info, wasBuilder)) {
+            return false;
+        }
+
+        BSONObj was = wasBuilder.done();
+        // need to merge new values in
+        BSONObjBuilder infoBuilder;
+        for (BSONObjIterator it(_info); it.more(); ++it) {
+            BSONElement e = *it;
+            StringData fn(e.fieldName());
+            if (fn != "name" && was.hasField(fn)) {
+                dassert(info[fn].ok());
+                infoBuilder.append(info[fn]);
+            } else {
+                infoBuilder.append(_info[fn]);
+            }
+        }
+        for (BSONObjIterator it(was); it.more(); ++it) {
+            BSONElement e = *it;
+            StringData fn(e.fieldName());
+            if (!_info.hasField(fn)) {
+                infoBuilder.append(info[fn]);
+            }
+        }
+        _info = infoBuilder.obj();
+        return true;
+    }
+
+    void IndexDetailsBase::getKeysFromObject(const BSONObj &obj, BSONObjSet &keys) const {
         _descriptor->generateKeys(obj, keys);
     }
 
@@ -322,7 +364,7 @@ namespace mongo {
         return IndexDetails::USELESS;
     }
 
-    int IndexDetails::uniqueCheckCallback(const DBT *key, const DBT *val, void *extra) {
+    int IndexDetailsBase::uniqueCheckCallback(const DBT *key, const DBT *val, void *extra) {
         UniqueCheckExtra *info = static_cast<UniqueCheckExtra *>(extra);
         try {
             if (key != NULL) {
@@ -345,9 +387,9 @@ namespace mongo {
         return -1;
     }
 
-    void IndexDetails::uniqueCheck(const BSONObj &key, const BSONObj &pk) const {
-        IndexDetails::Cursor c(*this, DB_SERIALIZABLE | DB_RMW);
-        DBC *cursor = c.dbc();
+    void IndexDetailsBase::uniqueCheck(const BSONObj &key, const BSONObj &pk) const {
+        shared_ptr<storage::Cursor> c = getCursor(DB_SERIALIZABLE | DB_RMW);
+        DBC *cursor = c->dbc();
 
         // We need to check if a secondary key, 'key', exists. We'd like to only
         // lock just the range of the index that may contain that secondary key,
@@ -376,20 +418,34 @@ namespace mongo {
         }
     }
 
-    void IndexDetails::uassertedDupKey(const BSONObj &key) const {
+    void IndexDetailsBase::uassertedDupKey(const BSONObj &key) const {
         uasserted(ASSERT_ID_DUPKEY, mongoutils::str::stream()
                                     << "E11000 duplicate key error, " << key
                                     << " already exists in unique index");
     }
 
-    void IndexDetails::acquireTableLock() {
+    void IndexDetailsBase::acquireTableLock() {
         const int r = db()->pre_acquire_table_lock(db(), cc().txn().db_txn());
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
     }
 
-    enum toku_compression_method IndexDetails::getCompressionMethod() const {
+    void IndexDetailsBase::updatePair(const BSONObj &key, const BSONObj *pk, const BSONObj &msg, uint64_t flags) {
+        storage::Key skey(key, pk);
+        DBT kdbt = skey.dbt();
+        DBT vdbt = storage::dbt_make(msg.objdata(), msg.objsize());
+
+        const int update_flags = (flags & Collection::NO_LOCKTREE) ? DB_PRELOCKED_WRITE : 0;
+        const int r = db()->update(db(), cc().txn().db_txn(), &kdbt, &vdbt, update_flags);
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
+        TOKULOG(3) << "index " << info()["key"].Obj() << ": sent update to "
+                   << key << ", pk " << (pk ? *pk : BSONObj()) << ", msg " << msg << endl;
+    }
+
+    enum toku_compression_method IndexDetailsBase::getCompressionMethod() const {
         enum toku_compression_method ret;
         int r = db()->get_compression_method(db(), &ret);
         if (r != 0) {
@@ -398,7 +454,16 @@ namespace mongo {
         return ret;
     }
 
-    uint32_t IndexDetails::getPageSize() const {
+    uint32_t IndexDetailsBase::getFanout() const {
+        uint32_t ret;
+        int r = db()->get_fanout(db(), &ret);
+        if (r != 0) {
+            storage::handle_ydb_error(r);
+        }
+        return ret;
+    }
+
+    uint32_t IndexDetailsBase::getPageSize() const {
         uint32_t ret;
         int r = db()->get_pagesize(db(), &ret);
         if (r != 0) {
@@ -407,7 +472,7 @@ namespace mongo {
         return ret;
     }
 
-    uint32_t IndexDetails::getReadPageSize() const {
+    uint32_t IndexDetailsBase::getReadPageSize() const {
         uint32_t ret;
         int r = db()->get_readpagesize(db(), &ret);
         if (r != 0) {
@@ -416,27 +481,38 @@ namespace mongo {
         return ret;
     }
 
-    void IndexDetails::getStat64(DB_BTREE_STAT64* stats) const {
+    void IndexDetailsBase::getStat64(DB_BTREE_STAT64* stats) const {
         int r = db()->stat64(db(), NULL, stats);
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
     }
 
-    int IndexDetails::hot_opt_callback(void *extra, float progress) {
-        int retval = 0;
-        uint64_t iter = *(uint64_t *)extra;
+    int IndexDetailsBase::hot_optimize_callback(void *extra, float progress) {
+        struct hot_optimize_callback_extra *info =
+                reinterpret_cast<hot_optimize_callback_extra *>(extra);
+
         try {
             killCurrentOp.checkForInterrupt(); // uasserts if we should stop
-        } catch (DBException &e) {
-            retval = 1;
+            if (info->timeout > 0 && info->timer.seconds() > info->timeout) {
+                // optimize timed out
+                return 1;
+            } else {
+                if (info->pm.report(progress) && cc().curop()) {
+                    std::string status = info->pm.toString();
+                    cc().curop()->setMessage(status.c_str());
+                }
+                return 0;
+            }
+        } catch (std::exception &e) {
+            info->saveException(e);
+            return -1;
         }
-        iter++;
-        return retval;
     }
 
-    void IndexDetails::optimize(const storage::Key &leftSKey, const storage::Key &rightSKey,
-                                const bool sendOptimizeMessage, uint64_t* loops_run) {
+    void IndexDetailsBase::optimize(const storage::Key &leftSKey, const storage::Key &rightSKey,
+                                const bool sendOptimizeMessage, const int timeout,
+                                uint64_t *loops_run) {
         if (sendOptimizeMessage) {
             const int r = db()->optimize(db());
             if (r != 0) {
@@ -444,12 +520,16 @@ namespace mongo {
             }
         }
 
-        uint64_t iter = 0;
+        std::stringstream pmss;
+        pmss << "Optimizing index " << indexNamespace() << " from " << leftSKey.key() << " to " << rightSKey.key();
+
         DBT left = leftSKey.dbt();
         DBT right = rightSKey.dbt();
-        const int r = db()->hot_optimize(db(), &left, &right, hot_opt_callback, &iter, loops_run);
-        if (r != 0) {
-            uassert(17199, mongoutils::str::stream() << "reIndex query killed ", false);
+        struct hot_optimize_callback_extra extra(timeout, pmss.str());
+        const int r = db()->hot_optimize(db(), &left, &right, hot_optimize_callback, &extra, loops_run);
+        if (r < 0) { // we return -1 on interrupt, 1 on timeout (no "error" on timeout)
+            extra.throwException();
+            storage::handle_ydb_error(r);
         }
     }
 
@@ -464,6 +544,7 @@ namespace mongo {
         stats.pageSize = getPageSize();
         stats.readPageSize = getReadPageSize();
         stats.compressionMethod = getCompressionMethod();
+        stats.fanout = getFanout();
         stats.queries = _accessStats.queries.load();
         stats.nscanned = _accessStats.nscanned.load();
         stats.nscannedObjects = _accessStats.nscannedObjects.load();
@@ -480,6 +561,7 @@ namespace mongo {
         b.appendNumber("storageSize", (long long) storageSize / scale);
         b.append("pageSize", pageSize / scale);
         b.append("readPageSize", readPageSize / scale);
+        b.append("fanout", fanout);
         switch(compressionMethod) {
         case TOKU_NO_COMPRESSION:
             b.append("compression", "uncompressed");
@@ -525,16 +607,15 @@ namespace mongo {
     
     /* ---------------------------------------------------------------------- */
 
-    IndexDetails::Builder::Builder(IndexDetails &idx) :
-        _idx(idx), _db(_idx.db()), _loader(&_db, 1) {
-        _loader.setPollMessagePrefix(str::stream() << "Cold index build progress: "
-                                                   << idx.parentNS() << ", key "
-                                                   << idx.keyPattern()
-                                                   << ":");
+    IndexDetailsBase::Builder::Builder(IndexDetailsBase &idx)
+            : _idx(idx),
+              _db(_idx.db()),
+              _loader(&_db, 1,
+                      str::stream() << "Foreground index build progress (sort phase) for "
+                                    << idx.parentNS() << ", key "
+                                    << idx.keyPattern()) {}
 
-    }
-
-    void IndexDetails::Builder::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val) {
+    void IndexDetailsBase::Builder::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val) {
         storage::Key skey(key, pk);
         DBT kdbt = skey.dbt();
         DBT vdbt = storage::dbt_make(NULL, 0);
@@ -547,11 +628,60 @@ namespace mongo {
         }
     }
 
-    void IndexDetails::Builder::done() {
+    void IndexDetailsBase::Builder::done() {
         const int r = _loader.close();
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
+    }
+
+    
+    enum toku_compression_method PartitionedIndexDetails::getCompressionMethod() const {
+        return _pc->getPartition(0)->idx(_idxNum).getCompressionMethod();
+    }
+
+    uint32_t PartitionedIndexDetails::getFanout() const {
+        return _pc->getPartition(0)->idx(_idxNum).getFanout();
+    }
+
+    uint32_t PartitionedIndexDetails::getPageSize() const {
+        return _pc->getPartition(0)->idx(_idxNum).getPageSize();
+    }
+
+    uint32_t PartitionedIndexDetails::getReadPageSize() const {
+        return _pc->getPartition(0)->idx(_idxNum).getReadPageSize();
+    }
+
+    void PartitionedIndexDetails::getStat64(DB_BTREE_STAT64* stats) const {
+        DB_BTREE_STAT64 ret;
+        memset(&ret, 0, sizeof(ret));
+        // TODO: figure out what the proper way to set max is
+        ret.bt_verify_time_sec = (uint64_t)-1;
+        for (uint64_t i = 0; i < _pc->numPartitions(); i++) {
+            DB_BTREE_STAT64 curr;
+            _pc->getPartition(i)->idx(_idxNum).getStat64(&curr);
+            ret.bt_nkeys += curr.bt_nkeys;
+            ret.bt_ndata += curr.bt_ndata;
+            ret.bt_dsize += curr.bt_dsize;
+            ret.bt_fsize += curr.bt_fsize;
+            if (curr.bt_create_time_sec > ret.bt_create_time_sec) {
+                ret.bt_create_time_sec = curr.bt_create_time_sec;
+            }
+            if (curr.bt_modify_time_sec > ret.bt_modify_time_sec) {
+                ret.bt_modify_time_sec = curr.bt_modify_time_sec;
+            }
+            if (curr.bt_verify_time_sec < ret.bt_verify_time_sec) {
+                ret.bt_verify_time_sec = curr.bt_verify_time_sec;
+            }
+        }
+        *stats = ret;
+    }
+    
+    // find a way to remove this eventually and have callers get
+    // access to IndexDetailsBase directly somehow
+    // This is a workaround to get going for now
+    shared_ptr<storage::Cursor> PartitionedIndexDetails::getCursor(const int flags) const {
+        uasserted(17243, "should not call getCursor on a PartitionedIndexDetails");
     }
 
 } // namespace mongo

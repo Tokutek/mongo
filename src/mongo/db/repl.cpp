@@ -144,6 +144,7 @@ namespace mongo {
         virtual bool slaveOk() const {
             return true;
         }
+        virtual bool requiresShardedOperationScope() const { return false; }
         virtual void help( stringstream &help ) const {
             help << "Check if this server is primary for a replica pair/set; also if it is --master or --slave in simple master/slave setups.\n";
             help << "{ isMaster : 1 }";

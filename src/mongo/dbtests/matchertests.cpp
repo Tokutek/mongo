@@ -23,7 +23,7 @@
 #include "mongo/db/json.h"
 #include "mongo/db/matcher.h"
 #include "mongo/db/matcher/matcher.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/query_optimizer.h"
 #include "mongo/dbtests/dbtests.h"
 #include "mongo/util/timer.h"
@@ -181,7 +181,7 @@ namespace MatcherTests {
                 client().insert( ns(), fromjson( "{ a:[ {}, { b:1 } ] }" ) );
                 
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Client::ReadContext context( ns() );
+                Client::ReadContext context( ns(), mongo::unittest::EMPTY_STRING );
 
                 CoveredIndexMatcher matcher( BSON( "a.b" << 1 ), BSON( "$natural" << 1 ) );
                 MatchDetails details;
@@ -207,7 +207,7 @@ namespace MatcherTests {
                 client().insert( ns(), fromjson( "{ a:[ {}, { b:9 }, { b:1 } ] }" ) );
                 
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Client::ReadContext context( ns() );
+                Client::ReadContext context( ns(), mongo::unittest::EMPTY_STRING );
                 
                 BSONObj query = BSON( "a.b" << 1 );
                 CoveredIndexMatcher matcher( query, BSON( "a.b" << 1 ) );
@@ -235,7 +235,7 @@ namespace MatcherTests {
                 client().insert( ns(), fromjson( "{ a:[ { b:1 } ] }" ) );
                 
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Client::ReadContext context( ns() );
+                Client::ReadContext context( ns(), mongo::unittest::EMPTY_STRING );
                 
                 BSONObj query = BSON( "a.b" << 1 );
                 CoveredIndexMatcher matcher( query, BSON( "a.b" << 1 ) );

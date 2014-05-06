@@ -55,3 +55,4 @@ assert.eq( before , after , "C4" )
 // Clean up after ourselves so other tests using authentication don't get messed up.
 db.system.users.remove({})
 db.getSiblingDB('admin').system.users.remove({})
+db.getSiblingDB('admin').addUser('admin', 'password');

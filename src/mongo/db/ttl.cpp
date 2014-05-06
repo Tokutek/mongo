@@ -92,6 +92,12 @@ namespace mongo {
                     error() << "key for ttl index can only have 1 field" << endl;
                     continue;
                 }
+                if (!idx[secondsExpireField].isNumber()) {
+                    error() << "ttl indexes require the " << secondsExpireField << " field to be "
+                          << "numeric but received a type of: "
+                          << typeName(idx[secondsExpireField].type()) << endl;
+                    continue;
+                }
 
                 BSONObj query;
                 {
@@ -109,10 +115,11 @@ namespace mongo {
                     settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
                     cc().setOpSettings(settings);
 
-                    Client::ReadContext ctx(ns);
+                    LOCK_REASON(lockReason, "ttl: deleting expired documents");
+                    Client::ReadContext ctx(ns, lockReason);
                     Client::Transaction transaction(DB_SERIALIZABLE);
-                    NamespaceDetails* nsd = nsdetails(ns);
-                    if (!nsd) {
+                    Collection *cl = getCollection(ns);
+                    if (!cl) {
                         // collection was dropped
                         continue;
                     }
@@ -142,20 +149,14 @@ namespace mongo {
                     continue;
                 }
                 
-                if ( lockedForWriting() ) {
-                    // note: this is not perfect as you can go into fsync+lock between 
-                    // this and actually doing the delete later
-                    LOG(3) << " locked for writing" << endl;
-                    continue;
-                }
-
                 // if part of replSet but not in a readable state (e.g. during initial sync), skip.
                 if ( theReplSet && !theReplSet->state().readable() )
                     continue;
 
                 set<string> dbs;
                 {
-                    Lock::DBRead lk( "local" );
+                    LOCK_REASON(lockReason, "ttl: getting list of dbs");
+                    Lock::DBRead lk("local", lockReason);
                     dbHolder().getAllShortNames( dbs );
                 }
                 

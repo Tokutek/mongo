@@ -1,6 +1,11 @@
 // Test that the loader behaves well with the multi-statement transaction API. 
 
-load("jstests/loader_helpers.js");
+var filename;
+if (TestData.testDir !== undefined) {
+    load(TestData.testDir + "/_loader_helpers.js");
+} else {
+    load('jstests/_loader_helpers.js');
+}
 
 var testNoTransaction = function() {
     t = db.loadnotxn;

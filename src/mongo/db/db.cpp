@@ -35,12 +35,19 @@
 #include <boost/filesystem/operations.hpp>
 #include <fstream>
 
+#include <db.h>
+
 #include "mongo/base/initializer.h"
+#include "mongo/db/collection.h"
+#include "mongo/db/collection_map.h"
 #include "mongo/db/client.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/cmdline.h"
+#include "mongo/db/crash.h"
+#include "mongo/db/cursor.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/d_globals.h"
+#include "mongo/db/database.h"
 #include "mongo/db/dbmessage.h"
 #include "mongo/db/dbwebserver.h"
 #include "mongo/db/initialize_server_global_state.h"
@@ -49,6 +56,8 @@
 #include "mongo/db/json.h"
 #include "mongo/db/kill_current_op.h"
 #include "mongo/db/module.h"
+#include "mongo/db/ops/delete.h"
+#include "mongo/db/ops/update.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/restapi.h"
@@ -248,19 +257,14 @@ namespace mongo {
         toLog.append( "cmdLine", CmdLine::getParsedOpts() );
         toLog.append( "pid", getpid() );
 
-
         BSONObjBuilder buildinfo( toLog.subobjStart("buildinfo"));
         appendBuildInfo(buildinfo);
         buildinfo.doneFast();
 
-        BSONObj o = toLog.obj();
-
-        Lock::GlobalWrite lk;
+        const BSONObj o = toLog.obj();
         Client::GodScope gs;
         DBDirectClient c;
-        const char* name = "local.startup_log";
-        c.createCollection( name, 10 * 1024 * 1024, true );
-        c.insert( name, o);
+        c.insert("local.startup_log", o);
     }
 
     void listen(int port) {
@@ -271,6 +275,9 @@ namespace mongo {
 
         MessageServer * server = createServer( options , new MyMessageHandler() );
         server->setAsTimeTracker();
+        // we must setupSockets prior to logStartup() to avoid getting too high
+        // a file descriptor for our calls to select()
+        server->setupSockets();
 
         logStartup();
         startReplication();
@@ -291,7 +298,8 @@ namespace mongo {
      *          --replset.
      */
     unsigned long long checkIfReplMissingFromCommandLine() {
-        Lock::GlobalWrite lk;
+        LOCK_REASON(lockReason, "startup: checking whether --replSet is missing");
+        Lock::GlobalWrite lk(lockReason);
         if( !cmdLine.usingReplSets() ) {
             Client::GodScope gs;
             DBDirectClient c;
@@ -308,6 +316,321 @@ namespace mongo {
     unsigned jsGetCurrentOpIdCallback() {
         return cc().curop()->opNum();
     }
+
+    class DiskFormatVersion {
+      public:
+        enum VersionID {
+            DISK_VERSION_INVALID = 0,
+            DISK_VERSION_1 = 1,  // < 1.4
+            DISK_VERSION_2 = 2,  // 1.4.0: changed how ints with abs value larger than 2^52 are packed (#820)
+            DISK_VERSION_3 = 3,  // 1.4.0+hotfix.1: moved upgrade of system.users collections into DiskFormatVersion framework (#978)
+            DISK_VERSION_4 = 4,  // 1.4.1: remove old partitioned collection entries from system.namespaces (#967)
+            DISK_VERSION_5 = 5,  // 1.4.2: #1087, fix indexes that were not properly serialized
+            DISK_VERSION_NEXT,
+            DISK_VERSION_CURRENT = DISK_VERSION_NEXT - 1,
+            MIN_SUPPORTED_VERSION = 1,
+            MAX_SUPPORTED_VERSION = DISK_VERSION_CURRENT,
+            FIRST_SERIALIZED_VERSION = DISK_VERSION_2,
+        };
+
+      private:
+        VersionID _startupVersion;
+        VersionID _currentVersion;
+        static size_t _numNamespaces;
+        static ProgressMeterHolder *_pm;
+
+        static const string versionNs;
+        static const BSONFieldValue<string> versionIdValue;
+        static const BSONField<int> valueField;
+
+        static Status countNamespaces(const StringData&) {
+            _numNamespaces++;
+            return Status::OK();
+        }
+
+        static Status removeZombieNamespaces(const StringData &dbname) {
+            Client::Context ctx(dbname);
+            CollectionMap *cm = collectionMap(dbname);
+            if (!cm) {
+                return Status(ErrorCodes::InternalError, mongoutils::str::stream() << "did not find collection map for database " << dbname);
+            }
+            list<string> collNses;
+            cm->getNamespaces(collNses);
+            for (list<string>::const_iterator cit = collNses.begin(); cit != collNses.end(); ++cit) {
+                const string &collNs = *cit;
+                Collection *c = getCollection(collNs);
+                if (c == NULL) {
+                    LOG(1) << "collection " << collNs << " was dropped but had a zombie entry in the collection map" << startupWarningsLog;
+                    cm->kill_ns(collNs);
+                }
+            }
+            string dbpath = cc().database()->path();
+            Database::closeDatabase(dbname, dbpath);
+            _pm->hit();
+            return Status::OK();
+        }
+
+        static Status upgradeSystemUsersCollection(const StringData &dbname) {
+            Client::UpgradingSystemUsersScope usus;
+            string ns = getSisterNS(dbname, "system.users");
+            Client::Context ctx(ns);
+            // Just by calling getCollection, if a collection that needed upgrade is opened, it'll
+            // get upgraded.  This fixes #674.
+            getCollection(ns);
+            string dbpath = cc().database()->path();
+            Database::closeDatabase(dbname, dbpath);
+            _pm->hit();
+            return Status::OK();
+        }
+
+        static Status cleanupPartitionedNamespacesEntries(const StringData &dbname) {
+            string ns = getSisterNS(dbname, "system.namespaces");
+            Client::Context ctx(ns);
+            Collection *nscl = getCollection(ns);
+            if (nscl == NULL) {
+                return Status(ErrorCodes::InternalError, mongoutils::str::stream() << "didn't find system.namespaces collection for db " << dbname);
+            }
+            for (shared_ptr<Cursor> cursor = Cursor::make(nscl); cursor->ok(); cursor->advance()) {
+                BSONObj cur = cursor->current();
+                if (!cur.getObjectField("options")["partitioned"].trueValue()) {
+                    continue;
+                }
+                string pat = mongoutils::str::stream() << "^\\Q" << cur["name"].String() + "$$\\E";
+                long long ndeleted = _deleteObjects(ns.c_str(), BSON("name" << BSONRegEx(pat)), false, false);
+                if (ndeleted < 1) {
+                    LOG(0) << "didn't find any system.namespaces entries to delete for partitioned collection "
+                           << cur["name"].Stringdata() << ", used pattern /" << pat << "/." << startupWarningsLog;
+                }
+            }
+            string dbpath = cc().database()->path();
+            Database::closeDatabase(dbname, dbpath);
+            _pm->hit();
+            return Status::OK();
+        }
+
+        static Status fixMissingIndexesInNS(const StringData &dbname) {
+            string ns = getSisterNS(dbname, "system.indexes");
+            Client::Context ctx(ns);
+            Collection *sysIndexes = getCollection(ns);
+            if (sysIndexes == NULL) {
+                return Status(ErrorCodes::InternalError, mongoutils::str::stream() << "didn't find system.indexes collection for db " << dbname);
+            }
+            for (shared_ptr<Cursor> cursor = Cursor::make(sysIndexes); cursor->ok(); cursor->advance()) {
+                BSONObj cur = cursor->current();
+                if (!cur["background"].trueValue()) {
+                    continue;
+                }
+                StringData collns = cur["ns"].Stringdata();
+                Collection *cl = getCollection(collns);
+                // It's possible for the collection to have been dropped.  If so, need to clean up
+                // system.indexes and system.namespaces because those entries may not have been
+                // deleted by the collection's drop.
+                if (!cl || cl->indexIsOrphaned(cur)) {
+                    // Don't warn the user if the collection was dropped.
+                    if (cl) {
+                        warning() << "Found an orphaned secondary index on collection " << collns << ": " << cur << startupWarningsLog;
+                        warning() << "This is due to issue #1087 (https://github.com/Tokutek/mongo/issues/1087)." << startupWarningsLog;
+                        warning() << "You will need to rebuild this index after this upgrade is complete." << startupWarningsLog;
+                        warning() << "To do this, run this command in the shell:" << startupWarningsLog;
+                        warning() << "> use " << dbname << startupWarningsLog;
+                        warning() << "> db.system.indexes.insert(" << cur << ")" << startupWarningsLog;
+                    }
+                    cleanupOrphanedIndex(cur);
+                }
+            }
+            _pm->hit();
+            return Status::OK();
+        }
+
+        Status upgradeToVersion(VersionID targetVersion) {
+            if (_currentVersion + 1 != targetVersion) {
+                return Status(ErrorCodes::BadValue, "bad version in upgrade");
+            }
+
+            std::stringstream upgradeLogPrefixStream;
+            upgradeLogPrefixStream << "Running upgrade of disk format version " << static_cast<int>(_currentVersion)
+                                   << " to " << static_cast<int>(targetVersion);
+            std::string upgradeLogPrefix = upgradeLogPrefixStream.str();
+            log() << upgradeLogPrefix << "." << endl;
+
+            // This is pretty awkward.  We want a static member to point to a stack
+            // ProgressMeterHolder so it can be used by other static member callback functions, but
+            // not longer than that object exists.  TODO: maybe it would be easier to pass a mem_fn
+            // to applyToDatabaseNames, but this isn't too crazy yet.
+            class ScopedPMH : boost::noncopyable {
+                ProgressMeterHolder *&_pmhp;
+              public:
+                ScopedPMH(ProgressMeterHolder *&pmhp, ProgressMeterHolder *val) : _pmhp(pmhp) {
+                    _pmhp = val;
+                }
+                ~ScopedPMH() {
+                    _pmhp = NULL;
+                }
+            };
+
+            switch (targetVersion) {
+                case DISK_VERSION_INVALID:
+                case DISK_VERSION_1:
+                case DISK_VERSION_NEXT: {
+                    warning() << "should not be trying to upgrade to " << static_cast<int>(targetVersion) << startupWarningsLog;
+                    return Status(ErrorCodes::BadValue, "bad version in upgrade");
+                }
+
+                case DISK_VERSION_2: {
+                    // Due to #879, we need to look at each existing database and remove
+                    // entries from the collection map which were dropped but their entries
+                    // weren't removed.
+                    verify(Lock::isW());
+                    verify(cc().hasTxn());
+
+                    ProgressMeter pmObj(_numNamespaces, 3, 1, "databases", upgradeLogPrefix);
+                    ProgressMeterHolder pm(pmObj);
+                    ScopedPMH scpmh(_pm, &pm);
+
+                    Status s = applyToDatabaseNames(&DiskFormatVersion::removeZombieNamespaces);
+                    if (!s.isOK()) {
+                        return s;
+                    }
+
+                    break;
+                }
+
+                case DISK_VERSION_3: {
+                    // We used to do this (force upgrade of system.users collections in a write
+                    // lock) in initAndListen but it should really be in the upgrade path, and this
+                    // way we won't do it on every startup, just one more time on upgrade to version
+                    // 3.
+                    verify(Lock::isW());
+                    verify(cc().hasTxn());
+
+                    ProgressMeter pmObj(_numNamespaces, 3, 1, "databases", upgradeLogPrefix);
+                    ProgressMeterHolder pm(pmObj);
+                    ScopedPMH scpmh(_pm, &pm);
+
+                    Status s = applyToDatabaseNames(&DiskFormatVersion::upgradeSystemUsersCollection);
+                    if (!s.isOK()) {
+                        return s;
+                    }
+
+                    break;
+                }
+
+                case DISK_VERSION_4: {
+                    verify(Lock::isW());
+                    verify(cc().hasTxn());
+
+                    ProgressMeter pmObj(_numNamespaces, 3, 1, "databases", upgradeLogPrefix);
+                    ProgressMeterHolder pm(pmObj);
+                    ScopedPMH scpmh(_pm, &pm);
+
+                    Status s = applyToDatabaseNames(&DiskFormatVersion::cleanupPartitionedNamespacesEntries);
+                    if (!s.isOK()) {
+                        return s;
+                    }
+
+                    break;
+                }
+                case DISK_VERSION_5: {
+                    verify(Lock::isW());
+                    verify(cc().hasTxn());
+
+                    ProgressMeter pmObj(_numNamespaces, 3, 1, "databases", upgradeLogPrefix);
+                    ProgressMeterHolder pm(pmObj);
+                    ScopedPMH scpmh(_pm, &pm);
+
+                    Status s = applyToDatabaseNames(&DiskFormatVersion::fixMissingIndexesInNS);
+                    if (!s.isOK()) {
+                        return s;
+                    }
+
+                    break;
+                }
+            }
+
+            verify(Lock::isW());
+            verify(cc().hasTxn());
+            Client::Context lctx(versionNs);
+            updateObjects(versionNs.c_str(),
+                          BSON(versionIdValue << valueField(targetVersion)),
+                          BSON(versionIdValue),
+                          true,    // upsert
+                          false   // multi
+                          );  // logop
+
+            _currentVersion = targetVersion;
+            return Status::OK();
+        }
+
+      public:
+        DiskFormatVersion()
+                : _startupVersion(DISK_VERSION_INVALID),
+                  _currentVersion(DISK_VERSION_INVALID) {}
+
+        Status initialize() {
+            verify(Lock::isW());
+            verify(cc().hasTxn());
+
+            Client::Context ctx(versionNs);
+
+            Collection *c = getCollection(versionNs);
+            if (c == NULL) {
+                _startupVersion = DISK_VERSION_1;
+            } else {
+                BSONObj versionObj;
+                bool ok = c->findOne(versionNs, BSON(versionIdValue), versionObj);
+                if (!ok) {
+                    warning() << "found local.system.version collection but query " << BSON(versionIdValue) << " found nothing" << startupWarningsLog;
+                    _startupVersion = DISK_VERSION_1;
+                } else {
+                    BSONElement versionElt = versionObj[valueField()];
+                    if (!versionElt.isNumber()) {
+                        return Status(ErrorCodes::BadValue, mongoutils::str::stream() << "found malformed version object " << versionObj);
+                    }
+                    _startupVersion = static_cast<VersionID>(versionElt.numberLong());
+                }
+            }
+
+            if (_startupVersion < MIN_SUPPORTED_VERSION) {
+                warning() << "Found unsupported disk format version: " << static_cast<int>(_startupVersion) << "." << startupWarningsLog;
+                warning() << "The minimum supported disk format version by TokuMX " << tokumxVersionString
+                          << " is " << static_cast<int>(MIN_SUPPORTED_VERSION) << "." << startupWarningsLog;
+                warning() << "Please upgrade to an earlier version of TokuMX before upgrading to this version." << startupWarningsLog;
+                return Status(ErrorCodes::UnsupportedFormat, "version on disk too low");
+            }
+
+            if (_startupVersion > MAX_SUPPORTED_VERSION) {
+                warning() << "Found unsupported disk format version: " << static_cast<int>(_startupVersion) << "." << startupWarningsLog;
+                warning() << "The maximum supported disk format version by TokuMX " << tokumxVersionString
+                          << " is " << static_cast<int>(MAX_SUPPORTED_VERSION) << "." << startupWarningsLog;
+                warning() << "Please upgrade to a later version of TokuMX to use the data on disk." << startupWarningsLog;
+                return Status(ErrorCodes::UnsupportedFormat, "version on disk too high");
+            }
+
+            _currentVersion = _startupVersion;
+
+            return Status::OK();
+        }
+
+        Status upgradeToCurrent() {
+            Status s = Status::OK();
+            if (_currentVersion < DISK_VERSION_CURRENT) {
+                s = applyToDatabaseNames(&DiskFormatVersion::countNamespaces);
+                log() << "Need to upgrade from disk format version " << static_cast<int>(_currentVersion)
+                      << " to " << static_cast<int>(DISK_VERSION_CURRENT) << "." << endl;
+                log() << _numNamespaces << " databases will be upgraded." << endl;
+            }
+            while (_currentVersion < DISK_VERSION_CURRENT && s.isOK()) {
+                s = upgradeToVersion(static_cast<VersionID>(static_cast<int>(_currentVersion) + 1));
+            }
+            return s;
+        }
+    };
+
+    size_t DiskFormatVersion::_numNamespaces = 0;
+    ProgressMeterHolder *DiskFormatVersion::_pm = NULL;
+    const string DiskFormatVersion::versionNs("local.system.version");
+    const BSONFieldValue<string> DiskFormatVersion::versionIdValue("_id", "diskFormatVersion");
+    const BSONField<int> DiskFormatVersion::valueField("value");
 
     void _initAndListen(int listenPort ) {
 
@@ -347,7 +670,27 @@ namespace mongo {
 
         acquirePathLock();
 
-        storage::startup(&_txnCompleteHooks);
+        extern storage::UpdateCallback _storageUpdateCallback;
+        storage::startup(&_txnCompleteHooks, &_storageUpdateCallback);
+
+        {
+            LOCK_REASON(lockReason, "startup: running upgrade hooks");
+            Lock::GlobalWrite lk(lockReason);
+            Client::UpgradingDiskFormatVersionScope udfvs;
+            Client::Transaction txn(DB_SERIALIZABLE);
+            DiskFormatVersion formatVersion;
+            Status s = formatVersion.initialize();
+            if (!s.isOK()) {
+                warning() << "Error while fetching disk format version: " << s << "." << startupWarningsLog;
+                exitCleanly(EXIT_NEED_UPGRADE);
+            }
+            s = formatVersion.upgradeToCurrent();
+            if (!s.isOK()) {
+                warning() << "Error while upgrading disk format version: " << s << "." << startupWarningsLog;
+                exitCleanly(EXIT_NEED_UPGRADE);
+            }
+            txn.commit();
+        }
 
         unsigned long long missingRepl = checkIfReplMissingFromCommandLine();
         if (missingRepl) {
@@ -394,25 +737,8 @@ namespace mongo {
         if( !noauth ) {
             // open admin db in case we need to use it later. TODO this is not the right way to
             // resolve this.
-            Client::WriteContext c("admin", dbpath);
-        }
-
-        {
-            // Upgrade any system.users collections if they need it.
-            Lock::GlobalWrite lk;
-            Client::UpgradingSystemUsersScope usus;
-            Client::Transaction txn(DB_SERIALIZABLE);
-
-            vector<string> databases;
-            getDatabaseNames(databases);
-            for (vector<string>::const_iterator it = databases.begin(); it != databases.end(); ++it) {
-                string ns = getSisterNS(*it, "system.users");
-                Client::Context ctx(ns);
-                // Just by calling nsdetails, if a collection that needed upgrade is opened, it'll
-                // get upgraded.  This fixes #674.
-                nsdetails(ns);
-            }
-            txn.commit();
+            LOCK_REASON(lockReason, "startup: opening admin db");
+            Client::WriteContext c("admin", lockReason);
         }
 
         listen(listenPort);
@@ -505,6 +831,8 @@ static void buildOptionsDescriptions(po::options_description *pVisible,
     ("dbpath", po::value<string>() , dbpathBuilder.str().c_str())
     ("diaglog", po::value<int>(), "0=off 1=W 2=R 3=both 7=W+some reads")
     ("directio", "use direct I/O in tokumx")
+    ("fastupdates", "Internal only.")
+    ("fastupdatesIgnoreErrors", "silently ignore all fastupdate errors. NOT RECOMMENDED FOR PRODUCTION, unless failed updates are expected and/or acceptable.")
     ("fsRedzone", po::value<int>(), "percentage of free-space left on device before the system goes read-only.")
     ("logDir", po::value<string>(), "directory to store transaction log files (default is --dbpath)")
     ("tmpDir", po::value<string>(), "directory to store temporary bulk loader files (default is --dbpath)")
@@ -521,6 +849,7 @@ static void buildOptionsDescriptions(po::options_description *pVisible,
     ("lockTimeout", po::value(&cmdLine.lockTimeout), "tokumx row lock wait timeout (in ms), 0 means wait as long as necessary")
     ("locktreeMaxMemory", po::value(&cmdLine.locktreeMaxMemory), "tokumx memory limit (in bytes) for storing transactions' row locks.")
     ("loaderMaxMemory", po::value(&cmdLine.loaderMaxMemory), "tokumx memory limit (in bytes) for a single bulk loader to use. the bulk loader is used to build foreground indexes and is also utilized by mongorestore/import")
+    ("loaderCompressTmp", po::value(&cmdLine.loaderCompressTmp), "the bulk loader (used for mongoimport/mongorestore and non-background index builds) will compress intermediate files (see tmpDir) when writing them to disk")
     ("noauth", "run without security")
     ("nohttpinterface", "disable http interface")
     ("nojournal", "DEPRECATED)")
@@ -728,6 +1057,12 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
         }
         if (params.count("directio")) {
             cmdLine.directio = true;
+        }
+        if (params.count("fastupdates")) {
+            cmdLine.fastupdates = true;
+        }
+        if (params.count("fastupdatesIgnoreErrors")) {
+            cmdLine.fastupdatesIgnoreErrors = true;
         }
         if (params.count("checkpointPeriod")) {
             cmdLine.checkpointPeriod = params["checkpointPeriod"].as<uint32_t>();
@@ -1078,20 +1413,19 @@ namespace mongo {
 
 namespace mongo {
 
-    void abruptQuit(int x) {
+    static void abruptQuitNoCrashInfo(int x) {
         ostringstream ossSig;
         ossSig << "Got signal: " << x << " (" << strsignal( x ) << ")." << endl;
-        rawOut( ossSig.str() );
+        rawOut(ossSig.str());
 
-        ostringstream oss;
-        oss << "Backtrace:" << endl;
-        printStackTrace( oss );
-        rawOut( oss.str() );
+        // Reinstall default signal handler, to generate core if necessary.
+        signal(x, SIG_DFL);
+    }
 
-        // Try to get even more information if gdbPath was set to a gdb executable.
-        if (cmdLine.gdbPath != "") {
-            db_env_try_gdb_stack_trace(cmdLine.gdbPath.c_str());
-        }
+    void abruptQuit(int x) {
+        ostringstream ossSig;
+        ossSig << "Got signal: " << x << " (" << strsignal( x ) << ").";
+        dumpCrashInfo(ossSig.str());
 
         // Reinstall default signal handler, to generate core if necessary.
         signal(x, SIG_DFL);
@@ -1106,8 +1440,8 @@ namespace mongo {
             oss << " operation";
         }
         oss << " at address: " << siginfo->si_addr << " from thread: " << getThreadName() << endl;
-        rawOut( oss.str() );
-        abruptQuit( signal );
+        dumpCrashInfo(oss.str());
+        abruptQuitNoCrashInfo(signal);
     }
 
     sigset_t asyncSignals;
@@ -1137,15 +1471,13 @@ namespace mongo {
     // this will be called in certain c++ error cases, for example if there are two active
     // exceptions
     void myterminate() {
-        rawOut( "terminate() called, printing stack (if implemented for platform):" );
-        printStackTrace();
+        dumpCrashInfo("terminate() called");
         ::abort();
     }
 
     // this gets called when new fails to allocate memory
     void my_new_handler() {
-        rawOut( "out of memory, printing stack and exiting:" );
-        printStackTrace();
+        dumpCrashInfo("out of memory");
         ::_exit(EXIT_ABRUPT);
     }
 
@@ -1180,6 +1512,7 @@ namespace mongo {
             sigaddset( &asyncSignals, SIGINT );
         }
         sigaddset( &asyncSignals, SIGUSR1 );
+        sigaddset( &asyncSignals, SIGXCPU );
 
         set_terminate( myterminate );
         set_new_handler( my_new_handler );

@@ -33,8 +33,10 @@
 #include "mongo/bson/bsonmisc.h"
 #include "mongo/bson/bson_builder_base.h"
 #include "mongo/bson/bson_field.h"
+#include "mongo/db/gtid.h"
 
 #if defined(_DEBUG) && defined(MONGO_EXPOSE_MACROS)
+#include "mongo/util/assert_util.h"
 #include "mongo/util/log.h"
 #endif
 
@@ -102,6 +104,14 @@ namespace mongo {
             _b.appendStr(fieldName);
             _b.appendBuf((void *) subObj.objdata(), subObj.objsize());
             return *this;
+        }
+
+        /** add a subobject as a member */
+        BSONObjBuilder& append(const StringData& fieldName, const GTID& gtid) {
+            uint32_t sizeofGTID = GTID::GTIDBinarySize();
+            char idData[sizeofGTID];
+            gtid.serializeBinaryData(idData);
+            return appendBinData(fieldName, sizeofGTID, BinDataGeneral, idData);
         }
 
         /** add a subobject as a member */
@@ -197,6 +207,17 @@ namespace mongo {
             return *this;
         }
 
+        BSONObjBuilder& append(const StringData& fieldName, unsigned long long n) {
+#if defined(_DEBUG) && defined(MONGO_EXPOSE_MACROS)
+            static const unsigned long long llMax = std::numeric_limits<long long>::max();
+            if (n > llMax) {
+                warning() << "appending unsigned long long int larger than max long long int to a BSONObj: " << n << std::endl;
+            }
+            dassert(n <= llMax);
+#endif
+            return append(fieldName, static_cast<long long>(n));
+        }
+
         /** appends a number.  if n < max(int)/2 then uses int, otherwise long long */
         BSONObjBuilder& appendIntOrLL( const StringData& fieldName , long long n ) {
             long long x = n;
@@ -243,6 +264,17 @@ namespace mongo {
             else
                 append( fieldName, llNumber );
             return *this;
+        }
+
+        BSONObjBuilder& appendNumber( const StringData& fieldName, unsigned long long ullNumber ) {
+#if defined(_DEBUG) && defined(MONGO_EXPOSE_MACROS)
+            static const unsigned long long llMax = std::numeric_limits<long long>::max();
+            if (ullNumber > llMax) {
+                warning() << "appending unsigned long long int larger than max long long int to a BSONObj: " << ullNumber << std::endl;
+            }
+            dassert(ullNumber <= llMax);
+#endif
+            return appendNumber(fieldName, static_cast<long long>(ullNumber));
         }
 
         /** Append a double element */
@@ -917,5 +949,4 @@ namespace mongo {
     { return BSON( "$or" << BSON_ARRAY(a << b << c << d << e) ); }
     inline BSONObj OR(const BSONObj& a, const BSONObj& b, const BSONObj& c, const BSONObj& d, const BSONObj& e, const BSONObj& f)
     { return BSON( "$or" << BSON_ARRAY(a << b << c << d << e << f) ); }
-
 }

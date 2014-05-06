@@ -19,7 +19,6 @@
  */
 
 #include "mongo/pch.h"
-#include "mongo/db/dbhelpers.h"
 #include "mongo/db/json.h"
 #include "mongo/db/queryutil.h"
 
@@ -27,20 +26,22 @@
 
 namespace NamespaceTests {
 
+    using boost::shared_ptr;
+
     namespace IndexDetailsTests {
         class Base {
             Lock::GlobalWrite lk;
             Client::Context _context;
-            shared_ptr<IndexDetails> _idx;
+            shared_ptr<IndexDetailsBase> _idx;
         public:
-            IndexDetails &idx() { return *_idx; }
-            Base() : _context(ns()), _idx() {
+            IndexDetailsBase &idx() { return *_idx; }
+            Base() : lk(mongo::unittest::EMPTY_STRING), _context(ns()), _idx() {
             }
             virtual ~Base() {
             }
         protected:
             void create() {
-                _idx.reset(new IndexDetails(info()));
+                _idx.reset(new IndexDetailsBase(info()));
             }
             virtual bool isSparse() const {
                 return false;
@@ -952,7 +953,7 @@ namespace NamespaceTests {
         
     } // namespace IndexDetailsTests
 
-    namespace NamespaceDetailsTests {
+    namespace CollectionTests {
 
         class Base {
             const char *ns_;
@@ -960,16 +961,15 @@ namespace NamespaceTests {
             Lock::GlobalWrite lk;
             Client::Context _context;
         public:
-            Base( const char *ns = "unittests.NamespaceDetailsTests" ) : ns_( ns ) , _transaction(DB_SERIALIZABLE), _context( ns ) {}
+            Base( const char *ns = "unittests.CollectionTests" ) : ns_( ns ) , _transaction(DB_SERIALIZABLE), lk(mongo::unittest::EMPTY_STRING), _context( ns ) {}
             virtual ~Base() {
                 if ( !nsd() )
                     return;
                 _transaction.commit();
-                string s( ns() );
                 string errmsg;
                 BSONObjBuilder result;
                 Client::Transaction droptxn(DB_SERIALIZABLE);
-                dropCollection( s, errmsg, result );
+                nsd()->drop(errmsg, result);
                 droptxn.commit();
             }
             Client::Context &ctx() {
@@ -977,7 +977,7 @@ namespace NamespaceTests {
             }
         protected:
             void create() {
-                Lock::GlobalWrite lk;
+                Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
                 string err;
                 ASSERT( userCreateNS( ns(), fromjson( spec() ), err, false ) );
             }
@@ -990,11 +990,11 @@ namespace NamespaceTests {
             const char *ns() const {
                 return ns_;
             }
-            NamespaceDetails *nsd() {
-                if (nsdetails(ns()) == NULL) {
+            Collection *nsd() {
+                if (getCollection(ns()) == NULL) {
                     create();
                 }
-                return nsdetails( ns() );
+                return getCollection( ns() );
             }
             static BSONObj bigObj(bool bGenID=false) {
                 BSONObjBuilder b;
@@ -1010,7 +1010,7 @@ namespace NamespaceTests {
         // after itself, /tmp/unittest needs to be cleared after running.
         //        class BigCollection : public Base {
         //        public:
-        //            BigCollection() : Base( "NamespaceDetailsTests_BigCollection" ) {}
+        //            BigCollection() : Base( "CollectionTests_BigCollection" ) {}
         //            void run() {
         //                
         //                ASSERT_EQUALS( 2, nExtents() );
@@ -1035,10 +1035,10 @@ namespace NamespaceTests {
         protected:
             void assertCachedIndexKey( const BSONObj &indexKey ) {
                 ASSERT_EQUALS( indexKey,
-                              nsd()->cachedQueryPlanForPattern( _pattern ).indexKey() );
+                              nsd()->getQueryCache().cachedQueryPlanForPattern( _pattern ).indexKey() );
             }
             void registerIndexKey( const BSONObj &indexKey ) {
-                nsd()->registerCachedQueryPlanForPattern
+                nsd()->getQueryCache().registerCachedQueryPlanForPattern
                         ( _pattern,
                          CachedQueryPlan( indexKey, 1, CandidatePlanCharacter( true, false ) ) );                
             }
@@ -1053,26 +1053,30 @@ namespace NamespaceTests {
         class SetIndexIsMultikey : public CachedPlanBase {
         public:
             void run() {
-                getAndMaybeCreateNS( ns(), false );
+                string err;
+                userCreateNS( ns(), BSONObj(), err, false );
                 ASSERT( nsd() != NULL );
                 DBDirectClient client;
                 client.ensureIndex( ns(), BSON( "a" << 1 ) );
                 registerIndexKey( BSON( "a" << 1 ) );
 
                 ASSERT( !nsd()->isMultikey( 1 ) );
-                
-                nsd()->setIndexIsMultikey( 1 );
+                bool dummy;
+                Collection* cl = nsd();
+                CollectionBase* cd = cl->as<CollectionBase>();
+                cd->setIndexIsMultikey( 1, &dummy );
+                cl->noteMultiKeyChanged(); // this is what now clears the query cache
                 ASSERT( nsd()->isMultikey( 1 ) );
                 assertCachedIndexKey( BSONObj() );
                 
                 registerIndexKey( BSON( "a" << 1 ) );
-                nsd()->setIndexIsMultikey( 1 );
+                cd->setIndexIsMultikey( 1, &dummy );
                 assertCachedIndexKey( BSON( "a" << 1 ) );
             }
         };
 
         /** clearQueryCache() clears the query plan cache. */
-        class ClearQueryCache : public NamespaceDetailsTests::CachedPlanBase {
+        class ClearQueryCache : public CollectionTests::CachedPlanBase {
         public:
             void run() {
                 // Register a query plan in the query plan cache.
@@ -1080,12 +1084,12 @@ namespace NamespaceTests {
                 assertCachedIndexKey( BSON( "a" << 1 ) );
                 
                 // The query plan is cleared.
-                nsd()->clearQueryCache();
+                nsd()->getQueryCache().clearQueryCache();
                 assertCachedIndexKey( BSONObj() );
             }
         };                                                                                         
         
-    } // namespace NamespaceDetailsTests
+    } // namespace CollectionTests
 
     class All : public Suite {
     public:
@@ -1131,8 +1135,8 @@ namespace NamespaceTests {
             add< IndexDetailsTests::Suitability >();
             add< IndexDetailsTests::NumericFieldSuitability >();
             add< IndexDetailsTests::IndexMissingField >();
-            add< NamespaceDetailsTests::SetIndexIsMultikey >();
-            add< NamespaceDetailsTests::ClearQueryCache >();
+            add< CollectionTests::SetIndexIsMultikey >();
+            add< CollectionTests::ClearQueryCache >();
         }
     } myall;
 } // namespace NamespaceTests

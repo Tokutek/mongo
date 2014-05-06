@@ -26,8 +26,71 @@ DB.prototype.getName = function(){
     return this._name;
 }
 
+DB.prototype.getParameter = function(){
+    var res;
+    if (arguments.length > 0) {
+        var all;
+        if (arguments.length == 1 && typeof arguments[0] == "object") {
+            if (arguments[0].length == undefined) {
+                all = [];
+                for (var x in arguments[0]) {
+                    all.push(x);
+                }
+            } else {
+                all = arguments[0];
+            }
+        } else {
+            all = arguments;
+        }
+        var cmd = {getParameter: 1};
+        for (var i = 0; i < all.length; ++i) {
+            cmd[all[i]] = 1;
+        }
+        res = this.adminCommand(cmd);
+    } else {
+        res = this.adminCommand({getParameter: '*'});
+    }
+    if (!res.ok) {
+        throw res.errmsg;
+    }
+    var retval = {};
+    for (var x in res) {
+        if (x != "ok") {
+            retval[x] = res[x];
+        }
+    }
+    return retval;
+}
+
+DB.prototype.setParameter = function(param, value){
+    if (arguments.length == 0) {
+        throw "nothing to set";
+    }
+    var cmd = {setParameter: 1};
+    if (typeof param == "object") {
+        if (value != undefined) {
+            throw "invalid arguments";
+        }
+        cmd = Object.extend(cmd, param);
+    } else {
+        if (value == undefined) {
+            throw "invalid arguments";
+        }
+        cmd[param] = value;
+    }
+    return this.adminCommand(cmd);
+}
+
 DB.prototype.stats = function(scale){
-    return this.runCommand( { dbstats : 1 , scale : scale } );
+    var sc = scale;
+    if (typeof scale == 'object') {
+        sc = scale.scale;
+    }
+    var cmd = {dbstats: 1};
+    if (sc) {
+        cmd = Object.extend(cmd, {scale: sc});
+    }
+    return this.runCommand(cmd);
 }
 
 DB.prototype.getCollection = function( name ){
@@ -278,6 +341,18 @@ DB.prototype.createCollection = function(name, opt) {
         cmd.capped = options.capped;
     if (options.size != undefined)
         cmd.size = options.size;
+    if (options.compression != undefined)
+        cmd.compression = options.compression;
+    if (options.pageSize != undefined)
+        cmd.pageSize = options.pageSize;
+    if (options.readPageSize != undefined)
+        cmd.readPageSize = options.readPageSize;
+    if (options.primaryKey != undefined)
+        cmd.primaryKey = options.primaryKey;
+    if (options.partitioned != undefined)
+        cmd.partitioned = options.partitioned;
+    if (options.fanout != undefined)
+        cmd.fanout = options.fanout;
     var res = this._dbCommand(cmd);
     return res;
 }
@@ -445,7 +520,7 @@ DB.prototype.help = function() {
     print("\tdb.cloneDatabase(fromhost)");
     print("\tdb.commandHelp(name) returns the help for the command");
     print("\tdb.copyDatabase(fromdb, todb, fromhost)");
-    print("\tdb.createCollection(name, { size : ..., capped : ..., max : ... } )");
+    print("\tdb.createCollection(name, { size : ..., capped : ..., max : ..., compression : ..., pageSize : ..., readPageSize : ..., fanout : ... } )");
     print("\tdb.currentOp() displays currently executing operations in the db");
     print("\tdb.dropDatabase()");
     print("\tdb.eval(func, args) run code server-side");
@@ -458,6 +533,7 @@ DB.prototype.help = function() {
     print("\tdb.getMongo() get the server connection object");
     print("\tdb.getMongo().setSlaveOk() allow queries on a replication slave server");
     print("\tdb.getName()");
+    print("\tdb.getParameter([name[, name...]]) - get server parameters, get all by default");
     print("\tdb.getPrevError()");
     print("\tdb.getProfilingLevel() - deprecated");
     print("\tdb.getProfilingStatus() - returns if profiling is on and slow threshold");
@@ -469,7 +545,7 @@ DB.prototype.help = function() {
     print("\tdb.listCommands() lists all the db commands");
     print("\tdb.loadServerScripts() loads all the scripts in db.system.js");
     print("\tdb.logout()");
-    print("\tdb.printCollectionStats()");
+    print("\tdb.printCollectionStats(scale)");
     print("\tdb.printReplicationInfo()");
     print("\tdb.printShardingStatus()");
     print("\tdb.printSlaveReplicationInfo()");
@@ -478,10 +554,11 @@ DB.prototype.help = function() {
     print("\tdb.resetError()");
     print("\tdb.runCommand(cmdObj) run a database command.  if cmdObj is a string, turns it into { cmdObj : 1 }");
     print("\tdb.serverStatus()");
+    print("\tdb.setParameter([param, value|obj]) - set server parameter(s), can set multiple if an object is passed");
     print("\tdb.setProfilingLevel(level,<slowms>) 0=off 1=slow 2=all");
     print("\tdb.setVerboseShell(flag) display extra information in shell output");
     print("\tdb.shutdownServer()");
-    print("\tdb.stats()");
+    print("\tdb.stats(scale)");
     print("\tdb.version() current version of the server");
 
     return __magicNoPrint;
@@ -491,16 +568,6 @@ DB.prototype.printCollectionStats = function(scale) {
     if (arguments.length > 1) { 
         print("printCollectionStats() has a single optional argument (scale)");
         return;
-    }
-    if (typeof scale != 'undefined') {
-        if(typeof scale != 'number') {
-            print("scale has to be a number >= 1");
-            return;
-        }
-        if (scale < 1) {
-            print("scale has to be >= 1");
-            return;
-        }
     }
     var mydb = this;
     this.getCollectionNames().forEach(
@@ -691,10 +758,18 @@ DB.prototype.getLastError = function( w , wtimeout ){
 }
 DB.prototype.getLastErrorObj = function( w , wtimeout ){
     var cmd = { getlasterror : 1 };
-    if ( w ){
-        cmd.w = w;
-        if ( wtimeout )
-            cmd.wtimeout = wtimeout;
+    if (w) {
+        if (typeof w == 'object') {
+            if (arguments.length > 1) {
+                throw "getlasterror accepts a single object or a list of values w, wtimeout";
+            }
+            cmd = Object.extend(cmd, w);
+        } else {
+            cmd.w = w;
+            if (wtimeout) {
+                cmd.wtimeout = wtimeout;
+            }
+        }
     }
     var res = this.runCommand( cmd );
 
@@ -716,21 +791,22 @@ DB.prototype.getPrevError = function(){
     return this.runCommand( { getpreverror : 1 } );
 }
 
+DB.prototype.forEachCollectionName = function(callback) {
+    var nsLength = this._name.length + 1;
+    this.getCollection('system.namespaces').find().forEach(function (doc) {
+        if (doc.name.indexOf('$') >= 0 && doc.name.indexOf('.oplog.$') < 0) {
+            return;
+        }
+
+        callback(doc.name.substring(nsLength));
+    });
+}
+
 DB.prototype.getCollectionNames = function(){
     var all = [];
-
-    var nsLength = this._name.length + 1;
-    
-    var c = this.getCollection( "system.namespaces" ).find();
-    while ( c.hasNext() ){
-        var name = c.next().name;
-        
-        if ( name.indexOf( "$" ) >= 0 && name.indexOf( ".oplog.$" ) < 0 )
-            continue;
-        
-        all.push( name.substring( nsLength ) );
-    }
-    
+    this.forEachCollectionName(function (n) {
+        all.push(n);
+    });
     return all.sort();
 }
 
@@ -757,8 +833,12 @@ DB.prototype.currentOp = function( arg ){
 DB.prototype.currentOP = DB.prototype.currentOp;
 
 DB.prototype.killOp = function(op) {
-    if( !op ) 
+    if (typeof op == 'object') {
+        op = op.op;
+    }
+    if (!op) {
         throw "no opNum to kill specified";
+    }
     return this.$cmd.sys.killop.findOne({'op':op});
 }
 DB.prototype.killOP = DB.prototype.killOp;
@@ -790,56 +870,56 @@ DB.prototype.getReplicationInfo = function() {
     var db = this.getSiblingDB("local");
 
     var result = { };
-    var oplog;
-    if (db.system.namespaces.findOne({name:"local.oplog.rs"}) != null) {
-        oplog = 'oplog.rs';
-    }
-    else if (db.system.namespaces.findOne({name:"local.oplog.$main"}) != null) {
-        oplog = 'oplog.$main';
-    }
-    else {
-        result.errmsg = "neither master/slave nor replica set replication detected";
+    if (db.system.namespaces.findOne({name:"local.oplog.rs"}) == null) {
+        result.errmsg = "replication not detected";
         return result;
     }
-    
-    var ol_entry = db.system.namespaces.findOne({name:"local."+oplog});
-    if( ol_entry && ol_entry.options ) {
-	result.logSizeMB = ol_entry.options.size / ( 1024 * 1024 );
-    } else {
-        result.errmsg  = "local."+oplog+", or its options, not found in system.namespaces collection";
+    if (db.system.namespaces.findOne({name:"local.oplog.refs"}) == null) {
+        result.errmsg = "local.oplog.rs exists but local.oplog.refs does not";
         return result;
     }
-    ol = db.getCollection(oplog);
 
-    result.usedMB = ol.stats().size / ( 1024 * 1024 );
-    result.usedMB = Math.ceil( result.usedMB * 100 ) / 100;
-    
+    var ol = db.oplog.rs;
+    var olr = db.oplog.refs;
+    var olstats = ol.stats();
+    var olrstats = olr.stats();
+    result.logSizeMB = {
+        uncompressed: (olstats.size + olrstats.size) / (1024 * 1024),
+        compressed: (olstats.storageSize + olrstats.storageSize) / (1024 * 1024),
+        'oplog.rs': {
+            uncompressed: olstats.size / (1024 * 1024),
+            compressed: olstats.storageSize / (1024 * 1024),
+        },
+        'oplog.refs': {
+            uncompressed: olrstats.size / (1024 * 1024),
+            compressed: olrstats.storageSize / (1024 * 1024),
+        }
+    };
+
     var firstc = ol.find().sort({$natural:1}).limit(1);
     var lastc = ol.find().sort({$natural:-1}).limit(1);
-    if( !firstc.hasNext() || !lastc.hasNext() ) { 
-	result.errmsg = "objects not found in local.oplog.$main -- is this a new and empty db instance?";
-	result.oplogMainRowCount = ol.count();
-	return result;
+    if (!firstc.hasNext() || !lastc.hasNext()) {
+        result.errmsg = "objects not found in local.oplog.rs";
+        result.oplogRowCount = ol.count();
+        return result;
     }
 
     var first = firstc.next();
     var last = lastc.next();
     {
-	var tfirst = first.ts;
-	var tlast = last.ts;
-        
-	if( tfirst && tlast ) { 
-	    tfirst = DB.tsToSeconds( tfirst ); 
-	    tlast = DB.tsToSeconds( tlast );
-	    result.timeDiff = tlast - tfirst;
-	    result.timeDiffHours = Math.round(result.timeDiff / 36)/100;
-	    result.tFirst = (new Date(tfirst*1000)).toString();
-	    result.tLast  = (new Date(tlast*1000)).toString();
-	    result.now = Date();
-	}
-	else { 
-	    result.errmsg = "ts element not found in oplog objects";
-	}
+        var tfirst = first.ts;
+        var tlast = last.ts;
+
+        if(tfirst && tlast) {
+            result.timeDiff = (tlast - tfirst) / 1000;
+            result.timeDiffHours = Math.round(result.timeDiff / 36) / 100;
+            result.tFirst = tfirst.toString();
+            result.tLast = tlast.toString();
+            result.now = Date();
+        }
+        else {
+            result.errmsg = "ts element not found in oplog objects";
+        }
     }
 
     return result;
@@ -847,69 +927,62 @@ DB.prototype.getReplicationInfo = function() {
 
 DB.prototype.printReplicationInfo = function() {
     var result = this.getReplicationInfo();
-    if( result.errmsg ) {
+    if (result.errmsg) {
         if (!this.isMaster().ismaster) {
             print("this is a slave, printing slave replication info.");
             this.printSlaveReplicationInfo();
             return;
         }
-	print(tojson(result));
-	return;
+        print(tojson(result));
+        return;
     }
-    print("configured oplog size:   " + result.logSizeMB + "MB");
+    print("oplog user data size: " + result.logSizeMB.uncompressed.toFixed(2) + "MB");
+    print("oplog on-disk size: " + result.logSizeMB.compressed.toFixed(2) + "MB");
     print("log length start to end: " + result.timeDiff + "secs (" + result.timeDiffHours + "hrs)");
-    print("oplog first event time:  " + result.tFirst);
-    print("oplog last event time:   " + result.tLast);
-    print("now:                     " + result.now);
+    print("oplog first event time: " + result.tFirst);
+    print("oplog last event time: " + result.tLast);
+    print("now: " + result.now);
 }
 
 DB.prototype.printSlaveReplicationInfo = function() {
-    function getReplLag(st) {
+    function getReplLag(primary, st) {
         var now = new Date();
         print("\t syncedTo: " + st.toString() );
         var ago = (now-st)/1000;
         var hrs = Math.round(ago/36)/100;
-        print("\t\t = " + Math.round(ago) + " secs ago (" + hrs + "hrs)");
-    };
-    
-    function g(x) {
-        assert( x , "how could this be null (printSlaveReplicationInfo gx)" )
-        print("source:   " + x.host);
-        if ( x.syncedTo ){
-            var st = new Date( DB.tsToSeconds( x.syncedTo ) * 1000 );
-            getReplLag(st);
+        var pstr = "";
+        if (primary.optimeDate !== undefined) {
+            var pago = (primary.optimeDate-st)/1000;
+            pstr = ", " + Math.max(0, Math.round(pago)) + " secs behind primary";
         }
-        else {
-            print( "\t doing initial sync" );
-        }
+        print("\t\t = " + Math.round(ago) + " secs ago (" + hrs + "hrs)" + pstr);
     };
 
-    function r(x) {
+    function r(primary, x) {
         assert( x , "how could this be null (printSlaveReplicationInfo rx)" );
         if ( x.state == 1 ) {
             return;
         }
-        
-        print("source:   " + x.name);
-        if ( x.optime ) {
-            getReplLag(x.optimeDate);
+
+        print("source: " + x.name);
+        if (x.optimeDate) {
+            getReplLag(primary, x.optimeDate);
         }
         else {
-            print( "\t no replication info, yet.  State: " + x.stateStr );
+            print( "\t no replication info, yet. State: " + x.stateStr );
         }
     };
-    
+
     var L = this.getSiblingDB("local");
 
     if (L.system.replset.count() != 0) {
         var status = this.adminCommand({'replSetGetStatus' : 1});
-        status.members.forEach(r);
-    }
-    else if( L.sources.count() != 0 ) {
-        L.sources.find().forEach(g);
+        var primary = {};
+        status.members.forEach(function(x) { if (x.state == 1) { primary = x; }});
+        status.members.forEach(function(x) { r(primary, x); });
     }
     else {
-        print("local.sources is empty; is this db a --slave?");
+        print("local.system.replset is empty; is this db in a replica set?");
         return;
     }
 }
@@ -919,6 +992,9 @@ DB.prototype.engineStatus = function(){
 }
 
 DB.prototype.beginTransaction = function(iso){
+    if (typeof iso == 'object') {
+        iso = iso.isolation;
+    }
     var cmd = {beginTransaction: 1};
     if (iso) {
         cmd.isolation = iso;
@@ -934,12 +1010,24 @@ DB.prototype.rollbackTransaction = function(){
     return this.runCommand('rollbackTransaction');
 }
 
+DB.prototype._runCommandCursor = function(cmd) {
+    if (typeof(cmd) == "string") {
+        var obj = {};
+        obj[cmd] = 1;
+        cmd = obj;
+    }
+    cmd.cursor = cmd.cursor || {};
+    var res = this.runCommand(cmd);
+    assert.commandWorked(res, tojson(cmd) + ' with cursor failed');
+    return new DBCommandCursor(this._mongo, res);
+}
+
 DB.prototype.showLiveTransactions = function(){
-    return this.runCommand('showLiveTransactions');
+    return this._runCommandCursor('showLiveTransactions');
 }
 
 DB.prototype.showPendingLockRequests = function(){
-    return this.runCommand('showPendingLockRequests');
+    return this._runCommandCursor('showPendingLockRequests');
 }
 
 DB.prototype.serverBuildInfo = function(){

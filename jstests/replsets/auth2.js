@@ -85,6 +85,7 @@ var master = rs.getMaster();
 
 print("add an admin user");
 master.getDB("admin").addUser("foo","bar",false,3);
+rs.awaitReplication();
 m = rs.nodes[0];
 
 print("starting 1 and 2 with key file");

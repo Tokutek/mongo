@@ -8,6 +8,9 @@ t.ensureIndex( { a:1 } );
 
 function assertExplain( expected, explain, checkAllPlans ) {
     for( field in expected ) {
+        if (expected[field] != explain[field]) {
+            print('assertExplain expected ' + tojson(expected) + ', got ' + tojson(explain));
+        }
         assert.eq( expected[ field ], explain[ field ], field );
     }
     if ( checkAllPlans && explain.allPlans && explain.allPlans.length == 1 ) {
@@ -91,17 +94,17 @@ t.ensureIndex( { a:1, b:1 } );
 t.ensureIndex( { b:1, a:1 } );
 t.save( { a:1, b:1 } );
 
-// Document matched by three query plans.
+// Document matched by two query plans.
 assertUnhintedExplain( { n:1, nscanned:1, nscannedObjects:1,
-                         nscannedObjectsAllPlans:2 /* Result is not loaded if a dup. */ },
+                         nscannedObjectsAllPlans:1 /* Result is not loaded if a dup. */ },
                        t.find( { a:{ $gt:0 }, b:{ $gt:0 } } ) );
 
-// Document matched by three query plans, with sorting.
-assertUnhintedExplain( { n:1, nscanned:1, nscannedObjects:1, nscannedObjectsAllPlans:2 },
+// Document matched by two query plans, with sorting.
+assertUnhintedExplain( { n:1, nscanned:1, nscannedObjects:1, nscannedObjectsAllPlans:1 },
                        t.find( { a:{ $gt:0 }, b:{ $gt:0 } } ).sort( { c:1 } ) );
 
-// Document matched by three query plans, with a skip.
-assertUnhintedExplain( { n:0, nscanned:1, nscannedObjects:1, nscannedObjectsAllPlans:1 },
+// Document matched by two query plans, with a skip.
+assertUnhintedExplain( { n:0, nscanned:1, nscannedObjects:1, nscannedObjectsAllPlans:0 },
                        t.find( { a:{ $gt:0 }, b:{ $gt:0 } } ).skip( 1 ) );
 
 // Hybrid ordered and unordered plans.
@@ -126,22 +129,22 @@ assertUnhintedExplain( { cursor:'IndexCursor a_1_b_1', n:30, nscanned:30, nscann
 // Ordered plan chosen, with a skip.  Skip is not included in counting nscannedObjects for a single
 // plan.
 assertUnhintedExplain( { cursor:'IndexCursor a_1_b_1', n:29, nscanned:30, nscannedObjects:30,
-                         nscannedObjectsAllPlans:89, scanAndOrder:false },
+                         nscannedObjectsAllPlans:59, scanAndOrder:false },
                        t.find( { b:{ $gte:0 } } ).sort( { a:1 } ).skip( 1 ) );
 
 // Unordered plan chosen.
 assertUnhintedExplain( { cursor:'IndexCursor b_1', n:1, nscanned:1, nscannedObjects:1,
-                         nscannedObjectsAllPlans:2, scanAndOrder:true },
+                         nscannedObjectsAllPlans:1, scanAndOrder:true },
                        t.find( { b:1 } ).sort( { a:1 } ) );
 
 // Unordered plan chosen and projected.
 assertUnhintedExplain( { cursor:'IndexCursor b_1', n:1, nscanned:1, nscannedObjects:1,
-                         nscannedObjectsAllPlans:2, scanAndOrder:true },
+                         nscannedObjectsAllPlans:1, scanAndOrder:true },
                        t.find( { b:1 }, { _id:0, b:1 } ).sort( { a:1 } ) );
 
 // Unordered plan chosen, with a skip.
 assertUnhintedExplain( { cursor:'IndexCursor b_1', n:0, nscanned:1, nscannedObjects:1,
-                         nscannedObjectsAllPlans:2, scanAndOrder:true },
+                         nscannedObjectsAllPlans:1, scanAndOrder:true },
                        t.find( { b:1 }, { _id:0, b:1 } ).sort( { a:1 } ).skip( 1 ) );
 
 // Ordered plan chosen, $returnKey specified.
@@ -158,21 +161,21 @@ assertUnhintedExplain( { cursor:'IndexCursor a_1_b_1', n:30, nscanned:30, nscann
 
 // Unordered plan chosen, $returnKey specified.
 assertUnhintedExplain( { cursor:'IndexCursor b_1', n:1, nscanned:1, nscannedObjects:0,
-                         nscannedObjectsAllPlans:1, scanAndOrder:true },
+                         nscannedObjectsAllPlans:0, scanAndOrder:true },
                        t.find( { b:1 }, { _id:0, b:1 } ).sort( { a:1 } )
                            ._addSpecial( "$returnKey", true ) );
 
 // Unordered plan chosen, $returnKey specified, matching requires loading document.
 assertUnhintedExplain( { cursor:'IndexCursor b_1', n:1, nscanned:1, nscannedObjects:1,
-                         nscannedObjectsAllPlans:2, scanAndOrder:true },
+                         nscannedObjectsAllPlans:1, scanAndOrder:true },
                        t.find( { b:1, c:null }, { _id:0, b:1 } ).sort( { a:1 } )
                            ._addSpecial( "$returnKey", true ) );
 
 t.ensureIndex( { a:1, b:1, c:1 } );
 
-// Documents matched by four query plans.
+// Documents matched by three query plans.
 assertUnhintedExplain( { n:30, nscanned:30, nscannedObjects:30,
-                         nscannedObjectsAllPlans:90 // Not 120 because deduping occurs before
+                         nscannedObjectsAllPlans:60 // Not 90 because deduping occurs before
                                                     // loading results.
                        },
                        t.find( { a:{ $gte:0 }, b:{ $gte:0 } } ).sort( { b:1 } ) );

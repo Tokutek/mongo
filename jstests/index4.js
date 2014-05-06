@@ -22,7 +22,7 @@ t.save( { name : "clusterstock" ,
 //
 // this should fail, not allowed -- we confirm that.
 //t.ensureIndex( { instances : { pool : 1 } } );
-//assert.eq( 0, db.system.indexes.find( {ns:"test.index4",name:{$ne:"_id_"}} ).count(), "no indexes should be here yet");
+//assert.eq( 0, db.system.indexes.find( {ns:db.getName() + ".index4",name:{$ne:"_id_"}} ).count(), "no indexes should be here yet");
 
 //t.ensureIndex( { "instances.pool" : 1 } );
 

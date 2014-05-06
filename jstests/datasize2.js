@@ -7,7 +7,7 @@ for ( i=0; i<N; i++ ){
     t.insert( { _id : i , s : "asdasdasdasdasdasdasd" } );
 }
 
-c = { dataSize : "test.datasize2" ,  
+c = { dataSize : db.getName() + ".datasize2" ,  
       "keyPattern" : {
           "_id" : 1
       },

@@ -19,8 +19,9 @@
 
 #include "mongo/db/client.h"
 #include "mongo/db/clientcursor.h"
+#include "mongo/db/collection.h"
+#include "mongo/db/collection_map.h"
 #include "mongo/db/databaseholder.h"
-#include "mongo/db/namespace_details.h"
 #include "mongo/db/txn_context.h"
 
 namespace mongo {
@@ -30,21 +31,25 @@ namespace mongo {
     void TxnCompleteHooksImpl::noteTxnCompletedInserts(const string &ns, const BSONObj &minPK,
                                          long long nDelta, long long sizeDelta,
                                          bool committed) {
-        Lock::DBRead lk(ns);
+        LOCK_REASON(lockReason, "txn: noting completed inserts");
+        Lock::DBRead lk(ns, lockReason);
         if (dbHolder().__isLoaded(ns, dbpath)) {
             scoped_ptr<Client::Context> ctx(cc().getContext() == NULL ?
                                             new Client::Context(ns) : NULL);
-            // Because this transaction did inserts, we're guarunteed to be the
+            // Because this transaction did inserts, we're guaranteed to be the
             // only party capable of closing/reopening the ns due to file-ops.
             // So, if the ns is open, note the commit/abort to fix up in-memory
             // stats and do nothing otherwise since there are no stats to fix.
-            NamespaceIndex *ni = nsindex(ns.c_str());
-            NamespaceDetails *d = ni->find_ns(ns.c_str());
-            if (d != NULL) {
+            //
+            // Only matters for capped collections.
+            CollectionMap *cm = collectionMap(ns);
+            Collection *cl = cm->find_ns(ns);
+            if (cl != NULL && cl->isCapped()) {
+                CappedCollection *cappedCl = cl->as<CappedCollection>();
                 if (committed) {
-                    d->noteCommit(minPK, nDelta, sizeDelta);
+                    cappedCl->noteCommit(minPK, nDelta, sizeDelta);
                 } else {
-                    d->noteAbort(minPK, nDelta, sizeDelta);
+                    cappedCl->noteAbort(minPK, nDelta, sizeDelta);
                 }
             }
         }
@@ -68,14 +73,15 @@ namespace mongo {
             }
 
             // The ydb requires that a txn closes any dictionaries it created beforeaborting.
-            // Hold a write lock while trying to close the namespace in the nsindex.
-            Lock::DBWrite lk(ns);
+            // Hold a write lock while trying to close the namespace in the collection map.
+            LOCK_REASON(lockReason, "txn: closing created dictionaries during txn abort");
+            Lock::DBWrite lk(ns, lockReason);
             if (dbHolder().__isLoaded(ns, dbpath)) {
                 scoped_ptr<Client::Context> ctx(cc().getContext() == NULL ?
                                                 new Client::Context(ns) : NULL);
                 // Pass aborting = true to close_ns(), which hints to the implementation
                 // that the calling transaction is about to abort.
-                (void) nsindex(ns)->close_ns(ns, true);
+                (void) collectionMap(ns)->close_ns(ns, true);
             }
         }
 
@@ -88,11 +94,12 @@ namespace mongo {
                 verify(Lock::isWriteLocked(db));
             }
 
-            Lock::DBWrite lk(db);
+            LOCK_REASON(lockReason, "txn: rolling back db creates");
+            Lock::DBWrite lk(db, lockReason);
             if (dbHolder().__isLoaded(db, dbpath)) {
                 scoped_ptr<Client::Context> ctx(cc().getContext() == NULL ?
                                                 new Client::Context(db) : NULL);
-                nsindex(db.c_str())->rollbackCreate();
+                collectionMap(db)->rollbackCreate();
             }
         }
     }

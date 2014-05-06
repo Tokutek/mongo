@@ -28,6 +28,7 @@ function plan( explain, cursor ) {
             return e;
         }
     }
+    print("did not find plan for " + tojson(explain) + ", cursor " + cursor);
     assert( false );
 }
 
@@ -44,4 +45,3 @@ assert.eq( 2000, plan( explain2, "IndexCursor a_1" ).nscanned );
 // Check that results only examined after the a:1 plan is selected will not affect plan explain
 // output for other plans.
 assert.eq( plan( explain1, "IndexCursor b_1" ), plan( explain2, "IndexCursor b_1" ) );
-assert.eq( plan( explain1, "BasicCursor" ), plan( explain2, "BasicCursor" ) );

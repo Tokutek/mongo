@@ -4,7 +4,6 @@
 //   - Disables the balancer
 //   - Inserts 10k documents and ensures they're evenly distributed
 //   - Verifies a $where query can be killed on multiple DBs
-//   - Tests fsync and fsync+lock permissions on sharded db
 
 var s = new ShardingTest({shards: 2,
                           mongos: 1,
@@ -137,20 +136,6 @@ assert.gt(whereKillSleepTime * numDocs / 20, killTime, "took too long to kill");
 join();
 var end = new Date();
 print("elapsed: " + (end.getTime() - start.getTime()));
-
-// test fsync command on non-admin db
-x = db.runCommand("fsync");
-assert(!x.ok , "fsync on non-admin namespace should fail : " + tojson(x));
-assert(x.errmsg.indexOf("access denied") >= 0,
-       "fsync on non-admin succeeded, but should have failed: " + tojson(x));
-
-// test fsync on admin db
-x = db._adminCommand("fsync");
-assert(x.ok == 1 && x.numFiles > 0, "fsync failed: " + tojson(x));
-
-// test fsync+lock on admin db
-x = db._adminCommand({"fsync" :1, lock:true});
-assert(!x.ok, "lock should fail: " + tojson(x));
 
 // write back stuff
 // SERVER-4194

@@ -398,25 +398,6 @@ namespace BasicTests {
         }
     };
 
-    class DatabaseOwnsNS {
-    public:
-        void run() {
-            Lock::GlobalWrite lk;
-            // this leaks as ~Database is private
-            // if that changes, should put this on the stack
-            {
-                Client::Transaction txn(DB_SERIALIZABLE);
-                Database * db = new Database( "dbtests_basictests_ownsns" );
-
-                ASSERT( db->ownsNS( "dbtests_basictests_ownsns.x" ) );
-                ASSERT( db->ownsNS( "dbtests_basictests_ownsns.x.y" ) );
-                ASSERT( ! db->ownsNS( "dbtests_basictests_ownsn.x.y" ) );
-                ASSERT( ! db->ownsNS( "dbtests_basictests_ownsnsa.x.y" ) );
-                txn.commit();
-            }
-        }
-    };
-
     class NSValidNames {
     public:
         void run() {
@@ -595,9 +576,9 @@ namespace BasicTests {
             istringstream iss3("\t    this = false  \n#that = true\n  #another = whocares\n\n  other = monkeys  ");
             CmdLine::parseConfigFile( iss3, ss3 );
 
-            ASSERT( ss1.str().compare("\n") == 0 );
-            ASSERT( ss2.str().compare("password=\'foo bar baz\'\n\n") == 0 );
-            ASSERT( ss3.str().compare("\n  other = monkeys  \n\n") == 0 );
+            ASSERT_EQUALS( ss1.str(), "\n" );
+            ASSERT_EQUALS( ss2.str(), "password=\'foo bar baz\'\n" );
+            ASSERT_EQUALS( ss3.str(), "\n  other = monkeys  \n" );
         }
     };
 
@@ -664,8 +645,6 @@ namespace BasicTests {
             add< AssertTests >();
 
             add< ArrayTests::basic1 >();
-
-            add< DatabaseOwnsNS >();
 
             add< NSValidNames >();
 

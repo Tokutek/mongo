@@ -59,8 +59,7 @@ namespace mongo {
         }
 
         auto_ptr<CollectionManager> manager(new CollectionManager);
-        manager->_key = this->_key;
-        manager->_key.getOwned();
+        manager->_key = this->_key.getOwned();
         manager->_chunksMap = this->_chunksMap;
         manager->_chunksMap.erase(chunk.getMin());
         manager->_maxShardVersion = newShardVersion;
@@ -113,8 +112,7 @@ namespace mongo {
         }
 
         auto_ptr<CollectionManager> manager(new CollectionManager);
-        manager->_key = this->_key;
-        manager->_key.getOwned();
+        manager->_key = this->_key.getOwned();
         manager->_chunksMap = this->_chunksMap;
         manager->_chunksMap.insert(make_pair(chunk.getMin().getOwned(), chunk.getMax().getOwned()));
         manager->_maxShardVersion = newShardVersion;
@@ -172,8 +170,7 @@ namespace mongo {
         }
 
         auto_ptr<CollectionManager> manager(new CollectionManager);
-        manager->_key = this->_key;
-        manager->_key.getOwned();
+        manager->_key = this->_key.getOwned();
         manager->_chunksMap = this->_chunksMap;
         manager->_maxShardVersion = newShardVersion; // will increment 2nd, 3rd,... chunks below
 

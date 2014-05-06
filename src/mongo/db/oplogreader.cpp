@@ -15,12 +15,14 @@
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/repl/connections.h"
 #include "mongo/db/instance.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/relock.h"
+#include "mongo/db/ops/delete.h"
+#include "mongo/db/ops/update.h"
 
 namespace mongo {
-    const BSONObj reverseNaturalObj = BSON( "$natural" << -1 );
+    const BSONObj reverseIDObj = BSON( "_id" << -1 );
 
     BSONObj userReplQuery = fromjson("{\"user\":\"repl\"}");
 
@@ -50,11 +52,11 @@ namespace mongo {
             BSONObj user;
             {
                 StringData ns("local.system.users");
-                Client::ReadContext ctx(ns);
-                NamespaceDetails *d = nsdetails(ns);
-                if( d == NULL || !d->findOne(userReplQuery, user) ||
-                                 // try the first user in local
-                                 !d->findOne(BSONObj(), user) ) {
+                LOCK_REASON(lockReason, "repl: authenticating with local db");
+                Client::ReadContext ctx(ns, lockReason);
+                if (!Collection::findOne(ns, userReplQuery, user) ||
+                        // try the first user in local
+                        !Collection::findOne(ns, BSONObj(), user)) {
                     log() << "replauthenticate: no user in local.system.users to use for authentication\n";
                     return false;
                 }
@@ -75,13 +77,12 @@ namespace mongo {
     }
 
     void getMe(BSONObj& me) {
-        string myname = getHostName();
+        const string myname = getHostName();
         Client::Transaction transaction(0);            
-        NamespaceDetails *d = nsdetails("local.me");
+
         // local.me is an identifier for a server for getLastError w:2+
-        if ( d == NULL || !d->findOne( BSONObj(), me ) ||
-                          !me.hasField("host") ||
-             me["host"].String() != myname ) {
+        if (!Collection::findOne("local.me", BSONObj(), me) ||
+                !me.hasField("host") || me["host"].String() != myname) {
         
             // cleaning out local.me requires write
             // lock. This is a rare operation, so it should
@@ -91,28 +92,27 @@ namespace mongo {
             }
 
             // clean out local.me
-            if (d != NULL) {
-                d->empty();
-            }
+            deleteObjects("local.me", BSONObj(), false, false);
         
             // repopulate
             BSONObjBuilder b;
             b.appendOID( "_id" , 0 , true );
             b.append( "host", myname );
             me = b.obj();
-            Helpers::putSingleton( "local.me" , me );
+            updateObjects("local.me", me, BSONObj(), true, false);
         }
         transaction.commit(0);
     }
 
     bool replHandshake(DBClientConnection *conn) {
         BSONObj me;
+        LOCK_REASON(lockReason, "repl: handshake");
         try {
-            Client::ReadContext ctx("local");
+            Client::ReadContext ctx("local", lockReason);
             getMe(me);
         }
         catch (RetryWithWriteLock &e) {
-            Client::WriteContext ctx("local");
+            Client::WriteContext ctx("local", lockReason);
             getMe(me);
         }
 
@@ -228,7 +228,7 @@ namespace mongo {
         BSONObjBuilder query;
         query.append("_id", q.done());
         retCursor.reset(
-            _conn->query(rsoplog, Query(query.done()).sort(reverseNaturalObj), 0, 0, NULL, QueryOption_SlaveOk).release()
+            _conn->query(rsoplog, Query(query.done()).sort(reverseIDObj), 0, 0, NULL, QueryOption_SlaveOk).release()
             );
         return retCursor;
     }

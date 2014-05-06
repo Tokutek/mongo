@@ -127,6 +127,11 @@ namespace mongo {
          */
         bool getNextChunk( const BSONObj& lookupKey, BSONObj* foundMin , BSONObj* foundMax ) const;
 
+        /**
+         * Given an object, determine if it contains the full shard key.
+         */
+        bool hasShardKey(const BSONObj &obj);
+
         // accessors
 
         ChunkVersion getVersion() const { return _version; }

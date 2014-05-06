@@ -21,10 +21,17 @@
 
 #include "mongo/db/instance.h"
 #include "mongo/db/database.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/unittest/unittest.h"
 
 using namespace mongo;
 using namespace mongo::unittest;
 using boost::shared_ptr;
 
+namespace mongo {
+namespace unittest {
+
+static const string EMPTY_STRING("");
+
+} // namespace unittest
+} // namespace mongo

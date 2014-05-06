@@ -48,6 +48,7 @@ namespace mongo {
     void printGitVersion();
 
     std::string sysInfo();
+    const char * sysInfoCstr();
     void printSysInfo();
 
     const char *tokukvVersion();

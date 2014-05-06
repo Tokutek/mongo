@@ -40,7 +40,7 @@ DBCollection.prototype.help = function () {
     print("\tdb." + shortName + ".dropIndex(index) - e.g. db." + shortName + ".dropIndex( \"indexName\" ) or db." + shortName + ".dropIndex( { \"indexKey\" : 1 } )");
     print("\tdb." + shortName + ".dropIndexes()");
     print("\tdb." + shortName + ".ensureIndex(keypattern[,options]) - options is an object with these possible fields: name, unique, dropDups");
-    print("\tdb." + shortName + ".reIndex()");
+    print("\tdb." + shortName + ".reIndex([[name|keypattern][, options]]) - options is an object with these possible fields: compression, pageSize, readPageSize");
     print("\tdb." + shortName + ".find([query],[fields]) - query is an optional query filter. fields is optional set of fields to return.");
     print("\t                                              e.g. db." + shortName + ".find( {x:77} , {name:1, x:1} )");
     print("\tdb." + shortName + ".find(...).count()");
@@ -58,7 +58,7 @@ DBCollection.prototype.help = function () {
     print("\tdb." + shortName + ".renameCollection( newName , <dropTarget> ) renames the collection.");
     print("\tdb." + shortName + ".runCommand( name , <options> ) runs a db command with the given name where the first param is the collection name");
     print("\tdb." + shortName + ".save(obj)");
-    print("\tdb." + shortName + ".stats()");
+    print("\tdb." + shortName + ".stats(scale)");
     print("\tdb." + shortName + ".storageSize() - includes free space allocated to this collection");
     print("\tdb." + shortName + ".totalIndexSize() - size in bytes of all the indexes");
     print("\tdb." + shortName + ".totalSize() - storage allocated for all data and indexes");
@@ -67,6 +67,9 @@ DBCollection.prototype.help = function () {
     print("\tdb." + shortName + ".getShardVersion() - only for use with sharding");
     print("\tdb." + shortName + ".getShardDistribution() - prints statistics about data distribution in the cluster");
     print("\tdb." + shortName + ".getSplitKeysForChunks( <maxChunkSize> ) - calculates split points over all chunks and returns splitter function");
+    print("\tdb." + shortName + ".addPartition( <pivot> ) - add partition to a partitioned collection, optionally pass in pivot");
+    print("\tdb." + shortName + ".getPartitionInfo() - get partition information of partitioned collection");
+    print("\tdb." + shortName + ".dropPartition( id ) - drop partition of partitioned collection with specified id");
     return __magicNoPrint;
 }
 
@@ -350,8 +353,11 @@ DBCollection.prototype.ensureIndex = function( keys , options ){
     // nothing returned on success
 }
 
-DBCollection.prototype.reIndex = function() {
-    return this._db.runCommand({ reIndex: this.getName() });
+DBCollection.prototype.reIndex = function(keys, options) {
+    var cmd = {reIndex: this.getName()};
+    cmd.index = keys || '*';
+    cmd.options = options || {};
+    return this._db.runCommand(cmd);
 }
 
 DBCollection.prototype.dropIndexes = function(){
@@ -540,7 +546,15 @@ DBCollection.prototype.getCollection = function( subName ){
 }
 
 DBCollection.prototype.stats = function( scale ){
-    return this._db.runCommand( { collstats : this._shortName , scale : scale } );
+    var sc = scale;
+    if (typeof scale == 'object') {
+        sc = scale.scale;
+    }
+    var cmd = {collstats: this._shortName};
+    if (sc) {
+        cmd = Object.extend(cmd, {scale: sc});
+    }
+    return this._db.runCommand(cmd);
 }
 
 DBCollection.prototype.dataSize = function(){
@@ -673,6 +687,24 @@ DBCollection.prototype.group = function( params ){
 DBCollection.prototype.groupcmd = function( params ){
     params.ns = this._shortName;
     return this._db.groupcmd( params );
+}
+
+DBCollection.prototype.addPartition = function( pivot ){
+    if ( pivot == undefined) {
+        return this._dbCommand( { addPartition : this._shortName } );
+    }
+    return this._dbCommand( { addPartition : this._shortName , newMax : pivot } );
+}
+
+DBCollection.prototype.getPartitionInfo = function(){
+    return this._dbCommand( { getPartitionInfo : this._shortName } );
+}
+
+DBCollection.prototype.dropPartition = function( partitionID ){
+    if ( partitionID == undefined) {
+        throw "must specify id of partition to drop";
+    }
+    return this._dbCommand( { dropPartition : this._shortName , id : partitionID } );
 }
 
 MapReduceResult = function( db , o ){

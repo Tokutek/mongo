@@ -22,6 +22,7 @@
 #include "mongo/bson/util/builder.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/storage/key.h"
+#include "mongo/server.h"
 
 namespace mongo {
 
@@ -46,12 +47,15 @@ namespace mongo {
             cint = cY | cdouble,
             cX = 0x20,
             clong = cX | cdouble,
+            cZ = 0x30,
+            cint64 = cZ | cdouble,
             cHASMORE = 0x40,
             cNOTUSED = 0x80 // but see IsBSON sentinel - this bit not usable without great care
         };
 
         // bindata bson type
-        const unsigned BinDataLenMask = 0xf0;  // lengths are powers of 2 of this value
+        // unused:
+        //const unsigned BinDataLenMask = 0xf0;  // lengths are powers of 2 of this value
         const unsigned BinDataTypeMask = 0x0f; // 0-7 as you would expect, 8-15 are 128+value.  see BinDataType.
         const int BinDataLenMax = 32;
         const int BinDataLengthToCode[] = { 
@@ -168,11 +172,12 @@ namespace mongo {
                         }
                         if( n >= m || n <= -m ) {
                             // can't represent exactly as a double
-                            traditional(obj);
-                            return;
+                            b.appendUChar(cint64|bits);
+                            b.appendNum(n);
+                        } else {
+                            b.appendUChar(clong|bits);
+                            b.appendNum((double) n);
                         }
-                        b.appendUChar(clong|bits);
-                        b.appendNum((double) n);
                         break;
                     }
                 case NumberDouble:
@@ -262,6 +267,10 @@ namespace mongo {
                         b.append("", static_cast< long long>((reinterpret_cast< const PackedDouble& >(*p)).d));
                         p += sizeof(double);
                         break;
+                    case cint64:
+                        b.append("", *reinterpret_cast<const long long *>(p));
+                        p += sizeof(long long);
+                        break;
                     default:
                         verify(false);
                 }
@@ -272,9 +281,11 @@ namespace mongo {
             return b.done();
         }
 
-        static int compare(const unsigned char *&l, const unsigned char *&r) { 
-            int lt = (*l & cCANONTYPEMASK);
-            int rt = (*r & cCANONTYPEMASK);
+        static int compare(const unsigned char *&l, const unsigned char *&r) {
+            int lt_real = *l;
+            int rt_real = *r;
+            int lt = (lt_real & cCANONTYPEMASK);
+            int rt = (rt_real & cCANONTYPEMASK);
             int x = lt - rt;
             if( x ) 
                 return x;
@@ -285,12 +296,34 @@ namespace mongo {
             switch( lt ) { 
             case cdouble:
                 {
-                    double L = (reinterpret_cast< const PackedDouble* >(l))->d;
-                    double R = (reinterpret_cast< const PackedDouble* >(r))->d;
-                    if( L < R )
-                        return -1;
-                    if( L != R )
-                        return 1;
+                    if (unlikely(lt_real == cint64 && rt_real == cint64)) {
+                        long long L = *reinterpret_cast<const long long *>(l);
+                        long long R = *reinterpret_cast<const long long *>(r);
+                        if (L < R) {
+                            return -1;
+                        }
+                        if (L != R) {
+                            return 1;
+                        }
+                    } else {
+                        // We only pack numbers as cint64 if they are larger than the largest thing
+                        // we would store as a double.  However, user inputted doubles can be larger
+                        // than 2^52 and just be packed as doubles because they came that way, so we
+                        // need to actually do the comparison, not just take the one that's packed
+                        // as an int to be greater or lesser.
+                        double L = (unlikely(lt_real == cint64)
+                                    ? double(*reinterpret_cast<const long long *>(l))
+                                    : (reinterpret_cast<const PackedDouble *>(l))->d);
+                        double R = (unlikely(rt_real == cint64)
+                                    ? double(*reinterpret_cast<const long long *>(r))
+                                    : (reinterpret_cast<const PackedDouble *>(r))->d);
+                        if (L < R) {
+                            return -1;
+                        }
+                        if (L != R) {
+                            return 1;
+                        }
+                    }
                     l += 8; r += 8;
                     break;
                 }

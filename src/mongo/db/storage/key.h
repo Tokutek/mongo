@@ -25,12 +25,14 @@
 // The dictionary key format is as follows:
 //
 //    Primary key:
-//    { _id value, no name }
-//    eg: { : 4 } for _id:4
+//    { primaryKey }
+//    eg: { : 4 } if pk pattern is { _id: 1 } and extracted primary key is { _id: 4 }
+//    eg: { : "hello", : 7 } if pk pattern is { a: 1, _id: 1 } and extracted primary key
+//        is { a: "hello", _id: 7 }
 //
 //    Secondary keys:
 //    { key values, no names } { associated PK, no field name }
-//    eg: { : 4, : 5 } { : 1 } for key a:4, b:5 ---> _id:1
+//    eg: { : 4, : 5 } { : 1 } for key a:4, b:5 ---> pk { : 1 }
 //
 // The dictionary val format is either the entire BSON object, or nothing at all.
 // If there's nothing, there must be an associated primary key.
@@ -171,8 +173,15 @@ namespace mongo {
                     dassert(k1_size + other_k1.objsize() == (int) key1.size());
                     dassert(k2_size + other_k2.objsize() == (int) key2.size());
 
-                    static const Ordering id_ordering = Ordering::make(BSON("_id" << 1));
-                    const int c = other_k1.woCompare(other_k2, id_ordering);
+                    // Note: The ordering here is unintuitive.
+                    //
+                    // We arbitrarily chose 'ascending' ordering for each part of the primary key.
+                    // It doesn't matter what the _real_ ordering of the primary key is here,
+                    // because there are no ordered scans over this part of the key. All that 
+                    // matters is that we're consistent.
+                    static const unsigned ordering_bits = 0;
+                    static const Ordering &pk_ordering = *reinterpret_cast<const Ordering *>(&ordering_bits);
+                    const int c = other_k1.woCompare(other_k2, pk_ordering);
                     if (c < 0) {
                         return -1;
                     } else if (c > 0) {

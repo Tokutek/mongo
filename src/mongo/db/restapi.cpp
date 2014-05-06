@@ -148,7 +148,7 @@ namespace mongo {
             while ( i.more() ) {
                 BSONElement e = i.next();
                 string name = e.fieldName();
-                if ( ! name.find( "filter_" ) == 0 )
+                if ( name.find( "filter_" ) != 0 )
                     continue;
 
                 string field = name.substr(7);
@@ -258,44 +258,31 @@ namespace mongo {
 
     } restHandler;
 
-    void openAdminDb() { 
-        {
-            readlocktry rl(/*"admin.system.users", */10000);
-            uassert( 16172 , "couldn't get readlock to open admin db" , rl.got() );
-            if( dbHolder().get("admin.system.users",dbpath) )
-                return;
-        }
-
-        writelocktry wl(10000);
-        verify( wl.got() );
-        Client::Context cx("admin.system.users", dbpath);
-    }
-
     bool RestAdminAccess::haveAdminUsers() const {
-        Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
-        openAdminDb();
-        readlocktry rl(/*"admin.system.users", */10000);
+        LOCK_REASON(lockReason, "restapi: getting admin auth credentials");
+        readlocktry rl(10000, lockReason);
         uassert( 16173 , "couldn't get read lock to get admin auth credentials" , rl.got() );
         Client::Context cx("admin.system.users", dbpath);
+        Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
+
         BSONObj o;
-        NamespaceDetails *d = nsdetails( "admin.system.users" );
-        bool ok = d != NULL && d->findOne(BSONObj(), o);
+        const bool ok = Collection::findOne("admin.system.users", BSONObj(), o);
         txn.commit();
         return ok;
     }
 
     BSONObj RestAdminAccess::getAdminUser( const string& username ) const {
-        Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
-        openAdminDb();
         Client::GodScope gs;
-        readlocktry rl(/*"admin.system.users", */10000);
+        LOCK_REASON(lockReason, "restapi: checking admin user");
+        readlocktry rl(10000, lockReason);
         uassert( 16174 , "couldn't get read lock to check admin user" , rl.got() );
         Client::Context cx( "admin.system.users" );
+        Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
+
         BSONObj user;
-        NamespaceDetails *d = nsdetails( "admin.system.users" );
-        if ( d != NULL && d->findOne( BSON( "user" << username ) , user ) ) {
+        if (Collection::findOne("admin.system.users", BSON("user" << username), user)) {
             txn.commit();
-            return user.copy();
+            return user.getOwned();
         }
         return BSONObj();
     }
@@ -325,7 +312,8 @@ namespace mongo {
 
         virtual void run( stringstream& ss ) {
             Timer t;
-            readlocktry lk( 300 );
+            LOCK_REASON(lockReason, "restapi: getting mongod status");
+            readlocktry lk(300, lockReason);
             if ( lk.got() ) {
                 _gotLock( t.millis() , ss );
             }

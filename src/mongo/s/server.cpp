@@ -202,6 +202,9 @@ namespace mongo {
         if (!cmdLine.gdb) {
             signal(SIGINT, sighandler);
         }
+#if defined(SIGXCPU)
+        signal(SIGXCPU, sighandler);
+#endif
 
 #if defined(SIGQUIT)
         signal( SIGQUIT , printStackAndExit );
@@ -240,6 +243,7 @@ namespace mongo {
         ShardedMessageHandler handler;
         MessageServer * server = createServer( opts , &handler );
         server->setAsTimeTracker();
+        server->setupSockets();
         server->run();
     }
 

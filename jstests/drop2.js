@@ -18,7 +18,7 @@ function op( drop ) {
                 return o.opid;
             }
         } else {
-            if (  o.query && o.query.query && o.query.query.$where && o.ns == "test.jstests_drop2" ) {
+            if (  o.query && o.query.query && o.query.query.$where && o.ns == db.getName() + ".jstests_drop2" ) {
                 return o.opid;
             }
         }

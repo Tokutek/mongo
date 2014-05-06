@@ -51,7 +51,7 @@
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/database.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/storage/exception.h"
 
 namespace mongo {
@@ -148,10 +148,12 @@ namespace mongo {
             );
 
         bool copyCollection(
+            const string& dbname,
             const string& ns , 
             const BSONObj& query , 
             string& errmsg , 
-            bool copyIndexes
+            bool copyIndexes,
+            bool logForRepl
             );
         
         void copyCollectionData(
@@ -225,10 +227,11 @@ namespace mongo {
                 }
                 else {
                     try {
-                        Client::ReadContext ctx(to_collection);
+                        LOCK_REASON(lockReason, "cloner: copying documents into local collection");
+                        Client::ReadContext ctx(to_collection, lockReason);
                         if (_isCapped) {
-                            NamespaceDetails *d = nsdetails(to_collection);
-                            verify(d->isCapped());
+                            Collection *cl = getCollection(to_collection);
+                            verify(cl->isCapped());
                             BSONObj pk = js["$_"].Obj();
                             BSONObjBuilder rowBuilder;                        
                             BSONObjIterator it(js);
@@ -242,7 +245,13 @@ namespace mongo {
                                 }
                             }
                             BSONObj row = rowBuilder.obj();
-                            d->insertObjectIntoCappedWithPK(pk, row, NamespaceDetails::NO_LOCKTREE);
+                            CappedCollection *cappedCl = cl->as<CappedCollection>();
+                            bool indexBitChanged = false;
+                            cappedCl->insertObjectWithPK(pk, row, Collection::NO_LOCKTREE, &indexBitChanged);
+                            // Hack copied from Collection::insertObject. TODO: find a better way to do this                        
+                            if (indexBitChanged) {
+                                cl->noteMultiKeyChanged();
+                            }
                         }
                         else {
                             insertObject(to_collection, js, 0, logForRepl);
@@ -309,7 +318,8 @@ namespace mongo {
         for ( list<BSONObj>::iterator i = storedForLater.begin(); i!=storedForLater.end(); i++ ) {
             BSONObj js = *i;
             try {
-                Client::WriteContext ctx(js.getStringField("ns"));
+                LOCK_REASON(lockReason, "cloner: creating indexes");
+                Client::WriteContext ctx(js.getStringField("ns"), lockReason);
                 insertObject(to_collection, js, 0, logForRepl);
             }
             catch( UserException& e ) {
@@ -355,10 +365,12 @@ namespace mongo {
     }
 
     bool Cloner::copyCollection(
+        const string& dbname,
         const string& ns, 
         const BSONObj& query,
         string& errmsg,
-        bool copyIndexes
+        bool copyIndexes,
+        bool logForRepl
         ) 
     {
         {
@@ -366,19 +378,37 @@ namespace mongo {
             string temp = getSisterNS(cc().database()->name(), "system.namespaces");
             BSONObj config = conn->findOne( temp , BSON( "name" << ns ) );
             if ( config["options"].isABSONObj() ) {
+                BSONObj options = config["options"].Obj();
                 if ( !userCreateNS(
                         ns.c_str(), 
-                        config["options"].Obj(), 
+                        options, 
                         errmsg, 
-                        true // logForRepl
+                        logForRepl
                         ) 
-                    ) 
+                    )
                 {
                     return false;
                 }
+                
+                if (options["partitioned"].trueValue()) {
+                    BSONObj res;
+                    StringData collectionName = nsToCollectionSubstring(ns);
+                    bool ok = conn->runCommand(dbname, BSON("getPartitionInfo" << collectionName), res);
+                    if (!ok) {
+                        errmsg = res["errmsg"].String();
+                        LOG(0) << errmsg << endl;
+                    }
+                    Collection* cl = getCollection(ns);
+                    massert(17309, "Could not get collection we just created", cl);
+                    PartitionedCollection* pc = cl->as<PartitionedCollection>();
+                    if (logForRepl) {
+                        OplogHelpers::logPartitionInfoAfterCreate(ns.c_str(), res["partitions"].Array());
+                    }
+                    pc->addClonedPartitionInfo(res["partitions"].Array());
+                }
             }
         }
-        copyCollectionData(ns, query, copyIndexes, true);
+        copyCollectionData(ns, query, copyIndexes, logForRepl);
         return true;
     }
 
@@ -432,6 +462,7 @@ namespace mongo {
         list<BSONObj> toClone;
         vector<string> toCloneNames;
         clonedColls.clear();
+        BSONArrayBuilder collsToIgnoreBarr;
         if ( opts.syncData ) {
             mayInterrupt( opts.mayBeInterrupted );
 
@@ -480,6 +511,7 @@ namespace mongo {
                     // system.users and s.js is cloned -- but nothing else from system.
                     // * system.indexes is handled specially at the end
                     if( legalClientSystemNS( from_name , true ) == 0 ) {
+                        collsToIgnoreBarr.append(from_name);
                         LOG(2) << "\t\t not cloning because system collection" << endl;
                         continue;
                     }
@@ -525,6 +557,23 @@ namespace mongo {
                 const char *toname = to_name.c_str();
                 userCreateNS(toname, options, err, opts.logForRepl);
             }
+            if (options["partitioned"].trueValue()) {
+                BSONObj res;
+                StringData collectionName = nsToCollectionSubstring(from_name);
+                bool ok = conn->runCommand(opts.fromDB, BSON("getPartitionInfo" << collectionName), res);
+                if (!ok) {
+                    errmsg = res["errmsg"].String();
+                    LOG(0) << errmsg << endl;
+                    return false;
+                }
+                Collection* cl = getCollection(to_name);
+                massert(17310, "Could not get collection we just created", cl);
+                if (opts.logForRepl) {
+                    OplogHelpers::logPartitionInfoAfterCreate(to_name.c_str(), res["partitions"].Array());
+                }
+                PartitionedCollection* pc = cl->as<PartitionedCollection>();
+                pc->addClonedPartitionInfo(res["partitions"].Array());
+            }
             LOG(1) << "\t\t cloning " << from_name << " -> " << to_name << endl;
             Query q;
             copy(
@@ -557,9 +606,8 @@ namespace mongo {
             // is dubious here at the moment.
             
             // build a $nin query filter for the collections we *don't* want
-            BSONArrayBuilder barr;
-            barr.append( opts.collsToIgnore );
-            BSONArray arr = barr.arr();
+            collsToIgnoreBarr.append( opts.collsToIgnore );
+            BSONArray arr = collsToIgnoreBarr.arr();
             
             // Also don't copy the _id_ index
             BSONObj query = BSON("name" << NE << "_id_" << "ns" << NIN << arr);
@@ -628,19 +676,19 @@ namespace mongo {
         }
       private:
         bool checkCollection(const StringData &ns, string &errmsg) {
-            NamespaceDetails *d;
+            Collection *cl;
             try {
-                d = nsdetails(ns);
+                cl = getCollection(ns);
             }
             catch (storage::SystemException::Enoent &e) {
-                d = NULL;
+                cl = NULL;
             }
-            if (d == NULL) {
+            if (cl == NULL) {
                 errmsg = mongoutils::str::stream() << "collection " << ns << " was dropped";
                 return false;
             }
             try {
-                shared_ptr<Cursor> c(BasicCursor::make(d));
+                shared_ptr<Cursor> c(Cursor::make(cl));
             }
             catch (storage::RetryableException::MvccDictionaryTooNew &e) {
                 errmsg = mongoutils::str::stream() << "collection " << ns << " was dropped and re-created";
@@ -680,8 +728,9 @@ namespace mongo {
             );
     }
 
-    void cloneCollectionData(
+    void cloneCollection(
         shared_ptr<DBClientBase> conn,
+        const string& dbname,
         const string& ns, 
         const BSONObj& query,
         bool copyIndexes,
@@ -689,9 +738,12 @@ namespace mongo {
         ) 
     {
         Cloner c(conn);
-        c.copyCollectionData(
+        string errmsg;
+        c.copyCollection(
+            dbname,
             ns,
             query,
+            errmsg,
             copyIndexes,
             logForRepl
             );
@@ -882,15 +934,18 @@ namespace mongo {
             
             RemoteTransaction rtxn(*conn, "mvcc");
 
-            Client::WriteContext ctx(collection);
+            LOCK_REASON(lockReason, "cloner: copying collection");
+            Client::WriteContext ctx(collection, lockReason);
             Client::Transaction txn(DB_SERIALIZABLE);
             
             Cloner c(conn);
             bool retval = c.copyCollection(
+                dbname,
                 collection,
                 query,
                 errmsg,
-                copyIndexes
+                copyIndexes,
+                true
                 );
 
             if (retval) {
@@ -1041,7 +1096,8 @@ namespace mongo {
                     return false;
                 }
 
-                lk.reset(static_cast<Lock::ScopedLock *>(new Lock::DBWrite(todb)));
+                LOCK_REASON(lockReason, "cloner: locking todb");
+                lk.reset(static_cast<Lock::ScopedLock *>(new Lock::DBWrite(todb, lockReason)));
                 conn = cc().authConn();
                 // we are not using a direct client, so we should
                 // create a multi statement transaction for the work
@@ -1055,7 +1111,8 @@ namespace mongo {
             }
             else {
                 {
-                    Client::ReadContext rctx(todb); // this is annoying, checkSelfClone needs cc().database()
+                    LOCK_REASON(lockReason, "cloner: checking for self-clone");
+                    Client::ReadContext rctx(todb, lockReason); // this is annoying, checkSelfClone needs cc().database()
                     // check if the input parameters are asking for a self-clone
                     // if so, gracefully exit
                     if (!checkSelfClone(fromhost.c_str(), fromdb, errmsg)) {
@@ -1065,11 +1122,13 @@ namespace mongo {
 
                 if (masterSameProcess(fromhost.c_str())) {
                     // SERVER-4328 todo lock just the two db's not everything for the fromself case
-                    lk.reset(static_cast<Lock::ScopedLock *>(new Lock::GlobalWrite()));
+                    LOCK_REASON(lockReason, "cloner: locking both dbs for self-clone");
+                    lk.reset(static_cast<Lock::ScopedLock *>(new Lock::GlobalWrite(lockReason)));
                     conn = boost::make_shared<DBDirectClient>();
                 }
                 else {
-                    lk.reset(static_cast<Lock::ScopedLock *>(new Lock::DBWrite(todb)));
+                    LOCK_REASON(lockReason, "cloner: locking todb");
+                    lk.reset(static_cast<Lock::ScopedLock *>(new Lock::DBWrite(todb, lockReason)));
                     conn = makeConnection(fromhost.c_str(), errmsg);
                     if (!conn) {
                         // errmsg should be set

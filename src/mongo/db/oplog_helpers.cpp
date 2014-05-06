@@ -15,17 +15,18 @@
 */
 
 #include "mongo/pch.h"
-#include "oplog_helpers.h"
-#include "txn_context.h"
-#include "repl_block.h"
-#include "stats/counters.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
+#include "mongo/db/oplog_helpers.h"
+#include "mongo/db/txn_context.h"
+#include "mongo/db/repl_block.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/ops/update.h"
+#include "mongo/db/ops/update_internal.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/repl/rs.h"
-
+#include "mongo/db/stats/counters.h"
+#include "mongo/db/relock.h"
 
 // BSON fields for oplog entries
 static const char *KEY_STR_OP_NAME = "op";
@@ -33,13 +34,41 @@ static const char *KEY_STR_NS = "ns";
 static const char *KEY_STR_ROW = "o";
 static const char *KEY_STR_OLD_ROW = "o";
 static const char *KEY_STR_NEW_ROW = "o2";
+static const char *KEY_STR_MODS = "m";
 static const char *KEY_STR_PK = "pk";
 static const char *KEY_STR_COMMENT = "o";
 static const char *KEY_STR_MIGRATE = "fromMigrate";
+static const char *KEY_STR_PARTITIONID = "pid";
+static const char *KEY_STR_CAPPED_PIVOT = "cp";
+static const char *KEY_STR_NEW_PARTITION_INFO = "pi";
+
+// values for types of operations in oplog
+static const char OP_STR_INSERT[] = "i"; // normal insert
+static const char OP_STR_CAPPED_INSERT[] = "ci"; // insert into capped collection
+static const char OP_STR_UPDATE[] = "u"; // normal update with full pre-image and full post-image
+static const char OP_STR_UPDATE_ROW_WITH_MOD[] = "ur"; // update with full pre-image and mods to generate post-image
+static const char OP_STR_DELETE[] = "d"; // delete with full pre-image
+static const char OP_STR_CAPPED_DELETE[] = "cd"; // delete from capped collection
+static const char OP_STR_COMMENT[] = "n"; // a no-op
+static const char OP_STR_COMMAND[] = "c"; // command
+static const char OP_STR_DROP_PARTITION[] = "dp"; // drop partition from partitioned collection
+static const char OP_STR_ADD_PARTITION[] = "ap"; // add partition from partitioned collection
+static const char OP_STR_PARTITION_INFO[] = "pi"; // partition info from partitioned collection, used after create
 
 namespace mongo {
 
-    namespace OpLogHelpers {
+    namespace OplogHelpers {
+        bool shouldLogOpForSharding(const char *opstr) {
+            return mongoutils::str::equals(opstr, OP_STR_INSERT) ||
+                mongoutils::str::equals(opstr, OP_STR_DELETE) ||
+                mongoutils::str::equals(opstr, OP_STR_UPDATE) ||
+                mongoutils::str::equals(opstr, OP_STR_UPDATE_ROW_WITH_MOD);
+        }
+
+        bool invalidOpForSharding(const char *opstr) {
+            return mongoutils::str::equals(opstr, OP_STR_CAPPED_INSERT) ||
+                mongoutils::str::equals(opstr, OP_STR_CAPPED_DELETE);
+        }
 
         static inline void appendOpType(const char *opstr, BSONObjBuilder* b) {
             b->append(KEY_STR_OP_NAME, opstr);
@@ -66,8 +95,9 @@ namespace mongo {
             }
         }
         
-        void logInsert(const char *ns, const BSONObj &row) {
-            bool logForSharding = shouldLogTxnOpForSharding(OP_STR_INSERT, ns, row);
+        void logInsert(const char *ns, const BSONObj &row, bool fromMigrate) {
+            bool logForSharding = !fromMigrate &&
+                                  shouldLogTxnOpForSharding(OP_STR_INSERT, ns, row);
             if (logTxnOpsForReplication() || logForSharding) {
                 BSONObjBuilder b;
                 if (isLocalNs(ns)) {
@@ -102,11 +132,11 @@ namespace mongo {
             }
         }
 
-        void logUpdate(const char *ns, const BSONObj& pk,
-                       const BSONObj& oldRow, const BSONObj& newRow,
+        void logUpdate(const char *ns, const BSONObj &pk,
+                       const BSONObj &oldObj, const BSONObj &newObj,
                        bool fromMigrate) {
             bool logForSharding = !fromMigrate &&
-                shouldLogTxnUpdateOpForSharding(OP_STR_UPDATE, ns, oldRow, newRow);
+                shouldLogTxnUpdateOpForSharding(OP_STR_UPDATE, ns, oldObj);
             if (logTxnOpsForReplication() || logForSharding) {
                 BSONObjBuilder b;
                 if (isLocalNs(ns)) {
@@ -117,8 +147,42 @@ namespace mongo {
                 appendNsStr(ns, &b);
                 appendMigrate(fromMigrate, &b);
                 b.append(KEY_STR_PK, pk);
-                b.append(KEY_STR_OLD_ROW, oldRow);
-                b.append(KEY_STR_NEW_ROW, newRow);
+                b.append(KEY_STR_OLD_ROW, oldObj);
+                // otherwise we just log the full old row and full new row
+                verify(!newObj.isEmpty());
+                b.append(KEY_STR_NEW_ROW, newObj);
+                BSONObj logObj = b.obj();
+                if (logTxnOpsForReplication()) {
+                    cc().txn().logOpForReplication(logObj);
+                }
+                if (logForSharding) {
+                    cc().txn().logOpForSharding(logObj);
+                }
+            }
+        }
+
+        void logUpdateModsWithRow(
+            const char *ns,
+            const BSONObj &pk,
+            const BSONObj &oldObj,
+            const BSONObj &updateobj,
+            bool fromMigrate
+            ) 
+        {
+            bool logForSharding = !fromMigrate &&
+                shouldLogTxnUpdateOpForSharding(OP_STR_UPDATE, ns, oldObj);
+            if (logTxnOpsForReplication() || logForSharding) {
+                BSONObjBuilder b;
+                if (isLocalNs(ns)) {
+                    return;
+                }
+
+                appendOpType(OP_STR_UPDATE_ROW_WITH_MOD, &b);
+                appendNsStr(ns, &b);
+                appendMigrate(fromMigrate, &b);
+                b.append(KEY_STR_PK, pk);
+                b.append(KEY_STR_OLD_ROW, oldObj);
+                b.append(KEY_STR_MODS, updateobj);
                 BSONObj logObj = b.obj();
                 if (logTxnOpsForReplication()) {
                     cc().txn().logOpForReplication(logObj);
@@ -183,13 +247,68 @@ namespace mongo {
             }
         }
 
+        void logUnsupportedOperation(const char *ns) {
+            if (logTxnOpsForReplication()) {
+                if (isLocalNs(ns)) {
+                    return;
+                }
+                uasserted(17293, "The operation is not supported for replication");
+            }
+        }
+        
+        void logDropPartition(const char *ns, uint64_t partitionID) {
+            if (logTxnOpsForReplication()) {
+                BSONObjBuilder b;
+                if (isLocalNs(ns)) {
+                    return;
+                }
+                appendOpType(OP_STR_DROP_PARTITION, &b);
+                appendNsStr(ns, &b);
+                b.append(KEY_STR_PARTITIONID, partitionID);
+                cc().txn().logOpForReplication(b.obj());
+            }
+        }
+        
+        void logAddPartition(const char *ns, const BSONObj &cappedPivot, const BSONObj &newPartitionInfo) {
+            if (logTxnOpsForReplication()) {
+                BSONObjBuilder b;
+                if (isLocalNs(ns)) {
+                    return;
+                }
+                appendOpType(OP_STR_ADD_PARTITION, &b);
+                appendNsStr(ns, &b);
+                b.append(KEY_STR_CAPPED_PIVOT, cappedPivot);
+                b.append(KEY_STR_NEW_PARTITION_INFO, newPartitionInfo);
+                cc().txn().logOpForReplication(b.obj());
+            }
+        }
+
+        void logPartitionInfoAfterCreate(const char *ns, const vector<BSONElement> &partitionInfo) {
+            if (logTxnOpsForReplication()) {
+                BSONObjBuilder b;
+                BSONArrayBuilder arrayBuilder;
+                if (isLocalNs(ns)) {
+                    return;
+                }
+                appendOpType(OP_STR_PARTITION_INFO, &b);
+                appendNsStr(ns, &b);
+                for (vector<BSONElement>::const_iterator it = partitionInfo.begin(); it != partitionInfo.end(); it++) {
+                    BSONObj curr = it->Obj();
+                    arrayBuilder.append(curr);
+                }
+                b.append(KEY_STR_ROW, arrayBuilder.arr());
+                cc().txn().logOpForReplication(b.obj());
+            }
+        }
+
         static void runColdIndexFromOplog(const char *ns, const BSONObj &row) {
-            Client::WriteContext ctx(ns);
-            NamespaceDetails* nsd = nsdetails(ns);
+            LOCK_REASON(lockReason, "repl: cold index build");
+            Client::WriteContext ctx(ns, lockReason);
+            Collection *sysCl = getCollection(ns);
             const string &coll = row["ns"].String();
 
-            NamespaceDetails* collNsd = nsdetails(coll);
-            const bool ok = collNsd->ensureIndex(row);
+            Collection *cl = getCollection(coll);
+            const bool ok = cl->ensureIndex(row);
             if (!ok) {
                 // the index already exists, so this is a no-op
                 // Note that for create index and drop index, we
@@ -198,7 +317,7 @@ namespace mongo {
                 return;
             }
             BSONObj obj = row;
-            insertOneObject(nsd, obj, NamespaceDetails::NO_UNIQUE_CHECKS);
+            insertOneObject(sysCl, obj, Collection::NO_UNIQUE_CHECKS);
         }
 
         static void runHotIndexFromOplog(const char *ns, const BSONObj &row) {
@@ -206,16 +325,17 @@ namespace mongo {
             // the indexer destructor gets called in a write locked.
             // These MUST NOT be reordered, the context must destruct
             // after the indexer.
-            scoped_ptr<Lock::DBWrite> lk(new Lock::DBWrite(ns));
-            scoped_ptr<NamespaceDetails::HotIndexer> indexer;
+            LOCK_REASON(lockReason, "repl: hot index build");
+            scoped_ptr<Lock::DBWrite> lk(new Lock::DBWrite(ns, lockReason));
+            shared_ptr<CollectionIndexer> indexer;
+            const string &coll = row["ns"].String();
 
             {
                 Client::Context ctx(ns);
-                NamespaceDetails* nsd = nsdetails(ns);
+                Collection *sysCl = getCollection(ns);
 
-                const string &coll = row["ns"].String();
-                NamespaceDetails* collNsd = nsdetails(coll);
-                if (collNsd->findIndexByKeyPattern(row["key"].Obj()) >= 0) {
+                Collection *cl = getCollection(coll);
+                if (cl->findIndexByKeyPattern(row["key"].Obj()) >= 0) {
                     // the index already exists, so this is a no-op
                     // Note that for create index and drop index, we
                     // are tolerant of the fact that the operation may
@@ -223,9 +343,10 @@ namespace mongo {
                     return;
                 }
                 BSONObj obj = row;
-                insertOneObject(nsd, obj, NamespaceDetails::NO_UNIQUE_CHECKS);
-                indexer.reset(new NamespaceDetails::HotIndexer(collNsd, row));
+                insertOneObject(sysCl, obj, Collection::NO_UNIQUE_CHECKS);
+                indexer = cl->newHotIndexer(row);
                 indexer->prepare();
+                addToNamespacesCatalog(IndexDetails::indexNamespace(coll, row["name"].String()));
             }
 
             {
@@ -237,7 +358,23 @@ namespace mongo {
             {
                 Client::Context ctx(ns);
                 indexer->commit();
+                Collection *cl = getCollection(coll);
+                verify(cl);
+                cl->noteIndexBuilt();
             }
+        }
+
+        static void runNonSystemInsertFromOplogWithLock(
+            const char *ns, 
+            const BSONObj &row
+            )
+        {
+            Collection *cl = getCollection(ns);
+            
+            // overwrite set to true because we are running on a secondary
+            const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
+            BSONObj obj = row;
+            insertOneObject(cl, obj, flags);
         }
 
         static void runInsertFromOplog(const char *ns, const BSONObj &op) {
@@ -254,56 +391,124 @@ namespace mongo {
                 }
             }
             else {
-                Client::ReadContext ctx(ns);
-                NamespaceDetails* nsd = nsdetails(ns);
-
-                // overwrite set to true because we are running on a secondary
-                uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);        
-                BSONObj obj = row;
-                insertOneObject(nsd, obj, flags);
+                try {
+                    LOCK_REASON(lockReason, "repl: applying insert");
+                    Client::ReadContext ctx(ns, lockReason);
+                    runNonSystemInsertFromOplogWithLock(ns, row);
+                }
+                catch (RetryWithWriteLock &e) {
+                    LOCK_REASON(lockReason, "repl: applying insert with write lock");
+                    Client::WriteContext ctx(ns, lockReason);
+                    runNonSystemInsertFromOplogWithLock(ns, row);
+                }
             }
+        }
+
+        static void runCappedInsertFromOplogWithLock(
+            const char* ns,
+            const BSONObj& pk,
+            const BSONObj& row
+            )
+        {
+            Collection *cl = getCollection(ns);
+
+            verify(cl->isCapped());
+            CappedCollection *cappedCl = cl->as<CappedCollection>();
+            // overwrite set to true because we are running on a secondary
+            bool indexBitChanged = false;
+            const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
+            cappedCl->insertObjectWithPK(pk, row, flags, &indexBitChanged);
+            // Hack copied from Collection::insertObject. TODO: find a better way to do this                        
+            if (indexBitChanged) {
+                cl->noteMultiKeyChanged();
+            }
+            cl->notifyOfWriteOp();
         }
 
         static void runCappedInsertFromOplog(const char *ns, const BSONObj &op) {
             const BSONObj pk = op[KEY_STR_PK].Obj();
             const BSONObj row = op[KEY_STR_ROW].Obj();
+            try {
+                LOCK_REASON(lockReason, "repl: applying capped insert");
+                Client::ReadContext ctx(ns, lockReason);
+                runCappedInsertFromOplogWithLock(ns, pk, row);
+            }
+            catch (RetryWithWriteLock &e) {
+                LOCK_REASON(lockReason, "repl: applying capped insert with write lock");
+                Client::WriteContext ctx(ns, lockReason);
+                runCappedInsertFromOplogWithLock(ns, pk, row);
+            }
+        }
 
-            Client::ReadContext ctx(ns);
-            NamespaceDetails *nsd = nsdetails(ns);
+        static void runRowDelete(const BSONObj& row, Collection* cl) {
+            const BSONObj pk = cl->getValidatedPKFromObject(row);
+            const uint64_t flags = Collection::NO_LOCKTREE;
+            deleteOneObject(cl, pk, row, flags);
+        }
 
-            // overwrite set to true because we are running on a secondary
-            const uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);        
-            BSONObj obj = row;
-            nsd->insertObjectIntoCappedWithPK(pk, obj, flags);
-            nsd->notifyOfWriteOp();
+        static void runDeleteFromOplogWithLock(const char *ns, const BSONObj &op) {
+            Collection *cl = getCollection(ns);
+
+            const BSONObj row = op[KEY_STR_ROW].Obj();
+            // Use "validated" version for paranoia, which checks for bad types like regex
+            runRowDelete(row, cl);
         }
 
         static void runDeleteFromOplog(const char *ns, const BSONObj &op) {
-            Client::ReadContext ctx(ns);
-            NamespaceDetails* nsd = nsdetails(ns);
-
-            const BSONObj row = op[KEY_STR_ROW].Obj();
-            const BSONObj pk = row["_id"].wrap("");
-            uint64_t flags = NamespaceDetails::NO_LOCKTREE;
-            deleteOneObject(nsd, pk, row, flags);
+            LOCK_REASON(lockReason, "repl: applying delete");
+            Client::ReadContext ctx(ns, lockReason);
+            runDeleteFromOplogWithLock(ns, op);
         }
         
         static void runCappedDeleteFromOplog(const char *ns, const BSONObj &op) {
-            Client::ReadContext ctx(ns);
-            NamespaceDetails* nsd = nsdetails(ns);
+            LOCK_REASON(lockReason, "repl: applying capped delete");
+            Client::ReadContext ctx(ns, lockReason);
+            Collection *cl = getCollection(ns);
 
             const BSONObj row = op[KEY_STR_ROW].Obj();
             const BSONObj pk = op[KEY_STR_PK].Obj();
 
-            uint64_t flags = NamespaceDetails::NO_LOCKTREE;
-            nsd->deleteObjectFromCappedWithPK(pk, row, flags);
-            nsd->notifyOfWriteOp();
+            verify(cl->isCapped());
+            CappedCollection *cappedCl = cl->as<CappedCollection>();
+            const uint64_t flags = Collection::NO_LOCKTREE;
+            cappedCl->deleteObjectWithPK(pk, row, flags);
+            cl->notifyOfWriteOp();
+        }
+
+        static void runUpdateFromOplogWithLock(
+            const char* ns,
+            const BSONObj &pk,
+            const BSONObj &oldObj,
+            BSONObj newObj,
+            bool isRollback
+            )
+        {
+            Collection *cl = getCollection(ns);
+
+            uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
+            if (isRollback) {
+                if (cl->isPKHidden()) {
+                    // if this is a rollback, then the newObj is what is in the
+                    // collections, that we want to replace with oldObj
+                    // with a hidden PK, we know the PK cannot change
+                    BSONObj oldObjCopy = oldObj.copy(); // to get around constness, it's rollback, so we don't care about memcpy
+                    updateOneObject(cl, pk, newObj, oldObjCopy, BSONObj(), false, flags);
+                }
+                else {
+                    // the pk is not hidden, so it may change
+                    // even though this is inefficient, just do a delete followed by an insert
+                    LOG(6) << "update rollback: running delete and insert on " << oldObj << " " << newObj << rsLog;
+                    runRowDelete(newObj, cl);
+                    runNonSystemInsertFromOplogWithLock(ns, oldObj);
+                }
+            }
+            else {
+                // normal replication case
+                updateOneObject(cl, pk, oldObj, newObj, BSONObj(), false, flags);
+            }
         }
 
         static void runUpdateFromOplog(const char *ns, const BSONObj &op, bool isRollback) {
-            Client::ReadContext ctx(ns);
-            NamespaceDetails* nsd = nsdetails(ns);
-
             const char *names[] = {
                 KEY_STR_PK,
                 KEY_STR_OLD_ROW, 
@@ -311,22 +516,88 @@ namespace mongo {
                 };
             BSONElement fields[3];
             op.getFields(3, names, fields);
-            const BSONObj pk = fields[0].Obj();
-            const BSONObj oldRow = fields[1].Obj();
-            const BSONObj newRow = fields[2].Obj();
-            // note the only difference between these two cases is
-            // what is passed as the before image, and what is passed
-            // as after. In normal replication, we replace oldRow with newRow.
-            // In rollback, we replace newRow with oldRow
-            uint64_t flags = (NamespaceDetails::NO_UNIQUE_CHECKS | NamespaceDetails::NO_LOCKTREE);        
+            const BSONObj pk = fields[0].Obj();     // must exist
+            const BSONObj oldObj = fields[1].Obj(); // must exist
+            const BSONObj newObj = fields[2].Obj(); // must exist
+            // must be given at least one of the new object or an update obj
+            verify(!newObj.isEmpty());
+
+            try {
+                LOCK_REASON(lockReason, "repl: applying update");
+                Client::ReadContext ctx(ns, lockReason);
+                runUpdateFromOplogWithLock(ns, pk, oldObj, newObj, isRollback);
+            }
+            catch (RetryWithWriteLock &e) {
+                LOCK_REASON(lockReason, "repl: applying update with write lock");
+                Client::WriteContext ctx(ns, lockReason);
+                runUpdateFromOplogWithLock(ns, pk, oldObj, newObj, isRollback);
+            }
+        }
+
+        static void runUpdateModsWithRowWithLock(
+            const char* ns,
+            const BSONObj &pk,
+            const BSONObj &oldObj,
+            const BSONObj &updateobj,
+            bool isRollback
+            )
+        {
+            Collection *cl = getCollection(ns);
+            scoped_ptr<ModSet> mods(new ModSet(updateobj, cl->indexKeys()));
+            auto_ptr<ModSetState> mss = mods->prepare(oldObj);
+            BSONObj newObj = mss->createNewFromMods();
+            // Make sure we pass the best hint in the case of an unindexed update
+
             if (isRollback) {
-                // if this is a rollback, then the newRow is what is in the
-                // collections, that we want to replace with oldRow
-                updateOneObject(nsd, pk, newRow, oldRow, LogOpUpdateDetails(), flags);
+                // we've generated the newObj and the oldObj, reuse code.
+                // This code is correct for both cases, but we only run it in this
+                // case because it is more inefficient.  It never uses
+                // the updateUsingMods path
+                runUpdateFromOplogWithLock(
+                    ns,
+                    pk,
+                    oldObj,
+                    newObj,
+                    isRollback
+                    );
             }
             else {
+                uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
+                if (mods->isIndexed() <= 0) {
+                    flags |= Collection::KEYS_UNAFFECTED_HINT;
+                }
                 // normal replication case
-                updateOneObject(nsd, pk, oldRow, newRow, LogOpUpdateDetails(), flags);
+                // optimization for later: if we know we are using
+                // the updateUsingMods path in updateOneObject,
+                // then we have constructed newObj unnecessarily
+                updateOneObject(cl, pk, oldObj, newObj, updateobj, false, flags);
+            }
+        }
+
+        static void runUpdateModsWithRowFromOplog(const char *ns, const BSONObj &op, bool isRollback) {
+            const char *names[] = {
+                KEY_STR_PK,
+                KEY_STR_OLD_ROW,
+                KEY_STR_MODS
+                };
+            BSONElement fields[3];
+            op.getFields(3, names, fields);
+            const BSONObj pk = fields[0].Obj();     // must exist
+            const BSONObj oldObj = fields[1].Obj(); // must exist
+            const BSONObj updateobj = fields[2].Obj(); // must exist
+            // must be given at least one of the new object or an update obj
+            verify(!updateobj.isEmpty());
+
+            // We have an update obj and we need to create the new obj
+            try {
+                LOCK_REASON(lockReason, "repl: applying update");
+                Client::ReadContext ctx(ns, lockReason);
+                runUpdateModsWithRowWithLock(ns, pk, oldObj, updateobj, isRollback);
+            }
+            catch (RetryWithWriteLock &e) {
+                LOCK_REASON(lockReason, "repl: applying update with write lock");
+                Client::WriteContext ctx(ns, lockReason);
+                runUpdateModsWithRowWithLock(ns, pk, oldObj, updateobj, isRollback);
             }
         }
 
@@ -336,13 +607,63 @@ namespace mongo {
 
             // Locking and context are handled in _runCommands
             const BSONObj command = op[KEY_STR_ROW].embeddedObject();
-            _runCommands(ns, command, bb, ob, true, 0);
+            bool ret = _runCommands(ns, command, bb, ob, true, 0);
+            massert(17220, str::stream() << "Command " << op.str() << " failed under runCommandFromOplog: " << ob.done(), ret);
         }
 
         static void rollbackCommandFromOplog(const char *ns, const BSONObj &op) {
             BSONObj command = op[KEY_STR_ROW].embeddedObject();
             log() << "Cannot rollback command " << op << rsLog;
             throw RollbackOplogException(str::stream() << "Could not rollback command " << command << " on ns " << ns);
+        }
+
+        static void runDropPartitionFromOplog(const char *ns, const BSONObj &op) {
+            LOCK_REASON(lockReason, "repl: drop partition");
+            Client::WriteContext ctx(ns, lockReason);
+            Collection *cl = getCollection(ns);
+            verify(cl->isPartitioned());
+            PartitionedCollection* pc = cl->as<PartitionedCollection>();
+            uint64_t id = op[KEY_STR_PARTITIONID].numberLong();
+            pc->dropPartition(id);
+        }
+
+        static void rollbackDropPartitionFromOplog(const char *ns, const BSONObj &op) {
+            throw RollbackOplogException(str::stream() << "Could not rollback drop partition" << op << " on ns " << ns);
+        }
+
+        static void runAddPartitionFromOplog(const char *ns, const BSONObj &op) {
+            LOCK_REASON(lockReason, "repl: add partition");
+            Client::WriteContext ctx(ns, lockReason);
+            Collection *cl = getCollection(ns);
+            verify(cl->isPartitioned());
+            PartitionedCollection* pc = cl->as<PartitionedCollection>();
+            const BSONObj &newPivot = op[KEY_STR_CAPPED_PIVOT].Obj();
+            const BSONObj &partitionInfo = op[KEY_STR_NEW_PARTITION_INFO].Obj();
+            pc->addPartitionFromOplog(newPivot, partitionInfo);
+        }
+
+        static void rollbackAddPartitionFromOplog(const char *ns, const BSONObj &op) {
+            LOCK_REASON(lockReason, "repl: rollback add partition");
+            Client::WriteContext ctx(ns, lockReason);
+            Collection *cl = getCollection(ns);
+            verify(cl->isPartitioned());
+            PartitionedCollection* pc = cl->as<PartitionedCollection>();
+            const BSONObj &partitionInfo = op[KEY_STR_NEW_PARTITION_INFO].Obj();
+            uint64_t id = partitionInfo["_id"].numberLong();
+            pc->dropPartition(id);
+        }
+
+        static void runPartitionInfoAfterCreate(const char *ns, const BSONObj &op) {
+            LOCK_REASON(lockReason, "repl: setting partition info after create");
+            Client::WriteContext ctx(ns, lockReason);
+            Collection *cl = getCollection(ns);
+            verify(cl->isPartitioned());
+            PartitionedCollection* pc = cl->as<PartitionedCollection>();
+            pc->addClonedPartitionInfo(op[KEY_STR_ROW].Array());
+        }
+
+        static void rollbackPartitionInfoAfterCreate(const char* ns, const BSONObj &op) {
+            throw RollbackOplogException(str::stream() << "Could not rollback partition info op " << op << " on ns " << ns);
         }
         
         void applyOperationFromOplog(const BSONObj& op) {
@@ -364,6 +685,10 @@ namespace mongo {
                 opCounters->gotUpdate();
                 runUpdateFromOplog(ns, op, false);
             }
+            else if (strcmp(opType, OP_STR_UPDATE_ROW_WITH_MOD) == 0) {
+                opCounters->gotUpdate();
+                runUpdateModsWithRowFromOplog(ns, op, false);
+            }
             else if (strcmp(opType, OP_STR_DELETE) == 0) {
                 opCounters->gotDelete();
                 runDeleteFromOplog(ns, op);
@@ -382,6 +707,15 @@ namespace mongo {
             else if (strcmp(opType, OP_STR_CAPPED_DELETE) == 0) {
                 opCounters->gotDelete();
                 runCappedDeleteFromOplog(ns, op);
+            }
+            else if (strcmp(opType, OP_STR_DROP_PARTITION) == 0) {
+                runDropPartitionFromOplog(ns, op);
+            }
+            else if (strcmp(opType, OP_STR_ADD_PARTITION) == 0) {
+                runAddPartitionFromOplog(ns, op);
+            }
+            else if (strcmp(opType, OP_STR_PARTITION_INFO) == 0) {
+                runPartitionInfoAfterCreate(ns, op);
             }
             else {
                 throw MsgAssertionException( 14825 , ErrorMsg("error in applyOperation : unknown opType ", *opType) );
@@ -415,6 +749,9 @@ namespace mongo {
             else if (strcmp(opType, OP_STR_UPDATE) == 0) {
                 runUpdateFromOplog(ns, op, true);
             }
+            else if (strcmp(opType, OP_STR_UPDATE_ROW_WITH_MOD) == 0) {
+                runUpdateModsWithRowFromOplog(ns, op, true);
+            }
             else if (strcmp(opType, OP_STR_DELETE) == 0) {
                 // the rollback of a delete is to do the insert
                 runInsertFromOplog(ns, op);
@@ -431,11 +768,20 @@ namespace mongo {
             else if (strcmp(opType, OP_STR_CAPPED_DELETE) == 0) {
                 runCappedInsertFromOplog(ns, op);
             }
+            else if (strcmp(opType, OP_STR_DROP_PARTITION) == 0) {
+                rollbackDropPartitionFromOplog(ns, op);
+            }
+            else if (strcmp(opType, OP_STR_ADD_PARTITION) == 0) {
+                rollbackAddPartitionFromOplog(ns, op);
+            }
+            else if (strcmp(opType, OP_STR_PARTITION_INFO) == 0) {
+                rollbackPartitionInfoAfterCreate(ns, op);
+            }
             else {
                 throw MsgAssertionException( 16795 , ErrorMsg("error in applyOperation : unknown opType ", *opType) );
             }
         }
 
-    } // namespace OpLogHelpers
+    } // namespace OplogHelpers
 
 } // namespace mongo

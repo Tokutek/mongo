@@ -49,6 +49,7 @@
 #include "mongo/db/gtid.h"
 #include "mongo/db/txn_context.h"
 #include "mongo/db/opsettings.h"
+#include "mongo/s/d_logic.h"
 #include "mongo/util/paths.h"
 #include "mongo/util/concurrency/threadlocal.h"
 #include "mongo/util/concurrency/rwlock.h"
@@ -131,6 +132,51 @@ namespace mongo {
 
         LockState& lockState() { return _ls; }
 
+        class QuerySettings {
+        public:
+            QuerySettings(BSONObj query = BSONObj(), bool sortRequired = true) : 
+                _query(query.getOwned()), _sortRequired(sortRequired)
+            {
+            }
+            const BSONObj& getQuery() const {
+                return _query;
+            }
+            const bool& sortRequired() const {
+                return _sortRequired;
+            }
+        private:
+            BSONObj _query;
+            bool _sortRequired;
+        };
+
+        /**
+         * Creates a scope for the current thread inside of which it is possible to check whether a
+         * message should be handled by the writeback mechanism, and inside of which it is safe to
+         * do write operations without racing with sharding metadata changes.
+         */
+        class ShardedOperationScope : public boost::noncopyable {
+            Client &_c;
+            bool _recursive;
+            void assertStillHasScope() const {
+                massert(17221, "not inside a ShardedOperationScope anymore", _c._scp);
+            }
+          public:
+            ShardedOperationScope();
+            ~ShardedOperationScope();
+            void checkPossiblyShardedMessage(int op, const string &ns) const {
+                assertStillHasScope();
+                _c._scp->checkPossiblyShardedMessage(op, ns);
+            }
+            bool handlePossibleShardedMessage(Message &m, DbResponse *dbresponse) const {
+                assertStillHasScope();
+                return _c._scp->handlePossibleShardedMessage(m, dbresponse);
+            }
+        };
+
+        void leaveShardedOperationScope() {
+            _scp.reset();
+        }
+
         /**
          * A stack of transactions, with parent/child relationships.
          * There is zero or one of these per Client.
@@ -203,6 +249,13 @@ namespace mongo {
             return _transactions->hasLiveTxn();
         }
 
+        bool hasMultTxns() const {
+            if (!_transactions) {
+                return false;
+            }
+            return _transactions->numLiveTxns() > 1;
+        }
+
         long long rootTransactionId() const {
             return _rootTransactionId;
         }
@@ -254,6 +307,26 @@ namespace mongo {
             _opSettings = settings;
         }
 
+        QuerySettings querySettings() const {
+            return _querySettings;
+        }
+
+        void setQuerySettings(const QuerySettings& querySettings) {
+            _querySettings = querySettings;
+        }
+
+        void clearQuerySettings() {
+            QuerySettings settings;
+            _querySettings = settings;
+        }
+
+        void setGloballyUninterruptible(bool val) {
+            _globallyUninterruptible = val;
+        }
+        bool globallyUninterruptible() {
+            return _globallyUninterruptible;
+        }
+
         /**
          * Swap out the transaction stack to another location.
          * This breaks the relationship with any Client::Transaction objects, which is useful for getMore() and one day multi-statement transactions.
@@ -301,7 +374,7 @@ namespace mongo {
         /** @return true if a load is in progress. */
         bool loadInProgress() const;
 
-        // HACK we need this until upserts go through the NamespaceDetails class
+        // HACK we need this until upserts go through the Collection class
         //      and can prevent writes on a bulk loaded collection automatically.
         string bulkLoadNS() const { return _loadInfo ? _loadInfo->bulkLoadNS() : ""; }
 
@@ -312,6 +385,7 @@ namespace mongo {
         string _threadId; // "" on non support systems
         CurOp * _curOp;
         Context * _context;
+        scoped_ptr<ShardingState::ShardedOperationScope> _scp;
         long long _rootTransactionId;
         shared_ptr<TransactionStack> _transactions;
         shared_ptr<LoadInfo> _loadInfo; // the txn and ns currently under-going bulk load by this client
@@ -320,10 +394,16 @@ namespace mongo {
         bool _god;
         StringData _creatingSystemUsers;
         bool _upgradingSystemUsers;
+        bool _upgradingDiskFormatVersion;
         GTID _lastGTID;
         BSONObj _handshake;
         BSONObj _remoteId;
         OpSettings _opSettings;
+        QuerySettings _querySettings;
+        // if true, this client cannot be uninterrupted by global events,
+        // and _checkForInterrupt will return false even if we are globally
+        // killed
+        bool _globallyUninterruptible;
 
         // for CmdCopyDb and CmdCopyDbGetNonce
         shared_ptr< DBClientConnection > _authConn;
@@ -343,7 +423,7 @@ namespace mongo {
         bool creatingSystemUsers() const;
 
         /* declare that we're upgrading system.users
-           therefore we should look for mismatched namespaceindex objects and handle them properly
+           therefore we should look for mismatched collectionMap objects and handle them properly
            this allows us to repair #672 properly */
         class UpgradingSystemUsersScope : boost::noncopyable {
           public:
@@ -351,6 +431,15 @@ namespace mongo {
             ~UpgradingSystemUsersScope();
         };
         bool upgradingSystemUsers() const { return _upgradingSystemUsers; }
+
+        /* declare that we're upgrading the disk format version
+           therefore we should have permission to create an index (the _id index) on local.system.version */
+        class UpgradingDiskFormatVersionScope : boost::noncopyable {
+          public:
+            UpgradingDiskFormatVersionScope();
+            ~UpgradingDiskFormatVersionScope();
+        };
+        bool upgradingDiskFormatVersion() const { return _upgradingDiskFormatVersion; }
 
         /* set _god=true temporarily, safely */
         class GodScope {
@@ -416,7 +505,7 @@ namespace mongo {
          */
         class ReadContext : boost::noncopyable { 
         public:
-            ReadContext(const StringData &ns, const StringData &path=dbpath);
+            ReadContext(const StringData &ns, const string &context);
             Context& ctx() { return _c; }
         private:
             Lock::DBRead _lk;
@@ -425,7 +514,7 @@ namespace mongo {
 
         class WriteContext : boost::noncopyable {
         public:
-            WriteContext(const StringData &ns, const StringData &path=dbpath);
+            WriteContext(const StringData &ns, const string &context);
             Context& ctx() { return _c; }
         private:
             Lock::DBWrite _lk;
@@ -439,6 +528,20 @@ namespace mongo {
         Client * c = currentClient.get();
         verify( c );
         return *c;
+    }
+
+    inline Client::ShardedOperationScope::ShardedOperationScope() : _c(cc()), _recursive(false) {
+        if (_c._scp) {
+            _recursive = true;
+        } else {
+            _c._scp.reset(new ShardingState::ShardedOperationScope);
+        }
+    }
+
+    inline Client::ShardedOperationScope::~ShardedOperationScope() {
+        if (!_recursive) {
+            _c._scp.reset();
+        }
     }
 
     inline Client::WithTxnStack::WithTxnStack(shared_ptr<Client::TransactionStack> &stack) : _stack(stack), _released(false) {
@@ -459,4 +562,14 @@ namespace mongo {
 
     inline bool haveClient() { return currentClient.get() > 0; }
 
+    struct QuerySettingsHolder {
+        QuerySettingsHolder(BSONObj query, BSONObj sort) {
+            const Client::QuerySettings settings(query, !sort.isEmpty());
+            cc().setQuerySettings(settings);
+        }
+
+        ~QuerySettingsHolder() {
+            cc().clearQuerySettings();
+        }
+    };
 };

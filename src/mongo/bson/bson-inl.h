@@ -32,6 +32,29 @@
 
 namespace mongo {
 
+    inline void addGTIDToBSON(const char* keyName, GTID gtid, BSONObjBuilder& result) {
+        result.append(keyName, gtid);
+    }
+
+    inline GTID getGTIDFromBSON(const char* keyName, const BSONObj& obj) {
+        int len;
+        GTID ret(obj[keyName].binData(len));
+        dassert((uint32_t)len == GTID::GTIDBinarySize());
+        return ret;
+    }
+
+    inline bool isValidGTID(BSONElement e) {
+        if (e.type() != mongo::BinData) {
+            return false;
+        }
+        int len;
+        e.binData(len);
+        if ((uint32_t)len != GTID::GTIDBinarySize()) {
+            return false;
+        }
+        return true;
+    }
+
     /* must be same type when called, unless both sides are #s 
        this large function is in header to facilitate inline-only use of bson
     */
@@ -1063,6 +1086,23 @@ dodouble:
         return true;
     }
 
+    template<> inline bool BSONElement::coerce<long long>( long long* out ) const {
+        if ( !isNumber() )
+            return false;
+        *out = numberLong();
+        return true;
+    }
+
+    template<> inline bool BSONElement::coerce<unsigned long long>( unsigned long long* out ) const {
+        if ( !isNumber() )
+            return false;
+        if ( numberLong() < 0) {
+            return false;
+        }
+        *out = static_cast<unsigned long long>(numberLong());
+        return true;
+    }
+
     template<typename T> inline bool BSONElement::coerce( BytesQuantity<T>* out ) const {
         T val;
         if (type() == mongo::String) {
@@ -1094,5 +1134,66 @@ dodouble:
         return Obj().coerceVector<std::string>( out );
     }
 
+    inline void cloneBSONWithFieldChanged(BSONObjBuilder &b, const BSONObj &orig, const BSONElement &newElement, bool appendIfMissing = true) {
+        StringData fieldName = newElement.fieldName();
+        bool replaced = false;
+        for (BSONObjIterator it(orig); it.more(); it.next()) {
+            BSONElement e = *it;
+            if (fieldName == e.fieldName()) {
+                b.append(newElement);
+                replaced = true;
+            } else {
+                b.append(e);
+            }
+        }
+        if (!replaced && appendIfMissing) {
+            b.append(newElement);
+        }
+    }
+
+    inline BSONObj cloneBSONWithFieldChanged(const BSONObj &orig, const BSONElement &newElement, bool appendIfMissing = true) {
+        BSONObjBuilder b(orig.objsize());
+        cloneBSONWithFieldChanged(b, orig, newElement, appendIfMissing);
+        return b.obj();
+    }
+
+    template<typename T>
+    void cloneBSONWithFieldChanged(BSONObjBuilder &b, const BSONObj &orig, const StringData &fieldName, const T &newValue, bool appendIfMissing = true) {
+        bool replaced = false;
+        for (BSONObjIterator it(orig); it.more(); it.next()) {
+            BSONElement e = *it;
+            if (fieldName == e.fieldName()) {
+                b.append(fieldName, newValue);
+                replaced = true;
+            } else {
+                b.append(e);
+            }
+        }
+        if (!replaced && appendIfMissing) {
+            b.append(fieldName, newValue);
+        }
+    }
+
+    template<typename T>
+    BSONObj cloneBSONWithFieldChanged(const BSONObj &orig, const StringData &fieldName, const T &newValue, bool appendIfMissing = true) {
+        BSONObjBuilder b(orig.objsize());
+        cloneBSONWithFieldChanged(b, orig, fieldName, newValue, appendIfMissing);
+        return b.obj();
+    }
+
+    inline void cloneBSONWithFieldStripped(BSONObjBuilder &b, const BSONObj &orig, const StringData &fieldName) {
+        for (BSONObjIterator it(orig); it.more(); it.next()) {
+            BSONElement e = *it;
+            if (fieldName != e.fieldName()) {
+                b.append(e);
+            }
+        }
+    }
+
+    inline BSONObj cloneBSONWithFieldStripped(const BSONObj &orig, const StringData &fieldName) {
+        BSONObjBuilder b(orig.objsize());
+        cloneBSONWithFieldStripped(b, orig, fieldName);
+        return b.obj();
+    }
 
 }

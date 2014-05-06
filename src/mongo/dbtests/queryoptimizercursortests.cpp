@@ -42,22 +42,27 @@ namespace mongo {
 } // namespace mongo
 
 namespace QueryOptimizerCursorTests {
+
+    using boost::shared_ptr;
     
     void dropCollection( const char *ns ) {
      	string errmsg;
         BSONObjBuilder result;
-        dropCollection( ns, errmsg, result );
+        Collection *d = getCollection(ns);
+        if (d != NULL) {
+            d->drop(errmsg, result);
+        }
     }
 
     void ensureIndex(const char *ns, BSONObj keyPattern, bool unique, const char *name) {
-        NamespaceDetails *d = nsdetails(ns);
+        Collection *d = getCollection(ns);
         if( d == 0 )
             return;
 
         {
-            NamespaceDetails::IndexIterator i = d->ii();
-            while( i.more() ) {
-                if( i.next().keyPattern().woCompare(keyPattern) == 0 )
+            for (int i = 0; i < d->nIndexes(); i++) {
+                IndexDetails &ii = d->idx(i);
+                if( ii.keyPattern().woCompare(keyPattern) == 0 )
                     return;
             }
         }
@@ -229,7 +234,7 @@ namespace QueryOptimizerCursorTests {
     public:
         Base() {
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             string err;
             userCreateNS( ns(), BSONObj(), err, false );
@@ -279,7 +284,7 @@ namespace QueryOptimizerCursorTests {
         }
         BSONObj cachedIndexForQuery( const BSONObj &query, const BSONObj &order = BSONObj() ) {
             QueryPattern queryPattern = FieldRangeSet( ns(), query, true, true ).pattern( order );
-            return nsdetails(ns())->cachedQueryPlanForPattern( queryPattern ).indexKey();
+            return getCollection(ns())->getQueryCache().cachedQueryPlanForPattern( queryPattern ).indexKey();
         }
     private:
         shared_ptr<Cursor> _c;
@@ -290,7 +295,7 @@ namespace QueryOptimizerCursorTests {
     public:
         void run() {
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             shared_ptr<QueryOptimizerCursor> c =
             dynamic_pointer_cast<QueryOptimizerCursor>
@@ -329,7 +334,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "_id" << 2 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSONObj() );
             ASSERT_EQUALS( 2, itcount() );
@@ -346,7 +351,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "_id" << GT << 0 << "a" << GT << 0 ) );
             ASSERT( ok() );
@@ -365,7 +370,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "_id" << GT << 5 << LT << 4 << "a" << GT << 0 ) );
             ASSERT( !ok() );
@@ -383,7 +388,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
 
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "_id" << GT << 0 << "a" << GT << 0 ) );
             ASSERT( ok() );
@@ -409,7 +414,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
 
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "_id" << GT << 5 << "a" << GT << 5 ) );
             ASSERT( ok() );
@@ -435,7 +440,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
 
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
 
             setQueryOptimizerCursor( BSON( "_id" << GT << -1 << "a" << GT << -1 ) );
@@ -459,7 +464,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "_id" << 500 << "a" << BSON_ARRAY( 0 << 300 ) ) );
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "_id" << GT << -1 << "a" << GT << -1 ) );
             ASSERT_EQUALS( 102, itcount() );
@@ -477,7 +482,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "_id" << 101 << "a" << 600 ) );
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "_id" << GT << -1 << "a" << LT << 500 ) );
             ASSERT_EQUALS( 101, itcount() );
@@ -496,7 +501,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "_id" << 202 << "a" << BSON_ARRAY( 2 << 3 ) ) );
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "_id" << GT << -1 << "a" << GT << 0) );
             ASSERT_EQUALS( 102, itcount() );
@@ -512,7 +517,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "_id" << 1 << "a" << 1 ) );
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "$or" << BSON_ARRAY( BSON( "_id" << 0 ) << BSON( "a" << 1 ) ) ) );
             ASSERT_EQUALS( BSON( "_id" << 0 << "a" << 0 ), current() );
@@ -531,7 +536,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "_id" << 1 << "a" << 1 ) );
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "$or" << BSON_ARRAY( BSON( "_id" << -1 ) << BSON( "a" << 1 ) ) ) );
             ASSERT_EQUALS( BSON( "_id" << 0 << "a" << 1 ), current() );
@@ -550,7 +555,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "_id" << 1 << "a" << 1 ) );
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "$or" << BSON_ARRAY( BSON( "_id" << 0 ) << BSON( "_id" << -1 ) << BSON( "a" << 1 ) ) ) );
             ASSERT_EQUALS( BSON( "_id" << 0 << "a" << 1 ), current() );
@@ -569,7 +574,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "_id" << 1 << "a" << 1 ) );
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "$or" << BSON_ARRAY( BSON( "_id" << 2 ) << BSON( "_id" << 4 ) << BSON( "_id" << 0 ) << BSON( "_id" << -1 ) << BSON( "_id" << 6 ) << BSON( "a" << 1 ) << BSON( "_id" << 9 ) ) ) );
             ASSERT_EQUALS( BSON( "_id" << 0 << "a" << 1 ), current() );
@@ -595,7 +600,7 @@ namespace QueryOptimizerCursorTests {
             }
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "$or" << BSON_ARRAY( BSON( "a" << 0 ) << BSON( "a" << 1 ) << BSON( "_id" << GTE << 120 << "a" << GT << 1 ) ) ) );
             for( int i = 0; i < 120; ++i ) {
@@ -620,7 +625,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.insert( ns(), BSON( "_id" << i ) );   
             }
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "$or" << BSON_ARRAY( BSON( "_id" << LT << 101 ) << BSON( "_id" << 101 ) ) ) );
             for( int i = 0; i < 102; ++i ) {
@@ -639,7 +644,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.insert( ns(), BSON( "_id" << i ) );   
             }
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "$or" << BSON_ARRAY( BSON( "_id" << LT << 100 ) << BSON( "_id" << 100 ) ) ) );
             for( int i = 0; i < 101; ++i ) {
@@ -658,7 +663,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.insert( ns(), BSON( "_id" << i ) );   
             }
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "$or" << BSON_ARRAY( BSON( "_id" << LT << 102 ) << BSON( "_id" << 102 ) ) ) );
             for( int i = 0; i < 103; ++i ) {
@@ -681,7 +686,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             shared_ptr< Cursor > c = newQueryOptimizerCursor( ns(), BSON( "_id" << GT << 5 << "a" << GT << 5 ) );
             ASSERT( c->ok() );
@@ -692,11 +697,6 @@ namespace QueryOptimizerCursorTests {
             ASSERT( c->advance() );
             
             // _id 0 {a:1}
-            ASSERT_EQUALS( 0, c->current().getIntField( "_id" ) );
-            ASSERT( !c->matcher()->matchesCurrent( c.get() ) );
-            ASSERT( c->advance() );
-            
-            // _id 0 {$natural:1}
             ASSERT_EQUALS( 0, c->current().getIntField( "_id" ) );
             ASSERT( !c->matcher()->matchesCurrent( c.get() ) );
             ASSERT( c->advance() );
@@ -713,11 +713,6 @@ namespace QueryOptimizerCursorTests {
             ASSERT( !c->getsetdup( c->currPK() ) );
             ASSERT( c->advance() );
             
-            // _id 10 {$natural:1}
-            ASSERT_EQUALS( 10, c->current().getIntField( "_id" ) );
-            ASSERT( !c->matcher()->matchesCurrent( c.get() ) );
-            ASSERT( c->advance() );
-            
             // _id 12 {_id:1}
             ASSERT_EQUALS( BSON( "_id" << 12 << "a" << 11 ), c->current() );
             ASSERT( c->matcher()->matchesCurrent( c.get() ) );
@@ -726,12 +721,6 @@ namespace QueryOptimizerCursorTests {
             
             // _id 11 {a:1}
             ASSERT_EQUALS( BSON( "_id" << 11 << "a" << 12 ), c->current() );
-            ASSERT( c->matcher()->matchesCurrent( c.get() ) );
-            ASSERT( c->getsetdup( c->currPK() ) );
-            ASSERT( c->advance() );
-            
-            // _id 11 {$natural:1}
-            ASSERT_EQUALS( 11, c->current().getIntField( "_id" ) );
             ASSERT( c->matcher()->matchesCurrent( c.get() ) );
             ASSERT( c->getsetdup( c->currPK() ) );
             
@@ -776,7 +765,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "_id" << "ba" ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             shared_ptr< Cursor > c = newQueryOptimizerCursor( ns(), fromjson( "{_id:/a/}" ) );
             ASSERT( c->ok() );
@@ -810,7 +799,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             shared_ptr< Cursor > c = newQueryOptimizerCursor( ns(), BSON( "$or" << BSON_ARRAY( BSON( "_id" << LT << 300 ) << BSON( "a" << 1 ) ) ) );
             for( int i = 0; i < 151; ++i ) {
@@ -832,7 +821,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             shared_ptr< Cursor > c = newQueryOptimizerCursor( ns(), BSON( "a" << GT << 1 << LT << 5 ) );
             // Two sided bounds work.
@@ -849,7 +838,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "a" << GT << 5 << LT << 3 ) );
             // Multi key bounds work.
@@ -871,7 +860,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "b" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             shared_ptr<Cursor> c = newQueryOptimizerCursor( ns(), BSON( "a" << 0 << "b" << 0 ) );
             
@@ -882,10 +871,6 @@ namespace QueryOptimizerCursorTests {
             ASSERT_EQUALS( BSON( "_id" << 0 << "a" << 0 << "b" << 0 ), c->current() );
             ASSERT_EQUALS( BSON( "b" << 1 ), c->indexKeyPattern() );
             
-            ASSERT( c->advance() );
-            ASSERT_EQUALS( BSON( "_id" << 0 << "a" << 0 << "b" << 0 ), c->current() );                
-            // Unindexed plan
-            ASSERT_EQUALS( BSONObj(), c->indexKeyPattern() );
             ASSERT( !c->advance() );
             
             c = newQueryOptimizerCursor( ns(), BSON( "a" << 100 << "b" << 149 ) );
@@ -908,72 +893,6 @@ namespace QueryOptimizerCursorTests {
         }
     };
 
-    /** Add other plans when the recorded one is doing more poorly than expected, with deletion. */
-    class AddOtherPlansDelete : public Base {
-    public:
-        void run() {
-            _cli.insert( ns(), BSON( "_id" << 0 << "a" << 0 << "b" << 0 ) );
-            _cli.insert( ns(), BSON( "_id" << 1 << "a" << 1 << "b" << 0 ) );
-            for( int i = 100; i < 120; ++i ) {
-                _cli.insert( ns(), BSON( "_id" << i << "a" << 100 << "b" << i ) );
-            }
-            for( int i = 199; i >= 150; --i ) {
-                _cli.insert( ns(), BSON( "_id" << i << "a" << 100 << "b" << 150 ) );
-            }
-            _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
-            _cli.ensureIndex( ns(), BSON( "b" << 1 ) );
-            
-            Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
-            Client::Context ctx( ns() );
-            shared_ptr<Cursor> c = newQueryOptimizerCursor( ns(), BSON( "a" << 0 << "b" << 0 ) );
-            
-            ASSERT_EQUALS( BSON( "_id" << 0 << "a" << 0 << "b" << 0 ), c->current() );
-            ASSERT_EQUALS( BSON( "a" << 1 ), c->indexKeyPattern() );
-            
-            ASSERT( c->advance() );
-            ASSERT_EQUALS( BSON( "_id" << 0 << "a" << 0 << "b" << 0 ), c->current() );
-            ASSERT_EQUALS( BSON( "b" << 1 ), c->indexKeyPattern() );
-            
-            ASSERT( c->advance() );
-            ASSERT_EQUALS( BSON( "_id" << 0 << "a" << 0 << "b" << 0 ), c->current() );                
-            // Unindexed plan
-            ASSERT_EQUALS( BSONObj(), c->indexKeyPattern() );
-            ASSERT( !c->advance() );
-            
-            c = newQueryOptimizerCursor( ns(), BSON( "a" << 100 << "b" << 150 ) );
-            // Try {a:1}, which was successful previously.
-            for( int i = 0; i < 12; ++i ) {
-                ASSERT( 150 != c->current().getIntField( "b" ) );
-                ASSERT_EQUALS( BSON( "a" << 1 ), c->indexKeyPattern() );
-                ASSERT( c->advance() );
-            }
-            // Now try {b:1} plan.
-            ASSERT_EQUALS( BSON( "b" << 1 ), c->indexKeyPattern() );
-            ASSERT_EQUALS( 150, c->current().getIntField( "b" ) );
-            ASSERT( c->currentMatches() );
-            int id = c->current().getIntField( "_id" );
-            c->advance();
-            _cli.remove( ns(), BSON( "_id" << id ) );
-            int count = 1;
-            while( c->ok() ) {
-                if ( !c->getsetdup( c->currPK() ) &&c->currentMatches() ) {
-                    ++count;
-                    int id = c->current().getIntField( "_id" );
-                    while ( c->ok() && c->currentMatches() && c->current().getIntField( "_id" ) == id) {
-                        c->advance();
-                    }
-                    _cli.remove( ns(), BSON( "_id" << id ) );
-                }
-                else {
-                    c->advance();
-                }
-            }
-            ASSERT_EQUALS( 50, count );
-            transaction.commit();
-        }
-    };
-
     /**
      * Add other plans when the recorded one is doing more poorly than expected, with deletion before
      * and after adding the additional plans.
@@ -990,7 +909,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "b" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             shared_ptr<Cursor> c = newQueryOptimizerCursor( ns(), BSON( "a" << GTE << -1 << LTE << 0 << "b" << GTE << -1 << LTE << 0 ) );
             while( c->advance() );
@@ -1015,65 +934,6 @@ namespace QueryOptimizerCursorTests {
         }
     };
     
-    /**
-     * When an index becomes multikey and ceases to be optimal for a query, attempt other plans
-     * quickly.
-     */
-    class AddOtherPlansWhenOptimalBecomesNonOptimal : public Base {
-    public:
-        void run() {
-            _cli.ensureIndex( ns(), BSON( "a" << 1 << "b" << 1 ) );
-            
-            {
-                // Create an index cursor on an optimal a:1,b:1 plan.
-                Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-                Client::ReadContext ctx( ns() );
-                {
-                    shared_ptr<Cursor> cursor = getCursor();
-                    ASSERT_EQUALS( "IndexCursor a_1_b_1", cursor->toString() );
-                    
-                    // The optimal a:1,b:1 plan is recorded.
-                    ASSERT_EQUALS( BSON( "a" << 1 << "b" << 1 ),
-                                  cachedIndexForQuery( BSON( "a" << 1 ), BSON( "b" << 1 ) ) );
-                }
-                transaction.commit();
-            }
-            
-            // Make the a:1,b:1 index multikey.
-            _cli.insert( ns(), BSON( "a" << 1 << "b" << BSON_ARRAY( 1 << 2 ) ) );
-            
-            {
-                // Create a QueryOptimizerCursor, without an optimal plan.
-                Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-                Client::ReadContext ctx( ns() );
-                {
-                    shared_ptr<Cursor> cursor = getCursor();
-                    ASSERT_EQUALS( "QueryOptimizerCursor", cursor->toString() );
-                    ASSERT_EQUALS( BSON( "a" << 1 << "b" << 1 ), cursor->indexKeyPattern() );
-                    ASSERT( cursor->advance() );
-                    // An alternative plan is quickly attempted.
-                    ASSERT_EQUALS( BSONObj(), cursor->indexKeyPattern() );
-                }
-                transaction.commit();
-            }
-        }
-    private:
-        static shared_ptr<Cursor> getCursor() {
-            // The a:1,b:1 index will be optimal for this query and sort if single key, but if
-            // the index is multi key only one of the upper or lower constraints will be applied and
-            // the index will not be optimal.
-            BSONObj query = BSON( "a" << GTE << 1 << LTE << 1 );
-            BSONObj order = BSON( "b" << 1 );
-            shared_ptr<ParsedQuery> parsedQuery
-                    ( new ParsedQuery( ns(), 0, 0, 0,
-                                      BSON( "$query" << query << "$orderby" << order ),
-                                      BSONObj() ) );
-            return getOptimizedCursor( ns(), query, order,
-                                                        QueryPlanSelectionPolicy ::any(),
-                                                        parsedQuery, false );
-        }
-    };
-
     /** Check $or clause range elimination. */
     class OrRangeElimination : public Base {
     public:
@@ -1081,7 +941,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "_id" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             shared_ptr<Cursor> c = newQueryOptimizerCursor( ns(), BSON( "$or" << BSON_ARRAY( BSON( "_id" << GT << 0 ) << BSON( "_id" << 1 ) ) ) );
             ASSERT( c->ok() );
@@ -1100,7 +960,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             shared_ptr<Cursor> c = newQueryOptimizerCursor( ns(), BSON( "$or" << BSON_ARRAY( BSON( "_id" << LT << 140 ) << BSON( "_id" << 145 ) << BSON( "a" << 145 ) ) ) );
             
@@ -1131,7 +991,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "a" << GT << -1 ) );
             ASSERT_EQUALS( 149, itcount() );
@@ -1148,7 +1008,7 @@ namespace QueryOptimizerCursorTests {
             }
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             shared_ptr<Cursor> c = newQueryOptimizerCursor( ns(), BSON( "$or" << BSON_ARRAY( BSON( "_id" << LTE << 147 ) << BSON( "_id" << 148 ) << BSON( "_id" << 149 ) ) ) );
             for( int i = 0; i < 150; ++i ) {
@@ -1161,56 +1021,6 @@ namespace QueryOptimizerCursorTests {
         }
     };
     
-    /** Or clause iteration abandoned once full collection scan is performed. */
-    class OrCollectionScanAbort : public Base {
-    public:
-        void run() {
-            _cli.insert( ns(), BSON( "_id" << 0 << "a" << BSON_ARRAY( 1 << 2 << 3 << 4 << 5 ) << "b" << 4 ) );
-            _cli.insert( ns(), BSON( "_id" << 1 << "a" << BSON_ARRAY( 6 << 7 << 8 << 9 << 10 ) << "b" << 4 ) );
-            _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
-            
-            Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
-            Client::Context ctx( ns() );
-            shared_ptr<Cursor> c = newQueryOptimizerCursor( ns(), BSON( "$or" << BSON_ARRAY( BSON( "a" << LT << 6 << "b" << 4 ) << BSON( "a" << GTE << 6 << "b" << 4 ) ) ) );
-            
-            ASSERT( c->ok() );
-            
-            // _id 0 on {a:1}
-            ASSERT_EQUALS( 0, c->current().getIntField( "_id" ) );
-            ASSERT( c->matcher()->matchesCurrent( c.get() ) );
-            ASSERT( !c->getsetdup( c->currPK() ) );
-            c->advance();
-            
-            // _id 0 on {$natural:1}
-            ASSERT_EQUALS( 0, c->current().getIntField( "_id" ) );
-            ASSERT( c->matcher()->matchesCurrent( c.get() ) );
-            ASSERT( c->getsetdup( c->currPK() ) );
-            c->advance();
-            
-            // _id 0 on {a:1}
-            ASSERT_EQUALS( 0, c->current().getIntField( "_id" ) );
-            ASSERT( c->matcher()->matchesCurrent( c.get() ) );
-            ASSERT( c->getsetdup( c->currPK() ) );
-            c->advance();
-            
-            // _id 1 on {$natural:1}
-            ASSERT_EQUALS( 1, c->current().getIntField( "_id" ) );
-            ASSERT( c->matcher()->matchesCurrent( c.get() ) );
-            ASSERT( !c->getsetdup( c->currPK() ) );
-            c->advance();
-            
-            // _id 0 on {a:1}
-            ASSERT_EQUALS( 0, c->current().getIntField( "_id" ) );
-            ASSERT( c->matcher()->matchesCurrent( c.get() ) );
-            ASSERT( c->getsetdup( c->currPK() ) );
-            c->advance();
-            
-            // {$natural:1} finished
-            ASSERT( !c->ok() );
-        }
-    };
-    
     class OrderId : public Base {
     public:
         void run() {
@@ -1219,7 +1029,7 @@ namespace QueryOptimizerCursorTests {
             }
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSONObj(), BSON( "_id" << 1 ) );
             
@@ -1240,7 +1050,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "_id" << 1 << "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "_id" << GTE << 0 << "a" << GTE << 0 ), BSON( "_id" << 1 ) );
             
@@ -1261,7 +1071,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "a" << GTE << 3 ), BSON( "_id" << 1 ) );
             
@@ -1287,7 +1097,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             setQueryOptimizerCursor( BSON( "_id" << GT << 0 ), BSON( "$natural" << 1 ) );
             
@@ -1306,7 +1116,7 @@ namespace QueryOptimizerCursorTests {
     public:
         void run() {
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             ASSERT( !newQueryOptimizerCursor( ns(), BSONObj(), BSON( "a" << 1 ) ).get() );
             transaction.commit();
@@ -1325,7 +1135,7 @@ namespace QueryOptimizerCursorTests {
             ASSERT( _cli.query( ns(), QUERY( "a" << 2 ).sort( "b" ) )->more() );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
+            Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
             Client::Context ctx( ns() );
             shared_ptr<Cursor> c = newQueryOptimizerCursor( ns(), BSON( "a" << 2 ),
                                                            BSON( "b" << 1 ) );
@@ -1347,7 +1157,7 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "b" << 1 ) );
             
             Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-            Client::ReadContext ctx( ns() );
+            Client::ReadContext ctx( ns(), mongo::unittest::EMPTY_STRING );
             setQueryOptimizerCursor( BSON( "_id" << GT << 0 << "b" << GT << 0 ) );
             ASSERT( ok() );
             cc().curop()->kill();
@@ -1366,39 +1176,13 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "b" << 1 ) );
             
             Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-            Client::ReadContext ctx( ns() );
+            Client::ReadContext ctx( ns(), mongo::unittest::EMPTY_STRING );
             shared_ptr<Cursor> c = newQueryOptimizerCursor( ns(), BSON( "$or" << BSON_ARRAY( BSON( "_id" << GT << 0 ) << BSON( "b" << GT << 0 ) ) ) );
             ASSERT( c->ok() );
             cc().curop()->kill();
             // First advance() call throws, subsequent calls just fail.
             ASSERT_THROWS( c->advance(), MsgAssertionException );
             ASSERT( !c->advance() );
-            transaction.commit();
-        }
-    };
-    
-    class Nscanned : public Base {
-    public:
-        void run() {
-            for( int i = 0; i < 120; ++i ) {
-                _cli.insert( ns(), BSON( "_id" << i << "a" << i ) );
-            }
-            
-            Client::Transaction transaction(DB_SERIALIZABLE);
-            Lock::GlobalWrite lk;
-            Client::Context ctx( ns() );
-            shared_ptr<Cursor> c = newQueryOptimizerCursor( ns(), BSON( "_id" << GTE << 0 << "a" << GTE << 0 ) );
-            ASSERT( c->ok() );
-            ASSERT_EQUALS( 2, c->nscanned() );
-            c->advance();
-            ASSERT( c->ok() );
-            ASSERT_EQUALS( 2, c->nscanned() );
-            c->advance();
-            for( int i = 3; i < 222; ++i ) {
-                ASSERT( c->ok() );
-                c->advance();
-            }
-            ASSERT( !c->ok() );
             transaction.commit();
         }
     };
@@ -1416,7 +1200,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.insert( ns(), BSON( "a" << 1 << "b" << 1 ) );
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
-                    Lock::GlobalWrite lk;
+                    Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
 
                     Client::Context ctx( ns() );
                     ClientCursor::Holder p
@@ -1441,7 +1225,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.insert( ns(), BSON( "a" << 1 << "b" << 1 ) );
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
-                    Lock::GlobalWrite lk;
+                    Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
                     Client::Context ctx( ns() );
                     ClientCursor::Holder p
                             ( new ClientCursor
@@ -1469,7 +1253,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.insert( ns(), BSON( "a" << 1 << "b" << 1 ) );
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
-                    Lock::GlobalWrite lk;
+                    Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
 
                     Client::Context ctx( ns() );
                     ClientCursor::Holder p
@@ -1499,7 +1283,7 @@ namespace QueryOptimizerCursorTests {
                 {
                     Client::Transaction transaction(DB_SERIALIZABLE);
                     {
-                        Client::WriteContext ctx(ns());
+                        Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
                         ClientCursor::Holder p
                             ( new ClientCursor
                              ( QueryOption_NoCursorTimeout,
@@ -1507,7 +1291,6 @@ namespace QueryOptimizerCursorTests {
                               ( ns(), BSON( "_id" << GT << 0 << "z" << 0 ) ),
                               ns() ) );
 
-                        ASSERT_EQUALS( "QueryOptimizerCursor", p->c()->toString() );
                         ASSERT_EQUALS( 1, p->c()->current().getIntField( "_id" ) );
                     }
                     transaction.commit();
@@ -1526,7 +1309,7 @@ namespace QueryOptimizerCursorTests {
     public:
         void run() {
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx(ns());
+            Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
             shared_ptr<Cursor> c =
             newQueryOptimizerCursor( ns(), BSONObj(), BSON( "a" << 1 ),
                                     QueryPlanSelectionPolicy::any(), false );
@@ -1554,7 +1337,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.insert( ns(), BSON( "a" << 3 << "b" << 10 ) );
             }            
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx(ns());
+            Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
             shared_ptr<Cursor> c =
             newQueryOptimizerCursor( ns(), BSON( "a" << LT << 3 << "b" << 1 ), BSON( "a" << 1 ),
                                     QueryPlanSelectionPolicy::any(), false );
@@ -1582,7 +1365,7 @@ namespace QueryOptimizerCursorTests {
             }
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx(ns());
+            Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
             shared_ptr<Cursor> c =
             newQueryOptimizerCursor( ns(), BSON( "a" << 1 ), BSON( "b" << 1 ),
                                     QueryPlanSelectionPolicy::any(), false );
@@ -1603,7 +1386,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "a" << 1 << "b" << 10 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx(ns());
+            Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
             shared_ptr<ParsedQuery> parsedQuery
                     ( new ParsedQuery( ns(), 0, 0, 0, BSONObj(), BSON( "_id" << 0 << "a" << 1 ) ) );
             shared_ptr<QueryOptimizerCursor> c =
@@ -1642,7 +1425,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), BSON( "a" << 2 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx(ns());
+            Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
             shared_ptr<ParsedQuery> parsedQuery
                     ( new ParsedQuery( ns(), 0, 0, 0, BSONObj(), BSON( "_id" << 0 << "a" << 1 ) ) );
             shared_ptr<QueryOptimizerCursor> c =
@@ -1710,20 +1493,20 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             _cli.ensureIndex( ns(), BSON( "b" << 1 ) );
 
-            Lock::DBWrite lk(ns());
+            Lock::DBWrite lk(ns(), mongo::unittest::EMPTY_STRING);
             {
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 Client::Context ctx( ns() );
                 
                 // No best plan - all must be tried.
-                nPlans( 3 );
+                nPlans( 2 );
                 runQuery();
                 // Best plan selected by query.
                 nPlans( 1 );
                 nPlans( 1 );
                 ensureIndex( ns(), BSON( "c" << 1 ), false, "c_1" );
                 // Best plan cleared when new index added.
-                nPlans( 3 );
+                nPlans( 2 );
                 runQuery();
                 // Best plan selected by query.
                 nPlans( 1 );
@@ -1744,7 +1527,7 @@ namespace QueryOptimizerCursorTests {
                 Client::Context ctx( ns() );
 
                 // Best plan cleared by ~1000 writes.
-                nPlans( 3 );
+                nPlans( 2 );
 
                 shared_ptr<ParsedQuery> parsedQuery
                         ( new ParsedQuery( ns(), 0, 0, 0,
@@ -1757,7 +1540,7 @@ namespace QueryOptimizerCursorTests {
                                                       false );
                 while( cursor->advance() );
                 // No plan recorded when a hint is used.
-                nPlans( 3 );
+                nPlans( 2 );
                 
                 shared_ptr<ParsedQuery> parsedQuery2
                         ( new ParsedQuery( ns(), 0, 0, 0,
@@ -1771,7 +1554,7 @@ namespace QueryOptimizerCursorTests {
                                                      parsedQuery2, false );
                 while( cursor2->advance() );
                 // Plan recorded was for a different query pattern (different sort spec).
-                nPlans( 3 );
+                nPlans( 2 );
                 
                 // Best plan still selected by query after all these other tests.
                 runQuery();
@@ -1829,157 +1612,6 @@ namespace QueryOptimizerCursorTests {
         shared_ptr<QueryOptimizerCursor> _cursor;
     };
     
-    class PossibleInOrderPlans : public PossiblePlans {
-    public:
-        void run() {
-            _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
-            _cli.insert( ns(), BSON( "a" << 1 ) );
-            for( int i = 0; i < 20; ++i ) {
-                _cli.insert( ns(), BSON( "a" << 2 ) );
-            }
-            
-            Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx(ns());
-            nPlans( 2, BSON( "a" << 1 << "x" << 1 ), BSONObj() );
-            setCursor( BSON( "a" << 1 << "x" << 1 ), BSONObj() );
-            checkCursor( false );
-            ASSERT( _cursor->initialFieldRangeSet()->range( "a" ).equality() );
-            ASSERT( !_cursor->initialFieldRangeSet()->range( "b" ).equality() );
-            ASSERT( _cursor->initialFieldRangeSet()->range( "x" ).equality() );
-
-            // Without running the (nonempty) cursor, no cached plan is recorded.
-            setCursor( BSON( "a" << 1 << "x" << 1 ), BSONObj() );
-            checkCursor( false );
-
-            // Running the cursor records the plan.
-            runCursor();
-            nPlans( 1, BSON( "a" << 1 << "x" << 1 ), BSONObj() );
-            setCursor( BSON( "a" << 1 << "x" << 1 ), BSONObj() );
-            checkCursor( true );
-
-            // Other plans may be added.
-            setCursor( BSON( "a" << 2 << "x" << 1 ), BSONObj() );
-            checkCursor( true );
-            for( int i = 0; i < 10; ++i, _cursor->advance() );
-            // The natural plan has been added in.
-            checkCursor( false );
-            nPlans( 1, BSON( "a" << 2 << "x" << 1 ), BSONObj() );
-            runCursor();
-
-            // The a:1 plan was recorded again.
-            nPlans( 1, BSON( "a" << 2 << "x" << 1 ), BSONObj() );
-            setCursor( BSON( "a" << 2 << "x" << 1 ), BSONObj() );
-            checkCursor( true );
-            
-            // Clear the recorded plan manually.
-            _cursor->clearIndexesForPatterns();
-            nPlans( 2, BSON( "a" << 2 << "x" << 1 ), BSONObj() );
-            setCursor( BSON( "a" << 2 << "x" << 1 ), BSONObj() );
-            checkCursor( false );
-            
-            // Add more data, and run until takeover occurs.
-            for( int i = 0; i < 120; ++i ) {
-                _cli.insert( ns(), BSON( "a" << 3 << "x" << 1 ) );
-            }
-            
-            setCursor( BSON( "a" << 3 << "x" << 1 ), BSONObj() );
-            checkCursor( false );
-            runCursorUntilTakeover();
-            ASSERT( _cursor->ok() );
-            checkTakeoverCursor( false );
-            
-            // Try again, with a cached plan this time.
-            setCursor( BSON( "a" << 3 << "x" << 1 ), BSONObj() );
-            checkCursor( true );
-            runCursorUntilTakeover();
-            checkTakeoverCursor( false );
-            transaction.commit();
-        }
-    private:
-        void checkCursor( bool runningInitialCachedPlan ) {
-            return PossiblePlans::checkCursor( true, false, true, runningInitialCachedPlan );
-        }
-        virtual void checkIterate( const shared_ptr<QueryOptimizerCursor> &cursor ) const {
-            ASSERT( !cursor->currentPlanScanAndOrderRequired() );
-            ASSERT( !cursor->completePlanOfHybridSetScanAndOrderRequired() );
-        }
-    };
-    
-    class PossibleOutOfOrderPlans : public PossiblePlans {
-    public:
-        void run() {
-            _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
-            _cli.ensureIndex( ns(), BSON( "b" << 1 ) );
-            _cli.insert( ns(), BSON( "a" << 1 << "b" << 1 ) );
-            for( int i = 0; i < 20; ++i ) {
-                _cli.insert( ns(), BSON( "a" << 2 ) );
-            }
-            _cli.insert( ns(), BSON( "b" << 2 ) );
-            
-            Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx(ns());
-            nPlans( 3, BSON( "a" << 1 << "b" << 1 ), BSON( "x" << 1 ) );
-            setCursor( BSON( "a" << 1 << "b" << 1 ), BSON( "x" << 1 ) );
-            checkCursor( false );
-            ASSERT( _cursor->initialFieldRangeSet()->range( "a" ).equality() );
-            ASSERT( _cursor->initialFieldRangeSet()->range( "b" ).equality() );
-            ASSERT( !_cursor->initialFieldRangeSet()->range( "x" ).equality() );
-            
-            // Without running the (nonempty) cursor, no cached plan is recorded.
-            setCursor( BSON( "a" << 1 << "b" << 1 ), BSON( "x" << 1 ) );
-            checkCursor( false );
-            
-            // Running the cursor records the plan.
-            runCursor();
-            nPlans( 1, BSON( "a" << 1 << "b" << 1 ), BSON( "x" << 1 ) );
-            setCursor( BSON( "a" << 1 << "b" << 1 ), BSON( "x" << 1 ) );
-            checkCursor( true );
-            
-            // Other plans may be added.
-            setCursor( BSON( "a" << 2 << "b" << 2 ), BSON( "x" << 1 ) );
-            checkCursor( true );
-            for( int i = 0; i < 10; ++i, _cursor->advance() );
-            // The other plans have been added in.
-            checkCursor( false );
-            runCursor();
-            
-            // The b:1 plan was recorded.
-            setCursor( BSON( "a" << 1 << "b" << 1 ), BSON( "x" << 1 ) );
-            checkCursor( true );
-            
-            // Clear the recorded plan manually.
-            _cursor->clearIndexesForPatterns();
-            setCursor( BSON( "a" << 2 << "x" << 1 ), BSON( "x" << 1 ) );
-            checkCursor( false );
-            
-            // Add more data, and run until takeover occurs.
-            for( int i = 0; i < 120; ++i ) {
-                _cli.insert( ns(), BSON( "a" << 3 << "b" << 3 ) );
-            }
-            
-            setCursor( BSON( "a" << 3 << "b" << 3 ), BSON( "x" << 1 ) );
-            checkCursor( false );
-            runCursorUntilTakeover();
-            ASSERT( _cursor->ok() );
-            checkTakeoverCursor( true );
-            
-            // Try again, with a cached plan this time.
-            setCursor( BSON( "a" << 3 << "b" << 3 ), BSON( "x" << 1 ) );
-            checkCursor( true );
-            runCursorUntilTakeover();
-            checkTakeoverCursor( true );
-            transaction.commit();
-        }
-    private:
-        void checkCursor( bool runningInitialCachedPlan ) {
-            return PossiblePlans::checkCursor( false, true, false, runningInitialCachedPlan );
-        }
-        virtual void checkIterate( const shared_ptr<QueryOptimizerCursor> &cursor ) const {
-            ASSERT( cursor->currentPlanScanAndOrderRequired() );
-            ASSERT( !cursor->completePlanOfHybridSetScanAndOrderRequired() );
-        }
-    };
-    
     class PossibleBothPlans : public PossiblePlans {
     public:
         void run() {
@@ -1995,8 +1627,8 @@ namespace QueryOptimizerCursorTests {
             }
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx(ns());
-            nPlans( 3, BSON( "a" << 1 << "b" << 1 ), BSON( "b" << 1 ) );
+            Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
+            nPlans( 2, BSON( "a" << 1 << "b" << 1 ), BSON( "b" << 1 ) );
             setCursor( BSON( "a" << 1 << "b" << 1 ), BSON( "b" << 1 ) );
             checkCursor( true, false );
             ASSERT( _cursor->initialFieldRangeSet()->range( "a" ).equality() );
@@ -2066,72 +1698,6 @@ namespace QueryOptimizerCursorTests {
         }
     };
     
-    class AbortOutOfOrderPlans : public PlanChecking {
-    public:
-        void run() {
-            _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
-            for( int i = 0; i < 10; ++i ) {
-                _cli.insert( ns(), BSON( "a" << 1 ) );
-            }
-            
-            Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx(ns());
-            
-            shared_ptr<QueryOptimizerCursor> c = getCursor( BSON( "a" << 1 << "b" << BSONNULL ),
-                                                           BSON( "a" << 1 ) );
-            // Wait until a $natural plan result is returned.
-            while( c->indexKeyPattern() != BSONObj() ) {
-                c->advance();
-            }
-            // Abort the natural plan.
-            c->abortOutOfOrderPlans();
-            c->advance();
-            // Check that no more results from the natural plan are returned.
-            ASSERT( c->ok() );
-            while( c->ok() ) {
-                ASSERT_EQUALS( BSON( "a" << 1 ), c->indexKeyPattern() );
-                c->advance();
-            }
-            ASSERT( !c->completePlanOfHybridSetScanAndOrderRequired() );
-            transaction.commit();
-        }
-    };
-    
-    class AbortOutOfOrderPlanOnLastMatch : public PlanChecking {
-    public:
-        void run() {
-            _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
-            for( int i = 0; i < 10; ++i ) {
-                _cli.insert( ns(), BSON( "a" << BSON_ARRAY( 1 << 2 ) ) );
-            }
-            
-            Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx(ns());
-            
-            shared_ptr<QueryOptimizerCursor> c =
-            getCursor( BSON( "a" << GTE << 1 << "b" << BSONNULL ), BSON( "a" << 1 ) );
-            // Wait until 10 (all) $natural plan results are returned.
-            for( int i = 0; i < 10; ++i ) {
-                while( c->indexKeyPattern() != BSONObj() ) {
-                    c->advance();
-                }
-                c->advance();
-            }
-            // Abort the natural plan.
-            c->abortOutOfOrderPlans();
-            c->advance();
-            // Check that no more results from the natural plan are returned, and the cursor is not
-            // done iterating.
-            ASSERT( c->ok() );
-            while( c->ok() ) {
-                ASSERT_EQUALS( BSON( "a" << 1 ), c->indexKeyPattern() );
-                c->advance();
-            }
-            ASSERT( !c->completePlanOfHybridSetScanAndOrderRequired() );
-            transaction.commit();
-        }
-    };
-    
     /** Out of order plans are not added after abortOutOfOrderPlans() is called. */
     class AbortOutOfOrderPlansBeforeAddOtherPlans : public PlanChecking {
     public:
@@ -2151,7 +1717,7 @@ namespace QueryOptimizerCursorTests {
             _bPreferableQuery = BSON( "a" << GTE << 0 << LTE << 100 << "b" << 0 );
 
             Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-            Client::ReadContext ctx( ns() );
+            Client::ReadContext ctx( ns() , mongo::unittest::EMPTY_STRING);
             
             // If abortOutOfOrderPlans() is not set, other plans will be attempted.
             recordAIndex();
@@ -2173,13 +1739,13 @@ namespace QueryOptimizerCursorTests {
         /** Record the a:1 index for the query pattern of interest. */
         void recordAIndex() const {
             Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-            Client::ReadContext ctx( ns() );
-            nsdetails(ns())->clearQueryCache();
+            Client::ReadContext ctx( ns() , mongo::unittest::EMPTY_STRING);
+            getCollection(ns())->getQueryCache().clearQueryCache();
             shared_ptr<QueryOptimizerCursor> c = getCursor( _aPreferableQuery, BSON( "a" << 1 ) );
             while( c->advance() );
             FieldRangeSet aPreferableFields( ns(), _aPreferableQuery, true, true );
             ASSERT_EQUALS( BSON( "a" << 1 ),
-                          nsdetails(ns())->cachedQueryPlanForPattern
+                          getCollection(ns())->getQueryCache().cachedQueryPlanForPattern
                           ( aPreferableFields.pattern( BSON( "a" << 1 ) ) ).indexKey() );
             transaction.commit();
         }
@@ -2219,7 +1785,7 @@ namespace QueryOptimizerCursorTests {
             }
 
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx(ns());
+            Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
             
             shared_ptr<QueryOptimizerCursor> c =
             getCursor( fromjson( "{$or:[{a:{$lte:2}},{a:{$gte:2}},{a:9}]}" ), BSONObj() );
@@ -2249,7 +1815,7 @@ namespace QueryOptimizerCursorTests {
             }
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx(ns());
+            Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
             
             BSONObj query =
             BSON(
@@ -2298,44 +1864,13 @@ namespace QueryOptimizerCursorTests {
             _cli.ensureIndex( ns(), BSON( "b" << 1 << "a" << 1 ) );
             
             Client::Transaction transaction(DB_SERIALIZABLE);
-            Client::WriteContext ctx(ns());
+            Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
 
             // This $or query will scan index a:1,b:1 then b:1,a:1.  If the key pattern is specified
             // incorrectly for the second clause, matching will fail.
             setQueryOptimizerCursor( fromjson( "{$or:[{a:1,b:{$gte:0}},{b:3,a:{$gte:0}}]}" ) );
             // All documents match, and there are no dups.
             ASSERT_EQUALS( 250, itcount() );
-            transaction.commit();
-        }
-    };
-    
-    /**
-     * An ordered plan returns all results, including when it takes over, even when it duplicates an
-     * entry of an out of order plan.
-     */
-    class TakeoverOrderedPlanDupsOutOfOrderPlan : public PlanChecking {
-    public:
-        void run() {
-            _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
-            for( int i = 1; i < 200; ++i ) {
-                _cli.insert( ns(), BSON( "a" << i << "b" << 0 ) );
-            }
-            // Insert this document last, so that most documents are read from the $natural cursor
-            // before the a:1 cursor.
-            _cli.insert( ns(), BSON( "a" << 0 << "b" << 0 ) );
-            
-            Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-            Client::ReadContext ctx( ns() );
-            shared_ptr<QueryOptimizerCursor> cursor =
-                    getCursor( BSON( "a" << GTE << 0 << "b" << 0 ), BSON( "a" << 1 ) );
-            int nextA = 0;
-            for( ; cursor->ok(); cursor->advance() ) {
-                if ( cursor->indexKeyPattern() == BSON( "a" << 1 ) ) {
-                    // Check that the expected 'a' value is present and in order.
-                    ASSERT_EQUALS( nextA++, cursor->current()[ "a" ].number() );
-                }
-            }
-            ASSERT_EQUALS( 200, nextA );
             transaction.commit();
         }
     };
@@ -2348,7 +1883,7 @@ namespace QueryOptimizerCursorTests {
             _cli.insert( ns(), fromjson( "{ a:[ { b:1 } ] }" ) );
 
             Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-            Client::ReadContext ctx( ns() );
+            Client::ReadContext ctx( ns() , mongo::unittest::EMPTY_STRING);
             setQueryOptimizerCursor( BSON( "a.b" << 1 ) );
             MatchDetails details;
             details.requestElemMatchKey();
@@ -2370,7 +1905,7 @@ namespace QueryOptimizerCursorTests {
             virtual ~Base() {}
             void run() {
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Lock::GlobalWrite lk;
+                Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
                 Client::Context ctx( ns() );
                 if ( expectException() ) {
                     ASSERT_THROWS
@@ -2510,7 +2045,7 @@ namespace QueryOptimizerCursorTests {
             void run() {
                 _cli.insert( ns(), BSON( "_id" << 5 ) );
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Lock::GlobalWrite lk;
+                Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
                 Client::Context ctx( ns() );
                 shared_ptr<Cursor> c = getOptimizedCursor( ns(), BSONObj(), BSON( "b" << 1 ) );
                 ASSERT( !c );
@@ -2522,7 +2057,7 @@ namespace QueryOptimizerCursorTests {
         public:
             void run() {
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Client::WriteContext ctx(ns());
+                Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
                 shared_ptr<ParsedQuery> parsedQuery
                         ( new ParsedQuery( ns(), 0, 0, 0,
                                           BSON( "$query" << BSONObj() <<
@@ -2546,7 +2081,7 @@ namespace QueryOptimizerCursorTests {
                 // record {_id:1} index for this query
                 ASSERT( _cli.query( ns(), QUERY( "_id" << GT << 0 << "b" << GT << 0 ).sort( "b" ) )->more() );
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Lock::GlobalWrite lk;
+                Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
                 Client::Context ctx( ns() );
                 shared_ptr<Cursor> c = getOptimizedCursor( ns(), BSON( "_id" << GT << 0 << "b" << GT << 0 ), BSON( "b" << 1 ) );
                 // {_id:1} requires scan and order, so {b:1} must be chosen.
@@ -2566,7 +2101,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.ensureIndex( ns(), BSON( "_id" << 1 << "q" << 1 ) );
                 ASSERT( _cli.query( ns(), QUERY( "_id" << GT << 0 ) )->more() );
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Lock::GlobalWrite lk;
+                Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
                 Client::Context ctx( ns() );
                 // Check the plan that was recorded for this query.
                 ASSERT_EQUALS( BSON( "_id" << 1 ), cachedIndexForQuery( BSON( "_id" << GT << 0 ) ) );
@@ -2587,7 +2122,7 @@ namespace QueryOptimizerCursorTests {
                 // Need to use a range on _id so that the queryByIdHack path is not taken.
                 ASSERT( _cli.query( ns(), QUERY( "q" << 1 << "_id" << GTE << 1 << LTE << 1 ) )->more() );
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Lock::GlobalWrite lk;
+                Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
                 Client::Context ctx( ns() );
                 ASSERT_EQUALS( BSON( "_id" << 1 ),
                               cachedIndexForQuery( BSON( "q" << 1 << "_id" << 1 ) ) );
@@ -2688,7 +2223,7 @@ namespace QueryOptimizerCursorTests {
                     _cli.insert( ns(), BSON( "_id" << 6 << "a" << 6 << "c" << 4 ) );
                     _cli.ensureIndex( ns(), BSON( "a" << 1 << "b" << 1 << "c" << 1 ) );
                 }
-                string expectedType() const { return "QueryOptimizerCursor"; }
+                string expectedType() const { return "IndexCursor a_1_b_1"; }
                 BSONObj query() const { return BSON( "a" << GTE << 5 << "c" << 4 ); }
                 void check( const shared_ptr<Cursor> &c ) {
                     ASSERT( c->ok() );
@@ -2744,27 +2279,6 @@ namespace QueryOptimizerCursorTests {
                 }
             };
             
-            class RecordedUnindexedPlan : public Base {
-            public:
-                RecordedUnindexedPlan() {
-                    _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
-                    _cli.insert( ns(), BSON( "a" << BSON_ARRAY( 1 << 2 << 3 ) << "b" << 1 ) );
-                    auto_ptr<DBClientCursor> cursor =
-                    _cli.query( ns(), QUERY( "a" << GT << 0 << "b" << 1 ).explain() );
-                    BSONObj explain = cursor->next();
-                    ASSERT_EQUALS( "BasicCursor", explain[ "cursor" ].String() );
-                }
-                string expectedType() const { return "QueryOptimizerCursor"; }
-                BSONObj query() const { return BSON( "a" << GT << 0 << "b" << 1 ); }
-                void check( const shared_ptr<Cursor> &c ) {
-                    ASSERT( c->ok() );
-                    ASSERT_EQUALS( BSON( "a" << 1 ), c->indexKeyPattern() );
-                    while( c->advance() ) {
-                        ASSERT_EQUALS( BSON( "a" << 1 ), c->indexKeyPattern() );                    
-                    }
-                }
-            };
-                
         } // namespace RequireIndex
         
         /**
@@ -2784,7 +2298,7 @@ namespace QueryOptimizerCursorTests {
             }
         private:
             static void checkInvalidQueryAssertions() {
-                Client::ReadContext ctx( ns() );
+                Client::ReadContext ctx( ns() , mongo::unittest::EMPTY_STRING);
                 
                 // An invalid query generating a single query plan asserts.
                 BSONObj invalidQuery = fromjson( "{$and:[{$atomic:true}]}" );
@@ -2833,7 +2347,7 @@ namespace QueryOptimizerCursorTests {
             }
         private:
             bool hasMatcher( const BSONObj& query, bool requestMatcher ) {
-                Client::ReadContext ctx( ns() );
+                Client::ReadContext ctx( ns() , mongo::unittest::EMPTY_STRING);
                 shared_ptr<Cursor> cursor = getOptimizedCursor( ns(),
                                                                 query,
                                                                 BSONObj(),
@@ -2851,7 +2365,7 @@ namespace QueryOptimizerCursorTests {
         class MatcherValidate : public Base {
         public:
             void run() {
-                Client::ReadContext ctx( ns() );
+                Client::ReadContext ctx( ns() , mongo::unittest::EMPTY_STRING);
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
                     // An assertion is triggered because { a:undefined } is an invalid query, even
@@ -2878,7 +2392,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.ensureIndex( ns(), BSON( "a" << 1 ) );
             }
             void run() {
-                Client::ReadContext ctx( ns() );
+                Client::ReadContext ctx( ns() , mongo::unittest::EMPTY_STRING);
                 shared_ptr<Cursor> cursor = getOptimizedCursor( ns(),
                                                                 BSON( "a" << 1 ),
                                                                 BSONObj(),
@@ -2900,7 +2414,7 @@ namespace QueryOptimizerCursorTests {
                 
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
-                    Client::WriteContext ctx(ns());
+                    Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
                     BSONObj query = BSON( "a" << 1 << "b" << 1 );
                     shared_ptr<Cursor> c =
                     getOptimizedCursor( ns(), query );
@@ -2934,7 +2448,7 @@ namespace QueryOptimizerCursorTests {
                 
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
-                    Client::WriteContext ctx(ns());
+                    Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
                     shared_ptr<ParsedQuery> parsedQuery
                             ( new ParsedQuery( ns(), 0, 0, 0,
                                               BSON( "$query" << query() << "$explain" << true ),
@@ -2943,14 +2457,18 @@ namespace QueryOptimizerCursorTests {
                     dynamic_pointer_cast<QueryOptimizerCursor>
                     ( getOptimizedCursor( ns(), query(), BSONObj(), QueryPlanSelectionPolicy ::any(),
                                                             parsedQuery, false ) );
-                    ASSERT( _cursor );
+                    // If the dynamic cast failed, then there is no optimizer cursor,
+                    // there is only a single plan cursor and so nothing to test.
+                    if (_cursor) {
                     
-                    handleCursor();
-                    
-                    _explainInfo = _cursor->explainQueryInfo();
-                    _explain = _explainInfo->bson();
+                        handleCursor();
+                        
+                        _explainInfo = _cursor->explainQueryInfo();
+                        _explain = _explainInfo->bson();
 
-                    checkExplain();
+                        checkExplain();
+
+                    }
                 }
                 transaction.commit();
             }
@@ -3222,14 +2740,14 @@ namespace QueryOptimizerCursorTests {
             virtual void checkExplain() {
 
                 ASSERT_EQUALS( 5, _explain[ "n" ].number() );
-                ASSERT_EQUALS( 18, _explain[ "nscannedObjectsAllPlans" ].number() );
-                ASSERT_EQUALS( 18, _explain[ "nscannedAllPlans" ].number() );
+                ASSERT_EQUALS( 9, _explain[ "nscannedObjectsAllPlans" ].number() );
+                ASSERT_EQUALS( 9, _explain[ "nscannedAllPlans" ].number() );
 
                 BSONObj clause1 = _explain[ "clauses" ].Array()[ 0 ].Obj();
                 ASSERT_EQUALS( "IndexCursor a_1", clause1[ "cursor" ].String() );
                 ASSERT_EQUALS( 4, clause1[ "n" ].number() );
-                ASSERT_EQUALS( 8, clause1[ "nscannedObjectsAllPlans" ].number() );
-                ASSERT_EQUALS( 8, clause1[ "nscannedAllPlans" ].number() );
+                ASSERT_EQUALS( 4, clause1[ "nscannedObjectsAllPlans" ].number() );
+                ASSERT_EQUALS( 4, clause1[ "nscannedAllPlans" ].number() );
                 
                 BSONObj c1plan1 = clause1[ "allPlans" ].Array()[ 0 ].Obj();
                 ASSERT_EQUALS( "IndexCursor a_1", c1plan1[ "cursor" ].String() );
@@ -3237,29 +2755,17 @@ namespace QueryOptimizerCursorTests {
                 ASSERT_EQUALS( 4, c1plan1[ "nscannedObjects" ].number() );
                 ASSERT_EQUALS( 4, c1plan1[ "nscanned" ].number() );
 
-                BSONObj c1plan2 = clause1[ "allPlans" ].Array()[ 1 ].Obj();
-                ASSERT_EQUALS( "BasicCursor", c1plan2[ "cursor" ].String() );
-                ASSERT_EQUALS( 4, c1plan2[ "n" ].number() );
-                ASSERT_EQUALS( 4, c1plan2[ "nscannedObjects" ].number() );
-                ASSERT_EQUALS( 4, c1plan2[ "nscanned" ].number() );
-
                 BSONObj clause2 = _explain[ "clauses" ].Array()[ 1 ].Obj();
                 ASSERT_EQUALS( "IndexCursor b_1", clause2[ "cursor" ].String() );
                 ASSERT_EQUALS( 1, clause2[ "n" ].number() );
-                ASSERT_EQUALS( 10, clause2[ "nscannedObjectsAllPlans" ].number() );
-                ASSERT_EQUALS( 10, clause2[ "nscannedAllPlans" ].number() );
+                ASSERT_EQUALS( 5, clause2[ "nscannedObjectsAllPlans" ].number() );
+                ASSERT_EQUALS( 5, clause2[ "nscannedAllPlans" ].number() );
 
                 BSONObj c2plan1 = clause2[ "allPlans" ].Array()[ 0 ].Obj();
                 ASSERT_EQUALS( "IndexCursor b_1", c2plan1[ "cursor" ].String() );
                 ASSERT_EQUALS( 5, c2plan1[ "n" ].number() );
                 ASSERT_EQUALS( 5, c2plan1[ "nscannedObjects" ].number() );
                 ASSERT_EQUALS( 5, c2plan1[ "nscanned" ].number() );
-                
-                BSONObj c2plan2 = clause2[ "allPlans" ].Array()[ 1 ].Obj();
-                ASSERT_EQUALS( "BasicCursor", c2plan2[ "cursor" ].String() );
-                ASSERT_EQUALS( 5, c2plan2[ "n" ].number() );
-                ASSERT_EQUALS( 5, c2plan2[ "nscannedObjects" ].number() );
-                ASSERT_EQUALS( 5, c2plan2[ "nscanned" ].number() );
             }
         };
         
@@ -3391,7 +2897,7 @@ namespace QueryOptimizerCursorTests {
                 _cli.ensureIndex( ns(), BSON( "c" << 1 ) );
                 
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Client::WriteContext ctx(ns());
+                Client::WriteContext ctx(ns(), mongo::unittest::EMPTY_STRING);
 
                 shared_ptr<Cursor> aCursor
                 ( getOptimizedCursor( ns(), BSON( "a" << 1 ) ) );
@@ -3427,7 +2933,7 @@ namespace QueryOptimizerCursorTests {
         public:
             void run() {
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Lock::GlobalWrite lk;
+                Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING);
 
                 Client::Context ctx( ns() );
                 
@@ -3484,14 +2990,11 @@ namespace QueryOptimizerCursorTests {
             add<Singlekey>();
             add<Multikey>();
             add<AddOtherPlans>();
-            add<AddOtherPlansDelete>();
             add<AddOtherPlansContinuousDelete>();
-            add<AddOtherPlansWhenOptimalBecomesNonOptimal>();
             add<OrRangeElimination>();
             add<OrDedup>();
             add<EarlyDups>();
             add<OrPopInTakeover>();
-            add<OrCollectionScanAbort>();
             add<OrderId>();
             add<OrderMultiIndex>();
             add<OrderReject>();
@@ -3500,7 +3003,6 @@ namespace QueryOptimizerCursorTests {
             add<RecordedOrderInvalid>();
             add<KillOp>();
             add<KillOpFirstClause>();
-            add<Nscanned>();
             add<ClientCursor::Invalidate>();
             add<ClientCursor::Timeout>();
             add<ClientCursor::Drop>();
@@ -3510,16 +3012,11 @@ namespace QueryOptimizerCursorTests {
             add<CoveredIndex>();
             add<CoveredIndexTakeover>();
             add<SaveGoodIndex>();
-            add<PossibleInOrderPlans>();
-            add<PossibleOutOfOrderPlans>();
             add<PossibleBothPlans>();
-            add<AbortOutOfOrderPlans>();
-            add<AbortOutOfOrderPlanOnLastMatch>();
             add<AbortOutOfOrderPlansBeforeAddOtherPlans>();
             add<TakeoverOrRangeElimination>();
             add<TakeoverOrDedups>();
             add<TakeoverOrDifferentIndex>();
-            add<TakeoverOrderedPlanDupsOutOfOrderPlan>();
             add<ElemMatchKey>();
             add<GetCursor::NoConstraints>();
             add<GetCursor::SimpleId>();
@@ -3545,7 +3042,6 @@ namespace QueryOptimizerCursorTests {
             add<GetCursor::RequireIndex::SecondOrClauseIndexed>();
             add<GetCursor::RequireIndex::SecondOrClauseUnindexed>();
             add<GetCursor::RequireIndex::SecondOrClauseUnindexedUndetected>();
-            add<GetCursor::RequireIndex::RecordedUnindexedPlan>();
             // There's no more $atomic operator, so this test isn't useful anymore.
             //add<GetCursor::MatcherValidation>(); 
             add<GetCursor::MatcherSet>();

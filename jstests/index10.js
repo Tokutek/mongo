@@ -16,7 +16,7 @@ t.ensureIndex( {i:1}, true );
 err = db.getLastErrorObj();
 assert( err.err , "err.err" );
 assert.eq( 11000, err.code );
-assert( 1 == db.system.indexes.count( {ns:"test.jstests_index10" } ), "only id index" );
+assert( 1 == db.system.indexes.count( {ns:db.getName() + ".jstests_index10" } ), "only id index" );
 // t.dropIndexes();
 
 ts = t.totalIndexSize();

@@ -34,7 +34,7 @@
 #include "mongo/db/queryutil.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/clientcursor.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/query_optimizer.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/query.h"
@@ -43,39 +43,70 @@
 
 namespace mongo {
 
-    void deleteOneObject(NamespaceDetails *d, const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
-        d->deleteObject(pk, obj, flags);
-        d->notifyOfWriteOp();
+    void deleteOneObject(Collection *cl, const BSONObj &pk, const BSONObj &obj, uint64_t flags) {
+        cl->deleteObject(pk, obj, flags);
+        cl->notifyOfWriteOp();
     }
     
-    long long _deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop) {
-        NamespaceDetails *d = nsdetails(ns);
-        if (d == NULL) {
+    // Special-cased helper for deleting ranges out of an index.
+    long long deleteIndexRange(const string &ns,
+                               const BSONObj &min,
+                               const BSONObj &max,
+                               const BSONObj &keyPattern,
+                               const bool maxInclusive,
+                               const bool fromMigrate,
+                               uint64_t flags) {
+        Collection *cl = getCollection(ns);
+        if (cl == NULL) {
             return 0;
         }
 
-        uassert( 10101 ,  "can't remove from a capped collection" , ! d->isCapped() );
+        IndexDetails &i = cl->idx(cl->findIndexByKeyPattern(keyPattern));
+        // Extend min to get (min, MinKey, MinKey, ....)
+        KeyPattern kp(keyPattern);
+        BSONObj newMin = KeyPattern::toKeyFormat(kp.extendRangeBound(min, false));
+        // If upper bound is included, extend max to get (max, MaxKey, MaxKey, ...)
+        // If not included, extend max to get (max, MinKey, MinKey, ....)
+        BSONObj newMax = KeyPattern::toKeyFormat(kp.extendRangeBound(max, maxInclusive));
 
-        // Fast-path for simple _id deletes.
-        if (d->mayFindById()) {
-            const BSONObj idQuery = getSimpleIdQuery(pattern);
-            if (!idQuery.isEmpty()) {
-                BSONObj obj;
-                if (queryByIdHack(d, idQuery, pattern, obj)) {
-                    if (logop) {
-                        OpLogHelpers::logDelete(ns, obj, false);
-                    }
-                    const BSONObj &pk = idQuery.firstElement().wrap("");
-                    deleteOneObject(d, pk, obj);
-                    return 1;
+        long long nDeleted = 0;
+        for (shared_ptr<Cursor> c(Cursor::make(cl, i, newMin, newMax, maxInclusive, 1));
+             c->ok(); c->advance()) {
+            const BSONObj pk = c->currPK();
+            const BSONObj obj = c->current();
+            OplogHelpers::logDelete(ns.c_str(), obj, fromMigrate);
+            deleteOneObject(cl, pk, obj, flags);
+            nDeleted++;
+        }
+        return nDeleted;
+    }
+
+    long long _deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop) {
+        Collection *cl = getCollection(ns);
+        if (cl == NULL) {
+            return 0;
+        }
+
+        uassert(10101, "can't remove from a capped collection", !cl->isCapped());
+
+        BSONObj obj;
+        BSONObj pk = cl->getSimplePKFromQuery(pattern);
+
+        // Fast-path for simple primary key deletes.
+        if (!pk.isEmpty()) {
+            if (queryByPKHack(cl, pk, pattern, obj)) {
+                if (logop) {
+                    OplogHelpers::logDelete(ns, obj, false);
                 }
-                return 0;
+                deleteOneObject(cl, pk, obj);
+                return 1;
             }
+            return 0;
         }
 
         long long nDeleted = 0;
         for (shared_ptr<Cursor> c = getOptimizedCursor(ns, pattern); c->ok(); ) {
-            BSONObj pk = c->currPK();
+            pk = c->currPK();
             if (c->getsetdup(pk)) {
                 c->advance();
                 continue;
@@ -85,7 +116,7 @@ namespace mongo {
                 continue;
             }
 
-            BSONObj obj = c->current();
+            obj = c->current();
 
             // justOne deletes do not intend to advance, so there's
             // no reason to do so here and potentially overlock rows.
@@ -103,9 +134,9 @@ namespace mongo {
             }
 
             if (logop) {
-                OpLogHelpers::logDelete(ns, obj, false);
+                OplogHelpers::logDelete(ns, obj, false);
             }
-            deleteOneObject(d, pk, obj);
+            deleteOneObject(cl, pk, obj);
             nDeleted++;
 
             if (justOne) {
@@ -121,10 +152,6 @@ namespace mongo {
     */
     long long deleteObjects(const char *ns, BSONObj pattern, bool justOne, bool logop) {
         if (NamespaceString::isSystem(ns)) {
-            /* note a delete from system.indexes would corrupt the db
-               if done here, as there are pointers into those objects in
-               NamespaceDetails.
-            */
             uassert(12050, "cannot delete from system namespace",
                     legalClientSystemNS(ns, true));
         }

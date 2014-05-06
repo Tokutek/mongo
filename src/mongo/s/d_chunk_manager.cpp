@@ -308,6 +308,11 @@ namespace mongo {
         return true;
     }
 
+    bool ShardChunkManager::hasShardKey(const BSONObj &obj) {
+        ShardKeyPattern shardKey(_key);
+        return shardKey.hasShardKey(obj);
+    }
+
     void ShardChunkManager::_assertChunkExists( const BSONObj& min , const BSONObj& max ) const {
         RangeMap::const_iterator it = _chunksMap.find( min );
         if ( it == _chunksMap.end() ) {
@@ -427,7 +432,7 @@ namespace mongo {
         BSONObj startKey = min;
         for ( vector<BSONObj>::const_iterator it = splitKeys.begin() ; it != splitKeys.end() ; ++it ) {
             BSONObj split = *it;
-            p->_chunksMap[min] = split.getOwned();
+            p->_chunksMap[startKey] = split.getOwned();
             p->_chunksMap.insert( make_pair( split.getOwned() , max.getOwned() ) );
             p->_version.incMinor();
             startKey = split;

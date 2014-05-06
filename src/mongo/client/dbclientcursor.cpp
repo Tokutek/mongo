@@ -242,6 +242,11 @@ namespace mongo {
         return o;
     }
 
+    void DBClientCursor::resetBatch(int pos, const char *data) {
+        batch.pos = pos;
+        batch.data = data;
+    }
+
     void DBClientCursor::peek(vector<BSONObj>& v, int atMost) {
         int m = atMost;
 

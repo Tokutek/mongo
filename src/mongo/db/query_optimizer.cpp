@@ -35,6 +35,7 @@
 
 namespace mongo {
 
+    // RAII struct to set a client's query settings
     shared_ptr<Cursor> getOptimizedCursor( const StringData& ns,
                                            const BSONObj& query,
                                            const BSONObj& order,
@@ -42,6 +43,9 @@ namespace mongo {
                                            const shared_ptr<const ParsedQuery>& parsedQuery,
                                            bool requireOrder,
                                            QueryPlanSummary* singlePlanSummary ) {
+
+        QuerySettingsHolder holder (query, order);
+
         try {
             CursorGenerator generator( ns,
                                        query,
@@ -52,7 +56,7 @@ namespace mongo {
                                        singlePlanSummary );
             return generator.generate();
         } catch (storage::RetryableException::MvccDictionaryTooNew) {
-            return shared_ptr<Cursor>( new DummyCursor() );
+            return Cursor::make(NULL);
         }
     }
 
@@ -60,6 +64,7 @@ namespace mongo {
                                            const BSONObj& query,
                                            const BSONObj& sort ) {
 
+        QuerySettingsHolder holder (query, sort);
         auto_ptr<FieldRangeSetPair> frsp( new FieldRangeSetPair( ns, query, true ) );
         auto_ptr<FieldRangeSetPair> origFrsp( new FieldRangeSetPair( *frsp ) );
 

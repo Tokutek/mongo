@@ -41,9 +41,9 @@ namespace mongo {
      */
     class LockException : public DBException {
     public:
-    	LockException( const char * msg , int code ) : DBException( msg, code ) {}
-    	LockException( const string& msg, int code ) : DBException( msg, code ) {}
-    	virtual ~LockException() throw() { }
+        LockException( const char * msg , int code ) : DBException( msg, code ) {}
+        LockException( const string& msg, int code ) : DBException( msg, code ) {}
+        virtual ~LockException() throw() { }
     };
 
     /**
@@ -57,17 +57,24 @@ namespace mongo {
     };
 
     /**
-     * The distributed lock is a configdb backed way of synchronizing system-wide tasks. A task must be identified by a
-     * unique name across the system (e.g., "balancer"). A lock is taken by writing a document in the configdb's locks
-     * collection with that name.
+     * The distributed lock is a configdb backed way of synchronizing system-wide tasks. A task
+     * must be identified by a unique name across the system (e.g., "balancer"). A lock is taken
+     * by writing a document in the configdb's locks collection with that name.
      *
-     * To be maintained, each taken lock needs to be revalidated ("pinged") within a pre-established amount of time. This
-     * class does this maintenance automatically once a DistributedLock object was constructed.
+     * To be maintained, each taken lock needs to be revalidated ("pinged") within a
+     * pre-established amount of time. This class does this maintenance automatically once a
+     * DistributedLock object was constructed. The ping procedure records the local time to
+     * the ping document, but that time is untrusted and is only used as a point of reference
+     * of whether the ping was refreshed or not. Ultimately, the clock a configdb is the source
+     * of truth when determining whether a ping is still fresh or not. This is achieved by
+     * (1) remembering the ping document time along with config server time when unable to
+     * take a lock, and (2) ensuring all config servers report similar times and have similar
+     * time rates (the difference in times must start and stay small).
      */
     class DistributedLock {
     public:
 
-    	static LabeledLevel logLvl;
+        static LabeledLevel logLvl;
 
         struct PingData {
             
@@ -85,19 +92,19 @@ namespace mongo {
             OID ts;
         };
         
-    	class LastPings {
-    	public:
-    	    LastPings() : _mutex( "DistributedLock::LastPings" ) {}
-    	    ~LastPings(){}
+        class LastPings {
+        public:
+            LastPings() : _mutex( "DistributedLock::LastPings" ) {}
+            ~LastPings(){}
 
-    	    PingData getLastPing( const ConnectionString& conn, const string& lockName );
-    	    void setLastPing( const ConnectionString& conn, const string& lockName, const PingData& pd );
+            PingData getLastPing( const ConnectionString& conn, const string& lockName );
+            void setLastPing( const ConnectionString& conn, const string& lockName, const PingData& pd );
 
-    	    mongo::mutex _mutex;
-    	    map< std::pair<string, string>, PingData > _lastPings;
-    	};
+            mongo::mutex _mutex;
+            map< std::pair<string, string>, PingData > _lastPings;
+        };
 
-    	static LastPings lastPings;
+        static LastPings lastPings;
 
         /**
          * The constructor does not connect to the configdb yet and constructing does not mean the lock was acquired.
@@ -147,9 +154,13 @@ namespace mongo {
         const ConnectionString& getRemoteConnection();
 
         /**
-         * Check the skew between a cluster of servers
+         * Checks the skew among a cluster of servers and returns true if the min and max clock
+         * times among the servers are within maxClockSkew.
          */
-        static bool checkSkew( const ConnectionString& cluster, unsigned skewChecks = NUM_LOCK_SKEW_CHECKS, unsigned long long maxClockSkew = MAX_LOCK_CLOCK_SKEW, unsigned long long maxNetSkew = MAX_LOCK_NET_SKEW );
+        static bool checkSkew( const ConnectionString& cluster,
+                               unsigned skewChecks = NUM_LOCK_SKEW_CHECKS,
+                               unsigned long long maxClockSkew = MAX_LOCK_CLOCK_SKEW,
+                               unsigned long long maxNetSkew = MAX_LOCK_NET_SKEW );
 
         /**
          * Get the remote time from a server or cluster
@@ -199,37 +210,34 @@ namespace mongo {
     class dist_lock_try {
     public:
 
-    	dist_lock_try() : _lock(NULL), _got(false) {}
+        dist_lock_try() : _lock(NULL), _got(false) {}
 
-    	dist_lock_try( const dist_lock_try& that ) : _lock(that._lock), _got(that._got), _other(that._other) {
-    		_other.getOwned();
+        dist_lock_try( const dist_lock_try& that ) : _lock(that._lock), _got(that._got), _other(that._other.getOwned()) {
+            // Make sure the lock ownership passes to this object,
+            // so we only unlock once.
+            ((dist_lock_try&) that)._got = false;
+            ((dist_lock_try&) that)._lock = NULL;
+            ((dist_lock_try&) that)._other = BSONObj();
+        }
 
-    		// Make sure the lock ownership passes to this object,
-    		// so we only unlock once.
-    		((dist_lock_try&) that)._got = false;
-    		((dist_lock_try&) that)._lock = NULL;
-    		((dist_lock_try&) that)._other = BSONObj();
-    	}
+        // Needed so we can handle lock exceptions in context of lock try.
+        dist_lock_try& operator=( const dist_lock_try& that ){
 
-    	// Needed so we can handle lock exceptions in context of lock try.
-    	dist_lock_try& operator=( const dist_lock_try& that ){
+            if( this == &that ) return *this;
 
-    	    if( this == &that ) return *this;
+            _lock = that._lock;
+            _got = that._got;
+            _other = that._other.getOwned();
+            _why = that._why;
 
-    	    _lock = that._lock;
-    	    _got = that._got;
-    	    _other = that._other;
-    	    _other.getOwned();
-    	    _why = that._why;
+            // Make sure the lock ownership passes to this object,
+            // so we only unlock once.
+            ((dist_lock_try&) that)._got = false;
+            ((dist_lock_try&) that)._lock = NULL;
+            ((dist_lock_try&) that)._other = BSONObj();
 
-    	    // Make sure the lock ownership passes to this object,
-    	    // so we only unlock once.
-    	    ((dist_lock_try&) that)._got = false;
-    	    ((dist_lock_try&) that)._lock = NULL;
-    	    ((dist_lock_try&) that)._other = BSONObj();
-
-    	    return *this;
-    	}
+            return *this;
+        }
 
         dist_lock_try( DistributedLock * lock , const std::string& why, double timeout = 0.0 )
             : _lock(lock), _why(why) {

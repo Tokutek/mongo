@@ -24,7 +24,6 @@
 #include "repl.h"
 #include "repl_block.h"
 #include "instance.h"
-#include "dbhelpers.h"
 #include "../util/background.h"
 #include "../util/mongoutils/str.h"
 #include "replutil.h"
@@ -258,6 +257,7 @@ namespace mongo {
     public:
         CmdUpdateSlave() : Command("updateSlave") {}
         virtual bool slaveOk() const { return true; }
+        virtual bool requiresShardedOperationScope() const { return false; }
         virtual LockType locktype() const { return NONE; }
         virtual bool requiresSync() const { return false; }
         virtual bool needsTxn() const { return false; }

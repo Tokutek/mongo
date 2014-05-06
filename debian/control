@@ -1,29 +1,122 @@
-Source: mongodb
+Source: tokumx
 Section: devel
 Priority: optional
-Maintainer: Richard Kreuter <richard@10gen.com>
-Build-Depends: debhelper (>= 7), libpcre3, libpcre3-dev, scons, xulrunner-dev, libboost1.35-dev | libboost1.37-dev | libboost1.38-dev | libboost1.40-dev | libboost1.42-dev, libboost-thread1.35-dev | libboost-thread1.37-dev | libboost-thread1.38-dev | libboost-thread1.40-dev | libboost-thread1.42-dev, libboost-filesystem1.35-dev | libboost-filesystem1.37-dev | libboost-filesystem1.38-dev | libboost-filesystem1.40-dev | libboost-filesystem1.42-dev, libboost-program-options1.35-dev | libboost-program-options1.37-dev | libboost-program-options1.38-dev | libboost-program-options1.40-dev | libboost-program-options1.42-dev, libboost-date-time1.35-dev | libboost-date-time1.37-dev | libboost-date-time1.38-dev | libboost-date-time1.40-dev | libboost-date-time1.42-dev, libpcap-dev, libreadline-dev
-Standards-Version: 3.8.0
-Homepage: http://www.mongodb.org
+Maintainer: Leif Walsh <leif.walsh@gmail.com>
+Standards-Version: 3.9.5
+Build-Depends: debhelper (>= 7), libpcre3, libpcre3-dev, cmake, libboost1.35-dev | libboost1.37-dev | libboost1.38-dev | libboost1.40-dev | libboost1.42-dev | libboost1.48-dev | libboost1.49-dev | libboost1.53-dev | libboost1.54-dev, libboost-thread1.35-dev | libboost-thread1.37-dev | libboost-thread1.38-dev | libboost-thread1.40-dev | libboost-thread1.42-dev | libboost-thread1.48-dev | libboost-thread1.49-dev | libboost-thread1.53-dev | libboost-thread1.54-dev, libboost-filesystem1.35-dev | libboost-filesystem1.37-dev | libboost-filesystem1.38-dev | libboost-filesystem1.40-dev | libboost-filesystem1.42-dev | libboost-filesystem1.48-dev | libboost-filesystem1.49-dev | libboost-filesystem1.53-dev | libboost-filesystem1.54-dev, libboost-program-options1.35-dev | libboost-program-options1.37-dev | libboost-program-options1.38-dev | libboost-program-options1.40-dev | libboost-program-options1.42-dev | libboost-program-options1.48-dev | libboost-program-options1.49-dev | libboost-program-options1.53-dev | libboost-program-options1.54-dev, libboost-date-time1.35-dev | libboost-date-time1.37-dev | libboost-date-time1.38-dev | libboost-date-time1.40-dev | libboost-date-time1.42-dev | libboost-date-time1.48-dev | libboost-date-time1.49-dev | libboost-date-time1.53-dev | libboost-date-time1.54-dev, libpcap-dev, libreadline-dev, zlib1g-dev
+Homepage: http://www.tokutek.com/products/tokumx-for-mongodb
+Vcs-Browser: https://github.com/Tokutek/mongo
+Vcs-Git: git://github.com/Tokutek/mongo.git
 
-Package: mongodb
-Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, xulrunner-dev
-Description: An object/document-oriented database
- MongoDB is a high-performance, open source, schema-free 
- document-oriented  data store that's easy to deploy, manage
- and use. It's network accessible, written in C++ and offers
- the following features :
+Package: tokumx
+Architecture: amd64
+Depends:
+    tokumx-clients (= ${binary:Version}),
+    tokumx-server (= ${binary:Version}),
+    ${misc:Depends}
+Conflicts: mongodb, mongodb-stable, mongodb-unstable, mongodb-nightly, mongodb-10gen, mongodb-10gen-unstable, mongodb-org, mongodb-org-unstable
+Description: object/document-oriented database (metapackage)
+ TokuMX is a high-performance version of MongoDB using Fractal
+ Tree indexes to store indexes and data.  TokuMX is
+ driver-compatible with MongoDB and has the same simple
+ management and operations interface as MongoDB, and adds:
  .
-    * Collection oriented storage - easy storage of object-
-      style data
-    * Full index support, including on inner objects
-    * Query profiling
-    * Replication and fail-over support
-    * Efficient storage of binary data including large 
-      objects (e.g. videos)
-    * Auto-sharding for cloud-level scalability
- .
- High performance, scalability, and reasonable depth of
- functionality are the goals for the project.
+    * Much higher performance on out-of-memory write workloads.
+    * Compression of all data, up to 10x in many cases.
+    * Document-level concurrency for all read and write
+      operations.
+    * Transactional semantics including snapshot reads and
+      multi-statement transactions on a single shard basis.
 
+Package: tokumx-clients
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}, tokumx-common (= ${binary:Version}), python2.5 | python2.6 | python2.7
+Conflicts: mongodb-clients, mongodb-10gen-unstable-shell, mongodb-10gen-unstable-tools, mongodb-org-shell, mongodb-org-tools, mongodb-org-unstable-shell, mongodb-org-unstable-tools
+Description: object/document-oriented database (client apps)
+ TokuMX is a high-performance version of MongoDB using Fractal
+ Tree indexes to store indexes and data.  TokuMX is
+ driver-compatible with MongoDB and has the same simple
+ management and operations interface as MongoDB, and adds:
+ .
+    * Much higher performance on out-of-memory write workloads.
+    * Compression of all data, up to 10x in many cases.
+    * Document-level concurrency for all read and write
+      operations.
+    * Transactional semantics including snapshot reads and
+      multi-statement transactions on a single shard basis.
+ .
+ This package includes the mongo shell and utilities for
+ interacting with a TokuMX database server.
+
+Package: tokumx-dev
+Architecture: amd64 i386
+Depends: ${misc:Depends}, python2.5 | python2.6 | python2.7, libboost1.35-dev | libboost1.37-dev | libboost1.38-dev | libboost1.40-dev | libboost1.42-dev | libboost1.48-dev | libboost1.49-dev | libboost1.53-dev | libboost1.54-dev, libboost-thread1.35-dev | libboost-thread1.37-dev | libboost-thread1.38-dev | libboost-thread1.40-dev | libboost-thread1.42-dev | libboost-thread1.48-dev | libboost-thread1.49-dev | libboost-thread1.53-dev | libboost-thread1.54-dev, libboost-filesystem1.35-dev | libboost-filesystem1.37-dev | libboost-filesystem1.38-dev | libboost-filesystem1.40-dev | libboost-filesystem1.42-dev | libboost-filesystem1.48-dev | libboost-filesystem1.49-dev | libboost-filesystem1.53-dev | libboost-filesystem1.54-dev, libboost-program-options1.35-dev | libboost-program-options1.37-dev | libboost-program-options1.38-dev | libboost-program-options1.40-dev | libboost-program-options1.42-dev | libboost-program-options1.48-dev | libboost-program-options1.49-dev | libboost-program-options1.53-dev | libboost-program-options1.54-dev, libboost-date-time1.35-dev | libboost-date-time1.37-dev | libboost-date-time1.38-dev | libboost-date-time1.40-dev | libboost-date-time1.42-dev | libboost-date-time1.48-dev | libboost-date-time1.49-dev | libboost-date-time1.53-dev | libboost-date-time1.54-dev, tokumx-common
+Conflicts: mongodb-dev
+Description: object/document-oriented database (development)
+ TokuMX is a high-performance version of MongoDB using Fractal
+ Tree indexes to store indexes and data.  TokuMX is
+ driver-compatible with MongoDB and has the same simple
+ management and operations interface as MongoDB, and adds:
+ .
+    * Much higher performance on out-of-memory write workloads.
+    * Compression of all data, up to 10x in many cases.
+    * Document-level concurrency for all read and write
+      operations.
+    * Transactional semantics including snapshot reads and
+      multi-statement transactions on a single shard basis.
+ .
+ This package includes the C++ headers and library for
+ developing TokuMX applications.
+
+Package: tokumx-server
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}, tokumx-common (= ${binary:Version})
+Pre-Depends: adduser
+Conflicts: mongodb-server, mongodb-10gen-unstable-mongos, mongodb-10gen-unstable-server, mongodb-org-mongos, mongodb-org-server, mongodb-org-unstable-mongos, mongodb-org-unstable-server
+Description: object/document-oriented database (server package)
+ TokuMX is a high-performance version of MongoDB using Fractal
+ Tree indexes to store indexes and data.  TokuMX is
+ driver-compatible with MongoDB and has the same simple
+ management and operations interface as MongoDB, and adds:
+ .
+    * Much higher performance on out-of-memory write workloads.
+    * Compression of all data, up to 10x in many cases.
+    * Document-level concurrency for all read and write
+      operations.
+    * Transactional semantics including snapshot reads and
+      multi-statement transactions on a single shard basis.
+ .
+ This package includes the mongod and mongos data and routing
+ servers for the TokuMX database system.
+
+Package: tokumx-common
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}, zlib1g
+Pre-Depends: debconf, curl, dialog
+Description: object/document-oriented database (common package)
+ TokuMX is a high-performance version of MongoDB using Fractal
+ Tree indexes to store indexes and data.  TokuMX is
+ driver-compatible with MongoDB and has the same simple
+ management and operations interface as MongoDB, and adds:
+ .
+    * Much higher performance on out-of-memory write workloads.
+    * Compression of all data, up to 10x in many cases.
+    * Document-level concurrency for all read and write
+      operations.
+    * Transactional semantics including snapshot reads and
+      multi-statement transactions on a single shard basis.
+ .
+ This package includes files common to tokumx-clients and
+ tokumx-server, including the Fractal Tree indexing library.
+
+Package: tokumx-dbg
+Architecture: amd64
+Section: debug
+Priority: extra
+Depends:
+    tokumx-clients (= ${binary:Version}),
+    tokumx-server (= ${binary:Version}),
+    ${misc:Depends}
+Description: object/document-oriented database (debug symbols)
+ .
+ This package contains the debugging symbols for tokumx.

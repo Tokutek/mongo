@@ -119,7 +119,7 @@ namespace DocumentSourceTests {
             void createSource() {
                 boost::shared_ptr<DocumentSourceCursor::CursorWithContext> cursorWithContext
                         ( new DocumentSourceCursor::CursorWithContext( ns ) );
-                boost::shared_ptr<Cursor> cursor( BasicCursor::make( nsdetails(ns) ) );
+                boost::shared_ptr<Cursor> cursor( BasicCursor::make( getCollection(ns) ) );
                 cursorWithContext->_cursor.reset
                         ( new ClientCursor( QueryOption_NoCursorTimeout, cursor, ns, BSONObj(), true ) );
                 _source = DocumentSourceCursor::create( cursorWithContext, _ctx );
@@ -571,7 +571,7 @@ namespace DocumentSourceTests {
         };
 
         struct ValueCmp {
-            bool operator()(const Value& a, const Value& b) {
+            bool operator()(const Value& a, const Value& b) const {
                 return Value::compare( a, b ) < 0;
             }
         };

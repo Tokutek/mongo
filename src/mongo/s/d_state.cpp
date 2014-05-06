@@ -34,6 +34,7 @@
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/db/kill_current_op.h"
 #include "mongo/db/replutil.h"
 #include "mongo/client/connpool.h"
 #include "mongo/s/chunk_version.h"
@@ -52,10 +53,20 @@ namespace mongo {
 
     ShardingState::ShardingState()
         : _enabled(false) , _mutex( "ShardingState" ),
-          _configServerTickets( 3 /* max number of concurrent config server refresh threads */ ) {
+          _configServerTickets( 3 /* max number of concurrent config server refresh threads */ ),
+          _rwlock("ShardingState") {
     }
 
     void ShardingState::enable( const string& server ) {
+        // Until sharding is enabled, normal clients will not take the ShardingState rwlock
+        // (ShardedOperationScope) for speed.  So when we want to transition to sharding being
+        // enabled, we have to flush all currently running operations out of the system (that have
+        // not yet taken this lock) before we set the bit.  We also have to kill anything that may
+        // have gotten past the ShardedOperationScope constructor but would be waiting on the DB
+        // lock.  It's unfortunate, but extraordinarily rare.
+        NoteStateTransition nst;
+        LOCK_REASON(lockReason, "sharding: enabling sharding");
+        Lock::GlobalWrite lk(lockReason);
         _enabled = true;
         verify( server.size() );
         if ( _configServer.size() == 0 )
@@ -277,7 +288,7 @@ namespace mongo {
 
         {
             // NOTE: This lock prevents the ns version from changing while a write operation occurs.
-            Lock::DBRead readLk(ns);
+            SetVersionScope sc;
             
             // This lock prevents simultaneous metadata changes using the same map
             scoped_lock lk( _mutex );
@@ -406,6 +417,7 @@ namespace mongo {
         virtual bool slaveOk() const { return false; }
         virtual bool adminOnly() const { return true; }
         virtual bool requiresSync() const { return false; }
+        virtual bool requiresShardedOperationScope() const { return false; }
         virtual bool canRunInMultiStmtTxn() const { return false; }
         virtual bool needsTxn() const { return false; }
         virtual int txnFlags() const { return noTxnFlags(); }
@@ -459,7 +471,7 @@ namespace mongo {
 
         virtual bool slaveOk() const { return true; }
         virtual LockType locktype() const { return NONE; }
-        
+
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {
@@ -498,7 +510,7 @@ namespace mongo {
                 return true;
             }
 
-            Lock::GlobalWrite lk;
+            ShardingState::SetVersionScope sc;
             return checkConfigOrInit( configdb , authoritative , errmsg , result , true );
         }
         
@@ -625,21 +637,7 @@ namespace mongo {
             // this is because of a weird segfault I saw and I can't see why this should ever be set
             massert( 13647 , str::stream() << "context should be empty here, is: " << cc().getContext()->ns() , cc().getContext() == 0 ); 
         
-            struct SetShardVersionLock {
-                SetShardVersionLock() : _lk(new Lock::GlobalWrite()) { }
-                // Just yields the lock. Doesn't need to do anything with
-                // context because we asserted above that there is none.
-                struct temprelease {
-                    temprelease(SetShardVersionLock &lk) : _lk(lk._lk) {
-                        _lk.reset();
-                    };
-                    ~temprelease() {
-                        _lk.reset(new Lock::GlobalWrite());
-                    }
-                    scoped_ptr<Lock::GlobalWrite> &_lk;
-                };
-                scoped_ptr<Lock::GlobalWrite> _lk;
-            } setShardVersionLock; // TODO: can we get rid of this??
+            ShardingState::SetVersionScope sc;
             
             if ( oldVersion.isSet() && ! globalVersion.isSet() ) {
                 // this had been reset
@@ -682,7 +680,7 @@ namespace mongo {
             if ( version < globalVersion && version.hasCompatibleEpoch( globalVersion ) ) {
                 while ( shardingState.inCriticalMigrateSection() ) {
                     log() << "waiting till out of critical section" << endl;
-                    SetShardVersionLock::temprelease temp(setShardVersionLock);
+                    ShardingState::SetVersionScope::temprelease tr(sc);
                     shardingState.waitTillNotInCriticalSection( 10 );
                 }
                 errmsg = "shard global version for collection is higher than trying to set to '" + ns + "'";
@@ -698,7 +696,7 @@ namespace mongo {
                 // should require a reload.
                 while ( shardingState.inCriticalMigrateSection() ) {
                     log() << "waiting till out of critical section" << endl;
-                    SetShardVersionLock::temprelease temp(setShardVersionLock);
+                    ShardingState::SetVersionScope::temprelease tr(sc);
                     shardingState.waitTillNotInCriticalSection( 10 );
                 }
 
@@ -711,8 +709,7 @@ namespace mongo {
 
             Timer relockTime;
             {
-                SetShardVersionLock::temprelease temp(setShardVersionLock);
-
+                ShardingState::SetVersionScope::temprelease tr(sc);
                 ChunkVersion currVersion = version;
                 if ( ! shardingState.trySetVersion( ns , currVersion ) ) {
                     errmsg = str::stream() << "client version differs from config's for collection '" << ns << "'";
@@ -786,7 +783,8 @@ namespace mongo {
     public:
         ShardingStateCmd() : MongodShardCommand( "shardingState" ) {}
 
-        virtual LockType locktype() const { return WRITE; } // TODO: figure out how to make this not need to lock
+        // The ShardedOperationScope will protect us from concurrent modification during appendInfo
+        virtual LockType locktype() const { return NONE; }
 
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,

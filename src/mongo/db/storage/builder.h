@@ -22,6 +22,7 @@
 #include "mongo/db/client.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/kill_current_op.h"
+#include "mongo/util/percentage_progress_meter.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/timer.h"
 
@@ -31,36 +32,25 @@ namespace mongo {
 
         class BuilderBase : boost::noncopyable {
         public:
-            BuilderBase() { }
-            void setPollMessagePrefix(const string &msg) {
-                _poll_extra.msg_prefix = msg;
-            }
+            BuilderBase(const std::string &prefix) : _poll_extra(prefix) {}
 
             struct poll_function_extra : public ExceptionSaver {
-                poll_function_extra() :
-                    c(cc()), msg_prefix(""),
-                    timer(), lastReportSeconds(0), lastReportProgress(0) {
-                }
+                poll_function_extra(const std::string &prefix)
+                        : c(cc()),
+                          timer(),
+                          pm(prefix) {}
                 Client &c;
-                string msg_prefix;
                 Timer timer;
-                long long lastReportSeconds;
-                double lastReportProgress;
+                PercentageProgressMeter pm;
             };
             static int poll_function(void *extra, float progress) {
                 poll_function_extra *info = static_cast<poll_function_extra *>(extra);
                 try {
                     killCurrentOp.checkForInterrupt(info->c); // uasserts if we should stop
 
-                    // Report every 1% of progress, but no more than once a second.
-                    if (progress > info->lastReportProgress + 0.01) {
-                        long long now = info->timer.seconds();
-                        if (now > info->lastReportSeconds) {
-                            log() << info->msg_prefix << " "
-                                  << (long long) (progress * 100) << "%." << endl;
-                        }
-                        info->lastReportProgress = progress;
-                        info->lastReportSeconds = now;
+                    if (info->pm.report(progress) && info->c.curop()) {
+                        std::string status = info->pm.toString();
+                        info->c.curop()->setMessage(status.c_str());
                     }
                     return 0;
                 } catch (const std::exception &ex) {
@@ -94,7 +84,7 @@ namespace mongo {
         // Wrapper for the ydb's DB_LOADER
         class Loader : public BuilderBase {
         public:
-            Loader(DB **dbs, const int n);
+            Loader(DB **dbs, const int n, const std::string &prefix);
 
             ~Loader();
 
@@ -113,7 +103,7 @@ namespace mongo {
         // Wrapper for the ydb's DB_INDEXER
         class Indexer : public BuilderBase {
         public:
-            Indexer(DB *src_db, DB *dest_db);
+            Indexer(DB *src_db, DB *dest_db, const std::string &prefix);
 
             ~Indexer();
 

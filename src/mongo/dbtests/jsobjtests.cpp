@@ -261,7 +261,7 @@ namespace JsobjTests {
                     Client::initThread("pretouchN");
                     c = &cc();
                 }
-                Lock::GlobalWrite lk; // for initTimestamp
+                Lock::GlobalWrite lk(mongo::unittest::EMPTY_STRING); // for initTimestamp
         
                 BSONObjBuilder b;
                 b.appendTimestamp( "a" );

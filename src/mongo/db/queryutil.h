@@ -354,7 +354,7 @@ namespace mongo {
         bool _boundElemMatch;
     };
 
-    class NamespaceDetails;
+    class Collection;
     
     /**
      * A pair of FieldRangeSets, one representing constraints for single key
@@ -373,7 +373,7 @@ namespace mongo {
          * @return the appropriate single or multi key FieldRangeSet for the specified index.
          * @param idxNo -1 for non index scan.
          */
-        const FieldRangeSet &frsForIndex( const NamespaceDetails* nsd, int idxNo ) const;
+        const FieldRangeSet &frsForIndex( const Collection *cl, int idxNo ) const;
 
         /** @return a field range in the single key FieldRangeSet. */
         const FieldRange &shardKeyRange( const char *fieldName ) const {
@@ -387,7 +387,7 @@ namespace mongo {
          * @return false if a match is impossible on the specified index.
          * @param idxNo -1 for non index scan.
          */
-        bool matchPossibleForIndex( NamespaceDetails *d, int idxNo, const BSONObj &keyPattern ) const;
+        bool matchPossibleForIndex( Collection *cl, int idxNo, const BSONObj &keyPattern ) const;
         
         const char *ns() const { return _singleKey.ns(); }
 
@@ -414,8 +414,8 @@ namespace mongo {
     private:
         FieldRangeSetPair( const FieldRangeSet &singleKey, const FieldRangeSet &multiKey )
         :_singleKey( singleKey ), _multiKey( multiKey ) {}
-        void assertValidIndex( const NamespaceDetails *d, int idxNo ) const;
-        void assertValidIndexOrNoIndex( const NamespaceDetails *d, int idxNo ) const;
+        void assertValidIndex( const Collection *cl, int idxNo ) const;
+        void assertValidIndexOrNoIndex( const Collection *cl, int idxNo ) const;
         /** matchPossibleForIndex() must be true. */
         FieldRangeSet _singleKey;
         FieldRangeSet _multiKey;
@@ -483,6 +483,9 @@ namespace mongo {
         /** @return starting point for an index traversal. */
         BSONObj startKey() const;
 
+        /** @return true if the startKey() bound is inclusive. */
+        bool startKeyInclusive() const;
+
         /** @return end point for an index traversal. */
         BSONObj endKey() const;
 
@@ -530,8 +533,8 @@ namespace mongo {
 
         const vector<FieldRange> &ranges() const { return _ranges; }
 
-        // True if each FieldRange in _ranges is a point interval set.
-        bool containsOnlyPointIntervals() const;
+        // True if the first FieldRange in _ranges is a point interval.
+        bool prefixedByPointInterval() const;
         
     private:
         int matchingLowElement( const BSONElement &e, int i, bool direction, bool &lowEquality ) const;
@@ -694,7 +697,7 @@ namespace mongo {
         /** @return true iff we are done scanning $or clauses, or if there are no $or clauses. */
         bool orRangesExhausted() const { return _orSets.empty(); }
         /** Iterates to the next $or clause by removing the current $or clause. */
-        void popOrClause( NamespaceDetails *nsd, int idxNo, const BSONObj &keyPattern );
+        void popOrClause( Collection *cl, int idxNo, const BSONObj &keyPattern );
         void popOrClauseSingleKey();
         /** @return FieldRangeSetPair for the current $or clause. */
         FieldRangeSetPair *topFrsp() const;
@@ -709,7 +712,7 @@ namespace mongo {
         SpecialIndices getSpecial() const { return _baseSet.getSpecial(); }
     private:
         void assertMayPopOrClause();
-        void _popOrClause( const FieldRangeSet *toDiff, NamespaceDetails *d, int idxNo, const BSONObj &keyPattern );
+        void _popOrClause( const FieldRangeSet *toDiff, Collection *cl, int idxNo, const BSONObj &keyPattern );
         FieldRangeSetPair _baseSet;
         list<FieldRangeSetPair> _orSets;
         list<FieldRangeSetPair> _originalOrSets;
@@ -769,7 +772,7 @@ namespace mongo {
         if( strcmp("_id", e.fieldName()) != 0 ) 
             return false;
         
-        if ( e.isSimpleType() ) // e.g. not something like { _id : { $gt : ...
+        if ( e.isSimpleType() ) // e.g. not something like { _id : { $gt : ... } }
             return true;
         
         if ( e.type() == Object )
@@ -778,22 +781,6 @@ namespace mongo {
         return false;
     }
 
-    inline BSONObj getSimpleIdQuery( const BSONObj &query ) {
-        for (BSONObjIterator i(query); i.more(); ) {
-            const BSONElement &e = i.next();
-            if (e.isSimpleType() && strcmp(e.fieldName(), "_id") == 0) {
-                if (e.type() == Object && e.Obj().firstElementFieldName()[0] == '$') {
-                    return BSONObj();
-                }
-                if (query.nFields() == 1) {
-                    return query;
-                }
-                return e.wrap();
-            }
-        }
-        return BSONObj();
-    }
-    
     inline bool FieldInterval::equality() const {
         if ( _cachedEquality == -1 ) {
             _cachedEquality = ( _lower._inclusive && _upper._inclusive && _lower._bound.woCompare( _upper._bound, false ) == 0 );
@@ -899,8 +886,8 @@ namespace mongo {
         return ret;
     }
     
-    inline bool FieldRangeSetPair::matchPossibleForIndex( NamespaceDetails *d, int idxNo, const BSONObj &keyPattern ) const {
-        assertValidIndexOrNoIndex( d, idxNo );
+    inline bool FieldRangeSetPair::matchPossibleForIndex( Collection *cl, int idxNo, const BSONObj &keyPattern ) const {
+        assertValidIndexOrNoIndex( cl, idxNo );
         if ( !matchPossible() ) {
             return false;
         }
@@ -908,13 +895,13 @@ namespace mongo {
             // multi key matchPossible() is true, so return true.
             return true;   
         }
-        return frsForIndex( d, idxNo ).matchPossibleForIndex( keyPattern );
+        return frsForIndex( cl, idxNo ).matchPossibleForIndex( keyPattern );
     }
 
-    inline void FieldRangeSetPair::assertValidIndexOrNoIndex( const NamespaceDetails *d, int idxNo ) const {
+    inline void FieldRangeSetPair::assertValidIndexOrNoIndex( const Collection *cl, int idxNo ) const {
         massert( 14049, "FieldRangeSetPair invalid index specified", idxNo >= -1 );
         if ( idxNo >= 0 ) {
-            assertValidIndex( d, idxNo );   
+            assertValidIndex( cl, idxNo );   
         }
     }        
     

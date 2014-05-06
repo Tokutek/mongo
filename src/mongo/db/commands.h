@@ -77,6 +77,12 @@ namespace mongo {
          */
         virtual LockType locktype() const = 0;
 
+        /** whether the command should be run in a ShardedOperationScope
+
+            usually true, except if the operation knows otherwise, like for setShardVersion (which
+            will take the exclusive lock later) */
+        virtual bool requiresShardedOperationScope() const { return true; }
+
         /** if true, this command must go to all members in a SyncClusterConnection.
             We add this because we can now have modifications without a locktype of WRITE, which is what we used to use to determine this for SyncClusterConnection.
          */
@@ -250,6 +256,7 @@ namespace mongo {
       public:
         QueryCommand(const char *name, bool webUI=false, const char *oldName=NULL) : Command(name, webUI, oldName) {}
         virtual bool slaveOk() const { return true; }
+        virtual bool requiresShardedOperationScope() const { return false; }
         virtual LockType locktype() const { return READ; }
         virtual bool requiresSync() const { return false; }
         virtual bool needsTxn() const { return true; }
@@ -264,6 +271,7 @@ namespace mongo {
         InformationCommand(const char *name, bool webUI=false, const char *oldName=NULL) : Command(name, webUI, oldName) {}
         virtual bool slaveOk() const { return true; }
         virtual bool slaveOverrideOk() const { return true; }
+        virtual bool requiresShardedOperationScope() const { return false; }
         virtual LockType locktype() const { return NONE; }
         virtual bool requiresSync() const { return false; }
         virtual bool needsTxn() const { return false; }
@@ -315,6 +323,7 @@ namespace mongo {
             actions.addAction(ActionType::shutdown);
             out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
         }
+        virtual bool requiresShardedOperationScope() const { return false; }
         virtual LockType locktype() const { return NONE; }
         virtual bool requiresSync() const { return false; }
         // Cannot have a transaction while shutting down the server.

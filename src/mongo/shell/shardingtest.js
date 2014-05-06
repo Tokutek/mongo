@@ -979,12 +979,6 @@ ShardingTest.prototype.isAnyBalanceInFlight = function() {
     if ( this.config.locks.find({ _id : { $ne : "balancer" }, state : 2 }).count() > 0 )
         return true;
 
-    var allCurrent = this.s.getDB( "admin" ).currentOp().inprog;
-    for ( var i = 0; i < allCurrent.length; i++ ) {
-        if ( allCurrent[i].desc &&
-             allCurrent[i].desc.indexOf( "cleanupOldData" ) == 0 )
-            return true;
-    }
     return false;
 }
 

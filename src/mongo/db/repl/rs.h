@@ -32,8 +32,7 @@
 #pragma once
 
 #include "mongo/db/commands.h"
-#include "mongo/db/index.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/oplogreader.h"
 #include "mongo/db/repl/rs_config.h"
@@ -385,19 +384,15 @@ namespace mongo {
         // for replInfoUpdate
         boost::mutex _replInfoMutex;
         bool _replInfoUpdateRunning;
-        // for oplog purge thread
-        bool _replOplogPurgeRunning;
-        boost::mutex _purgeMutex;
-        boost::condition_variable _purgeCond;
-        GTID _lastPurgedGTID;
-        uint64_t _lastPurgedTS;
+        // for oplogPartitionThread
+        boost::mutex _oplogPartitionMutex;
+        boost::condition_variable _oplogPartitionCond;
+        bool _replOplogPartitionRunning;
         // for keepOplogAlive
         bool _replKeepOplogAliveRunning;
         uint64_t _keepOplogPeriodMillis;
         boost::mutex _keepOplogAliveMutex;
         boost::condition_variable _keepOplogAliveCond;
-        // for optimize oplog thread, uses same _purgeMutex
-        bool _replOplogOptimizeRunning;
 
         bool _replBackgroundShouldRun;
         
@@ -551,16 +546,13 @@ namespace mongo {
         // for testing
         void setKeepOplogAlivePeriod(uint64_t val);
         void changeExpireOplog(uint64_t expireOplogDays, uint64_t expireOplogHours);
-        GTID getLastPurgedGTID();
-        uint64_t getLastPurgedTS();
     private:
         void _getTargets(list<Target>&, int &configVersion);
         void getTargets(list<Target>&, int &configVersion);
         void startThreads();
         void keepOplogAliveThread();
-        void purgeOplogThread();
-        void optimizeOplogThread();
         void updateReplInfoThread();
+        void oplogPartitionThread();
         friend class FeedbackThread;
         friend class CmdReplSetElect;
         friend class Member;
@@ -662,6 +654,7 @@ namespace mongo {
     protected:
         ReplSetCommand(const char * s, bool show=false) : Command(s, show) { }
         virtual bool slaveOk() const { return true; }
+        virtual bool requiresShardedOperationScope() const { return false; }
         virtual bool adminOnly() const { return true; }
         virtual bool logTheOp() { return false; }
         virtual LockType locktype() const { return NONE; }
@@ -737,9 +730,10 @@ namespace mongo {
 
     inline BSONObj getLastEntryInOplog() {
         BSONObj o;
-        Client::ReadContext lk(rsoplog);
-        NamespaceDetails *d = nsdetails(rsoplog);
-        shared_ptr<Cursor> c( BasicCursor::make(d, -1) );
+        LOCK_REASON(lockReason, "repl: getting last entry in oplog");
+        Client::ReadContext lk(rsoplog, lockReason);
+        Collection *cl = getCollection(rsoplog);
+        shared_ptr<Cursor> c(Cursor::make(cl, -1));
         return c->ok() ? c->current().copy() : BSONObj();
     }
 

@@ -65,8 +65,10 @@ namespace mongo {
     }
 
     bool ShardKeyPattern::isUniqueIndexCompatible( const KeyPattern& uniqueIndexPattern ) const {
-        if ( ! uniqueIndexPattern.toBSON().isEmpty() &&
-             str::equals( uniqueIndexPattern.toBSON().firstElementFieldName(), "_id" ) ){
+        const BSONObj &uniqueIndexPatternBSON = uniqueIndexPattern.toBSON();
+        if (!uniqueIndexPatternBSON.isEmpty() &&
+            // {_id: 'hashed'} doesn't count (that couldn't be unique anyway...)
+            uniqueIndexPatternBSON["_id"].isNumber()) {
             return true;
         }
         return pattern.toBSON().isFieldNamePrefixOf( uniqueIndexPattern.toBSON() );

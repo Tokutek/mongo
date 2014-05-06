@@ -35,7 +35,7 @@
 #include "mongo/db/commands.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/clientcursor.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/queryutil.h"
@@ -104,8 +104,9 @@ namespace mongo {
                 return false;
             }
 
+            LOCK_REASON(lockReason, "findAndModify");
             try {
-                Client::ReadContext ctx(ns);
+                Client::ReadContext ctx(ns, lockReason);
                 Client::Transaction txn(DB_SERIALIZABLE);
 
                 bool ok = runNoDirectClient( ns ,
@@ -118,7 +119,7 @@ namespace mongo {
                 return ok;
             }
             catch (RetryWithWriteLock &e) {
-                Client::WriteContext ctx(ns);
+                Client::WriteContext ctx(ns, lockReason);
                 Client::Transaction txn(DB_SERIALIZABLE);
 
                 bool ok = runNoDirectClient( ns ,
@@ -153,8 +154,7 @@ namespace mongo {
                                 bool upsert , bool returnNew , bool remove ,
                                 BSONObjBuilder& result , string& errmsg ) {
             BSONObj doc;
-            NamespaceDetails *d = nsdetails(ns);
-            const bool found = d != NULL && d->findOne( queryOriginal , doc );
+            const bool found = Collection::findOne(ns, queryOriginal, doc);
 
             BSONObj queryModified = queryOriginal;
             if ( found && doc["_id"].type() && ! isSimpleIdQuery( queryOriginal ) ) {
@@ -229,7 +229,7 @@ namespace mongo {
                         _appendHelper( result , doc , found , fields );
                     }
 
-                    UpdateResult res = updateObjects( ns.c_str() , update , queryModified , upsert , false , true , cc().curop()->debug() );
+                    UpdateResult res = updateObjects( ns.c_str() , update , queryModified , upsert , false );
 
                     if ( returnNew ) {
                         if ( res.upserted.isSet() ) {
@@ -239,8 +239,7 @@ namespace mongo {
                             // we do this so that if the update changes the fields, it still matches
                             queryModified = queryModified["_id"].wrap();
                         }
-                        d = nsdetails(ns);
-                        if ( d == NULL || ! d->findOne( queryModified , doc ) ) {
+                        if (!Collection::findOne(ns, queryModified, doc)) {
                             errmsg = str::stream() << "can't find object after modification  " 
                                                    << " ns: " << ns 
                                                    << " queryModified: " << queryModified 

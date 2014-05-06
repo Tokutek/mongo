@@ -31,11 +31,8 @@
 
 #include "mongo/pch.h"
 
-#include "mongo/db/database.h"
-
-#include <boost/filesystem/operations.hpp>
-
 #include "mongo/db/clientcursor.h"
+#include "mongo/db/database.h"
 #include "mongo/db/databaseholder.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/introspect.h"
@@ -49,7 +46,7 @@ namespace mongo {
     }
 
     Database::Database(const StringData &name, const StringData &path)
-        : _name(name.toString()), _path(path.toString()), _nsIndex( _path, _name ),
+        : _name(name.toString()), _path(path.toString()), _collectionMap( _path, _name ),
           _profileName(getSisterNS(_name, "system.profile"))
     {
         try {
@@ -77,7 +74,7 @@ namespace mongo {
             _profile = cmdLine.defaultProfile;
             // The underlying dbname.ns dictionary is opend if it exists,
             // and created lazily on the next write.
-            _nsIndex.init();
+            _collectionMap.init();
         } catch (std::exception &e) {
             log() << "warning database " << _path << " " << _name << " could not be opened" << endl;
             DBException* dbe = dynamic_cast<DBException*>(&e);
@@ -89,7 +86,23 @@ namespace mongo {
             }
             throw;
         }
-    }    
+    }
+
+    void Database::diskSize(size_t &uncompressedSize, size_t &compressedSize) {
+        list<string> colls;
+        _collectionMap.getNamespaces(colls);
+        CollectionData::Stats dbstats;
+        for (list<string>::const_iterator it = colls.begin(); it != colls.end(); ++it) {
+            Collection *c = getCollection(*it);
+            if (c == NULL) {
+                DEV warning() << "collection " << *it << " wasn't found in Database::diskSize" << endl;
+                continue;
+            }
+            c->fillCollectionStats(dbstats, NULL, 1);
+        }
+        uncompressedSize += dbstats.size + dbstats.indexSize;
+        compressedSize += dbstats.storageSize + dbstats.indexStorageSize;
+    }
 
     bool Database::setProfilingLevel( int newLevel , string& errmsg ) {
         if ( _profile == newLevel )
@@ -145,7 +158,8 @@ namespace mongo {
                 dassert(db->name() == it->first);
                 // This erases dbs[db->name] for us, can't lift it out yet until we understand the callers of closeDatabase().
                 // That's why we have a weird loop here.
-                Client::WriteContext ctx(db->name());
+                LOCK_REASON(lockReason, "closing databases");
+                Client::WriteContext ctx(db->name(), lockReason);
                 db->closeDatabase(db->name(), path);
             }
             _paths.erase(path);
@@ -186,6 +200,23 @@ namespace mongo {
         }
 
         return db;
+    }
+
+    void dropDatabase(const StringData& name) {
+        TOKULOG(1) << "dropDatabase " << name << endl;
+        Lock::assertWriteLocked(name);
+        Database *d = cc().database();
+        verify(d != NULL);
+        verify(d->name() == name);
+
+        // Disable dropDatabase in a multi-statement transaction until
+        // we have the time/patience to test/debug it.
+        if (cc().txnStackSize() > 1) {
+            uasserted(16777, "Cannot dropDatabase in a multi-statement transaction.");
+        }
+
+        collectionMap(name)->drop();
+        Database::closeDatabase(d->name().c_str(), d->path());
     }
 
 } // namespace mongo

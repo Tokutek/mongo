@@ -32,12 +32,13 @@
 #include "mongo/client/remote_transaction.h"
 #include "mongo/db/client.h"
 #include "mongo/db/cursor.h"
+#include "mongo/db/database.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/jsobjmanipulator.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/oplogreader.h"
 #include "mongo/db/query_optimizer.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/repl/rs.h"
@@ -145,7 +146,10 @@ namespace mongo {
 
     bool Member::syncable() const {
         bool buildIndexes = theReplSet ? theReplSet->buildIndexes() : true;
-        return hbinfo().up() && (config().buildIndexes || !buildIndexes) && state().readable();
+        return hbinfo().up() &&
+            (config().buildIndexes || !buildIndexes) &&
+            state().readable() &&
+            (hbinfo().oplogVersion <= ReplSetConfig::OPLOG_VERSION);
     }
 
     const Member* ReplSetImpl::getMemberToSyncTo() {
@@ -277,19 +281,15 @@ namespace mongo {
     }
 
     void ReplSetImpl::_fillGaps(OplogReader* r) {
-        Client::ReadContext ctx(rsoplog);
+        LOCK_REASON(lockReason, "repl: filling gaps");
+        Client::ReadContext ctx(rsoplog, lockReason);
         Client::Transaction catchupTransaction(0);
-        NamespaceDetails *d = nsdetails(rsReplInfo);
         
         // now we should have replInfo on this machine,
         // let's query the minLiveGTID to figure out from where
         // we should copy the opLog
         BSONObj result;
-        const bool foundMinLive = d != NULL &&
-            d->findOne(
-               BSON( "_id" << "minLive" ),
-               result
-               );
+        const bool foundMinLive = Collection::findOne(rsReplInfo, BSON("_id" << "minLive"), result);
         verify(foundMinLive);
         GTID minLiveGTID;
         minLiveGTID = getGTIDFromBSON("GTID", result);
@@ -329,19 +329,15 @@ namespace mongo {
         std::deque<BSONObj> unappliedTransactions;
         {
             // accumulate a list of transactions that are unapplied
-            Client::ReadContext ctx(rsoplog);
+            LOCK_REASON(lockReason, "repl: initial sync applying missing ops");
+            Client::ReadContext ctx(rsoplog, lockReason);
             Client::Transaction catchupTransaction(0);        
-            NamespaceDetails *d = nsdetails(rsReplInfo);
 
             // now we should have replInfo on this machine,
             // let's query the minUnappliedGTID to figure out from where
             // we should copy the opLog
             BSONObj result;
-            const bool foundMinUnapplied = d != NULL &&
-                d->findOne(
-                   BSON( "_id" << "minUnapplied" ), 
-                   result
-                   );
+            const bool foundMinUnapplied = Collection::findOne(rsReplInfo, BSON("_id" << "minUnapplied"), result);
             verify(foundMinUnapplied);
             GTID minUnappliedGTID;
             minUnappliedGTID = getGTIDFromBSON("GTID", result);
@@ -426,7 +422,8 @@ namespace mongo {
             }
 
             {
-                Lock::GlobalWrite lk;
+                LOCK_REASON(lockReason, "repl: initial sync drop all databases");
+                Lock::GlobalWrite lk(lockReason);
                 Client::Transaction dropTransaction(DB_SERIALIZABLE);
                 sethbmsg("initial sync drop all databases", 0);
                 dropAllDatabasesExceptLocal();
@@ -437,12 +434,10 @@ namespace mongo {
             // first delete any existing data in the oplog
 
             {
-                Lock::DBWrite lk("local");
+                LOCK_REASON(lockReason, "repl: create oplog");
+                Lock::DBWrite lk("local", lockReason);
                 Client::Transaction fileOpsTransaction(DB_SERIALIZABLE);
                 deleteOplogFiles();
-                // now recreate the oplog
-                createOplog();
-                openOplogFiles();
                 fileOpsTransaction.commit(0);
             }
 
@@ -462,12 +457,14 @@ namespace mongo {
                 // later causes an abort. So, to be cautious, they are separate
 
                 {
-                    Lock::GlobalWrite lk;
+                    LOCK_REASON(lockReason, "repl: initial sync");
+                    Lock::GlobalWrite lk(lockReason);
                     Client::Transaction cloneTransaction(DB_SERIALIZABLE);
                     bool ret = _syncDoInitialSync_clone(sourceHostname.c_str(), dbs, conn);
 
                     if (!ret) {
                         veto(source->fullName(), 600);
+                        cloneTransaction.abort();
                         sleepsecs(300);
                         return false;
                     }
@@ -480,29 +477,35 @@ namespace mongo {
 
                     // first copy the replInfo, as we will use its information
                     // to determine  how much of the opLog to copy
-                    BSONObj q;
-                    cloneCollectionData(conn,
-                                        rsReplInfo,
-                                        q,
-                                        true, //copyIndexes
-                                        false //logForRepl
-                                        );
+                    {
+                        Client::Context ctx( "local" );
+                        BSONObj q;
+                        cloneCollection(conn,
+                                            "local",
+                                            rsReplInfo,
+                                            q,
+                                            true, //copyIndexes
+                                            false //logForRepl
+                                            );
 
-                    // copy entire oplog (probably overkill)
-                    cloneCollectionData(conn,
-                                        rsoplog,
-                                        q,
-                                        true, //copyIndexes
-                                        false //logForRepl
-                                        );
+                        // copy entire oplog (probably overkill)
+                        cloneCollection(conn,
+                                            "local",
+                                            rsoplog,
+                                            q,
+                                            true, //copyIndexes
+                                            false //logForRepl
+                                            );
 
-                    // copy entire oplog.refs (probably overkill)
-                    cloneCollectionData(conn,
-                                        rsOplogRefs,
-                                        q,
-                                        true, //copyIndexes
-                                        false //logForRepl
-                                        );
+                        // copy entire oplog.refs (probably overkill)
+                        cloneCollection(conn,
+                                            "local",
+                                            rsOplogRefs,
+                                            q,
+                                            true, //copyIndexes
+                                            false //logForRepl
+                                            );
+                    }
                     cloneTransaction.commit(0);
                 }
 
@@ -516,10 +519,6 @@ namespace mongo {
                 sleepsecs(1);
                 return false;
             }
-        }
-        else {
-            Lock::DBWrite lk("local");
-            openOplogFiles();
         }
         if (needGapsFilled) {
             _fillGaps(&r);

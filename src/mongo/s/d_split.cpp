@@ -28,12 +28,11 @@
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/commands.h"
-#include "mongo/db/dbhelpers.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/query_optimizer_internal.h"
 #include "mongo/db/clientcursor.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/namespacestring.h"
 
 #include "mongo/client/dbclientcursor.h"
@@ -84,6 +83,12 @@ namespace mongo {
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
 
             const char* ns = jsobj.getStringField( "checkShardingIndex" );
+
+            if (nsToDatabaseSubstring(ns) != dbname) {
+                errmsg = "incorrect database in ns";
+                return false;
+            }
+
             BSONObj keyPattern = jsobj.getObjectField( "keyPattern" );
 
             if ( keyPattern.isEmpty() ) {
@@ -103,13 +108,13 @@ namespace mongo {
                 return false;
             }
 
-            NamespaceDetails *d = nsdetails( ns );
-            if ( ! d ) {
+            Collection *cl = getCollection( ns );
+            if ( ! cl ) {
                 errmsg = "ns not found";
                 return false;
             }
 
-            const IndexDetails *idx = d->findIndexByPrefix( keyPattern ,
+            const IndexDetails *idx = cl->findIndexByPrefix( keyPattern ,
                                                             true );  /* require single key */
             if ( idx == NULL ) {
                 errmsg = "couldn't find valid index for shard key";
@@ -117,16 +122,16 @@ namespace mongo {
             }
             // extend min to get (min, MinKey, MinKey, ....)
             KeyPattern kp( idx->keyPattern() );
-            min = Helpers::toKeyFormat( kp.extendRangeBound( min, false ) );
+            min = KeyPattern::toKeyFormat( kp.extendRangeBound( min, false ) );
             if  ( max.isEmpty() ) {
                 // if max not specified, make it (MaxKey, Maxkey, MaxKey...)
-                max = Helpers::toKeyFormat( kp.extendRangeBound( max, true ) );
+                max = KeyPattern::toKeyFormat( kp.extendRangeBound( max, true ) );
             } else {
                 // otherwise make it (max,MinKey,MinKey...) so that bound is non-inclusive
-                max = Helpers::toKeyFormat( kp.extendRangeBound( max, false ) );
+                max = KeyPattern::toKeyFormat( kp.extendRangeBound( max, false ) );
             }
 
-            shared_ptr<IndexCursor> c( IndexCursor::make( d , *idx , min , max , false , 1 ) );
+            shared_ptr<Cursor> c( Cursor::make( cl , *idx , min , max , false , 1 ) );
             auto_ptr<ClientCursor> cc( new ClientCursor( QueryOption_NoCursorTimeout , c , ns ) );
             if ( ! cc->ok() ) {
                 // range is empty
@@ -185,9 +190,8 @@ namespace mongo {
     } cmdCheckShardingIndex;
 
     class SplitVectorFinder {
-        std::exception *_ex;
-        NamespaceDetails *_d;
-        const IndexDetails &_idx;
+        Collection *_cl;
+        const IndexDetails* _idx;
         KeyPattern _chunkPattern;
         Ordering _ordering;
         storage::Key _chunkMin, _chunkMax;
@@ -251,7 +255,7 @@ namespace mongo {
                 // If we got the same as the current chunk min, that means there are many documents
                 // with that same key (or a few really big ones).  Since we can't split in the
                 // middle of them, we fall back to just using a cursor from this point forward.
-                if (!_idx.isIdIndex()) {
+                if (!_idx->isIdIndex()) {
                     _chunkMin.reset(*endKey, endPK);
                     _justSkipped += skipped;
                 }
@@ -263,14 +267,14 @@ namespace mongo {
             // query, and in BSONObj form to pass it back.
             _lastSplitKey = splitKey.getOwned();
             _splitPoints.push_back(_lastSplitKey);
-            KeyPattern kp(_idx.keyPattern());
-            BSONObj modSplitKey = Helpers::toKeyFormat(kp.extendRangeBound(_lastSplitKey, false));
-            _chunkMin.reset(modSplitKey, _idx.isIdIndex() ? NULL : &minKey);
+            KeyPattern kp(_idx->keyPattern());
+            BSONObj modSplitKey = KeyPattern::toKeyFormat(kp.extendRangeBound(_lastSplitKey, false));
+            _chunkMin.reset(modSplitKey, _idx->isIdIndex() ? NULL : &minKey);
         }
 
         void slowFindSplitPoint(long long targetChunkSize) {
             long long skipped = 0;
-            for (shared_ptr<IndexCursor> c(IndexCursor::make(_d, _idx, _chunkMin.key(), _chunkMax.key(), false, 1)); c->ok(); c->advance()) {
+            for (shared_ptr<Cursor> c(Cursor::make(_cl, *_idx, _chunkMin.key(), _chunkMax.key(), false, 1)); c->ok(); c->advance()) {
                 const BSONObj &currKey = c->currKey();
                 const BSONObj &currPK = c->currPK();
                 long long docsize = currKey.objsize() + currPK.objsize() + c->current().objsize();
@@ -287,9 +291,9 @@ namespace mongo {
                         }
                         _lastSplitKey = splitKey.getOwned();
                         _splitPoints.push_back(_lastSplitKey);
-                        KeyPattern kp(_idx.keyPattern());
-                        BSONObj modSplitKey = Helpers::toKeyFormat(kp.extendRangeBound(_lastSplitKey, false));
-                        _chunkMin.reset(modSplitKey, _idx.isIdIndex() ? NULL : &minKey);
+                        KeyPattern kp(_idx->keyPattern());
+                        BSONObj modSplitKey = KeyPattern::toKeyFormat(kp.extendRangeBound(_lastSplitKey, false));
+                        _chunkMin.reset(modSplitKey, _idx->isIdIndex() ? NULL : &minKey);
                         return;
                     }
                 }
@@ -300,14 +304,14 @@ namespace mongo {
         }
 
       public:
-        SplitVectorFinder(NamespaceDetails *d, const IndexDetails &idx, const BSONObj &chunkPattern, const BSONObj &min, const BSONObj &max,
+        SplitVectorFinder(Collection *cl, const IndexDetails* idx, const BSONObj &chunkPattern, const BSONObj &min, const BSONObj &max,
                           vector<BSONObj> &splitPoints)
-                : _d(d),
+                : _cl(cl),
                   _idx(idx),
                   _chunkPattern(chunkPattern.getOwned()),
-                  _ordering(Ordering::make(_idx.keyPattern())),
-                  _chunkMin(min, _idx.isIdIndex() ? NULL : &minKey),
-                  _chunkMax(max, _idx.isIdIndex() ? NULL : &maxKey),
+                  _ordering(Ordering::make(_idx->keyPattern())),
+                  _chunkMin(min, _idx->isIdIndex() ? NULL : &minKey),
+                  _chunkMax(max, _idx->isIdIndex() ? NULL : &maxKey),
                   _splitPoints(splitPoints),
                   _chunkTooBig(false),
                   _doneFindingPoints(false),
@@ -315,7 +319,7 @@ namespace mongo {
                   _useCursor(false),
                   _lastSplitKey()
         {
-            massert(16799, "shard key pattern must be a prefix of the index key pattern", chunkPattern.isPrefixOf(_idx.keyPattern()));
+            massert(16799, "shard key pattern must be a prefix of the index key pattern", chunkPattern.isPrefixOf(_idx->keyPattern()));
         }
 
         // Functors that wrap the above callbacks
@@ -338,9 +342,18 @@ namespace mongo {
 
         // Schedules the calls down into get_key_after_bytes.
         void find(long long maxChunkSize, long long maxSplitPoints) {
+            //
+            //
+            // HACK!!!!! Need to find a better way to do this
+            // TODO: Zardosht talk to Leif about this
+            // Problem is that getKeyAfterBytes is templated, so we cannot virtualize it
+            //
+            //
+            const IndexDetailsBase* idxBase = dynamic_cast<const IndexDetailsBase *>(_idx);
+            massert(17237, "bug: failed to dynamically cast IndexDetails to IndexDetailsBase", idxBase != NULL);
             {
                 IsTooBigCallback cb(*this);
-                _idx.getKeyAfterBytes(_chunkMin, maxChunkSize, cb);
+                idxBase->getKeyAfterBytes(_chunkMin, maxChunkSize, cb);
             }
             if (!_chunkTooBig) {
                 return;
@@ -349,7 +362,7 @@ namespace mongo {
                 // If _chunkMin doesn't actually exist (could be {x: MinKey} for example) we need to
                 // get the actual first key in the chunk so that we make sure we don't try to split
                 // on the first key.
-                shared_ptr<IndexCursor> c(IndexCursor::make(_d, _idx, _chunkMin.key(), _chunkMax.key(), false, 1, 1));
+                shared_ptr<Cursor> c(Cursor::make(_cl, *_idx, _chunkMin.key(), _chunkMax.key(), false, 1, 1));
                 massert(16794, "didn't find anything actually in our chunk, but we thought we should split it", c->ok());
                 _lastSplitKey = _chunkPattern.prettyKey(c->currKey());
             }
@@ -365,7 +378,7 @@ namespace mongo {
                         _useCursor = false;
                     }
                     else {
-                        _idx.getKeyAfterBytes(_chunkMin, targetChunkSize, cb);
+                        idxBase->getKeyAfterBytes(_chunkMin, targetChunkSize, cb);
                     }
                 }
             }
@@ -433,13 +446,13 @@ namespace mongo {
             vector<BSONObj> splitKeys;
 
             // Get the size estimate for this namespace
-            NamespaceDetails *d = nsdetails( ns );
-            if ( ! d ) {
+            Collection *cl = getCollection( ns );
+            if ( ! cl ) {
                 errmsg = "ns not found";
                 return false;
             }
 
-            const IndexDetails *idx = d->findIndexByPrefix( keyPattern ,
+            const IndexDetails *idx = cl->findIndexByPrefix( keyPattern ,
                                                             true ); /* require single key */
             if ( idx == NULL ) {
                 errmsg = (string)"couldn't find index over splitting key " +
@@ -448,13 +461,13 @@ namespace mongo {
             }
             // extend min to get (min, MinKey, MinKey, ....)
             KeyPattern kp( idx->keyPattern() );
-            min = Helpers::toKeyFormat( kp.extendRangeBound( min, false ) );
+            min = KeyPattern::toKeyFormat( kp.extendRangeBound( min, false ) );
             if  ( max.isEmpty() ) {
                 // if max not specified, make it (MaxKey, Maxkey, MaxKey...)
-                max = Helpers::toKeyFormat( kp.extendRangeBound( max, true ) );
+                max = KeyPattern::toKeyFormat( kp.extendRangeBound( max, true ) );
             } else {
                 // otherwise make it (max,MinKey,MinKey...) so that bound is non-inclusive
-                max = Helpers::toKeyFormat( kp.extendRangeBound( max, false ) );
+                max = KeyPattern::toKeyFormat( kp.extendRangeBound( max, false ) );
             }
 
             // 'force'-ing a split is equivalent to having maxChunkSize be the size of the current chunk, i.e., the
@@ -485,12 +498,12 @@ namespace mongo {
             }
 
             if (!forceMedianSplit && idx->clustering()) {
-                SplitVectorFinder finder(d, *idx, keyPattern, min, max, splitKeys);
+                SplitVectorFinder finder(cl, idx, keyPattern, min, max, splitKeys);
                 finder.find(maxChunkSize, maxSplitPoints);
             } else {
                 // Haven't implemented a better version using get_key_after_bytes yet, do the slow thing
-                NamespaceDetails::Stats stats;
-                d->fillCollectionStats(stats, NULL, 1);
+                CollectionData::Stats stats;
+                cl->fillCollectionStats(stats, NULL, 1);
                 const long long recCount = stats.count;
                 const long long dataSize = stats.size;
 
@@ -523,7 +536,7 @@ namespace mongo {
                 long long numChunks = 0;
 
                 {
-                    shared_ptr<IndexCursor> c(IndexCursor::make( d , *idx , min , max , false , 1 ));
+                    shared_ptr<Cursor> c(Cursor::make( cl , *idx , min , max , false , 1 ));
                     auto_ptr<ClientCursor> cc( new ClientCursor( QueryOption_NoCursorTimeout , c , ns ) );
                     if ( ! cc->ok() ) {
                         errmsg = "can't open a cursor for splitting (desired range is possibly empty)";
@@ -584,7 +597,7 @@ namespace mongo {
                         currCount = 0;
                         LOG(0) << "splitVector doing another cycle because of force, maxChunkSize now: " << maxChunkSize << endl;
 
-                        c = IndexCursor::make(d, *idx, min, max, false, 1);
+                        c = Cursor::make(cl, *idx, min, max, false, 1);
                         cc.reset(new ClientCursor(QueryOption_NoCursorTimeout, c, ns));
                     }
 
@@ -664,6 +677,7 @@ namespace mongo {
 
         virtual bool slaveOk() const { return false; }
         virtual bool adminOnly() const { return true; }
+        virtual bool requiresShardedOperationScope() const { return false; }
         virtual LockType locktype() const { return OPLOCK; }
         virtual bool requiresSync() const { return false; }
         virtual bool needsTxn() const { return false; }
@@ -892,7 +906,7 @@ namespace mongo {
                     catch (DBException &e) {
                         warning() << e << endl;
                         error() << "splitChunk error updating the chunk ending in " << endKey << endl;
-                        throw e;
+                        throw;
                     }
 
                     // remember this chunk info for logging later
@@ -944,14 +958,19 @@ namespace mongo {
             }
 
             if (newChunks.size() == 2){
-                Client::ReadContext ctx( ns );
+                LOCK_REASON(lockReason, "sharding: checking whether new chunk should migrate");
+                Client::ReadContext ctx( ns, lockReason );
                 Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
                 // If one of the chunks has only one object in it we should move it
                 for (int i=1; i >= 0 ; i--){ // high chunk more likely to have only one obj
 
-                    NamespaceDetails *d = nsdetails(ns);
+                    Collection *cl = getCollection(ns);
+                    if ( ! cl ) {
+                        errmsg = "ns not found";
+                        return false;
+                    }
 
-                    const IndexDetails *idx = d->findIndexByPrefix( keyPattern ,
+                    const IndexDetails *idx = cl->findIndexByPrefix( keyPattern ,
                                                                     true ); /* exclude multikeys */
                     if ( idx == NULL ) {
                         break;
@@ -959,14 +978,14 @@ namespace mongo {
 
                     ChunkInfo chunk = newChunks[i];
                     KeyPattern kp( idx->keyPattern() );
-                    BSONObj newmin = Helpers::toKeyFormat( kp.extendRangeBound( chunk.min, false) );
-                    BSONObj newmax = Helpers::toKeyFormat( kp.extendRangeBound( chunk.max, false) );
+                    BSONObj newmin = KeyPattern::toKeyFormat( kp.extendRangeBound( chunk.min, false) );
+                    BSONObj newmax = KeyPattern::toKeyFormat( kp.extendRangeBound( chunk.max, false) );
 
-                    shared_ptr<Cursor> c( IndexCursor::make( d , *idx ,
-                                                             newmin , /* lower */
-                                                             newmax , /* upper */
-                                                             false , /* upper noninclusive */
-                                                             1 ) ); /* direction */
+                    shared_ptr<Cursor> c( Cursor::make( cl , *idx ,
+                                                        newmin , /* lower */
+                                                        newmax , /* upper */
+                                                        false , /* upper noninclusive */
+                                                        1 ) ); /* direction */
 
                     // check if exactly one document found
                     if ( c->ok() ) {

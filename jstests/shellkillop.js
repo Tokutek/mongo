@@ -33,7 +33,7 @@ if (true) { // toggle to disable test
 
     var inprog = db.currentOp().inprog;
     for (i in inprog) {
-	if (inprog[i].ns == "test." + baseName)
+	if (inprog[i].ns == db.getName() + "." + baseName)
 	    throw "shellkillop.js op is still running: " + tojson( inprog[i] );
     }
 

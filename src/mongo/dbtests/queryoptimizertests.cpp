@@ -22,8 +22,7 @@
 #include "mongo/db/query_optimizer_internal.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/query_optimizer.h"
-#include "mongo/db/namespace_details.h"
-#include "mongo/db/dbhelpers.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/ops/count.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/query.h"
@@ -52,14 +51,14 @@ namespace QueryOptimizerTests {
     using boost::shared_ptr;
     
     void ensureIndex(const char *ns, BSONObj keyPattern, bool unique, const char *name) {
-        NamespaceDetails *d = nsdetails(ns);
+        Collection *d = getCollection(ns);
         if( d == 0 )
             return;
 
         {
-            NamespaceDetails::IndexIterator i = d->ii();
-            while( i.more() ) {
-                if( i.next().keyPattern().woCompare(keyPattern) == 0 )
+            for (int i = 0; i < d->nIndexes(); i++) {
+                IndexDetails &ii = d->idx(i);
+                if( ii.keyPattern().woCompare(keyPattern) == 0 )
                     return;
             }
         }
@@ -79,7 +78,10 @@ namespace QueryOptimizerTests {
     void dropCollection( const char *ns ) {
      	string errmsg;
         BSONObjBuilder result;
-        dropCollection( ns, errmsg, result );
+        Collection *d = getCollection(ns);
+        if (d != NULL) {
+            d->drop(errmsg, result);
+        }
     }
     
     namespace QueryPlanTests {
@@ -98,7 +100,7 @@ namespace QueryOptimizerTests {
 
         class Base {
         public:
-            Base() : _transaction(DB_SERIALIZABLE), _ctx( ns() ) , indexNum_( 0 ) {
+            Base() : _transaction(DB_SERIALIZABLE), lk_(mongo::unittest::EMPTY_STRING), _ctx( ns() ) , indexNum_( 0 ) {
                 string err;
                 userCreateNS( ns(), BSONObj(), err, false );
             }
@@ -108,7 +110,7 @@ namespace QueryOptimizerTests {
             }
         protected:
             static const char *ns() { return "unittests.QueryPlanTests"; }
-            static NamespaceDetails *nsd() { return nsdetails( ns() ); }
+            static Collection *nsd() { return getCollection( ns() ); }
             IndexDetails *index( const BSONObj &key ) {
                 stringstream ss;
                 ss << indexNum_++;
@@ -121,7 +123,7 @@ namespace QueryOptimizerTests {
                 return nsd()->idxNo( *index(key) );
             }
             int existingIndexNo( const BSONObj &key ) const {
-                NamespaceDetails *d = nsd();
+                Collection *d = nsd();
                 for( int i = 0; i < d->nIndexes(); ++i ) {
                     if ( ( d->idx( i ).keyPattern() == key ) ||
                         ( d->idx( i ).isIdIndex() && IndexDetails::isIdIndexPattern( key ) ) ) {
@@ -876,14 +878,14 @@ namespace QueryOptimizerTests {
 
         class Base {
         public:
-            Base() : _transaction(DB_SERIALIZABLE), _context( ns() ) {
+            Base() : _transaction(DB_SERIALIZABLE), lk_(mongo::unittest::EMPTY_STRING), _context( ns() ) {
                 string err;
                 userCreateNS( ns(), BSONObj(), err, false );
             }
             virtual ~Base() {
                 if ( !nsd() )
                     return;
-                nsdetails(ns())->clearQueryCache();
+                getCollection(ns())->getQueryCache().clearQueryCache();
             }
         protected:
             static void assembleRequest( const string &ns, BSONObj query, int nToReturn, int nToSkip, BSONObj *fieldsToReturn, int queryOptions, Message &toSend ) {
@@ -916,7 +918,7 @@ namespace QueryOptimizerTests {
                                               allowSpecial ) );
             }
             static const char *ns() { return "unittests.QueryPlanSetTests"; }
-            static NamespaceDetails *nsd() { return nsdetails( ns() ); }
+            static Collection *nsd() { return getCollection( ns() ); }
             DBDirectClient &client() { return _client; }
         private:
             Client::Transaction _transaction;
@@ -953,7 +955,7 @@ namespace QueryOptimizerTests {
                 // The optimal plan is recorded in the plan cache.
                 FieldRangeSet frs( ns(), query, true, true );
                 CachedQueryPlan cachedPlan =
-                        nsd()->cachedQueryPlanForPattern
+                        nsd()->getQueryCache().cachedQueryPlanForPattern
                             ( QueryPattern( frs, BSONObj() ) );
                 ASSERT_EQUALS( BSON( "a" << 1 ), cachedPlan.indexKey() );
                 CandidatePlanCharacter planCharacter = cachedPlan.planCharacter();
@@ -967,7 +969,7 @@ namespace QueryOptimizerTests {
             void run() {
                 ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
                 ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
-                ASSERT_EQUALS( 3, makeQps( BSON( "a" << 4 ), BSON( "b" << 1 ) )->nPlans() );
+                ASSERT_EQUALS( 2, makeQps( BSON( "a" << 4 ), BSON( "b" << 1 ) )->nPlans() );
             }
         };
 
@@ -1077,7 +1079,7 @@ namespace QueryOptimizerTests {
             void run() {
                 ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
                 ensureIndex( ns(), BSON( "b" << 1 ), false, "b_1" );
-                ASSERT_EQUALS( 2, makeQps( BSON( "a" << 1 << "c" << 2 ) )->nPlans() );
+                ASSERT_EQUALS( 1, makeQps( BSON( "a" << 1 << "c" << 2 ) )->nPlans() );
             }
         };
 
@@ -1087,11 +1089,10 @@ namespace QueryOptimizerTests {
                 BSONObj one = BSON( "a" << 1 );
                 insertObject( ns(), one );
                 BSONObj result;
-                NamespaceDetails *d = nsdetails( ns() );
-                ASSERT( d->findOne( BSON( "a" << 1 ), result ) );
-                ASSERT_THROWS( d->findOne( BSON( "a" << 1 ), result, true ), AssertionException );
+                ASSERT( Collection::findOne( ns(), BSON( "a" << 1 ), result ) );
+                ASSERT_THROWS( Collection::findOne( ns(), BSON( "a" << 1 ), result, true ), AssertionException );
                 ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
-                ASSERT( d->findOne( BSON( "a" << 1 ), result, true ) );
+                ASSERT( Collection::findOne( ns(), BSON( "a" << 1 ), result, true ) );
             }
         };
 
@@ -1109,7 +1110,7 @@ namespace QueryOptimizerTests {
                 deleteObjects( ns(), delSpec, false );
                 
                 QueryPattern queryPattern = FieldRangeSet( ns(), delSpec, true, true ).pattern();
-                CachedQueryPlan cachedQueryPlan = nsd()->cachedQueryPlanForPattern( queryPattern ); 
+                CachedQueryPlan cachedQueryPlan = nsd()->getQueryCache().cachedQueryPlanForPattern( queryPattern ); 
                 ASSERT_EQUALS( BSON( "a" << 1 ), cachedQueryPlan.indexKey() );
                 ASSERT_EQUALS( 1, cachedQueryPlan.nScanned() );
             }
@@ -1126,7 +1127,7 @@ namespace QueryOptimizerTests {
                 insertObject( ns(), two );
                 insertObject( ns(), three );
                 deleteObjects( ns(), BSON( "_id" << GTE << 3 << "a" << GTE << 1 ), true );
-                for( boost::shared_ptr<Cursor> c( BasicCursor::make( nsdetails(ns()) ) ); c->ok(); c->advance() ) {
+                for( boost::shared_ptr<Cursor> c( BasicCursor::make( getCollection(ns()) ) ); c->ok(); c->advance() ) {
                     ASSERT( 3 != c->current().getIntField( "_id" ) );
                 }
             }
@@ -1143,7 +1144,7 @@ namespace QueryOptimizerTests {
                 insertObject( ns(), two );
                 insertObject( ns(), three );
                 deleteObjects( ns(), BSON( "a" << GTE << 2 ), true );
-                for( boost::shared_ptr<Cursor> c( BasicCursor::make( nsdetails(ns()) ) ); c->ok(); c->advance() ) {
+                for( boost::shared_ptr<Cursor> c( BasicCursor::make( getCollection(ns()) ) ); c->ok(); c->advance() ) {
                     ASSERT( 0 != c->current().getIntField( "_id" ) );
                 }
             }
@@ -1280,7 +1281,7 @@ namespace QueryOptimizerTests {
                 
                 {
                     shared_ptr<QueryPlanSet> qps = makeQps( BSON( "a" << 1 ), BSON( "b" << 1 ) );
-                    ASSERT_EQUALS( 3, qps->nPlans() );
+                    ASSERT_EQUALS( 2, qps->nPlans() );
                     ASSERT( qps->possibleInOrderPlan() );
                     ASSERT( qps->haveInOrderPlan() );
                     ASSERT( qps->possibleOutOfOrderPlan() );
@@ -1288,7 +1289,7 @@ namespace QueryOptimizerTests {
                     ASSERT( !qps->usingCachedPlan() );
                 }
                 
-                nsd()->registerCachedQueryPlanForPattern( makePattern( BSON( "a" << 1 ), BSONObj() ),
+                nsd()->getQueryCache().registerCachedQueryPlanForPattern( makePattern( BSON( "a" << 1 ), BSONObj() ),
                                                        CachedQueryPlan( BSON( "a" << 1 ), 1,
                                                         CandidatePlanCharacter( true, false ) ) );
                 {
@@ -1301,7 +1302,7 @@ namespace QueryOptimizerTests {
                     ASSERT( qps->usingCachedPlan() );
                 }
 
-                nsd()->registerCachedQueryPlanForPattern
+                nsd()->getQueryCache().registerCachedQueryPlanForPattern
                         ( makePattern( BSON( "a" << 1 ), BSON( "b" << 1 ) ),
                          CachedQueryPlan( BSON( "a" << 1 ), 1,
                                          CandidatePlanCharacter( true, true ) ) );
@@ -1316,7 +1317,7 @@ namespace QueryOptimizerTests {
                     ASSERT( qps->usingCachedPlan() );
                 }
 
-                nsd()->registerCachedQueryPlanForPattern
+                nsd()->getQueryCache().registerCachedQueryPlanForPattern
                         ( makePattern( BSON( "a" << 1 ), BSON( "b" << 1 ) ),
                          CachedQueryPlan( BSON( "b" << 1 ), 1,
                                          CandidatePlanCharacter( true, true ) ) );
@@ -1333,7 +1334,7 @@ namespace QueryOptimizerTests {
                 
                 {
                     shared_ptr<QueryPlanSet> qps = makeQps( BSON( "a" << 1 ), BSON( "c" << 1 ) );
-                    ASSERT_EQUALS( 2, qps->nPlans() );
+                    ASSERT_EQUALS( 1, qps->nPlans() );
                     ASSERT( !qps->possibleInOrderPlan() );
                     ASSERT( !qps->haveInOrderPlan() );
                     ASSERT( qps->possibleOutOfOrderPlan() );
@@ -1350,7 +1351,7 @@ namespace QueryOptimizerTests {
                 ensureIndex( ns(), BSON( "a" << 1 ), false, "a_1" );
 
                 // Record the {a:1} index for a {b:1} query.
-                nsd()->registerCachedQueryPlanForPattern
+                nsd()->getQueryCache().registerCachedQueryPlanForPattern
                         ( makePattern( BSON( "b" << 1 ), BSONObj() ),
                          CachedQueryPlan( BSON( "a" << 1 ), 1,
                                          CandidatePlanCharacter( true, false ) ) );
@@ -1374,7 +1375,7 @@ namespace QueryOptimizerTests {
                                      "sparse" << true ) );
 
                 // Record the {a:1} index for a {a:null} query.
-                nsd()->registerCachedQueryPlanForPattern
+                nsd()->getQueryCache().registerCachedQueryPlanForPattern
                 ( makePattern( BSON( "a" << BSONNULL ), BSONObj() ),
                  CachedQueryPlan( BSON( "a" << 1 ), 1,
                                  CandidatePlanCharacter( true, false ) ) );
@@ -1414,7 +1415,7 @@ namespace QueryOptimizerTests {
                                UserException );
 
                 // The special plan is not chosen if not allowed, even if cached.
-                nsd()->registerCachedQueryPlanForPattern
+                nsd()->getQueryCache().registerCachedQueryPlanForPattern
                         ( makePattern( query, BSONObj() ),
                           CachedQueryPlan( specialIndex, 1,
                                            CandidatePlanCharacter( true, false ) ) );
@@ -1431,7 +1432,7 @@ namespace QueryOptimizerTests {
 
     class Base {
     public:
-        Base() : _transaction(DB_SERIALIZABLE), _ctx( ns() ) {
+        Base() : _transaction(DB_SERIALIZABLE), lk_(mongo::unittest::EMPTY_STRING), _ctx( ns() ) {
             string err;
             userCreateNS( ns(), BSONObj(), err, false );
         }
@@ -1443,7 +1444,7 @@ namespace QueryOptimizerTests {
         }
     protected:
         static const char *ns() { return "unittests.QueryOptimizerTests"; }
-        static NamespaceDetails *nsd() { return nsdetails( ns() ); }
+        static Collection *nsd() { return getCollection( ns() ); }
         QueryPattern makePattern( const BSONObj &query, const BSONObj &order ) {
             FieldRangeSet frs( ns(), query, true, true );
             return QueryPattern( frs, order );
@@ -1488,14 +1489,14 @@ namespace QueryOptimizerTests {
                 {
                     shared_ptr<MultiPlanScanner> mps =
                     makeMps( BSON( "a" << 1 ), BSON( "b" << 1 ) );
-                    ASSERT_EQUALS( 3, mps->currentNPlans() );
+                    ASSERT_EQUALS( 2, mps->currentNPlans() );
                     ASSERT( mps->possibleInOrderPlan() );
                     ASSERT( mps->haveInOrderPlan() );
                     ASSERT( mps->possibleOutOfOrderPlan() );
                     ASSERT( !mps->hasPossiblyExcludedPlans() );
                 }
                 
-                nsd()->registerCachedQueryPlanForPattern( makePattern( BSON( "a" << 1 ), BSONObj() ),
+                nsd()->getQueryCache().registerCachedQueryPlanForPattern( makePattern( BSON( "a" << 1 ), BSONObj() ),
                                                        CachedQueryPlan( BSON( "a" << 1 ), 1,
                                                         CandidatePlanCharacter( true, false ) ) );
                 {
@@ -1507,7 +1508,7 @@ namespace QueryOptimizerTests {
                     ASSERT( !mps->hasPossiblyExcludedPlans() );
                 }
 
-                nsd()->registerCachedQueryPlanForPattern
+                nsd()->getQueryCache().registerCachedQueryPlanForPattern
                         ( makePattern( BSON( "a" << 1 ), BSON( "b" << 1 ) ),
                          CachedQueryPlan( BSON( "a" << 1 ), 1,
                                          CandidatePlanCharacter( true, true ) ) );
@@ -1522,7 +1523,7 @@ namespace QueryOptimizerTests {
                     ASSERT( mps->hasPossiblyExcludedPlans() );
                 }
                 
-                nsd()->registerCachedQueryPlanForPattern
+                nsd()->getQueryCache().registerCachedQueryPlanForPattern
                         ( makePattern( BSON( "a" << 1 ), BSON( "b" << 1 ) ),
                          CachedQueryPlan( BSON( "b" << 1 ), 1,
                                          CandidatePlanCharacter( true, true ) ) );
@@ -1540,7 +1541,7 @@ namespace QueryOptimizerTests {
                 {
                     shared_ptr<MultiPlanScanner> mps =
                     makeMps( BSON( "a" << 1 ), BSON( "c" << 1 ) );
-                    ASSERT_EQUALS( 2, mps->currentNPlans() );
+                    ASSERT_EQUALS( 1, mps->currentNPlans() );
                     ASSERT( !mps->possibleInOrderPlan() );
                     ASSERT( !mps->haveInOrderPlan() );
                     ASSERT( mps->possibleOutOfOrderPlan() );
@@ -1560,7 +1561,7 @@ namespace QueryOptimizerTests {
                 {
                     shared_ptr<MultiPlanScanner> mps =
                     makeMps( fromjson( "{$or:[{a:1,b:1},{a:2,b:2}]}" ), BSONObj() );
-                    ASSERT_EQUALS( 3, mps->currentNPlans() );
+                    ASSERT_EQUALS( 2, mps->currentNPlans() );
                     ASSERT( mps->possibleInOrderPlan() );
                     ASSERT( mps->haveInOrderPlan() );
                     ASSERT( !mps->possibleOutOfOrderPlan() );
@@ -1603,9 +1604,10 @@ namespace QueryOptimizerTests {
 
             FieldRangeSet frs( "ns", BSON( "a" << 1 ), true, true );
             {
-                NamespaceDetails *d = nsdetails(ns());
-                NamespaceDetails::QueryCacheRWLock::Exclusive lk(d);
-                d->registerCachedQueryPlanForPattern( frs.pattern( BSON( "b" << 1 ) ),
+                Collection *d = getCollection(ns());
+                QueryCache &qc = d->getQueryCache();
+                QueryCache::Lock::Exclusive lk(qc);
+                qc.registerCachedQueryPlanForPattern( frs.pattern( BSON( "b" << 1 ) ),
                                                       CachedQueryPlan( BSON( "a" << 1 ), 0,
                                                       CandidatePlanCharacter( true, true ) ) );
             }

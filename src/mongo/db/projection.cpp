@@ -77,7 +77,7 @@ namespace mongo {
                     // initialize new Matcher object(s)
 
                     _matchers.insert( make_pair( mongoutils::str::before( e.fieldName(), '.' ),
-                                                 new Matcher( e.wrap(), true ) ) );
+                                                 boost::make_shared<Matcher>( e.wrap(), true ) ) );
                     add( e.fieldName(), true );
                 }
                 else {
@@ -355,7 +355,7 @@ namespace mongo {
         if ( _hasNonSimple )
             return 0;
 
-        const bool pkHasIdField = pkPattern["_id"].ok();
+        const bool pkHasIdField = pkPattern.nFields() == 1 && pkPattern["_id"].ok();
         if ( _includeID && keyPattern["_id"].eoo() && ! pkHasIdField ) {
             // Requesting to include the _id, but neither the key nor the pk have it.
             return 0;

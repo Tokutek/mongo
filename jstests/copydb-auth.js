@@ -1,5 +1,5 @@
-a = db.getSisterDB( "copydb2-test-a" );
-b = db.getSisterDB( "copydb2-test-b" );
+a = db.getSisterDB( db.getName() + "-a" );
+b = db.getSisterDB( db.getName() + "-b" );
 
 a.dropDatabase();
 b.dropDatabase();

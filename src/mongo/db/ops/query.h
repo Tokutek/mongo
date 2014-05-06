@@ -32,13 +32,12 @@
 #pragma once
 
 #include "mongo/pch.h"
-#include "../../util/net/message.h"
-#include "../dbmessage.h"
-#include "../jsobj.h"
-#include "../explain.h"
-#include "../../s/d_chunk_manager.h"
 
-// struct QueryOptions, QueryResult, QueryResultFlags in:
+#include "mongo/db/dbmessage.h"
+#include "mongo/db/explain.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/s/d_chunk_manager.h"
+#include "mongo/util/net/message.h"
 
 namespace mongo {
 
@@ -82,13 +81,13 @@ namespace mongo {
         bool chunkSkip;            // Did not belong to an owned chunk range.
     };
 
-    // Run a query on the _id portion of 'query'.
-    // @param idQuery, simple id query, a subset of 'query'
+    // Run a query on the pk portion of 'query'.
+    // @param idQuery, simple pk query, a subset of 'query'
     // @param query, the original query, used for matching
-    // @return true if the document found by idQuery matched 'query' and is in 'result', false otherwise.
-    bool queryByIdHack(NamespaceDetails *d,
-                       const BSONObj &idQuery, const BSONObj &query,
-                       BSONObj &result, ResultDetails *details = NULL);
+    // @return true if the document found by pk matched 'query' and is in 'result', false otherwise.
+    bool queryByPKHack(Collection *cl, const BSONObj &pk,
+                       const BSONObj &query, BSONObj &result,
+                       ResultDetails *resDetails = NULL);
 
     /** Interface for recording events that contribute to explain results. */
     class ExplainRecordingStrategy {
@@ -237,17 +236,6 @@ namespace mongo {
         int _bufferedMatches;
     };
 
-    /** Helper class for deduping primary keys (_id keys) */
-    class PKDupSet {
-    public:
-        /** @return true if dup, otherwise return false and insert. */
-        bool getsetdup( const BSONObj &pk ) {
-            pair<set<BSONObj>::iterator, bool> p = _dups.insert(pk.copy());
-            return !p.second;
-        }
-    private:
-        set<BSONObj> _dups;
-    };
 
     /**
      * Build strategy for a QueryOptimizerCursor containing some in order and some out of order

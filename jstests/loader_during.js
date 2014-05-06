@@ -1,6 +1,11 @@
 // Test that the rules are properly enforced during load.
 
-load("jstests/loader_helpers.js");
+var filename;
+if (TestData.testDir !== undefined) {
+    load(TestData.testDir + "/_loader_helpers.js");
+} else {
+    load('jstests/_loader_helpers.js');
+}
 
 var testTypicalLoad = function() {
     t = db.loadertypical;
@@ -20,7 +25,7 @@ var testTypicalLoadWithIndex = function() {
     t = db.loadertypical;
     t.drop();
     begin();
-    beginLoad('loadertypical', [ { key: { a: 1 }, ns: 'test.loadertypical', name: 'a_1' } ], { });
+    beginLoad('loadertypical', [ { key: { a: 1 }, ns: db.getName() + '.loadertypical', name: 'a_1' } ], { });
     for (i = 0; i < 1000; i++) {
         t.insert({ _id: i, a: 1 });
     }
@@ -51,7 +56,7 @@ var testOperationsGetRejected = function() {
             t2.remove({});
 
             begin();
-            beginLoad('loaderclientreject', [ ], { });
+            beginLoad('loaderclientreject', [ { key: { zzz: 1 }, name: "zzz_1" } ], { });
 
             var commitAndCheck = function() {
                 commitLoad();

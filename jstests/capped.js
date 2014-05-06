@@ -1,6 +1,6 @@
 db.createCollection("jstests_capped", {capped:true, size:30000});
 
-assert.eq( 2, db.system.indexes.find( {ns:"test.jstests_capped"} ).count(), "expected two indexes for new capped collection (hidden pk and _id)" );
+assert.eq( 2, db.system.indexes.find( {ns:db.getName() + ".jstests_capped"} ).count(), "expected two indexes for new capped collection (hidden pk and _id)" );
 t = db.jstests_capped;
 
 t.save({x:1});

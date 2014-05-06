@@ -25,7 +25,6 @@
 #include "mongo/s/grid.h"
 #include "mongo/s/request.h"
 #include "mongo/s/client_info.h"
-#include "mongo/db/dbhelpers.h"
 #include "mongo/db/matcher.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/namespacestring.h"

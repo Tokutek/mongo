@@ -76,13 +76,20 @@ namespace mongo {
             }
 
             const ServerParameter::Map& m = ServerParameterSet::getGlobal()->getMap();
-            for ( ServerParameter::Map::const_iterator i = m.begin(); i != m.end(); ++i ) {
-                if ( all || cmdObj.hasElement( i->first.c_str() ) ) {
-                    i->second->append( result, i->second->name() );
+            if (cmdObj.hasElement("journalCommitInterval")) {
+                ServerParameter::Map::const_iterator it = m.find("logFlushPeriod");
+                if (it != m.end()) {
+                    it->second->append(result, "journalCommitInterval");
                 }
             }
 
-            if ( before == result.len() ) {
+            for (ServerParameter::Map::const_iterator i = m.begin(); i != m.end(); ++i) {
+                if (all || cmdObj.hasElement(i->first.c_str())) {
+                    i->second->append(result, i->second->name());
+                }
+            }
+
+            if (before == result.len()) {
                 errmsg = "no option found to get";
                 return false;
             }
@@ -202,6 +209,12 @@ namespace mongo {
                                                           &cmdLine.syncdelay,
                                                           true,
                                                           true );
+
+        ExportedServerParameter<bool> LoaderCompressTmpSetting( ServerParameterSet::getGlobal(),
+                                                                "loaderCompressTmp",
+                                                                &cmdLine.loaderCompressTmp,
+                                                                true,
+                                                                true );
     }
 
 }

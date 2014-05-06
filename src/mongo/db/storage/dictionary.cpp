@@ -19,8 +19,10 @@
 #include "mongo/base/units.h"
 #include "mongo/db/client.h"
 #include "mongo/db/descriptor.h"
+#include "mongo/db/server_parameters.h"
 #include "mongo/db/storage/dictionary.h"
 #include "mongo/db/storage/env.h"
+#include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
 
@@ -70,16 +72,58 @@ namespace mongo {
             }
         }
 
+        MONGO_EXPORT_SERVER_PARAMETER(defaultCompression, std::string, "zlib");
+        MONGO_EXPORT_SERVER_PARAMETER(defaultPageSize, BytesQuantity<int>, StringData("4MB"));
+        MONGO_EXPORT_SERVER_PARAMETER(defaultReadPageSize, BytesQuantity<int>, StringData("64KB"));
+        MONGO_EXPORT_SERVER_PARAMETER(defaultFanout, int, 16);
+
+        // Get an object with default attribute values, overriden 
+        // by anyting present in the given info object.
+        //
+        // Currently, these include:
+        // - compression
+        // - readPageSize
+        // - pageSize
+        static BSONObj fillDefaultAttributes(const BSONObj &info) {
+            // zlib compression
+            const std::string compression = (info.hasField("compression")
+                                             ? info["compression"].valuestrsafe()
+                                             : defaultCompression);
+
+            // 4mb fractal tree nodes
+            const int pageSize = (info.hasField("pageSize")
+                                  ? BytesQuantity<int>(info["pageSize"])
+                                  : defaultPageSize);
+
+            // 64kb basement nodes
+            const int readPageSize = (info.hasField("readPageSize")
+                                      ? BytesQuantity<int>(info["readPageSize"])
+                                      : defaultReadPageSize);
+
+            // fractal tree fanout is 16
+            const int fanout = (info.hasField("fanout")
+                                ? info["fanout"].numberInt()
+                                : defaultFanout);
+
+            return BSON("compression" << compression <<
+                        "readPageSize" << readPageSize <<
+                        "pageSize" << pageSize <<
+                        "fanout" << fanout);
+        }
+            
         Dictionary::Dictionary(const string &dname, const BSONObj &info,
-                               const mongo::Descriptor &descriptor, const bool may_create,
-                               const bool hot_index) :
+                               const mongo::Descriptor &descriptor,
+                               const bool may_create, const bool hot_index) :
             _dname(dname), _db(NULL) {
             const int r = db_create(&_db, env, 0);
             if (r != 0) {
                 handle_ydb_error(r);
             }
             try {
-                open(info, descriptor, may_create, hot_index);
+                open(descriptor, may_create, hot_index);
+                const BSONObj attr = fillDefaultAttributes(info);
+                BSONObjBuilder unusedBuilder;
+                changeAttributes(attr, unusedBuilder);
             } catch (...) {
                 close();
                 throw;
@@ -94,59 +138,8 @@ namespace mongo {
             }
         }
 
-        void Dictionary::open(const BSONObj &info,
-                              const mongo::Descriptor &descriptor, const bool may_create,
+        void Dictionary::open(const mongo::Descriptor &descriptor, const bool may_create,
                               const bool hot_index) {
-            int readPageSize = 65536;
-            int pageSize = 4 * 1024 * 1024;
-            TOKU_COMPRESSION_METHOD compression = TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD;
-            BSONObj key_pattern = info["key"].Obj();
-            
-            BSONElement e;
-            e = info["readPageSize"];
-            if (e.ok() && !e.isNull()) {
-                readPageSize = BytesQuantity<int>(e);
-                uassert(16743, "readPageSize must be a number > 0.", readPageSize > 0);
-                TOKULOG(1) << "db " << _dname << ", using read page size " << readPageSize << endl;
-            }
-            e = info["pageSize"];
-            if (e.ok() && !e.isNull()) {
-                pageSize = BytesQuantity<int>(e);
-                uassert(16445, "pageSize must be a number > 0.", pageSize > 0);
-                TOKULOG(1) << "db " << _dname << ", using page size " << pageSize << endl;
-            }
-            e = info["compression"];
-            if (e.ok() && !e.isNull()) {
-                std::string str = e.String();
-                if (str == "lzma") {
-                    compression = TOKU_LZMA_METHOD;
-                } else if (str == "quicklz") {
-                    compression = TOKU_QUICKLZ_METHOD;
-                } else if (str == "zlib") {
-                    compression = TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD;
-                } else if (str == "none") {
-                    compression = TOKU_NO_COMPRESSION;
-                } else {
-                    uassert(16442, "compression must be one of: lzma, quicklz, zlib, none.", false);
-                }
-                TOKULOG(1) << "db " << _dname << ", using compression method \"" << str << "\"" << endl;
-            }
-
-            int r = _db->set_readpagesize(_db, readPageSize);
-            if (r != 0) {
-                handle_ydb_error(r);
-            }
-
-            r = _db->set_pagesize(_db, pageSize);
-            if (r != 0) {
-                handle_ydb_error(r);
-            }
-
-            r = _db->set_compression_method(_db, compression);
-            if (r != 0) {
-                handle_ydb_error(r);
-            }
-
             // If this is a non-creating open for a read-only (or non-existent)
             // transaction, we can use an alternate stack since there's nothing
             // to roll back and no locktree locks to hold.
@@ -157,8 +150,10 @@ namespace mongo {
                                                    new Client::Transaction(0));
 
             const int db_flags = may_create ? DB_CREATE : 0;
-            r = _db->open(_db, cc().txn().db_txn(), _dname.c_str(), NULL,
-                          DB_BTREE, db_flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+            const int r = _db->open(_db, cc().txn().db_txn(), _dname.c_str(), NULL,
+                                    // But I thought there were fractal trees! Yes, this is for bdb compatibility.
+                                    DB_BTREE,
+                                    db_flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
             if (r == ENOENT && !may_create) {
                 throw NeedsCreate();
             }
@@ -173,6 +168,141 @@ namespace mongo {
             if (altTxn.get() != NULL) {
                 altTxn->commit();
             }
+        }
+
+        class DBParameterSetter : public boost::noncopyable {
+          public:
+            virtual ~DBParameterSetter() {}
+            virtual bool finalize(BSONObjBuilder &wasBuilder) = 0;
+        };
+
+        template<typename T>
+        class DBParameterSetterImpl : public DBParameterSetter {
+            typedef int (*db_getter_fun)(DB *db, T *val);
+            typedef int (*db_setter_fun)(DB *db, T val);
+            DB *_db;
+            string _name;
+            T _value;
+            T _oldValue;
+            db_getter_fun _get;
+            db_setter_fun _set;
+            bool _didSet;
+            bool _shouldUnset;
+          public:
+            DBParameterSetterImpl(DB *db, const string &name, T value,
+                                  db_getter_fun get, db_setter_fun set)
+                    : _db(db), _name(name), _value(value), _get(get), _set(set),
+                      _didSet(false), _shouldUnset(true) {
+                int r = _get(_db, &_oldValue);
+                if (r != 0) {
+                    problem() << "error getting parameter " << _name << endl;
+                    handle_ydb_error(r);
+                }
+                if (_oldValue == _value) {
+                    return;
+                }
+                r = _set(_db, _value);
+                if (r != 0) {
+                    problem() << "error setting parameter " << _name << endl;
+                    handle_ydb_error(r);
+                }
+                _didSet = true;
+            }
+            ~DBParameterSetterImpl() {
+                if (_didSet && _shouldUnset) {
+                    int r = _set(_db, _oldValue);
+                    if (r != 0) {
+                        problem() << "error " << r
+                                  << " when trying to reset parameter " << _name
+                                  << endl;
+                    }
+                }
+            }
+            virtual bool finalize(BSONObjBuilder &wasBuilder) {
+                _shouldUnset = false;
+                wasBuilder.append(_name, _oldValue);
+                return _didSet;
+            }
+        };
+
+        static string compressionMethodToString(TOKU_COMPRESSION_METHOD c) {
+            switch (c) {
+                case TOKU_SMALL_COMPRESSION_METHOD:
+                case TOKU_LZMA_METHOD:
+                    return "lzma";
+                case TOKU_DEFAULT_COMPRESSION_METHOD:
+                case TOKU_FAST_COMPRESSION_METHOD:
+                case TOKU_QUICKLZ_METHOD:
+                    return "quicklz";
+                case TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD:
+                case TOKU_ZLIB_METHOD:
+                    return "zlib";
+                case TOKU_NO_COMPRESSION:
+                    return "none";
+                default:
+                    msgasserted(17233, mongoutils::str::stream() << "invalid compression method " << c);
+            }
+        }
+
+        template<>
+        bool DBParameterSetterImpl<TOKU_COMPRESSION_METHOD>::finalize(BSONObjBuilder &wasBuilder) {
+            _shouldUnset = false;
+            wasBuilder.append(_name, compressionMethodToString(_oldValue));
+            return _didSet;
+        }
+
+        // @param info describes the attributes to be changed
+        bool Dictionary::changeAttributes(const BSONObj &info, BSONObjBuilder &wasBuilder) {
+            map<string, shared_ptr<DBParameterSetter> > setMap;
+            for (BSONObjIterator it(info); it.more(); ++it) {
+                BSONElement e = *it;
+                string fn(e.fieldName());
+                if (setMap.find(fn) != setMap.end()) {
+                    uasserted(17235, mongoutils::str::stream() << "can't set " << fn << " twice");
+                }
+                if (fn == "readPageSize") {
+                    const uint32_t readPageSize = BytesQuantity<uint32_t>(e);
+                    uassert(16743, "readPageSize must be a number > 0.", readPageSize > 0);
+                    setMap[fn] = boost::make_shared<DBParameterSetterImpl<uint32_t> >(
+                        _db, fn, readPageSize, _db->get_readpagesize, _db->change_readpagesize);
+                } else if (fn == "pageSize") {
+                    const uint32_t pageSize = BytesQuantity<uint32_t>(e);
+                    uassert(16445, "pageSize must be a number > 0.", pageSize > 0);
+                    setMap[fn] = boost::make_shared<DBParameterSetterImpl<uint32_t> >(
+                        _db, fn, pageSize, _db->get_pagesize, _db->change_pagesize);
+                } else if (fn == "compression") {
+                    TOKU_COMPRESSION_METHOD compression = TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD;
+                    const string str = e.String();
+                    if (str == "lzma") {
+                        compression = TOKU_LZMA_METHOD;
+                    } else if (str == "quicklz") {
+                        compression = TOKU_QUICKLZ_METHOD;
+                    } else if (str == "zlib") {
+                        compression = TOKU_ZLIB_WITHOUT_CHECKSUM_METHOD;
+                    } else if (str == "none") {
+                        compression = TOKU_NO_COMPRESSION;
+                    } else {
+                        uassert(16442, "compression must be one of: lzma, quicklz, zlib, none.", false);
+                    }
+                    setMap[fn] = boost::make_shared<DBParameterSetterImpl<TOKU_COMPRESSION_METHOD> >(
+                        _db, fn, compression, _db->get_compression_method, _db->change_compression_method);
+                } else if (fn == "fanout") {
+                    int fanout = e.numberInt();
+                    uassert(17288, "fanout must be number >= 4", fanout >= 4);
+                    setMap[fn] = boost::make_shared<DBParameterSetterImpl<unsigned int> >(
+                        _db, fn, (unsigned int) fanout, _db->get_fanout, _db->change_fanout);
+                } else {
+                    uasserted(17234, mongoutils::str::stream() << "cannot set unknown attribute " << fn);
+                }
+            }
+            bool ret = false;
+            for (map<string, shared_ptr<DBParameterSetter> >::const_iterator it = setMap.begin();
+                 it != setMap.end(); ++it) {
+                if (it->second->finalize(wasBuilder)) {
+                    ret = true;
+                }
+            }
+            return ret;
         }
 
         int Dictionary::close() {

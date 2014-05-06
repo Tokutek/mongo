@@ -95,6 +95,7 @@ files.forEach(function(x) {
 	    '6072_touch|' +
 	    'auth_mst|' +
 	    'lock_diag_size_limit|' +
+	    'cursor_timeout|' +
 	    'dbadmin|' +
 	    'error1|' +
 	    'fsync|' +
@@ -114,7 +115,7 @@ files.forEach(function(x) {
 	    'queryoptimizera|' +
 	    'indexStatsCommand|' +
 	    'reversecursor|' +
-        'block_check_supported|' +
+            'block_check_supported|' +
 	    'stats|' +
 	    'txn_.*|' +
 	    'loader_.*|' +
@@ -123,7 +124,18 @@ files.forEach(function(x) {
 	    'collection_exists_cmd|' +
 	    'getNamespaces_after_close|' +
 	    'ops_after_close|' +
-	    'collections_exist_cmd' +
+	    'collections_exist_cmd|' +
+            'update_fast|' +
+            'update_fasterrors|' +
+            'partition_mst_886|' +
+            'multi_key_mst_872|' +
+            'partition_add|' +
+            'partition_stats|' +
+            'part_convert|' +
+            'part_coll_simple|' +
+            'partition_ops_multithread|' +
+            'pk_unique_check_param|' +
+            'indexer_bg_unit' +
         ')\.js$');
 
     if (failsInShardingPattern.test(x.name)) {

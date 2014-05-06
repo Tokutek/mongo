@@ -41,6 +41,11 @@
 #include "mongo/util/concurrency/mutex.h"
 #include "mongo/util/concurrency/rwlock.h"
 
+// Unintuitively, both macros are necessary to convert __LINE__ to a string
+#define STRINGIFY_MACRO(x) #x
+#define TO_STRING_MACRO(x) STRINGIFY_MACRO(x)
+#define LOCK_REASON(var, s) static const string var(s " (" __FILE__ ":" TO_STRING_MACRO(__LINE__) ")")
+
 namespace mongo {
 
     class WrapperForRWLock;
@@ -60,8 +65,6 @@ namespace mongo {
         static bool atLeastReadLocked(const StringData& ns); // true if this db is locked
         static void assertAtLeastReadLocked(const StringData& ns);
         static void assertWriteLocked(const StringData& ns);
-
-        static bool dbLevelLockingEnabled(); 
         
         static LockStat* globalLockStat();
         static LockStat* nestableLockStat( Nestable db );
@@ -97,19 +100,16 @@ namespace mongo {
         class GlobalWrite : public ScopedLock {
             bool noop;
         public:
-            // stopGreed is removed and does NOT work
             // timeoutms is only for writelocktry -- deprecated -- do not use
-            GlobalWrite(bool stopGreed = false, int timeoutms = -1 ); 
+            GlobalWrite(const string &context, const int timeoutms = -1);
             virtual ~GlobalWrite();
-            void downgrade(); // W -> R
-            void upgrade();   // caution see notes
         };
         class GlobalRead : public ScopedLock { // recursive is ok
         public:
             bool noop;
         public:
             // timeoutms is only for readlocktry -- deprecated -- do not use
-            GlobalRead( int timeoutms = -1 ); 
+            GlobalRead(const string &context, const int timeoutms = -1);
             virtual ~GlobalRead();
         };
 
@@ -126,13 +126,13 @@ namespace mongo {
              */
 
             void lockTop(LockState&);
-            void lockNestable(Nestable db);
-            void lockOther(const StringData& db);
-            void lockDB(const string& ns);
+            void lockNestable(Nestable db, const string &context);
+            void lockOther(const StringData& db, const string &context);
+            void lockDB(const string &ns, const string &context);
             void unlockDB();
 
         public:
-            DBWrite(const StringData& dbOrNs);
+            DBWrite(const StringData& dbOrNs, const string &context);
             virtual ~DBWrite();
 
             class UpgradeToExclusive : private boost::noncopyable {
@@ -147,18 +147,12 @@ namespace mongo {
 
             class Downgrade : boost::noncopyable {
                 const std::string _ns;
+                const std::string &_context;
                 scoped_ptr<Lock::DBWrite> &_wrlk;
                 scoped_ptr<Lock::DBRead> _rdlk;
               public:
-                Downgrade(scoped_ptr<Lock::DBWrite> &wrlk)
-                        : _ns(wrlk->_what), _wrlk(wrlk) {
-                    _wrlk.reset();
-                    _rdlk.reset(new Lock::DBRead(_ns));
-                }
-                ~Downgrade() {
-                    _rdlk.reset();
-                    _wrlk.reset(new Lock::DBWrite(_ns));
-                }
+                Downgrade(scoped_ptr<Lock::DBWrite> &wrlk);
+                ~Downgrade();
             };
 
         private:
@@ -167,18 +161,19 @@ namespace mongo {
             WrapperForRWLock *_weLocked;
             const string _what;
             bool _nested;
+            Nestable _nestedDB;
         };
 
         // lock this database for reading. do not shared_lock globally first, that is handledin herein. 
         class DBRead : public ScopedLock {
             void lockTop(LockState&);
-            void lockNestable(Nestable db);
-            void lockOther(const StringData& db);
+            void lockNestable(Nestable db, const string &context);
+            void lockOther(const StringData& db, const string &context);
 
         public:
-            void lockDB(const string& ns);
+            void lockDB(const string &ns, const string &context);
             void unlockDB();
-            DBRead(const StringData& dbOrNs);
+            DBRead(const StringData& dbOrNs, const string &context);
             virtual ~DBRead();
 
         private:
@@ -186,6 +181,7 @@ namespace mongo {
             WrapperForRWLock *_weLocked;
             string _what;
             bool _nested;
+            Nestable _nestedDB;
             
         };
 
@@ -195,7 +191,7 @@ namespace mongo {
         bool _got;
         scoped_ptr<Lock::GlobalRead> _dbrlock;
     public:
-        readlocktry( int tryms );
+        readlocktry(int tryms, const string &context);
         ~readlocktry();
         bool got() const { return _got; }
     };
@@ -204,7 +200,7 @@ namespace mongo {
         bool _got;
         scoped_ptr<Lock::GlobalWrite> _dbwlock;
     public:
-        writelocktry( int tryms );
+        writelocktry(int tryms, const string &context);
         ~writelocktry();
         bool got() const { return _got; }
     };

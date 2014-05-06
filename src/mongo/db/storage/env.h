@@ -28,17 +28,25 @@ namespace mongo {
 
     namespace storage {
 
+        class UpdateCallback : boost::noncopyable {
+        public:
+            virtual ~UpdateCallback() { }
+            virtual BSONObj applyMods(const BSONObj &oldObj, const BSONObj &msg) {
+                msgasserted(17214, "bug: update apply callback not properly installed");
+            }
+        };
+
         extern DB_ENV *env;
 
-        void startup(TxnCompleteHooks *hooks);
+        void startup(TxnCompleteHooks *hooks, UpdateCallback *updateCallback);
         void shutdown(void);
 
         void db_remove(const string &name);
         void db_rename(const string &old_name, const string &new_name);
 
         void get_status(BSONObjBuilder &status);
-        void get_pending_lock_request_status(BSONObjBuilder &status);
-        void get_live_transaction_status(BSONObjBuilder &status);
+        void get_pending_lock_request_status(vector<BSONObj> &pendingLockRequests);
+        void get_live_transaction_status(vector<BSONObj> &liveTransactions);
         void log_flush();
         void checkpoint();
 
@@ -51,6 +59,8 @@ namespace mongo {
 
         void handle_ydb_error(int error);
         MONGO_COMPILER_NORETURN void handle_ydb_error_fatal(int error);
+
+        void do_backtrace();
 
     } // namespace storage
 

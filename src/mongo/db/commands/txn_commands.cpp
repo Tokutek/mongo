@@ -19,6 +19,7 @@
 #include "mongo/db/commands.h"
 #include "mongo/db/client.h"
 #include "mongo/db/repl/rs.h"
+#include "mongo/db/storage/assert_ids.h"
 
 namespace mongo {
 
@@ -31,6 +32,9 @@ namespace mongo {
                                            std::vector<Privilege> *out) {
             ActionSet actions;
             actions.addAction(ActionType::transactionCommands);
+            if (cmdObj["isolation"].valuestringdatasafe() == "serializable") {
+                actions.addAction(ActionType::beginSerializableTransaction);
+            }
             // This doesn't really need to be specific to this dbname, but it ensures that you are
             // authed as someone and aren't just anonymous.  This means that if you're running with
             // auth, you need to issue transaction commands against a db that you have privileges
@@ -111,7 +115,7 @@ namespace mongo {
                          BSONObjBuilder& result, 
                          bool fromRepl) 
         {
-            uassert(16788, "no transaction exists to be committed", cc().hasTxn());
+            uassert(storage::ASSERT_IDS::TxnNotFoundOnCommit, "no transaction exists to be committed", cc().hasTxn());
             uassert(16889, "a bulk load is still in progress. commit or abort the load before committing the transaction.",
                             !cc().loadInProgress());
             cc().commitTopTxn();

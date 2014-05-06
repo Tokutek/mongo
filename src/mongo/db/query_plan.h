@@ -39,7 +39,7 @@ namespace mongo {
     class FieldRangeSet;
     class FieldRangeSetPair;
     class IndexDetails;
-    class NamespaceDetails;
+    class Collection;
     class ParsedQuery;
     struct QueryPlanSummary;
 
@@ -54,7 +54,7 @@ namespace mongo {
          * @param originalFrsp - original constraints for this query clause.  If null, frsp will be
          * used instead.
          */
-        static QueryPlan* make( NamespaceDetails* d,
+        static QueryPlan* make( Collection *cl,
                                 int idxNo, // -1 = no index
                                 const FieldRangeSetPair& frsp,
                                 const FieldRangeSetPair* originalFrsp,
@@ -119,7 +119,7 @@ namespace mongo {
 
         const char* ns() const;
 
-        NamespaceDetails* nsd() const { return _d; }
+        Collection *cl() const { return _cl; }
 
         BSONObj originalQuery() const { return _originalQuery; }
 
@@ -145,7 +145,7 @@ namespace mongo {
 
     private:
         
-        QueryPlan( NamespaceDetails* d,
+        QueryPlan( Collection *cl,
                    int idxNo,
                    const FieldRangeSetPair& frsp,
                    const BSONObj& originalQuery,
@@ -163,7 +163,7 @@ namespace mongo {
         /** @return true when the plan's query may contains an $exists:false predicate. */
         bool hasPossibleExistsFalsePredicate() const;
 
-        NamespaceDetails* _d;
+        Collection *_cl;
         int _idxNo;
         const FieldRangeSet& _frs;
         const FieldRangeSet& _frsMulti;

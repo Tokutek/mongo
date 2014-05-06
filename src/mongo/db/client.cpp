@@ -99,6 +99,13 @@ namespace mongo {
         cc()._upgradingSystemUsers = false;
     }
 
+    Client::UpgradingDiskFormatVersionScope::UpgradingDiskFormatVersionScope() {
+        cc()._upgradingDiskFormatVersion = true;
+    }
+    Client::UpgradingDiskFormatVersionScope::~UpgradingDiskFormatVersionScope() {
+        cc()._upgradingDiskFormatVersion = false;
+    }
+
     /* each thread which does db operations has a Client object in TLS.
        call this when your thread starts.
     */
@@ -119,7 +126,9 @@ namespace mongo {
         _desc(desc),
         _god(0),
         _creatingSystemUsers(""),
-        _upgradingSystemUsers(false)
+        _upgradingSystemUsers(false),
+        _upgradingDiskFormatVersion(false),
+        _globallyUninterruptible(false)
     {
         _connectionId = p ? p->connectionId() : 0;
         
@@ -182,18 +191,16 @@ namespace mongo {
         // client is being destroyed, if there are any transactions on our stack,
         // abort them, starting with the one in the loadInfo object if it exists.
         _loadInfo.reset();
+
+        {
+            scoped_lock bl(clientsMutex);
+            clients.erase(this);
+        }
+
         if (_transactions) {
             while (_transactions->hasLiveTxn()) {
                 _transactions->abortTxn();
             }
-        }
-
-        if ( inShutdown() ) {
-            return false;
-        }
-        {
-            scoped_lock bl(clientsMutex);
-            clients.erase(this);
         }
 
         return false;
@@ -222,19 +229,15 @@ namespace mongo {
         _finishInit();
     }
 
-    /** "read lock, and set my context, all in one operation" 
-     *  This handles (if not recursively locked) opening an unopened database.
-     */
-    Client::ReadContext::ReadContext(const StringData& ns, const StringData& path)
-        : _lk( ns ) ,
-          _c(ns, path) {
+    // Locking and context in one operation
+    Client::ReadContext::ReadContext(const StringData& ns, const string &context)
+        : _lk(ns, context) ,
+          _c(ns, dbpath) {
     }
-
-    Client::WriteContext::WriteContext(const StringData& ns, const StringData& path)
-        : _lk( ns ) ,
-          _c(ns, path) {
+    Client::WriteContext::WriteContext(const StringData& ns, const string &context)
+        : _lk(ns, context) ,
+          _c(ns, dbpath) {
     }
-
 
     void Client::Context::checkNotStale() const { 
         switch ( _client->_curOp->getOp() ) {
@@ -484,8 +487,6 @@ namespace mongo {
         nupdated = -1;
         ninserted = -1;
         ndeleted = -1;
-        nmoved = -1;
-        fastmod = false;
         fastmodinsert = false;
         upsert = false;
         keyUpdates = 0;  // unsigned, so -1 not possible
@@ -543,11 +544,9 @@ namespace mongo {
         OPDEBUG_TOSTRING_HELP( nscanned );
         OPDEBUG_TOSTRING_HELP_BOOL( idhack );
         OPDEBUG_TOSTRING_HELP_BOOL( scanAndOrder );
-        OPDEBUG_TOSTRING_HELP( nmoved );
         OPDEBUG_TOSTRING_HELP( nupdated );
         OPDEBUG_TOSTRING_HELP( ninserted );
         OPDEBUG_TOSTRING_HELP( ndeleted );
-        OPDEBUG_TOSTRING_HELP_BOOL( fastmod );
         OPDEBUG_TOSTRING_HELP_BOOL( fastmodinsert );
         OPDEBUG_TOSTRING_HELP_BOOL( upsert );
         OPDEBUG_TOSTRING_HELP( keyUpdates );
@@ -562,8 +561,23 @@ namespace mongo {
         }
 
 
-        if ( ! lockNotGrantedInfo.isEmpty() ) {
-            s << " lockNotGranted: " << lockNotGrantedInfo;
+        if (!lockNotGrantedInfo.isEmpty()) {
+            BSONObjBuilder expandedLockNotGrantedInfoBuilder;
+            expandedLockNotGrantedInfoBuilder.appendElements(lockNotGrantedInfo);
+            verify(lockNotGrantedInfo["blockingTxnid"].isNumber());
+            long long blockingTxnid = lockNotGrantedInfo["blockingTxnid"].numberLong();
+            {
+                scoped_lock bl(Client::clientsMutex);
+                for (set<Client*>::iterator i = Client::clients.begin(); i != Client::clients.end(); i++) {
+                    Client *c = *i;
+                    verify(c);
+                    if (c->rootTransactionId() == blockingTxnid && c->curop() != NULL) {
+                        expandedLockNotGrantedInfoBuilder.append("blockingOp", c->curop()->info());
+                        break;
+                    }
+                }
+            }
+            s << " lockNotGranted: " << expandedLockNotGrantedInfoBuilder.done();
         }
 
         s << " ";
@@ -590,8 +604,6 @@ namespace mongo {
         if ( ! updateobj.isEmpty() )
             b.append( "updateobj" , updateobj );
         
-        const bool moved = (nmoved >= 1);
-
         OPDEBUG_APPEND_NUMBER( cursorid );
         OPDEBUG_APPEND_NUMBER( ntoreturn );
         OPDEBUG_APPEND_NUMBER( ntoskip );
@@ -600,12 +612,9 @@ namespace mongo {
         OPDEBUG_APPEND_NUMBER( nscanned );
         OPDEBUG_APPEND_BOOL( idhack );
         OPDEBUG_APPEND_BOOL( scanAndOrder );
-        OPDEBUG_APPEND_BOOL( moved );
-        OPDEBUG_APPEND_NUMBER( nmoved );
         OPDEBUG_APPEND_NUMBER( nupdated );
         OPDEBUG_APPEND_NUMBER( ninserted );
         OPDEBUG_APPEND_NUMBER( ndeleted );
-        OPDEBUG_APPEND_BOOL( fastmod );
         OPDEBUG_APPEND_BOOL( fastmodinsert );
         OPDEBUG_APPEND_BOOL( upsert );
         OPDEBUG_APPEND_NUMBER( keyUpdates );

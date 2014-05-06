@@ -1,0 +1,6 @@
+Template: tokumx-common/email_address
+Type: string
+Description: Provide your email address to keep up with TokuMX news.
+ You may want to sign up for alerts to make sure you have the latest releases
+ and information. To receive product announcements and event invitations, please
+ enter your email address below.

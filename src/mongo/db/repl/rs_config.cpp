@@ -38,10 +38,10 @@
 #include <boost/static_assert.hpp>
 
 #include "mongo/client/syncclusterconnection.h"
-#include "mongo/db/dbhelpers.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/oplog_helpers.h"
+#include "mongo/db/ops/update.h"
 #include "mongo/db/repl/connections.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/util/net/hostandport.h"
@@ -79,16 +79,16 @@ namespace mongo {
         log() << "replSet info saving a newer config version to local.system.replset" << rsLog;
         {
             // TODO: does this really need to be a global lock?
-            Lock::GlobalWrite lk;
+            LOCK_REASON(lockReason, "repl: saving new replset config");
+            Lock::GlobalWrite lk(lockReason);
             Client::Context cx( rsConfigNs );
             Client::Transaction transaction(DB_SERIALIZABLE);    
             if (onInitiate) {
                 cc().txn().txnIntiatingRs();
             }
-            BSONObj o = asBson();
-            Helpers::putSingleton(rsConfigNs.c_str(), o);
+            updateObjects(rsConfigNs.c_str(), asBson(), BSONObj(), true, false);
             if( !comment.isEmpty() && (!theReplSet || theReplSet->isPrimary()) ) {
-                OpLogHelpers::logComment(comment);
+                OplogHelpers::logComment(comment);
             }
             transaction.commit(0);
         }
@@ -192,6 +192,8 @@ namespace mongo {
     const int ReplSetConfig::CURRENT_PROTOCOL_VERSION = PV_TOKUMX_CURRENT;
     const int ReplSetConfig::MAX_SUPPORTED_PROTOCOL_VERSION = PV_TOKUMX_CURRENT;
     const int ReplSetConfig::MIN_SUPPORTED_PROTOCOL_VERSION = PV_TOKUMX_1_0;
+
+    uint32_t ReplSetConfig::OPLOG_VERSION = OPLOG_VERSION_CURRENT;
 
     BOOST_STATIC_ASSERT(ReplSetConfig::MIN_SUPPORTED_PROTOCOL_VERSION > PV_MONGODB_CURRENT);
     BOOST_STATIC_ASSERT(ReplSetConfig::MIN_SUPPORTED_PROTOCOL_VERSION <= ReplSetConfig::MAX_SUPPORTED_PROTOCOL_VERSION);

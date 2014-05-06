@@ -1,0 +1,13 @@
+[Unit]
+Description=High-performance, schema-free document-oriented database
+After=syslog.target network.target
+
+[Service]
+Type=forking
+User=tokumx
+PIDFile=/var/run/tokumx/tokumx.pid
+EnvironmentFile=/etc/sysconfig/tokumx
+ExecStart=/usr/bin/mongod $OPTIONS run
+
+[Install]
+WantedBy=multi-user.target

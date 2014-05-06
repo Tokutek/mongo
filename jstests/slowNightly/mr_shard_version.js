@@ -1,3 +1,6 @@
+// Too slow on debug builds
+if (!db.runCommand('buildInfo').debug) {
+
 // Test for SERVER-4158 (version changes during mapreduce)
 
 var st = new ShardingTest({ shards : 2, mongos : 1, verbose : 2 })
@@ -89,3 +92,5 @@ jsTest.log( "Finishing parallel migrations..." )
 printjson( benchFinish( bid ) )
 
 st.stop()
+
+}

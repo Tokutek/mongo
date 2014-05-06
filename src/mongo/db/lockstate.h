@@ -76,9 +76,12 @@ namespace mongo {
          */
         void changeLockState( char newstate );
 
-        Lock::Nestable whichNestable() const { return _whichNestable; }
-        int nestableCount() const { return _nestableCount; }
-        
+        bool adminLocked() {
+            return _adminLockCount != 0;
+        }
+        bool localLocked() {
+            return _localLockCount != 0;
+        }
         int otherCount() const { return _otherCount; }
         const string& otherName() const { return _otherName; }
         WrapperForRWLock* otherLock() const { return _otherLock; }
@@ -86,15 +89,22 @@ namespace mongo {
         void enterScopedLock( Lock::ScopedLock* lock );
         Lock::ScopedLock* leaveScopedLock();
 
-        void lockedNestable( Lock::Nestable what , int type );
-        void unlockedNestable();
-        void lockedOther( const StringData& db , int type , WrapperForRWLock* lock );
-        void lockedOther( int type );  // "same lock as last time" case 
+        void lockedAdmin(int type, const string &context);
+        void lockedLocal(int type, const string &context);
+        void unlockedAdmin();
+        void unlockedLocal();
+        void lockedOther( const StringData& db , int type , WrapperForRWLock* lock, const string &context );
+        void lockedOther( int type, const string &context );  // "same lock as last time" case
         void unlockedOther();
 
         LockStat* getRelevantLockStat();
         void recordLockTime() { _scopedLk->recordTime(); }
         void resetLockTime() { _scopedLk->resetTime(); }
+
+        const string &context() const {
+            dassert(_context != NULL);
+            return *_context;
+        }
         
     private:
         unsigned _recursive;           // we allow recursively asking for a lock; we track that here
@@ -102,9 +112,8 @@ namespace mongo {
         // global lock related
         char _threadState;             // 0, 'r', 'w', 'R', 'W'
 
-        // db level locking related
-        Lock::Nestable _whichNestable;
-        int _nestableCount;            // recursive lock count on local or admin db XXX - change name
+        int _adminLockCount; // if non-zero, that means admin is locked
+        int _localLockCount; // if non-zero, that means local is locked
         
         int _otherCount;               //   >0 means write lock, <0 read lock - XXX change name
         string _otherName;             // which database are we locking and working with (besides local/admin) 
@@ -116,6 +125,8 @@ namespace mongo {
         
         bool _lockPending;
         bool _lockPendingParallelWriter;
+
+        const string *_context;
 
         friend class Acquiring;
         friend class AcquiringParallelWriter;

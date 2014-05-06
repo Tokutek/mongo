@@ -43,7 +43,6 @@
 #include "health.h"
 #include "rs.h"
 #include "rs_config.h"
-#include "../dbhelpers.h"
 #include "../oplog.h"
 
 using namespace bson;
@@ -203,7 +202,8 @@ namespace mongo {
                 // later.  of course it could be stuck then, but this check lowers the risk if weird things
                 // are up.
                 time_t t = time(0);
-                Lock::GlobalWrite lk;
+                LOCK_REASON(lockReason, "repl: checking for empty oplog");
+                Lock::GlobalWrite lk(lockReason);
                 if( time(0)-t > 10 ) {
                     errmsg = "took a long time to get write lock, so not initiating.  Initiate when server less busy?";
                     return false;
@@ -277,11 +277,11 @@ namespace mongo {
 
                 log() << "replSet replSetInitiate all members seem up" << rsLog;
 
-                Lock::GlobalWrite lk;
+                LOCK_REASON(lockReason, "repl: creating oplog");
+                Lock::GlobalWrite lk(lockReason);
                 {
                     Client::Transaction transaction(DB_SERIALIZABLE);
                     createOplog();
-                    openOplogFiles();
                     GTID minLiveGTID;
                     GTID minUnappliedGTID;
                     logToReplInfo(minLiveGTID, minUnappliedGTID);

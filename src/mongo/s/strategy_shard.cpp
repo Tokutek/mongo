@@ -614,7 +614,7 @@ namespace mongo {
                             //
                             dbcon.done();
 
-                            globalOpCounters.incInsertInWriteLock(group.inserts.size());
+                            globalOpCounters.gotInsert(group.inserts.size());
 
                             //
                             // CHECK INTERMEDIATE ERROR

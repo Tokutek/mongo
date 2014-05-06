@@ -6,7 +6,7 @@ var mongos = st.s0
 
 var coll = mongos.getCollection( jsTestName() + ".foo" )
 
-st.shardColl( coll, { _id : 1, i : 1 }, { _id : ObjectId(), i : 1 } )
+st.shardColl( coll, { i : 1, _id : 1 }, { i : 1, _id : ObjectId() } )
 
 printjson( mongos.getDB("config").chunks.find().toArray() )
 
@@ -100,10 +100,10 @@ for( var i = 0; i < 10; i++ ){
     checkError( false )
 }
 
-coll.ensureIndex({ _id : 1, i : 1 }, { clustering: true })
+coll.ensureIndex({ i : 1, _id : 1 }, { clustering: true })
 
 try {
-    st.shardColl( coll, { _id : 1, i : 1 },  { _id : ObjectId(), i : 1 } )
+    st.shardColl( coll, { i : 1, _id : 1 },  { i : 1, _id : ObjectId() } )
 }
 catch( e ){
     print( "Correctly threw error on sharding with multikey index." )
@@ -119,9 +119,9 @@ for( var i = 0; i < 10; i++ ){
     checkError( false )
 }
 
-coll.ensureIndex({ _id : 1, i : 1 }, { clustering: true })
+coll.ensureIndex({ i : 1, _id : 1 }, { clustering: true })
 
-st.shardColl( coll, { _id : 1, i : 1 },  { _id : ObjectId(), i : 1 } )
+st.shardColl( coll, { i : 1, _id : 1 },  { i : 1, _id : ObjectId() } )
 
 st.printShardingStatus()
 

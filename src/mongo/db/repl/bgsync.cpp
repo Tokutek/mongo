@@ -32,6 +32,7 @@
 #include "mongo/db/client.h"
 #include "mongo/db/commands/fsync.h"
 #include "mongo/db/commands/server_status.h"
+#include "mongo/db/crash.h"
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/repl/rs_sync.h"
 #include "mongo/base/counter.h"
@@ -137,6 +138,10 @@ namespace mongo {
         }
         Client::initThread("applier");
         replLocalAuth();
+        // we don't want the applier to be interrupted,
+        // as it must finish work that it starts
+        // done for github issues #770 and #771
+        cc().setGloballyUninterruptible(true);
         applyOpsFromOplog();
         cc().shutdown();
         {
@@ -178,8 +183,10 @@ namespace mongo {
                     }
                     catch (std::exception &e) {
                         log() << "exception during applying transaction from oplog: " << e.what() << endl;
+                        log() << "oplog entry: " << curr.str() << endl;
                         if (numTries == 100) {
                             // something is really wrong if we fail 100 times, let's abort
+                            dumpCrashInfo("100 errors applying oplog entry");
                             ::abort();
                         }
                         sleepsecs(1);
@@ -500,19 +507,6 @@ namespace mongo {
         return theReplSet->shouldChangeSyncTarget(_currentSyncTarget->hbinfo().opTime);
     }
 
-    bool BackgroundSync::isStale(OplogReader& r, BSONObj& remoteOldestOp) {
-        remoteOldestOp = r.findOne(rsoplog, Query());
-        GTID remoteOldestGTID = getGTIDFromBSON("_id", remoteOldestOp);
-        {
-            boost::unique_lock<boost::mutex> lock(_mutex);
-            GTID currLiveState = theReplSet->gtidManager->getLiveState();
-            if (GTID::cmp(currLiveState, remoteOldestGTID) < 0) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     void BackgroundSync::getOplogReader(OplogReader& r) {
         const Member *target = NULL, *stale = NULL;
         BSONObj oldest;
@@ -525,13 +519,6 @@ namespace mongo {
                 LOG(2) << "replSet can't connect to " << current << " to read operations" << rsLog;
                 r.resetConnection();
                 theReplSet->veto(current);
-                continue;
-            }
-
-            if (isStale(r, oldest)) {
-                r.resetConnection();
-                theReplSet->veto(current, 600);
-                stale = target;
                 continue;
             }
 
@@ -574,6 +561,7 @@ namespace mongo {
         incRBID();
         try {
             shared_ptr<DBClientCursor> rollbackCursor = r.getRollbackCursor(ourLast);
+            uassert(17350, "rollback failed to get a cursor to start reading backwards from.", rollbackCursor.get());
             while (rollbackCursor->more()) {
                 BSONObj remoteObj = rollbackCursor->next();
                 GTID remoteGTID = getGTIDFromBSON("_id", remoteObj);
@@ -590,10 +578,11 @@ namespace mongo {
                 addGTIDToBSON("_id", remoteGTID, localQuery);
                 bool foundLocally = false;
                 {
-                    Client::ReadContext ctx(rsoplog);
+                    LOCK_REASON(lockReason, "repl: looking up oplog entry for rollback");
+                    Client::ReadContext ctx(rsoplog, lockReason);
                     Client::Transaction transaction(DB_SERIALIZABLE);
-                    NamespaceDetails *d = nsdetails( rsoplog );
-                    foundLocally = d != NULL && d->findOne( localQuery.done(), localObj);
+                    foundLocally = Collection::findOne(rsoplog, localQuery.done(), localObj);
+                    transaction.commit();
                 }
                 if (foundLocally) {
                     GTID localGTID = getGTIDFromBSON("_id", localObj);
@@ -651,7 +640,8 @@ namespace mongo {
         {
             // so we know nothing is simultaneously occurring
             RWLockRecursive::Exclusive e(operationLock);
-            Lock::GlobalWrite lk;
+            LOCK_REASON(lockReason, "repl: killing all operations for rollback");
+            Lock::GlobalWrite lk(lockReason);
             ClientCursor::invalidateAllCursors();
             Client::abortLiveTransactions();
             theReplSet->goToRollbackState();
@@ -678,7 +668,8 @@ namespace mongo {
             while (true) {
                 BSONObj o;
                 {
-                    Lock::DBRead lk(rsoplog);
+                    LOCK_REASON(lockReason, "repl: checking for oplog data");
+                    Lock::DBRead lk(rsoplog, lockReason);
                     Client::Transaction txn(DB_SERIALIZABLE);
                     // if there is nothing in the oplog, break
                     o = getLastEntryInOplog();

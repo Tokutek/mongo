@@ -21,15 +21,20 @@
 
 #include "mongo/base/initializer.h"
 #include "mongo/db/commands.h"
+#include "mongo/db/collection.h"
 #include "mongo/dbtests/dbtests.h"
 #include "mongo/dbtests/framework.h"
 #include "mongo/util/exception_filter_win32.h"
 #include "mongo/util/startup_test.h"
 
+// This is kind of secret, see collection.cpp.
+void turnOnAllowSetMultiKeyInMSTForTests();
+
 int main( int argc, char** argv, char** envp ) {
     static StaticObserver StaticObserver;
     setWindowsUnhandledExceptionFilter();
     Command::testCommandsEnabled = 1;
+    CollectionBase::turnOnAllowSetMultiKeyInMSTForTests();
     mongo::runGlobalInitializersOrDie(argc, argv, envp);
     StartupTest::runTests();
     _exit(mongo::dbtests::runDbTests( argc, argv, "/tmp/unittest" ));

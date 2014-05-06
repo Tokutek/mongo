@@ -12,7 +12,7 @@ function rollback() {
 }
 
 db.dropDatabase();
-var db2 = db.getSisterDB('test2');
+var db2 = db.getSisterDB(db.getName() + 'test2');
 var t = db.rollbackcapped;
 var t2 = db2.rollbackcapped;
 e = db.createCollection('rollbackcapped', { capped: true, size: 1024 })

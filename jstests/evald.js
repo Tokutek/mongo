@@ -16,7 +16,7 @@ function op( ev, where ) {
     for ( var i in p ) {
         var o = p[ i ];
         if ( where ) {
-            if ( o.active && o.query && o.query.query && o.query.query.$where && o.ns == "test.jstests_evald" ) {
+            if ( o.active && o.query && o.query.query && o.query.query.$where && o.ns == db.getName() + ".jstests_evald" ) {
                 return o.opid;
             }
         } else {
@@ -33,7 +33,7 @@ function doIt( ev, wait, where ) {
     if ( where ) {
         s = startParallelShell( ev );
     } else {
-        s = startParallelShell( "db.eval( '" + ev + "' )" );        
+        s = startParallelShell( "db.getSiblingDB('" + db.getName() + "').eval( '" + ev + "' )" );
     }
 
     o = null;
@@ -47,6 +47,16 @@ function doIt( ev, wait, where ) {
 
     db.killOp( o );
 
+    assert.soon(function() {
+        var o = op(ev, where);
+        if (o == -1) {
+            return true;
+        } else {
+            db.killOp(o);
+            return false;
+        }
+    });
+
     debug( "sent kill" );
 
     s();
@@ -54,8 +64,8 @@ function doIt( ev, wait, where ) {
 }
 
 // nested scope with nested invoke()
-doIt("db.jstests_evald.count( { $where: function() { while(1) { sleep(1); } } } )", true, true);
-doIt("db.jstests_evald.count( { $where: function() { while(1) { sleep(1); } } } )", false, true);
+doIt("db.getSiblingDB(\"" + db.getName() + "\").jstests_evald.count( { $where: function() { while(1) { sleep(1); } } } )", true, true);
+doIt("db.getSiblingDB(\"" + db.getName() + "\").jstests_evald.count( { $where: function() { while(1) { sleep(1); } } } )", false, true);
 
 // simple tight loop tests with callback
 doIt("while(1) { sleep(1); }", false);
@@ -66,10 +76,10 @@ doIt("while(1) {;}", false);
 doIt("while(1) {;}", true);
 
 // the for loops are currently required, as a spawned op masks the parent op - see SERVER-1931
-doIt("while(1) { for( var i = 0; i < 10000; ++i ) {;} db.jstests_evald.count({i:10}); }", true);
-doIt("while(1) { for( var i = 0; i < 10000; ++i ) {;} db.jstests_evald.count({i:10}); }", false);
-doIt("while(1) { for( var i = 0; i < 10000; ++i ) {;} db.jstests_evald.count(); }", true);
-doIt("while(1) { for( var i = 0; i < 10000; ++i ) {;} db.jstests_evald.count(); }", false);
+doIt("while(1) { for( var i = 0; i < 10000; ++i ) {;} db.getSiblingDB(\"" + db.getName() + "\").jstests_evald.count({i:10}); }", true);
+doIt("while(1) { for( var i = 0; i < 10000; ++i ) {;} db.getSiblingDB(\"" + db.getName() + "\").jstests_evald.count({i:10}); }", false);
+doIt("while(1) { for( var i = 0; i < 10000; ++i ) {;} db.getSiblingDB(\"" + db.getName() + "\").jstests_evald.count(); }", true);
+doIt("while(1) { for( var i = 0; i < 10000; ++i ) {;} db.getSiblingDB(\"" + db.getName() + "\").jstests_evald.count(); }", false);
 
 // try/catch with tight-loop kill tests.  Catch testing is important
 // due to v8::TerminateExecution internals.
@@ -77,7 +87,7 @@ doIt("while(1) { for( var i = 0; i < 10000; ++i ) {;} db.jstests_evald.count(); 
 doIt("while(1) {                                  " +
      "   for(var i = 0; i < 10000; ++i) {;}       " +
      "   try {                                    " +
-     "      db.jstests_evald.count({i:10});       " +
+     "      db.getSiblingDB(\"" + db.getName() + "\").jstests_evald.count({i:10});       " +
      "   } catch (e) {}                           " +
      "}", true );
 

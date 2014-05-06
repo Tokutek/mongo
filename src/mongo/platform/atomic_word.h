@@ -156,4 +156,18 @@ namespace mongo {
     _ATOMIC_WORD_DECLARE(AtomicInt64, long long);
 #undef _ATOMIC_WORD_DECLARE
 
+    template<typename T, size_t padSize>
+    class Padded : public T {
+#ifdef __APPLE__
+        __attribute__((unused))
+#endif
+        char _pad[padSize - (sizeof(T) % padSize)];
+    };
+
+    template<typename T>
+    class CacheLinePadded : public Padded<T, 64> {};
+
+    typedef CacheLinePadded<AtomicWord<long long> > AtomicWordOnCacheLine;
+    BOOST_STATIC_ASSERT(sizeof(AtomicWordOnCacheLine) == 64);
+
 }  // namespace mongo

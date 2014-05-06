@@ -441,7 +441,7 @@ namespace mongo {
             _dataWritten = mkDataWritten();
 
             // if the collection lock is taken (e.g. we're migrating), it is fine for the split to fail.
-            warning() << "could not autosplit collection " << _manager->getns() << causedBy( e ) << endl;
+            RATELIMITED(1000) warning() << "could not autosplit collection " << _manager->getns() << causedBy( e ) << endl;
             return false;
         }
     }

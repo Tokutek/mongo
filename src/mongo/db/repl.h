@@ -41,7 +41,6 @@
 #pragma once
 
 #include "mongo/base/counter.h"
-#include "mongo/db/dbhelpers.h"
 #include "mongo/util/optime.h"
 #include "mongo/db/oplog.h"
 #include "mongo/util/concurrency/thread_pool.h"

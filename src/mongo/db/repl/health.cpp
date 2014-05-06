@@ -40,7 +40,6 @@
 #include "mongo/util/ramlog.h"
 #include "connections.h"
 #include "mongo/util/startup_test.h"
-#include "mongo/db/dbhelpers.h"
 #include "mongo/db/repl/bgsync.h"
 
 namespace mongo {
@@ -427,9 +426,8 @@ namespace mongo {
                 bb.append("lastGTID", lastLive.toString());
                 bb.append("lastUnappliedGTID", lastUnapplied.toString());
                 bb.append("minLiveGTID", minLive.toString());
-                bb.append("minUnappliedGTID", minUnapplied.toString());                
-                bb.append("nextPurgedGTID", _lastPurgedGTID.toString());
-                bb.appendDate("nextPurgedTS", _lastPurgedTS);
+                bb.append("minUnappliedGTID", minUnapplied.toString());
+                bb.append("oplogVersion", ReplSetConfig::OPLOG_VERSION);
             }
 
             int maintenance = _maintenanceMode;
@@ -468,10 +466,7 @@ namespace mongo {
                 bb.append("lastUnappliedGTID", m->hbinfo().lastUnappliedGTID.toString());
                 bb.append("minLiveGTID", m->hbinfo().minLiveGTID.toString());
                 bb.append("minUnappliedGTID", m->hbinfo().minUnappliedGTID.toString());
-                if (m->hbinfo().purgedInfoAvailable) {
-                    bb.append("nextPurgedGTID", m->hbinfo().lastPurgedGTID.toString());
-                    bb.appendDate("nextPurgedTS", m->hbinfo().lastPurgedTS);
-                }
+                bb.append("oplogVersion", m->hbinfo().oplogVersion);
             }
             bb.appendTimeT("lastHeartbeat", m->hbinfo().lastHeartbeat);
             bb.appendTimeT("lastHeartbeatRecv", m->getLastRecvHeartbeat());

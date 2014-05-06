@@ -34,12 +34,14 @@
 #include "mongo/db/ops/query.h"
 
 #include "mongo/bson/util/builder.h"
+#include "mongo/db/client.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/parsed_query.h"
 #include "mongo/db/query_plan_summary.h"
 #include "mongo/db/query_optimizer.h"
 #include "mongo/db/query_optimizer_internal.h"
+#include "mongo/db/queryoptimizercursor.h"
 #include "mongo/db/replutil.h"
 #include "mongo/db/scanandorder.h"
 #include "mongo/s/d_logic.h"
@@ -95,16 +97,15 @@ namespace mongo {
         return qr;
     }
 
-    bool queryByIdHack(NamespaceDetails *d, const BSONObj &idQuery,
+
+    bool queryByPKHack(Collection *cl, const BSONObj &pk,
                        const BSONObj &query, BSONObj &result,
                        ResultDetails *resDetails) {
-        verify(d->mayFindById()); // caller should have asserted d->mayFindById()
-
         cc().curop()->debug().idhack = true;
 
         BSONObj obj;
         bool objMatches = true;
-        const bool found = d->findById(idQuery, obj);
+        const bool found = cl->findByPK(pk, obj);
         if (found) {
             // Only use a matcher for queries with more than just an _id
             // component. The _id was already 'matched' by the find.
@@ -116,6 +117,7 @@ namespace mongo {
         }
 
         const bool ok = found && objMatches;
+        cl->getPKIndex().noteQuery(ok ? 1 : 0, 0);
         result = ok ? obj : BSONObj();
         return ok;
     }
@@ -147,7 +149,6 @@ namespace mongo {
         else {
             // check for spoofing of the ns such that it does not match the one originally there for the cursor
             uassert(14833, "auth error", str::equals(ns, client_cursor->ns().c_str()));
-            uassert(16784, "oplog cursor reading data that is too old", !client_cursor->lastOpForSlaveTooOld());
 
             int queryOptions = client_cursor->queryOptions();
             OpSettings settings;
@@ -250,6 +251,7 @@ namespace mongo {
             }
             
             if ( client_cursor ) {
+                client_cursor->resetIdleAge();
                 exhaust = client_cursor->queryOptions() & QueryOption_Exhaust;
             } else if (!cursorPartOfMultiStatementTxn) {
                 // This cursor is done and it wasn't part of a multi-statement
@@ -741,10 +743,13 @@ namespace mongo {
         if (pq.hasOption( QueryOption_OplogReplay )) {
             options |= QueryOption_OplogReplay;
         }
-        ClientCursor::Holder ccPointer( new ClientCursor( options, cursor, ns ) );
+        // create a client cursor that does not create a cursorID.
+        // The cursor ID will be created if and only if we save
+        // the client cursor further below
+        ClientCursor::Holder ccPointer(
+            new ClientCursor( options, cursor, ns, BSONObj(), false, false )
+            );
 
-        // for oplog cursors, we check if we are reading data that is too old and might
-        // be stale.
         bool opChecked = false;
         bool slaveLocationUpdated = false;
         BSONObj last;
@@ -775,7 +780,6 @@ namespace mongo {
                 // check if data we are about to return may be too stale
                 if (!opChecked) {
                     ccPointer->storeOpForSlave(current);
-                    uassert(16785, "oplog cursor reading data that is too old", !ccPointer->lastOpForSlaveTooOld());
                     opChecked = true;
                 }
             }
@@ -864,21 +868,20 @@ namespace mongo {
         return saveClientCursor;
     }
 
-    bool _tryQueryByIdHack(const char *ns, const BSONObj &idQuery, const BSONObj &query,
+    bool _tryQueryByPKHack(const char *ns, const BSONObj &query,
                            const ParsedQuery &pq, CurOp &curop, Message &result) {
-        int n = 0;
-        auto_ptr< QueryResult > qr;
         BSONObj resObject;
 
         bool found = false;
-        NamespaceDetails *d = nsdetails(ns);
-        if (d != NULL) {
-            if (!d->mayFindById()) {
-                // we have to resort to using the optimizer
-                return false;
-            }
-            found = queryByIdHack(d, idQuery, query, resObject);
+        Collection *cl = getCollection(ns);
+        if (cl == NULL) {
+            return false; // ns doesn't exist, fall through to optimizer for legacy reasons
         }
+        const BSONObj &pk = cl->getSimplePKFromQuery(query);
+        if (pk.isEmpty()) {
+            return false; // unable to query by PK - resort to using the optimizer
+        }
+        found = queryByPKHack(cl, pk, query, resObject);
 
         if ( shardingState.needShardChunkManager( ns ) ) {
             ShardChunkManagerPtr m = shardingState.getShardChunkManager( ns );
@@ -895,11 +898,10 @@ namespace mongo {
         bb.skip(sizeof(QueryResult));
 
         if ( found ) {
-            n = 1;
             fillQueryResultFromObj( bb , pq.getFields() , resObject );
         }
 
-        qr.reset( (QueryResult *) bb.buf() );
+        auto_ptr< QueryResult > qr( (QueryResult *) bb.buf() );
         bb.decouple();
         qr->setResultFlagsToOk();
         qr->len = bb.len();
@@ -908,7 +910,7 @@ namespace mongo {
         qr->setOperation(opReply);
         qr->cursorId = 0;
         qr->startingFrom = 0;
-        qr->nReturned = n;
+        qr->nReturned = found ? 1 : 0;
 
         result.setData( qr.release(), true );
         return true;
@@ -968,7 +970,8 @@ namespace mongo {
             return "";
         }
 
-        bool explain = pq.isExplain();
+        const bool explain = pq.isExplain();
+        const bool tailable = pq.hasOption(QueryOption_CursorTailable);
         BSONObj order = pq.getOrder();
         BSONObj query = pq.getFilter();
 
@@ -992,57 +995,47 @@ namespace mongo {
         settings.setCappedAppendPK(pq.hasOption(QueryOption_AddHiddenPK));
         cc().setOpSettings(settings);
 
-        // Run a simple id query.
-
-        // - Don't do it for explains.
-        // - Don't do it for tailable cursors.
-        if ( !explain && !pq.hasOption( QueryOption_CursorTailable ) ) {
-            const BSONObj idQuery = getSimpleIdQuery(query);
-            if (!idQuery.isEmpty()) {
-                Client::ReadContext ctx(ns);
-                Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-                replVerifyReadsOk(&pq);
-                if ( _tryQueryByIdHack( ns, idQuery, query, pq, curop, result ) ) {
-                    transaction.commit();
-                    return "";
-                }
-            }
+        // If our caller has a transaction, it's multi-statement.
+        const bool inMultiStatementTxn = cc().hasTxn();
+        if (tailable) {
+            // Because it's easier to disable this. It shouldn't be happening in a normal system.
+            uassert(16812, "May not perform a tailable query in a multi-statement transaction.",
+                           !inMultiStatementTxn);
         }
 
-        // sanity check the query and projection
-        if ( pq.getFields() != NULL )
-            pq.getFields()->validateQuery( query );
-
-        // these now may stored in a ClientCursor or somewhere else,
-        // so make sure we use a real copy
-        jsobj = jsobj.getOwned();
-        query = query.getOwned();
-        order = order.getOwned();
+        // Begin a read-only, snapshot transaction under normal circumstances.
+        // If the cursor is tailable, we need to be able to read uncommitted data.
+        const int txnFlags = (tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT) | DB_TXN_READ_ONLY;
+        LOCK_REASON(lockReason, "query");
+        Client::ReadContext ctx(ns, lockReason);
+        scoped_ptr<Client::Transaction> transaction(!inMultiStatementTxn ?
+                                                    new Client::Transaction(txnFlags) : NULL);
 
         bool hasRetried = false;
         while ( 1 ) {
             try {
-                const bool tailable = pq.hasOption( QueryOption_CursorTailable ) && pq.getNumToReturn() != 1;
+                replVerifyReadsOk(&pq);
 
-                // If our caller has a transaction, it's multi-statement.
-                const bool inMultiStatementTxn = cc().hasTxn();
-                if (tailable) {
-                    // Because it's easier to disable this. It shouldn't be happening in a normal system.
-                    uassert(17201, "May not perform a tailable query in a multi-statement transaction.",
-                                   !inMultiStatementTxn);
+                // Fast-path for primary key queries.
+                if (!explain && !tailable) {
+                    replVerifyReadsOk(&pq);
+                    if (_tryQueryByPKHack(ns, query, pq, curop, result)) {
+                        if (transaction) {
+                            transaction->commit();
+                        }
+                        return "";
+                    }
                 }
 
-                const int txnFlags = (tailable ? DB_READ_UNCOMMITTED : DB_TXN_SNAPSHOT) | DB_TXN_READ_ONLY;
-                Client::ReadContext ctx(ns);
-                scoped_ptr<Client::Transaction> transaction(!inMultiStatementTxn ?
-                                                            new Client::Transaction(txnFlags) : NULL);
+                // sanity check the query and projection
+                if (pq.getFields() != NULL) {
+                    pq.getFields()->validateQuery( query );
+                }
 
-                const ConfigVersion shardingVersionAtStart = shardingState.getVersion( ns );
-                replVerifyReadsOk(&pq);
                         
-                if ( pq.hasOption( QueryOption_CursorTailable ) ) {
-                    NamespaceDetails *d = nsdetails( ns );
-                    if (d != NULL && !(d->isCapped() || str::equals(ns, rsoplog))) {
+                if (tailable) {
+                    Collection *cl = getCollection( ns );
+                    if (cl != NULL && !(cl->isCapped() || str::equals(ns, rsoplog))) {
                         uasserted( 13051, "tailable cursor requested on non-capped, non-oplog collection" );
                     }
                     const BSONObj nat1 = BSON( "$natural" << 1 );
@@ -1055,13 +1048,19 @@ namespace mongo {
                     
                 // Run a regular query.
 
+                // these now may stored in a ClientCursor or somewhere else,
+                // so make sure we use a real copy
+                jsobj = jsobj.getOwned();
+                query = query.getOwned();
+                order = order.getOwned();
+                const ConfigVersion shardingVersionAtStart = shardingState.getVersion( ns );
                 const bool getCachedExplainPlan = ! hasRetried && explain && ! pq.hasIndexSpecifier();
                 const bool savedCursor = queryWithQueryOptimizer( queryOptions, ns, jsobj, curop, query,
                                                                   order, pq_shared, shardingVersionAtStart,
                                                                   getCachedExplainPlan, inMultiStatementTxn,
                                                                   result );
                 // Did not save the cursor, so we can commit the transaction now if it exists.
-                if (transaction.get() != NULL && !savedCursor) {
+                if (transaction && !savedCursor) {
                     transaction->commit();
                 }
                 return curop.debug().exhaust ? ns : "";

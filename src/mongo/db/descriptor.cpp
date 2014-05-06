@@ -99,6 +99,18 @@ namespace mongo {
         }
     }
 
+    BSONObj Descriptor::fillKeyFieldNames(const BSONObj &key) const {
+        BSONObjBuilder b;
+        vector<const char *> fields;
+        fieldNames(fields);
+        BSONObjIterator o(key);
+        for (vector<const char *>::const_iterator i = fields.begin();
+             i != fields.end(); i++) {
+            b.appendAs(o.next(), *i);
+        }
+        return b.obj();
+    }
+
     DBT Descriptor::dbt() const {
         return storage::dbt_make(_data, _size);
     }

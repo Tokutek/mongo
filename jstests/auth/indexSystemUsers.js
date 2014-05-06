@@ -20,7 +20,7 @@ adminDB.logout();
 adminDB.auth('mallory', 'x');
 testDB.system.users.createIndex({haxx:1}, {unique:true, dropDups:true});
 assertGLENotOK(testDB.getLastErrorObj());
-testDB.exploit.system.indexes.insert({ns: "test.system.users", key: { haxx: 1.0 }, name: "haxx_1",
+testDB.exploit.system.indexes.insert({ns: testDB.getName() + ".system.users", key: { haxx: 1.0 }, name: "haxx_1",
                                       unique: true, dropDups: true});
 // In TokuMX, the above is OK, but it inserts a fairly nonsense document into a
 // weird-looking collection named "exploit.system.indexes".  We just need to
@@ -30,8 +30,8 @@ assert.eq(null, testDB.getLastError());
 assert.eq(null,
           testDB.system.namespaces.findOne(
               {$and : [{name : /^test\.system\.users\.\$/},
-                       {name : {$ne : "test.system.users.$_id_"}},
-                       {name : {$ne : "test.system.users.$user_1_userSource_1"}} ]}));
+                       {name : {$ne : testDB.getName() + ".system.users.$_id_"}},
+                       {name : {$ne : testDB.getName() + ".system.users.$user_1_userSource_1"}} ]}));
 adminDB.logout();
 
 adminDB.auth('admin','x');

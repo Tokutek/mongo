@@ -36,11 +36,15 @@
 #include <sys/file.h>
 #endif
 
+#include <boost/function.hpp>
 #include <boost/thread/thread.hpp>
 #include <boost/filesystem/operations.hpp>
 
+#include <db.h>
+
 #include "mongo/util/time_support.h"
 #include "mongo/base/status.h"
+#include "mongo/base/string_data.h"
 
 #include "mongo/bson/util/atomic_int.h"
 
@@ -49,6 +53,8 @@
 #include "mongo/db/databaseholder.h"
 #include "mongo/db/introspect.h"
 #include "mongo/db/repl.h"
+#include "mongo/db/client.h"
+#include "mongo/db/crash.h"
 #include "mongo/db/dbmessage.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/lasterror.h"
@@ -75,6 +81,7 @@
 
 #include "mongo/s/d_logic.h"
 #include "mongo/s/stale_exception.h" // for SendStaleConfigException
+#include "mongo/util/fail_point_service.h"
 #include "mongo/util/goodies.h"
 #include "mongo/util/mongoutils/str.h"
 #include "mongo/util/time_support.h"
@@ -152,11 +159,20 @@ namespace mongo {
             DbMessage d(m);
             QueryMessage q(d);
             bool all = q.query["$all"].trueValue();
+            bool allMatching = q.query["$allMatching"].trueValue();
             vector<BSONObj> vals;
+            BSONObjBuilder qb;
+            for (BSONObjIterator it(q.query); it.more(); ) {
+                BSONElement e = it.next();
+                StringData fn(e.fieldName());
+                if (fn != "$all" && fn != "$allMatching") {
+                    qb.append(e);
+                }
+            }
             {
                 Client& me = cc();
                 scoped_lock bl(Client::clientsMutex);
-                scoped_ptr<Matcher> m(new Matcher(q.query));
+                scoped_ptr<Matcher> m(new Matcher(qb.done()));
                 for( set<Client*>::iterator i = Client::clients.begin(); i != Client::clients.end(); i++ ) {
                     Client *c = *i;
                     verify( c );
@@ -165,7 +181,7 @@ namespace mongo {
                         continue;
                     }
                     verify( co );
-                    if( all || co->displayInCurop() ) {
+                    if( all || allMatching || co->displayInCurop() ) {
                         BSONObj info = co->info();
                         if ( all || m->matches( info )) {
                             vals.push_back( info );
@@ -174,10 +190,6 @@ namespace mongo {
                 }
             }
             b.append("inprog", vals);
-            if( lockedForWriting() ) {
-                b.append("fsyncLock", true);
-                b.append("info", "use db.fsyncUnlock() to terminate the fsync write/snapshot lock");
-            }
         }
 
         replyToQuery(0, m, dbresponse, b.obj());
@@ -203,28 +215,6 @@ namespace mongo {
                 log() << "going to kill op: " << e << endl;
                 obj = fromjson("{\"info\":\"attempting to kill op\"}");
                 killCurrentOp.kill( (unsigned) e.number() );
-            }
-        }
-        replyToQuery(0, m, dbresponse, obj);
-    }
-
-    bool _unlockFsync();
-    void unlockFsync(const char *ns, Message& m, DbResponse &dbresponse) {
-        BSONObj obj;
-        if (!cc().getAuthorizationManager()->checkAuthorization(
-                AuthorizationManager::SERVER_RESOURCE_NAME, ActionType::unlock)) {
-            obj = fromjson("{\"err\":\"unauthorized\"}");
-        }
-        else if (strncmp(ns, "admin.", 6) != 0 ) {
-            obj = fromjson("{\"err\":\"unauthorized - this command must be run against the admin DB\"}");
-        }
-        else {
-            log() << "command: unlock requested" << endl;
-            if( _unlockFsync() ) {
-                obj = fromjson("{ok:1,\"info\":\"unlock completed\"}");
-            }
-            else {
-                obj = fromjson("{ok:0,\"errmsg\":\"not locked\"}");
             }
         }
         replyToQuery(0, m, dbresponse, obj);
@@ -324,7 +314,7 @@ namespace mongo {
     void mongoAbort(const char *msg) { 
         if( reportEventToSystem ) 
             reportEventToSystem(msg);
-        rawOut(msg);
+        dumpCrashInfo(msg);
         ::abort();
     }
 
@@ -361,7 +351,9 @@ namespace mongo {
                         return;
                     }
                     if( strstr(ns, "$cmd.sys.unlock") ) {
-                        unlockFsync(ns, m, dbresponse);
+                        // Reply to this deprecated operation with the standard "not locked"
+                        // error for legacy reasons.
+                        replyToQuery(0, m, dbresponse, BSON("ok" << 0 << "errmsg" << "not locked"));
                         return;
                     }
                 }
@@ -403,9 +395,13 @@ namespace mongo {
         bool shouldLog = logLevel >= 1;
 
         if ( op == dbQuery ) {
-            if ( handlePossibleShardedMessage( m , &dbresponse ) )
+            try {
+                checkPossiblyShardedMessageWithoutLock(m);
+                receivedQuery(c, dbresponse, m);
+            } catch (MustHandleShardedMessage &e) {
+                e.handleShardedMessage(m, &dbresponse);
                 return;
-            receivedQuery(c , dbresponse, m );
+            }
         }
         else if ( op == dbGetMore ) {
             if ( ! receivedGetMore(dbresponse, m, currentOp) )
@@ -487,15 +483,13 @@ namespace mongo {
             if ( Lock::isReadLocked() ) {
                 LOG(1) << "note: not profiling because recursive read lock" << endl;
             }
-            else if ( lockedForWriting() ) {
-                LOG(1) << "note: not profiling because doing fsync+lock" << endl;
-            }
             else {
+                LOCK_REASON(lockReason, "writing to system.profile collection");
                 try {
-                    Lock::DBRead lk( currentOp.getNS() );
+                    Lock::DBRead lk( currentOp.getNS(), lockReason );
                     lockedDoProfile( c, op, currentOp );
                 } catch (RetryWithWriteLock &e) {
-                    Lock::DBWrite lk( currentOp.getNS() );
+                    Lock::DBWrite lk( currentOp.getNS(), lockReason );
                     lockedDoProfile( c, op, currentOp );
                 }
             }
@@ -539,21 +533,16 @@ namespace mongo {
         return nsToCollectionSubstring(ns) == "system.users";
     }
 
-    static void lockedReceivedUpdate(const char *ns, Message &m, CurOp &op, const BSONObj &toupdate, const BSONObj &query,
-                                     const bool upsert, const bool multi, const bool broadcast) {
+    static void lockedReceivedUpdate(const char *ns, Message &m, CurOp &op, const BSONObj &updateobj, const BSONObj &query,
+                                     const bool upsert, const bool multi) {
         // void ReplSetImpl::relinquish() uses big write lock so 
         // this is thus synchronized given our lock above.
         uassert(10054,  "not master", isMasterNs(ns));
 
-        // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
-        if (!broadcast && handlePossibleShardedMessage(m, 0)) {
-            return;
-        }
-
         Client::Context ctx(ns);
         scoped_ptr<Client::AlternateTransactionStack> altStack(opNeedsAltTxn(ns) ? new Client::AlternateTransactionStack : NULL);
         Client::Transaction transaction(DB_SERIALIZABLE);
-        UpdateResult res = updateObjects(ns, toupdate, query, upsert, multi, true, op.debug() );
+        UpdateResult res = updateObjects(ns, updateobj, query, upsert, multi);
         transaction.commit();
         lastError.getSafe()->recordUpdate( res.existing , res.num , res.upserted ); // for getlasterror
     }
@@ -567,12 +556,13 @@ namespace mongo {
 
         verify(d.moreJSObjs());
         verify(query.objsize() < m.header()->dataLen());
-        BSONObj toupdate = d.nextJsObj();
-        uassert(10055, "update object too large", toupdate.objsize() <= BSONObjMaxUserSize);
-        verify(toupdate.objsize() < m.header()->dataLen());
-        verify(query.objsize() + toupdate.objsize() < m.header()->dataLen());
+        const BSONObj updateobj = d.nextJsObj();
+        uassert(10055, "update object too large", updateobj.objsize() <= BSONObjMaxUserSize);
+        verify(updateobj.objsize() < m.header()->dataLen());
+        verify(query.objsize() + updateobj.objsize() < m.header()->dataLen());
 
         op.debug().query = query;
+        op.debug().updateobj = updateobj;
         op.setQuery(query);
 
         const bool upsert = flags & UpdateOption_Upsert;
@@ -587,13 +577,19 @@ namespace mongo {
         settings.setJustOne(!multi);
         cc().setOpSettings(settings);
 
+        Client::ShardedOperationScope sc;
+        if (!broadcast && sc.handlePossibleShardedMessage(m, 0)) {
+            return;
+        }
+
+        LOCK_REASON(lockReason, "update");
         try {
-            Lock::DBRead lk(ns);
-            lockedReceivedUpdate(ns, m, op, toupdate, query, upsert, multi, broadcast);
+            Lock::DBRead lk(ns, lockReason);
+            lockedReceivedUpdate(ns, m, op, updateobj, query, upsert, multi);
         }
         catch (RetryWithWriteLock &e) {
-            Lock::DBWrite lk(ns);
-            lockedReceivedUpdate(ns, m, op, toupdate, query, upsert, multi, broadcast);
+            Lock::DBWrite lk(ns, lockReason);
+            lockedReceivedUpdate(ns, m, op, updateobj, query, upsert, multi);
         }
     }
 
@@ -620,15 +616,16 @@ namespace mongo {
         settings.setJustOne(justOne);
         cc().setOpSettings(settings);
 
-        Lock::DBRead lk(ns);
+        Client::ShardedOperationScope sc;
+        if (!broadcast && sc.handlePossibleShardedMessage(m, 0)) {
+            return;
+        }
+
+        LOCK_REASON(lockReason, "delete");
+        Lock::DBRead lk(ns, lockReason);
 
         // writelock is used to synchronize stepdowns w/ writes
         uassert(10056, "not master", isMasterNs(ns));
-
-        // if this ever moves to outside of lock, need to adjust check Client::Context::_finishInit
-        if (!broadcast && handlePossibleShardedMessage(m, 0)) {
-            return;
-        }
 
         Client::Context ctx(ns);
         long long n;
@@ -712,7 +709,8 @@ namespace mongo {
                     }
                 }
 
-                Client::ReadContext ctx(ns);
+                LOCK_REASON(lockReason, "getMore");
+                Client::ReadContext ctx(ns, lockReason);
 
                 // call this readlocked so state can't change
                 replVerifyReadsOk();
@@ -823,66 +821,100 @@ namespace mongo {
         return ok;
     }
 
+    // for failure injection around hot indexing
+    MONGO_FP_DECLARE(hotIndexUnlockedBeforeBuild);
+    // a fail point that acts like a condition variable
+    MONGO_FP_DECLARE(hotIndexSleepCond);
+
     static void _buildHotIndex(const char *ns, Message &m, const vector<BSONObj> objs) {
-        uassert(16905, "Can only build one index at a time.", objs.size() == 1);
-
-        scoped_ptr<Lock::DBWrite> lk(new Lock::DBWrite(ns));
-
+        // We intend to take the DBWrite lock only to initiate and finalize the
+        // index build. Since we'll be releasing lock in between these steps, we
+        // take the operation lock here to ensure that we do not step down as primary.
+        RWLockRecursive::Shared oplock(operationLock);
         uassert(16902, "not master", isMasterNs(ns));
 
-        // System.indexes cannot be sharded.
-        verify(!handlePossibleShardedMessage(m, 0));
+        uassert(16905, "Can only build one index at a time.", objs.size() == 1);
+
+        DEV {
+            // System.indexes cannot be sharded.
+            Client::ShardedOperationScope sc;
+            verify(!sc.handlePossibleShardedMessage(m, 0));
+        }
+
+        LOCK_REASON(lockReasonBegin, "initializing hot index build");
+        scoped_ptr<Lock::DBWrite> lk(new Lock::DBWrite(ns, lockReasonBegin));
 
         const BSONObj &info = objs[0];
         const StringData &coll = info["ns"].Stringdata();
 
-        scoped_ptr<Client::Transaction> transaction(new Client::Transaction(DB_SERIALIZABLE));
-        scoped_ptr<NamespaceDetails::HotIndexer> indexer;
+        Client::Transaction transaction(DB_SERIALIZABLE);
+        shared_ptr<CollectionIndexer> indexer;
 
         // Prepare the index build. Performs index validation and marks
-        // the NamespaceDetails as having an index build in progress.
+        // the collection as having an index build in progress.
         {
             Client::Context ctx(ns);
-            NamespaceDetails *d = getAndMaybeCreateNS(coll, true);
-            if (d->findIndexByKeyPattern(info["key"].Obj()) >= 0) {
+            Collection *cl = getOrCreateCollection(coll, true);
+            if (cl->findIndexByKeyPattern(info["key"].Obj()) >= 0) {
                 // No error or action if the index already exists. We need to commit
                 // the transaction in case this is an ensure index on the _id field
-                // and the ns was created by getAndMaybeCreateNS()
-                transaction->commit();
+                // and the ns was created by getOrCreateCollection()
+                transaction.commit();
                 return;
             }
 
             _insertObjects(ns, objs, false, 0, true);
-            indexer.reset(new NamespaceDetails::HotIndexer(d, info));
+            indexer = cl->newHotIndexer(info);
             indexer->prepare();
+            addToNamespacesCatalog(IndexDetails::indexNamespace(coll, info["name"].String()));
         }
 
-        // Perform the index build
         {
-            Lock::DBWrite::Downgrade dg(lk);
-            uassert(16906, "not master: after indexer setup but before build", isMasterNs(ns));
+            /**
+             * We really shouldn't do this anywhere if we can help it, this is a bit of a special
+             * case, so it's a local class.
+             */
+            class WriteLockReleaser : boost::noncopyable {
+                scoped_ptr<Lock::DBWrite> &_lk;
+                std::string _ns;
+              public:
+                WriteLockReleaser(scoped_ptr<Lock::DBWrite> &lk, const StringData &ns) : _lk(lk), _ns(ns.toString()) {
+                    _lk.reset();
+                }
+                ~WriteLockReleaser() {
+                    LOCK_REASON(lockReasonCommit, "committing/aborting hot index build");
+                    _lk.reset(new Lock::DBWrite(_ns, lockReasonCommit));
+                }
+            } wlr(lk, ns);
 
-            Client::Context ctx(ns);
+            MONGO_FAIL_POINT_BLOCK(hotIndexUnlockedBeforeBuild, data) {
+                const BSONObj &info = data.getData(); 
+                if (info["sleep"].trueValue()) {
+                    // sleep until the hotIndexSleepCond fail point is active
+                    while (!MONGO_FAIL_POINT(hotIndexSleepCond)) {
+                        sleep(1);
+                    }
+                }
+            }
+
+            // Perform the index build
             indexer->build();
         }
-
-        uassert(16907, "not master: after indexer build but before commit", isMasterNs(ns));
 
         // Commit the index build
         {
             Client::Context ctx(ns);
             indexer->commit();
+            Collection *cl = getCollection(coll);
+            verify(cl);
+            cl->noteIndexBuilt();
         }
-        transaction->commit();
+        transaction.commit();
     }
 
     static void lockedReceivedInsert(const char *ns, Message &m, const vector<BSONObj> &objs, CurOp &op, const bool keepGoing) {
         // writelock is used to synchronize stepdowns w/ writes
         uassert(10058, "not master", isMasterNs(ns));
-
-        if (handlePossibleShardedMessage(m, 0)) {
-            return;
-        }
 
         Client::Context ctx(ns);
         scoped_ptr<Client::AlternateTransactionStack> altStack(opNeedsAltTxn(ns) ? new Client::AlternateTransactionStack : NULL);
@@ -890,7 +922,7 @@ namespace mongo {
         insertObjects(ns, objs, keepGoing, 0, true);
         transaction.commit();
         size_t n = objs.size();
-        globalOpCounters.incInsertInWriteLock(n);
+        globalOpCounters.gotInsert(n);
         op.debug().ninserted = n;
     }
 
@@ -922,20 +954,29 @@ namespace mongo {
         settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
         cc().setOpSettings(settings);
 
-        if (coll == "system.indexes" &&
-                // Can only build non-unique indexes in the background, because the
-                // hot indexer does not know how to perform unique checks.
-                objs[0]["background"].trueValue() && !objs[0]["unique"].trueValue()) {
+        if (coll == "system.indexes" && objs[0]["background"].trueValue()) {
+            // Can only build non-unique indexes in the background, because the
+            // hot indexer does not know how to perform unique checks.
+            uassert(17330, "cannot build unique indexes in the background, change to a foreground index or remove the unique constraint", !objs[0]["unique"].trueValue());
             _buildHotIndex(ns, m, objs);
             return;
         }
 
+        scoped_ptr<Client::ShardedOperationScope> scp;
+        if (coll != "system.indexes") {
+            scp.reset(new Client::ShardedOperationScope);
+            if (scp->handlePossibleShardedMessage(m, 0)) {
+                return;
+            }
+        }
+
+        LOCK_REASON(lockReason, "insert");
         try {
-            Lock::DBRead lk(ns);
+            Lock::DBRead lk(ns, lockReason);
             lockedReceivedInsert(ns, m, objs, op, keepGoing);
         }
         catch (RetryWithWriteLock &e) {
-            Lock::DBWrite lk(ns);
+            Lock::DBWrite lk(ns, lockReason);
             lockedReceivedInsert(ns, m, objs, op, keepGoing);
         }
     }
@@ -957,7 +998,7 @@ namespace mongo {
                 e->names.push_back(string((char *) key->data, length - 3));
             }
         }
-        return 0;
+        return TOKUDB_CURSOR_CONTINUE;
     } 
 
     void getDatabaseNames( vector< string > &names) {
@@ -973,6 +1014,58 @@ namespace mongo {
         }
     }
 
+    class ApplyToDatabaseNamesWrapper {
+        vector<string> _batch;
+
+        int cb(const DBT *key, const DBT *val) {
+            size_t length = key->size;
+            if (length > 0) {
+                const char *cp = (const char *) key->data + length - 1;
+                if (*cp == 0) {
+                    length -= 1;
+                }
+                StringData dbname((const char *) key->data, length);
+                if (dbname.endsWith(".ns")) {
+                    _batch.push_back(dbname.substr(0, dbname.size() - 3).toString());
+                }
+            }
+            const size_t max_size = 1<<10;
+            return ((_batch.size() < max_size)
+                    ? TOKUDB_CURSOR_CONTINUE
+                    : 0);
+        }
+
+      public:
+        static int callback(const DBT *key, const DBT *val, void *extra) {
+            ApplyToDatabaseNamesWrapper *e = static_cast<ApplyToDatabaseNamesWrapper *>(extra);
+            return e->cb(key, val);
+        }
+
+        vector<string> &batch() {
+            return _batch;
+        }
+    };
+
+    Status applyToDatabaseNames(boost::function<Status (const StringData &)> f) {
+        verify(Lock::isRW());
+        verify(cc().hasTxn());
+        storage::DirectoryCursor c(storage::env, cc().txn().db_txn());
+        ApplyToDatabaseNamesWrapper wrapper;
+        int r = 0;
+        Status s = Status::OK();
+        while (r == 0 && s.isOK()) {
+            r = c.dbc()->c_getf_next(c.dbc(), 0, &ApplyToDatabaseNamesWrapper::callback, &wrapper);
+            if (r != 0 && r != DB_NOTFOUND) {
+                storage::handle_ydb_error(r);
+            }
+            for (vector<string>::const_iterator it = wrapper.batch().begin(); s.isOK() && it != wrapper.batch().end(); ++it) {
+                s = f(*it);
+            }
+            wrapper.batch().clear();
+        }
+        return s;
+    }
+
     /* returns true if there is data on this server.  useful when starting replication.
        local database does NOT count except for rsoplog collection.
        used to set the hasData field on replset heartbeat command response
@@ -980,7 +1073,8 @@ namespace mongo {
     bool replHasDatabases() {
         vector<string> names;
         {
-            Lock::GlobalRead lk;
+            LOCK_REASON(lockReason, "repl: checking for existing data");
+            Lock::GlobalRead lk(lockReason);
             Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
             getDatabaseNames(names);
             txn.commit();
@@ -991,11 +1085,11 @@ namespace mongo {
                 return true;
             // we have a local database.  return true if oplog isn't empty
             {
-                Client::ReadContext ctx(rsoplog);
+                LOCK_REASON(lockReason, "repl: checking for non-empty oplog");
+                Client::ReadContext ctx(rsoplog, lockReason);
                 Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
-                NamespaceDetails *d = nsdetails(rsoplog);
                 BSONObj o;
-                if (d != NULL && d->findOne(BSONObj(), o)) {
+                if (Collection::findOne(rsoplog, BSONObj(), o)) {
                     txn.commit();
                     return true;
                 }
@@ -1052,7 +1146,8 @@ namespace mongo {
         string errmsg;
         int errCode;
 
-        Client::ReadContext ctx(ns);
+        LOCK_REASON(lockReason, "count");
+        Client::ReadContext ctx(ns, lockReason);
         Client::Transaction transaction(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
         long long res = runCount( ns.c_str() , _countCmd( ns , query , options , limit , skip ) , errmsg, errCode );
         if ( res == -1 ) {
@@ -1104,7 +1199,8 @@ namespace mongo {
         boost::thread close_socket_thread( boost::bind(MessagingPort::closeAllSockets, 0) );
 
         {
-            Lock::GlobalWrite lk;
+            LOCK_REASON(lockReason, "shutting down");
+            Lock::GlobalWrite lk(lockReason);
             log() << "shutdown: going to close databases..." << endl;
             dbHolderW().closeDatabases(dbpath);
             log() << "shutdown: going to unload all plugins..." << endl;
@@ -1140,7 +1236,8 @@ namespace mongo {
 
 
         {
-            Lock::GlobalWrite lk;
+            LOCK_REASON(lockReason, "exiting cleanly");
+            Lock::GlobalWrite lk(lockReason);
             log() << "aborting any live transactions" << endl;
             Client::abortLiveTransactions();
             log() << "now exiting" << endl;

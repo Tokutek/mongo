@@ -1,6 +1,685 @@
 tokumx news
 ===========
 
+tokumx 1.4.2
+------------
+Release date: TBD
+
+General
+~~~~~~~
+
+    - This release is focused on bug fixes since 1.4.1.
+
+    - Please take special note of issues #1085 and #1087, if you are
+      affected by them you may need to drop and re-create some indexes to
+      make sure they are consistent with the primary key.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Added new `mongod` server parameters that control the default
+      parameters used when creating new collections and indexes:
+
+       - `defaultCompression` (default `"zlib"`)
+       - `defaultPageSize` (default `"4MB"`)
+       - `defaultReadPageSize` (default `"64KB"`)
+
+      Use the `setParameter` command line option, or the
+      `getParameter`/`setParameter` commands to control these values,
+      e.g. `mongod --setParameter=defaultCompression="quicklz"` or
+      `db.setParameter('defaultCompression', 'quicklz')`.
+
+      Also added new `mongorestore` command line options that, if set,
+      determine the default parameters used for restoring new collections
+      and indexes, unless they are specified in the `metadata.json` file.
+      If the `mongorestore` options are not set, the `mongod`'s values are
+      used instead:
+
+        - `defaultCompression`
+        - `defaultPageSize`
+        - `defaultReadPageSize`
+
+      These options are specified as normal options, e.g.
+      `mongorestore --defaultCompression "quicklz"`.  (#377)
+
+    - The engine-specific information in serverStatus() has been expanded,
+      including some new information for existing sections, and a new
+      `ft.checkpoint` section.  See the user's guide for more details.
+      (Tokutek/ft-index#219, #1090)
+
+    - Background index build operations no longer hold a read lock on
+      their database.  This eliminates the possibility that another thread
+      can stall the system by trying to acquire a write lock, which would
+      greedily block other operations until the index build finished.
+      (#1035)
+
+    - The `--rowcount` argument to `mongostat` now works with multiple
+      servers.  (#1040)
+
+    - Added better progress reporting for index building, bulk loading
+      with `mongorestore`, `reIndex` operations, and disk format version
+      upgrade on startup.  This information is available in the log and in
+      `db.currentOp()`.  (#1048, #1052, #1053)
+
+    - The shell's `show collections` now reports uncompressed and
+      compressed sizes like `show dbs`.  (#1102)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Optimized the operation of opening a database when there are a large
+      number of databases already open.  (Tokutek/ft-index#225)
+
+    - In sharded clusters, new databases now have their primary shard
+      chosen correctly, according to total uncompressed data size, rather
+      than always to the first shard.  (#422)
+
+    - Chunk migrations in sharded clusters now just warn about missing
+      indexes.
+
+      Chunk migrations used to check that the recipient shard had the same
+      indexes as the donor shard, and would build any missing indexes at
+      that point.  This situation could arise from a user aborted index
+      build, if some shards finished building before the abort.  In this
+      case, it would cause migrations to force an expensive index build at
+      unpredictable times.  With this change, users should watch for these
+      messages, but can now choose when to schedule the index build.
+      (#1045)
+
+    - Fixed a starvation interaction between a long-running `reIndex`
+      operation and a `setShardVersion` (which is used by several sharding
+      components).  (#1047)
+
+    - Fixed the default location for `pluginsDir` in deb and rpm packages.
+      (#1051)
+
+    - Fixed a crash that could occur with large range queries and drivers
+      that use connection pools.  (#1058)
+
+    - Fixed a deadlock when upgrading the disk format version with a large
+      number of databases.  (#1059)
+
+    - Several fixes to the `mongorestore` tool, including adding an option
+      to disable the bulk loader (`--noLoader`) and better error
+      checking.  (#1064)
+
+    - Merged fixes from upstream through 2.4.10:  (#1077)
+
+      - https://jira.mongodb.org/browse/SERVER-9259[SERVER-9259]
+      - https://jira.mongodb.org/browse/SERVER-11560[SERVER-11560]
+      - https://jira.mongodb.org/browse/SERVER-12034[SERVER-12034]
+      - https://jira.mongodb.org/browse/SERVER-12132[SERVER-12132]
+      - https://jira.mongodb.org/browse/SERVER-12548[SERVER-12548]
+      - https://jira.mongodb.org/browse/SERVER-12908[SERVER-12908]
+      - https://jira.mongodb.org/browse/SERVER-13249[SERVER-13249]
+      - https://jira.mongodb.org/browse/SERVER-13333[SERVER-13333]
+      - https://jira.mongodb.org/browse/SERVER-13376[SERVER-13376]
+
+    - Fixed a bug in `update` that could cause a background index being
+      concurrently built to not reflect the result of the update if the
+      building index's key was affected by the update.
+
+      This bug existed in 1.4.0 and 1.4.1; any indexes built in the
+      background with those versions should be dropped and recreated if it
+      is possible that there were updates that would have affected the
+      index's key while it was building.  (#1085)
+
+    - Fixed an issue where background index builds replicated to
+      secondaries did not have their metadata properly maintained by 1.4.0
+      and 1.4.1 secondaries.  This can cause updates to those indexes to
+      not be reflected on the secondaries' versions of those indexes,
+      which is similar to #1085, but this state lasts longer than just
+      during the index build as in #1085.
+
+      This can but does not necessarily also cause those indexes to be
+      inaccessible after a server reboot, and upgrading to 1.4.2 will
+      clean up those indexes (they will be dropped and will report to the
+      log how to rebuild them).  Any background indexes that were
+      replicated to secondaries running 1.4.0 and 1.4.1, if they are not
+      cleaned up by this mechanism, should be dropped and recreated.
+
+      This can be done by starting the secondary without the `--replSet`
+      option or config file directive to take it out of the set, building
+      the index while it's not in the set, then starting it with the
+      `--replSet` option to get it back into the set.  Before doing this,
+      you should add arbiters if needed to make sure there will be enough
+      other nodes in the set to keep the primary from stepping down.  This
+      procedure is described in
+      http://docs.mongodb.org/manual/tutorial/build-indexes-on-replica-sets/[Build indexes on replica sets].
+      (#1087)
+
+    - A unique index cannot be built in the background.  In previous
+      versions such an index was turned into a foreground index, now an
+      error is returned that lets the user choose what to do.  (#1091)
+
+    - Beginning a serializable multi-statement transaction
+      (`db.beginTransaction('serializable')`) now requires the `readWrite`
+      role on servers running with authorization.  This prevents users
+      with only the `read` role from creating serializable transactions
+      and running queries that take document-level locks.  (#1112)
+
+    - Replication secondaries now handle query errors while checking for
+      rollback by retrying, rather than crashing.  (#1113)
+
+
+tokumx 1.4.1
+------------
+Release date: 2014-03-25
+
+General
+~~~~~~~
+
+    - This release is focused on bug fixes since 1.4.0.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Improved the speed and reduced the impact of deletes after a chunk
+      migration.  (#957)
+
+    - Improved the speed of the `touch` command.  (#959)
+
+    - TokuMX now gathers more information and tries to output it to the
+      log on a crash.  (#987, #993)
+
+    - Added `compressionRatio` section to `serverStatus` to report the
+      compression ratio calculated on disk write.  (#989)
+
+    - Added aggregate per-index stats in output of `db.collection.stats()`
+      for sharded collections.  (#1019)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Newly sharded databases now have their primary shard chosen as the
+      most lightly loaded shard (by data size), rather than always
+      choosing the first shard.  (#422, #1029)
+
+    - Fixed the output of `show dbs` and `listDatabases` in sharded
+      clusters.  (#962)
+
+    - Fixed a bad query plan used by a secondary to find its rollback
+      point in the oplog, which could cause startup to time out.  (#965)
+
+    - Removed erroneous `system.namespaces` entries for partitioned
+      collections, including the oplog.  (#966, #967)
+
+    - Enabled the use of a hashed shard key when there is a user-defined
+      primary key.  In 1.4.0, the shard key would be rejected because the
+      primary key looks like a unique index whose uniqueness cannot be
+      enforced, however, for a primary key it is enforced by the `_id`'s
+      uniqueness assumption.  (#968)
+
+    - Fixed linking of some commands, including `loadPlugin` and the bulk
+      loader commands in `mongorestore`.  (#977, #981, #983)
+
+    - Fixed problem opening too many files on startup, causing listening
+      sockets' ids to be too high.  (#978, #984)
+
+    - Changing storage settings (compression, page sizes, etc.) with
+      `reIndex` now correctly persists the change for future opens and
+      added partitions.  (#982)
+
+    - The `getParameter` command now accepts `journalCommitInterval` as an
+      alias for `logFlushPeriod`.  (#988)
+
+    - Fixed issue with `listDatabases` and partitioned collections.
+      (#997)
+
+    - Fixed a race between aborting a transaction due to client
+      disconnect, and the transaction abort due to replica set
+      relinquish.  (#1003)
+
+    - Fixed the way errors during chunk migration cleanup are handled to
+      avoid a crash when a replica set primary steps down at the end of a
+      migration.  (#1010)
+
+    - Fixed an issue that could cause migrations to fail repeatedly.
+      (#1011)
+
+    - Fixed command authorization settings for enterprise plugin loading
+      commands.  (#1012)
+
+    - Fixed a bug that caused migrations to fail when the migration causes
+      the recipient shard to transition an index to multiKey.  (#1025)
+
+    - Backported a fix for SERVER-12515, a bug that corrupts the state of
+      the config.chunks collection in sharded clusters when using hashed
+      shard keys.  (#1030)
+
+    - Added a retry mechanism for chunk migration commit to make it less
+      brittle in the face of a flaky connection to the config servers.
+      (#1032)
+
+
+tokumx 1.4.0
+------------
+Release date: 2014-02-13
+
+General
+~~~~~~~
+
+    - This release is focused on making the TokuMX cluster experience
+      smoother.  The major improvements are in eliminating stalls that
+      could appear in replica sets and sharded clusters.
+
+
+Upgrade notice
+~~~~~~~~~~~~~~
+
+Existing TokuMX users running with replication, please read before
+upgrading:
+
+    - Due to some new oplog entry types, servers running earlier versions
+      of TokuMX cannot replicate from a primary running TokuMX version
+      1.4.0 or greater.  Therefore, when upgrading a replica set, be sure
+      to upgrade all secondaries first.  Only then should you upgrade the
+      primary.
+
+      If failover happens during this period, make sure it is a 1.3
+      machine that steps up to primary.  You can set the servers'
+      `priority` to ensure this.  If a 1.4 machine becomes primary, it may
+      begin to log operations that a 1.3 machine will not replicate, which
+      would halt replication for those 1.3 secondaries.  Once a majority
+      of machines have been upgraded to 1.4, it is safe to allow them to
+      step up, but at this point any remaining 1.3 machines may start to
+      experience replication lag, so only allow this if your cluster has
+      enough capacity to serve requests only from the 1.4 machines.
+
+
+Highlights
+~~~~~~~~~~
+
+    The list of minor new features and bugfixes in this release is large.
+    The most prominent of them appear here:
+
+    - Chunk migrations in sharding have been greatly simplified and
+      optimized.  They no longer take as many locks, particularly
+      database- and server-wide locks, which could previously cause stalls
+      and pileups.  Additionally, the data transfer between shards has
+      been simplified and optimized and is significantly faster and more
+      reliable.  (#214, #746, #823, #824)
+
+    - In TokuMX 1.3 and earlier, updates were represented in the storage
+      layer, and in the oplog, by their pre- and post-images, which could
+      be quite large compared to the actual change that occurred in the
+      document (consider incrementing an integer in a large document).
+      For replication, this ensures that secondaries use significantly
+      less I/O for many update workloads, but costs a lot of space in the
+      oplog and over the network.
+
+      In TokuMX 1.4, updates to unindexed fields represent their updates
+      on disk with the update modifier object itself, which can
+      significantly reduce the amount of cache memory used by internal
+      node buffers in the Fractal Tree indexing structure.
+
+      Most updates (including to indexed fields) are represented in the
+      oplog by the pre-image and the update object, which can reduce, by
+      up to half, the amount of space and network bandwidth used by the
+      oplog.  (#511)
+
+    - It is now possible to define a "primary key" for a collection.  A
+      primary index for a collection is defined by the primary key, is an
+      index which is unique and clustering, and is the index that is used
+      by all non-clustering secondary indexes to find the full document.
+      The primary key for each document is therefore embedded in every
+      secondary index.  The key must end in `{_id: 1}` to ensure
+      uniqueness, and it is a good idea to let the `_id` be
+      auto-generated.
+
+      In some cases, if a clustering secondary index is desired, a primary
+      key can be defined instead, which removes the need for a clustering
+      `_id` index, which therefore can reduce storage costs even further
+      for such a use case.  (#684)
+
+    - This primary key concept is prominently featured in sharding.  Newly
+      sharded, nonexistent collections with a shard key other than just
+      the `_id` will be created using a primary key of the shard key
+      concatenated with `{_id: 1}`.  In TokuMX 1.3 and earlier, to
+      facilitate fast migrations and range queries, it was strongly
+      encouraged to make the shard key clustering, but this had the
+      drawback that there were automatically two clustering indexes (the
+      `_id` index and the shard key).  Now, sharded collections can have a
+      clustered shard key without paying the extra storage cost, and this
+      behavior is the default.  (#740)
+
+    - In TokuMX 1.3 and earlier, the oplog was a single collection that
+      was trimmed by a background task, to maintain a specific amount of
+      history, specified in days (`expireOplogDays`).  This background
+      thread could sometimes fail to reclaim space aggressively enough, so
+      in TokuMX 1.4, the oplog is instead partitioned into a set of N
+      collections, one per day, and each day, the oldest partition is
+      dropped according to `expireOplogDays`, which reclaims space
+      immediately.  This should make the oplog occupy a smaller disk
+      footprint overall, and should alleviate some locking problems that
+      used to be caused by the background trimming task.
+
+      So-called "partitioned collections" (of which the oplog is now one)
+      are a generally-available feature, but they currently have
+      significant limitations, including that they do not permit secondary
+      indexes.  See the user's guide for more details.  (#762)
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - The `listDatabases` command now computes a size estimate for each
+      db, which also means that `show dbs` in the shell will report the
+      size of each database (compressed and uncompressed), rather than
+      showing "(empty)" for everything regardless of contents.  (#57)
+
+    - Provided new implementations for `db.getReplicationInfo()`,
+      `db.printReplicationInfo()`, and `db.printSlaveReplicationInfo()`,
+      including compressed and uncompressed sizes.  (#223)
+
+    - The `compression`, `pageSize`, and `readPageSize` attributes of an
+      index can now be changed online.  The `db.collection.reIndex()`
+      shell function now takes a second parameter, which if specified is
+      an object describing the options to set.  These options take effect
+      immediately for all data written after the command runs, but will
+      not rewrite existing data.  To force existing data to be rewritten
+      with the new options, run a `reIndex` command without specifying
+      options, to rewrite all the data for that index, forcing the
+      conversion.  See the user's guide for full usage details.  (#389)
+
+    - The diagnostic tools `db.showPendingLockRequests()` and
+      `db.showLiveTransactions()` now use cursors to return results, which
+      means that in extreme cases, the results will no longer be truncated
+      due to the maximum size of a BSON object, instead the results will
+      be paginated.  This doesn't change the fact that they are a snapshot
+      of the state of the system.  (#606)
+
+    - The `count()` operation has been further optimized for simple
+      interval count operations, by up to 4x in some workloads.  (#725)
+
+    - Exhaustive scans are no longer ever chosen when a useful index
+      exists for a query.  The query optimizer is a sample-based optimizer
+      which would periodically retry all possible plans, including an
+      exhaustive scan.  For certain update workloads, this could cause a
+      major 99th percentile latency problem, and concurrency bottleneck,
+      so this change alleviates that problem.  (#796)
+
+    - The sharding subsystem used to use database- and system-wide locking
+      to protect metadata and sharding-only state.  That usage of those
+      locks has been refined to avoid stalls caused by long-running DML
+      operations combined with unrelated administrative operations.
+      (#797)
+
+    - Added the `$allMatching` flag to `db.currentOp()` to aid in
+      finding background tasks.  (#814)
+
+    - The storage format for integers with absolute value greater than
+      2^52 has been optimized to reduce the CPU cost of operations on such
+      values.  This is of particular importance to users of hashed keys
+      (e.g. hashed shard keys), because hash values are pseudorandom bit
+      patterns and are therefore almost always larger than 2^52.  In some
+      tests, up to a 20% speed improvement has been measured for CPU-bound
+      workloads.  (#820)
+
+    - Added the `compression`, `pageSize`, and `readPageSize` parameters
+      to the `db.createCollection()` shell function, so the following is
+      now valid:
+
+          db.createCollection('foo',
+                              {compression: 'lzma'
+                               pageSize: '8MB'})
+
+      Also, shell functions were added to wrap the `getParameter` and
+      `setParameter` commands.  See `db.help()` for more.  (#854)
+
+    - Added a server option `loaderCompressTmp` that, if on, causes the
+      bulk loader (used by `mongorestore` and `mongoimport` and
+      non-background index builds) to compress intermediate files before
+      writing them to disk, thus using less disk space during the index
+      build.  This can also be set with the `setParameter` command.
+      (#858)
+
+    - TokuMX is now built with CMake.  Therefore, the binary tarball names
+      have changed slightly, though they will unpack to a similar location
+      to previous tarballs.  (#869)
+
+    - When a document-level lock request times out (the `lockTimeout`
+      parameter), some debugging information is printed to the server's
+      log, including a transaction identifier for the operation which was
+      holding the lock that the current operation failed to acquire.  Now,
+      that blocking transaction's information (the same information
+      printed in `db.currentOp()` is also printed to the log, which should
+      help in debugging lock timeouts in applications.  (#876)
+
+    - Improved the latency of short range query operations.  (#882)
+
+    - Improved the performance of workloads with high concurrency.  (#904)
+
+    - Added information about the following to `db.serverStatus()`:
+
+      * Cache misses of the "partial fetch" type.
+      * Cache evictions.
+      * Number of pending document-level lock requests.
+
+      See the user's guide for a full description.  (#905, #906, #907)
+
+    - Added a server parameter for `mongod`, `migrateUniqueChecks`.  If
+      this setting is on, then during a migration, TokuMX will perform
+      unique checks for all data in the chunk being migrated.  That is the
+      default.
+
+      These unique checks exist to prevent users from inserting different
+      documents that initially are inserted to different shards, but which
+      have the same `_id`, from causing issues if those documents are
+      migrated to the same server.
+
+      With this setting turned on, such a migration would fail, but the
+      documents would be preserved.
+
+      If this setting is turned off, such a migration would succeed, and
+      silently overwrite the document that was there before, just in the
+      `_id` index.  This would effectively overwrite that document, and
+      for any secondary indexes, the newly migrated document would appear
+      twice.  This can only happen when using an `_id` index as the
+      primary key (the old behavior, see above), but when also using a
+      shard key other than the `_id`, and simultaneously generating
+      inappropriate (non-unique) values for the `_id` in the application.
+
+      For the best performance, use the default behavior of
+      `shardCollection` which will create a primary key containing the
+      shard key, allow TokuMX to generate `_id` values on your
+      application's behalf (use a different field for an application-level
+      ID if needed), and turn _off_ `migrateUniqueChecks`.  If these
+      recommendations are followed, this setting is safe and will not lead
+      to corruption or data loss.  However, to be careful, the default is
+      to do the unique checks, which is slower.  (#941)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - The `fsync` command, which has always been useless in TokuMX (its
+      functionality is available with other commands: `getLastError` with
+      `j` or `fsync` set to 1 flushes the transaction log, and
+      `checkpoint` forces data pages to be written), has finally been
+      deprecated, and is now completely a no-op.  (#180)
+
+    - Updates with `upsert` can no longer allow bad values for the `_id`
+      field (`Array`, `RegEx`, or `undefined`).  (#736)
+
+    - Inserts into capped collections within a multi-statement transaction
+      have been disabled, because they could not properly maintain the
+      size of the collection.  (#852)
+
+    - Replication initial sync no longer fails when a profile collection
+      exists.  (#862)
+
+    - All relevant bugfixes from MongoDB 2.4.9 have been incorporated.
+      (#868)
+
+      This includes:
+
+      * http://jira.mongodb.org/browse/SERVER-5625[SERVER-5625]
+      * http://jira.mongodb.org/browse/SERVER-7246[SERVER-7246]
+      * http://jira.mongodb.org/browse/SERVER-9238[SERVER-9238]
+      * http://jira.mongodb.org/browse/SERVER-10538[SERVER-10538]
+      * http://jira.mongodb.org/browse/SERVER-10919[SERVER-10919]
+      * http://jira.mongodb.org/browse/SERVER-11099[SERVER-11099]
+      * http://jira.mongodb.org/browse/SERVER-11194[SERVER-11194]
+      * http://jira.mongodb.org/browse/SERVER-11502[SERVER-11502]
+      * http://jira.mongodb.org/browse/SERVER-11731[SERVER-11731]
+      * http://jira.mongodb.org/browse/SERVER-11971[SERVER-11971]
+      * http://jira.mongodb.org/browse/SERVER-11977[SERVER-11977]
+      * http://jira.mongodb.org/browse/SERVER-12041[SERVER-12041]
+      * http://jira.mongodb.org/browse/SERVER-12092[SERVER-12092]
+      * http://jira.mongodb.org/browse/SERVER-12094[SERVER-12094]
+      * http://jira.mongodb.org/browse/SERVER-12146[SERVER-12146]
+
+    - An index can no longer become a "multi-key" index inside a
+      multi-statement transaction.  An index becomes multi-key when a
+      document is inserted such that the key generated for that index
+      contains an array in the document, and therefore generates multiple
+      keys (this is useful information for the query optimizer), but this
+      only happens when the first such document is inserted.  This
+      transition cannot be safely maintained if done in a multi-statement
+      transaction, so it will throw an error if done.
+
+      If you intend to use documents with array-valued key fields, as well
+      as multi-statement transactions, you may wish to prepare the
+      collection by inserting one such document so that the index becomes
+      multi-key, then removing that document, all outside of a
+      multi-statement transaction.  (#872)
+
+    - Fixed a bug where a dropped collection could leave behind a piece of
+      zombie metadata that would prevent future collections from being
+      created with the same name.  If this has happened already, upgrading
+      to 1.4 will clean out any such zombie metadata.  (#879, #937)
+
+    - Fixed two bugs related to setting the size of a capped collection:
+
+      * When setting a capped collection size to an integer larger than
+        2GB, no longer reject all insertions until the server is
+        restarted.
+      * When setting a capped collection size to a string to be
+        interpreted with a SI suffix (K, M, G), no longer reject all
+        insertions after the server is restarted.
+
+      (#934)
+
+
+tokumx 1.3.3
+------------
+Release date: 2013-12-16
+
+General
+~~~~~~~
+
+    - This release is focused on bug fixes since 1.3.2.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Added an optimization to the execution of aggregation pipelines that
+      greatly speeds up all range queries done for aggregations.  (#802)
+
+    - The `mongo2toku` migration tool supports authentication with a
+      MongoDB replica set using new options `--ruser`, `--rpass`,
+      `--rauthenticationDatabase`, and `--rauthenticationMechanism`.
+      (#836, #849)
+
+    - The `mongo2toku` migration tool now prints OpTimes in human-readable
+      form.  (#839)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - In TokuMX 1.3.2 and earlier, part of the oplog trimming process (an
+      optimization step) tended to hold a read lock for long periods of
+      time.  Now in 1.3.3, this component works in 4-second periods, which
+      is configurable with the parameter `optimizeOplogQuantum`, which can
+      be set dynamically with `setParameter`.  (#777)
+
+      Valid values are:
+
+      * `N > 0`: Work in periods of `N` seconds.
+
+      * `N = 0`: Do not optimize the oplog at all.
+
+      * `N < 0`: The 1.3.2 behavior, optimize aggressively without
+        yielding.
+
+    - Removed an unnecessary step in a replica set secondary's startup
+      process that had the potential to cause long stalls and pileups.
+      (#806)
+
+    - Certain query operations sometimes spend a long time in the storage
+      layer, searching through entries that were deleted but not garbage
+      collected.  Added a mechanism by which such operations can be killed
+      like normal operations.  (#813)
+
+    - Fixed a memory allocation size issue that could cause crashes when
+      dealing with very large leaf entries.  (#822)
+
+    - Cursors no longer automatically timeout after 10 minutes regardless
+      of continued activity, now continuing to use a cursor will preserve
+      it indefinitely.  (#826)
+
+    - Fixed some miscellaneous bugs in `mongo2toku`.  (#834, #837, #838)
+
+
+tokumx 1.3.2
+------------
+Release date: 2013-11-21
+
+General
+~~~~~~~
+
+    - This release is focused on bug fixes since 1.3.1.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Added `tokumxstat.py`, a script for polling `db.engineStatus()`.
+      (#534, #535)
+
+    - Improved the error messages reported in the server log when
+      filesystem errors occur.  (#703, #715)
+
+    - Improved the concurrency of sequential inserts into a unique index.
+      (#705)
+
+    - Improved the concurrency of `justOne` remove operations.  (#721)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Removed an overactive assert that could prevent a server from
+      starting if recovery was needed.  (#650)
+
+    - Fixed counting of oplog insert statistics on secondaries.
+      Previously, operations were double-counted on secondaries.  (#689)
+
+    - Fixed the upgrade of `system.users` collections to work when the
+      server is started with `--auth`.  (#690)
+
+    - Changed required authorization of transaction and loader commands so
+      that they are available to normal users when running with `--auth`.
+      (#698)
+
+    - Fixed the semantics of `getLastError` with `j:1` or `fsync:1`.
+      (#709)
+
+    - Fixed the rollback of very large transactions after a replication
+      failover.  (#716, #720)
+
+    - Fixed a problem when dropping an index concurrently with a
+      background index build.  The server now correctly serializes those
+      operations.  (#745)
+
+
 tokumx 1.3.1
 ------------
 Release date: 2013-10-25

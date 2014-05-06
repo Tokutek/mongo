@@ -18,7 +18,8 @@ t.drop();
 t.ensureIndex( {a:1} );
 t.save( {a:1} );
 t.find( {a:1,x:1} ).itcount();
-expectRecordedPlan( {a:1,x:1}, "a_1" );
+// TokuMX issue #796 - A single-plan is utilized, so no plan is recorded.
+expectNoRecordedPlan( {a:1,x:1}, "a_1" );
 
 // Index type changes
 t.drop();
@@ -53,7 +54,8 @@ t.drop();
 t.ensureIndex( {a:1} );
 t.save( {a:1}  );
 t.find( {a:1,b:{$gt:5,$lt:0},x:1} ).itcount();
-expectRecordedPlan( {a:1,b:{$gt:5,$lt:0},x:1}, "a_1" );
+// TokuMX issue #796 - A single-plan is utilized, so no plan is recorded.
+expectNoRecordedPlan( {a:1,b:{$gt:5,$lt:0},x:1}, "a_1" );
 
 // SERVER-2864
 t.drop();

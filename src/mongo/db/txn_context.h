@@ -23,6 +23,7 @@
 
 #include "mongo/db/jsobj.h"
 #include "mongo/db/txn_complete_hooks.h"
+#include "mongo/db/spillable_vector.h"
 #include "mongo/db/stats/timer_stats.h"
 #include "mongo/db/storage/txn.h"
 
@@ -36,14 +37,14 @@ namespace mongo {
     void setLogTxnOpsForReplication(bool val);
     bool logTxnOpsForReplication();
     void enableLogTxnOpsForSharding(bool (*shouldLogOp)(const char *, const char *, const BSONObj &),
-                                    bool (*shouldLogUpdateOp)(const char *, const char *, const BSONObj &, const BSONObj &),
+                                    bool (*shouldLogUpdateOp)(const char *, const char *, const BSONObj &),
                                     void (*startObj)(BSONObjBuilder &),
                                     void (*writeObj)(BSONObj &),
                                     void (*writeObjToRef)(BSONObj &));
     void disableLogTxnOpsForSharding(void);
     bool shouldLogTxnOpForSharding(const char *opstr, const char *ns, const BSONObj &obj);
-    bool shouldLogTxnUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj, const BSONObj &newObj);
-    void setLogTxnToOplog(void (*)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo));
+    bool shouldLogTxnUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj);
+    void setLogTxnToOplog(void (*)(GTID gtid, uint64_t timestamp, uint64_t hash, const deque<BSONObj>& ops));
     void setLogTxnRefToOplog(void (*f)(GTID gtid, uint64_t timestamp, uint64_t hash, OID& oid));
     void setLogOpsToOplogRef(void (*f)(BSONObj o));
     void setOplogInsertStats(TimerStats *oplogInsertStats, Counter64 *oplogInsertBytesStats);
@@ -83,8 +84,8 @@ namespace mongo {
 
     // Class to handle rollback of in-memory modifications to the namespace index
     // On abort, we simply reload the map entry for each ns touched, bringing it in
-    // sync with whatever is on disk in the nsdb.
-    class NamespaceIndexRollback : boost::noncopyable {
+    // sync with whatever is on disk in the metadb.
+    class CollectionMapRollback : boost::noncopyable {
     public:
         // Called after txn commit.
         void commit();
@@ -92,7 +93,7 @@ namespace mongo {
         // Called before txn abort.
         void preAbort();
 
-        void transfer(NamespaceIndexRollback &parent);
+        void transfer(CollectionMapRollback &parent);
 
         void noteNs(const StringData& ns);
 
@@ -115,69 +116,6 @@ namespace mongo {
     private:
         void _complete();
         set<long long> _cursorIds;
-    };
-
-    /**
-       SpillableVector holds a vector of BSONObjs, and if that vector gets too big (>= maxSize), it
-       starts spilling those objects to a backing collection, to be referenced later.
-
-       SpillableVector labels each of the spilled entries with an OID and a sequence number in the
-       _id field.  Each entry in the collection is of the form (where n is from a sequence of
-       integers starting with 0 for each new OID):
-
-           {
-             _id: {"oid": ObjectID("..."),
-                   "seq": n},
-               a: [
-                    ..., // user objects are here
-                  ]
-           }
-
-       SpillableVector supports getObjectsOrRef(), which appends to a given BSONObjBuilder either a
-       reference to the OID used to spill objects, or a BSONArray containing the spilled objects.
-
-       SpillableVector also supports transfer(), which appends its objects to a parent
-       SpillableVector.
-    */
-    class SpillableVector : boost::noncopyable {
-        void (*_writeObjToRef)(BSONObj &);
-        vector<BSONObj> _vec;
-        size_t _curSize;
-        const size_t _maxSize;
-        SpillableVector *_parent;
-        OID _oid;
-
-        bool _curObjInited;
-        BufBuilder _buf;
-        long long _seq;
-        long long *_curSeqNo;
-        scoped_ptr<BSONObjBuilder> _curObjBuilder;
-        scoped_ptr<BSONArrayBuilder> _curArrayBuilder;
-      public:
-        SpillableVector(void (*writeObjToRef)(BSONObj &), size_t maxSize, SpillableVector *parent);
-
-        /** @return true iff there have been no objects appended yet. */
-        bool empty() const {
-            bool isEmpty = _curSize == 0;
-            if (isEmpty) {
-                dassert(_vec.empty());
-            }
-            return isEmpty;
-        }
-
-        void append(const BSONObj &o);
-        void getObjectsOrRef(BSONObjBuilder &b);
-        void transfer();
-
-      private:
-        bool spilling() const {
-            return _curSize >= _maxSize;
-        }
-        void initCurObj();
-        void finish();
-        void spillCurObj();
-        void spillOneObject(BSONObj obj);
-        void spillAllObjects();
     };
 
     // Each TxnOplog gathers a transaction's operations that need to be put in the oplog
@@ -260,7 +198,7 @@ namespace mongo {
         bool _initiatingRS;
 
         CappedCollectionRollback _cappedRollback;
-        NamespaceIndexRollback _nsIndexRollback;
+        CollectionMapRollback _collectionMapRollback;
         ClientCursorRollback _clientCursorRollback;
 
     public:
@@ -296,8 +234,8 @@ namespace mongo {
             return _cappedRollback;
         }
 
-        NamespaceIndexRollback &nsIndexRollback() {
-            return _nsIndexRollback;
+        CollectionMapRollback &collectionMapRollback() {
+            return _collectionMapRollback;
         }
 
         ClientCursorRollback &clientCursorRollback() {
@@ -305,6 +243,8 @@ namespace mongo {
         }
 
     private:
+        void commitChild(int flags);
+        void commitRoot(int flags);
         // transfer operations in _txnOps to _parent->_txnOps
         void transferOpsToParent();
         void transferOpsForShardingToParent();

@@ -339,9 +339,10 @@ namespace mongo {
                     // Creating a collection must be done in a child transaction,
                     // which aborts if the create fails.
                     // If the create fails, the child's abort hooks will clean up
-                    // the nsindex inside mongod (therefore not leaving a
+                    // the collection map inside mongod (therefore not leaving a
+                    LOCK_REASON(lockReason, "m/r: creating incremental collection");
+                    Client::WriteContext ctx( _config.incLong, lockReason );
                     Client::Transaction transaction(0);
-                    Client::WriteContext ctx( _config.incLong );
                     string err;
                     // Specifying { natural : 1 } creates a "natural order" collection,
                     // which does not automatically add/index the _id field.
@@ -360,8 +361,9 @@ namespace mongo {
             // create temp collection
             {
                 // See above for why userCreateNS must be called in its own child transaction.
+                LOCK_REASON(lockReason, "m/r: creating temp collection");
+                Client::WriteContext ctx( _config.tempNamespace, lockReason );
                 Client::Transaction transaction(0);
-                Client::WriteContext ctx( _config.tempNamespace.c_str() );
                 string errmsg;
                 if ( ! userCreateNS( _config.tempNamespace.c_str() , BSONObj() , errmsg , true ) ) {
                     uasserted(13630, str::stream() << "userCreateNS failed for mr tempNamespace ns: "
@@ -391,7 +393,8 @@ namespace mongo {
                     BSONObj indexToInsert = b.obj();
 
                     string sysIndexes = getSisterNS( _config.tempNamespace, "system.indexes" );
-                    Client::WriteContext ctx( sysIndexes.c_str() );
+                    LOCK_REASON(lockReason, "m/r: creating output indexes");
+                    Client::WriteContext ctx( sysIndexes, lockReason );
                     insert( sysIndexes.c_str() , indexToInsert );
                 }
 
@@ -515,8 +518,6 @@ namespace mongo {
                           /*pattern=*/ o["_id"].wrap(),
                           /*upsert=*/ true,
                           /*multi=*/ false,
-                          /*logtheop=*/ true,
-                          debug,
                           fromMigrate);
         }
 
@@ -546,7 +547,8 @@ namespace mongo {
                                "M/R Merge Post Processing Progress",
                                _safeCount(_db, _config.tempNamespace, BSONObj()));
                 {
-                    Client::ReadContext ctx( _config.outputOptions.finalNamespace );
+                    LOCK_REASON(lockReason, "m/r: merge post processing");
+                    Client::ReadContext ctx( _config.outputOptions.finalNamespace, lockReason );
                     auto_ptr<DBClientCursor> cursor = _db.query( _config.tempNamespace , BSONObj() );
                     while ( cursor->more() ) {
                         BSONObj o = cursor->next();
@@ -564,15 +566,15 @@ namespace mongo {
                                "M/R Reduce Post Processing Progress",
                                _safeCount(_db, _config.tempNamespace, BSONObj()));
                 {
-                    Client::ReadContext ctx( _config.outputOptions.finalNamespace );
+                    LOCK_REASON(lockReason, "m/r: reduce post processing");
+                    Client::ReadContext ctx( _config.outputOptions.finalNamespace, lockReason );
                     auto_ptr<DBClientCursor> cursor = _db.query( _config.tempNamespace , BSONObj() );
                     while ( cursor->more() ) {
                         BSONObj temp = cursor->next();
                         BSONObj old;
 
-                        NamespaceDetails *d = nsdetails(_config.outputOptions.finalNamespace);
-                        const bool found = d != NULL && d->findOne( temp["_id"].wrap() , old , true );
-                        if ( found ) {
+                        const bool found = Collection::findOne(_config.outputOptions.finalNamespace, temp["_id"].wrap(), old, true);
+                        if (found) {
                             // need to reduce
                             values.clear();
                             values.push_back( temp );
@@ -599,7 +601,8 @@ namespace mongo {
         void State::insert( const string& ns , const BSONObj& o ) {
             verify( _onDisk );
 
-            Client::ReadContext ctx( ns.c_str() );
+            LOCK_REASON(lockReason, "m/r: insert");
+            Client::ReadContext ctx( ns, lockReason );
             insertObject( ns.c_str() , o );
         }
 
@@ -888,7 +891,8 @@ namespace mongo {
                 verify( foundIndex );
             }
 
-            Client::ReadContext ctx( _config.incLong );
+            LOCK_REASON(lockReason, "m/r: final reduce to collection");
+            Client::ReadContext ctx( _config.incLong, lockReason );
 
             BSONObj prev;
             BSONList all;
@@ -961,7 +965,8 @@ namespace mongo {
                     // only 1 value for this key
                     if ( _onDisk ) {
                         // this key has low cardinality, so just write to collection
-                        Client::ReadContext ctx(_config.incLong.c_str());
+                        LOCK_REASON(lockReason, "m/r: reducing into collection");
+                        Client::ReadContext ctx(_config.incLong, lockReason);
                         _insertToInc( *(all.begin()) );
                     }
                     else {
@@ -988,7 +993,8 @@ namespace mongo {
             if ( ! _onDisk )
                 return;
 
-            Client::ReadContext ctx(_config.incLong);
+            LOCK_REASON(lockReason, "m/r: dumping in memory state to collection");
+            Client::ReadContext ctx(_config.incLong, lockReason);
 
             for ( InMemory::iterator i=_temp->begin(); i!=_temp->end(); i++ ) {
                 BSONList& all = i->second;
@@ -1110,6 +1116,9 @@ namespace mongo {
 
             virtual bool slaveOverrideOk() const { return false; }
 
+            // mapreduce is like a query, we don't need to hold this lock
+            virtual bool requiresShardedOperationScope() const { return false; }
+
             virtual void help( stringstream &help ) const {
                 help << "Run a map/reduce operation on the server.\n";
                 help << "Note this is used for aggregation, not querying, in MongoDB.\n";
@@ -1197,7 +1206,8 @@ namespace mongo {
                         wassert( config.limit < 0x4000000 ); // see case on next line to 32 bit unsigned
                         long long mapTime = 0;
                         {
-                            Client::ReadContext ctx( config.ns );
+                            LOCK_REASON(lockReason, "m/r: emit phase");
+                            Client::ReadContext ctx(config.ns, lockReason);
 
                             // obtain full cursor on data to apply mr to
                             shared_ptr<Cursor> temp = getOptimizedCursor( config.ns.c_str(), config.filter, config.sort );
@@ -1288,17 +1298,15 @@ namespace mongo {
                 }
                 catch( SendStaleConfigException& e ){
                     log() << "mr detected stale config, should retry" << causedBy(e) << endl;
-                    throw e;
+                    throw;
                 }
-                // TODO:  The error handling code for queries is v. fragile,
-                // *requires* rethrow AssertionExceptions - should probably fix.
                 catch ( AssertionException& e ){
                     log() << "mr failed, removing collection" << causedBy(e) << endl;
-                    throw e;
+                    throw;
                 }
                 catch ( std::exception& e ){
                     log() << "mr failed, removing collection" << causedBy(e) << endl;
-                    throw e;
+                    throw;
                 }
                 catch ( ... ) {
                     log() << "mr failed for unknown reason, removing collection" << endl;
@@ -1318,6 +1326,7 @@ namespace mongo {
             MapReduceFinishCommand() : Command( "mapreduce.shardedfinish" ) {}
             virtual bool slaveOk() const { return !replSet; }
             virtual bool slaveOverrideOk() const { return true; }
+            virtual bool requiresShardedOperationScope() const { return false; }
             virtual LockType locktype() const { return NONE; }
             virtual bool requiresSync() const { return false; }
             virtual bool needsTxn() const { return false; }

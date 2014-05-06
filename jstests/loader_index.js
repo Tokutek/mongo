@@ -1,6 +1,11 @@
 // Test that special indexes are recognized during load.
 
-load("jstests/loader_helpers.js");
+var filename;
+if (TestData.testDir !== undefined) {
+    load(TestData.testDir + "/_loader_helpers.js");
+} else {
+    load('jstests/_loader_helpers.js');
+}
 
 var testSparse = function() {
     t = db.loadersparse;

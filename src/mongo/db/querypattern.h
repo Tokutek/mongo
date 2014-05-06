@@ -17,7 +17,9 @@
 
 #pragma once
 
-#include "jsobj.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/util/concurrency/rwlock.h"
+#include "mongo/util/concurrency/simplerwlock.h"
 
 namespace mongo {
 
@@ -91,6 +93,37 @@ namespace mongo {
         BSONObj _indexKey;
         long long _nScanned;
         CandidatePlanCharacter _planCharacter;
+    };
+
+    /** A cache of query plans */
+    class QueryCache {
+    public:
+        QueryCache();
+
+        struct Lock : boost::noncopyable {
+            struct Shared : boost::noncopyable {
+                Shared(QueryCache &qc) : _lk(qc._rwlock) { }
+                SimpleRWLock::Shared _lk;
+            };
+            struct Exclusive : boost::noncopyable {
+                Exclusive(QueryCache &qc) : _lk(qc._rwlock) { }
+                SimpleRWLock::Exclusive _lk;
+            };
+        };
+
+        CachedQueryPlan cachedQueryPlanForPattern(const QueryPattern &pattern);
+
+        void registerCachedQueryPlanForPattern(const QueryPattern &pattern,
+                                               const CachedQueryPlan &cachedQueryPlan) ;
+
+        void notifyOfWriteOp();
+
+        void clearQueryCache();
+
+    private:
+        SimpleRWLock _rwlock;
+        int _qcWriteCount;
+        map<QueryPattern, CachedQueryPlan> _qcCache;
     };
 
     inline bool QueryPattern::operator<( const QueryPattern &other ) const {

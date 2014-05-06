@@ -17,15 +17,16 @@
 
 #include "mongo/pch.h"
 
+#include "mongo/db/txn_context.h"
+
 #include "mongo/base/counter.h"
 #include "mongo/bson/bsonobjiterator.h"
+#include "mongo/bson/util/builder.h"
 #include "mongo/db/gtid.h"
 #include "mongo/db/oplog.h"
 #include "mongo/db/repl.h"
-#include "mongo/db/txn_context.h"
 #include "mongo/db/stats/timer_stats.h"
 #include "mongo/db/storage/env.h"
-#include "mongo/util/stacktrace.h"
 
 #include "mongo/s/d_logic.h"
 
@@ -39,11 +40,11 @@ namespace mongo {
     // to true
     static bool _logTxnOpsForReplication = false;
     static bool _logTxnOpsForSharding = false;
-    static void (*_logTxnToOplog)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo) = NULL;
+    static void (*_logTxnToOplog)(GTID gtid, uint64_t timestamp, uint64_t hash, const deque<BSONObj>& ops) = NULL;
     static void (*_logTxnOpsRef)(GTID gtid, uint64_t timestamp, uint64_t hash, OID& oid) = NULL;
     static void (*_logOpsToOplogRef)(BSONObj o) = NULL;
     static bool (*_shouldLogOpForSharding)(const char *, const char *, const BSONObj &) = NULL;
-    static bool (*_shouldLogUpdateOpForSharding)(const char *, const char *, const BSONObj &, const BSONObj &) = NULL;
+    static bool (*_shouldLogUpdateOpForSharding)(const char *, const char *, const BSONObj &) = NULL;
     static void (*_startObjForMigrateLog)(BSONObjBuilder &b) = NULL;
     static void (*_writeObjToMigrateLog)(BSONObj &) = NULL;
     static void (*_writeObjToMigrateLogRef)(BSONObj &) = NULL;
@@ -62,7 +63,7 @@ namespace mongo {
         return _logTxnOpsForReplication;
     }
 
-    void setLogTxnToOplog(void (*f)(GTID gtid, uint64_t timestamp, uint64_t hash, BSONArray& opInfo)) {
+    void setLogTxnToOplog(void (*f)(GTID gtid, uint64_t timestamp, uint64_t hash, const deque<BSONObj>& ops)) {
         _logTxnToOplog = f;
     }
 
@@ -88,7 +89,7 @@ namespace mongo {
     }
 
     void enableLogTxnOpsForSharding(bool (*shouldLogOp)(const char *, const char *, const BSONObj &),
-                                    bool (*shouldLogUpdateOp)(const char *, const char *, const BSONObj &, const BSONObj &),
+                                    bool (*shouldLogUpdateOp)(const char *, const char *, const BSONObj &),
                                     void (*startObj)(BSONObjBuilder &b),
                                     void (*writeObj)(BSONObj &),
                                     void (*writeObjToRef)(BSONObj &)) {
@@ -121,115 +122,12 @@ namespace mongo {
         return _shouldLogOpForSharding(opstr, ns, row);
     }
 
-    bool shouldLogTxnUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj, const BSONObj &newObj) {
+    bool shouldLogTxnUpdateOpForSharding(const char *opstr, const char *ns, const BSONObj &oldObj) {
         if (!logTxnOpsForSharding()) {
             return false;
         }
         dassert(_shouldLogUpdateOpForSharding != NULL);
-        return _shouldLogUpdateOpForSharding(opstr, ns, oldObj, newObj);
-    }
-
-    SpillableVector::SpillableVector(void (*writeObjToRef)(BSONObj &), size_t maxSize, SpillableVector *parent)
-            : _writeObjToRef(writeObjToRef),
-              _vec(),
-              _curSize(0),
-              _maxSize(maxSize),
-              _parent(parent),
-              _oid(_parent == NULL ? OID::gen() : _parent->_oid),
-              _curObjInited(false),
-              _buf(),
-              _seq(0),
-              _curSeqNo(_parent == NULL ? &_seq : _parent->_curSeqNo),
-              _curObjBuilder(),
-              _curArrayBuilder()
-    {}
-
-    void SpillableVector::append(const BSONObj &o) {
-        BSONObj obj = o.getOwned();
-        bool wasSpilling = spilling();
-        _curSize += obj.objsize();
-        if (!wasSpilling && spilling()) {
-            spillAllObjects();
-        }
-        if (spilling()) {
-            spillOneObject(obj);
-        }
-        else {
-            _vec.push_back(obj.getOwned());
-        }
-    }
-
-    void SpillableVector::getObjectsOrRef(BSONObjBuilder &b) {
-        finish();
-        dassert(_parent == NULL);
-        if (spilling()) {
-            b.append("refOID", _oid);
-        }
-        else {
-            b.append("a", _vec);
-        }
-    }
-
-    void SpillableVector::transfer() {
-        finish();
-        dassert(_parent != NULL);
-        if (!spilling()) {
-            // If your parent is spilling, or is about to start spilling, we'll take care of
-            // spilling these in a moment.
-            _parent->_vec.insert(_parent->_vec.end(), _vec.begin(), _vec.end());
-        }
-        _parent->_curSize += _curSize;
-        if (_parent->spilling()) {
-            // If your parent wasn't spilling before, this will spill their objects and yours in the
-            // right order.  If they were already spilling, this will just spill your objects now.
-            _parent->spillAllObjects();
-        }
-    }
-
-    void SpillableVector::finish() {
-        if (spilling()) {
-            spillCurObj();
-        }
-    }
-
-    void SpillableVector::initCurObj() {
-        _curObjBuilder.reset(new BSONObjBuilder(_buf));
-        _curObjBuilder->append("_id", BSON("oid" << _oid << "seq" << (*_curSeqNo)++));
-        _curArrayBuilder.reset(new BSONArrayBuilder(_curObjBuilder->subarrayStart("a")));
-    }
-
-    void SpillableVector::spillCurObj() {
-        if (_curArrayBuilder->arrSize() == 0) {
-            return;
-        }
-        _curArrayBuilder->doneFast();
-        BSONObj curObj = _curObjBuilder->done();
-        _writeObjToRef(curObj);
-    }
-
-    void SpillableVector::spillOneObject(BSONObj obj) {
-        if (!_curObjInited) {
-            initCurObj();
-            _curObjInited = true;
-        }
-        if (_curObjBuilder->len() + obj.objsize() >= (long long) _maxSize) {
-            spillCurObj();
-            _buf.reset();
-            initCurObj();
-        }
-        _curArrayBuilder->append(obj);
-    }
-
-    void SpillableVector::spillAllObjects() {
-        if (_parent != NULL) {
-            // Your parent must spill anything they have before you do, to get the sequence numbers
-            // right.
-            _parent->spillAllObjects();
-        }
-        for (vector<BSONObj>::iterator it = _vec.begin(); it != _vec.end(); ++it) {
-            spillOneObject(*it);
-        }
-        _vec.clear();
+        return _shouldLogUpdateOpForSharding(opstr, ns, oldObj);
     }
 
     TxnContext::TxnContext(TxnContext *parent, int txnFlags)
@@ -251,8 +149,44 @@ namespace mongo {
         }
     }
 
-    void TxnContext::commit(int flags) {
-        verify(!_retired);
+    void TxnContext::commitChild(int flags) {
+        verify(hasParent());
+        // handle work related to logging of transaction for replication
+        // this piece must be done before the _txn.commit
+        try {
+            // This does something
+            // a bit dangerous in that it may spill parent's stuff
+            // with this child transaction that is committing. If something
+            // goes wrong and this child transaction aborts, we will miss
+            // some ops
+            //
+            // This ought to be ok, because we are in this try/catch block
+            // where if something goes wrong, we will crash the server.
+            // NOTHING better go wrong here, unless under bad rare
+            // circumstances
+            _txnOps.finishChildCommit();
+            // handle work related to logging of transaction for chunk migrations
+            if (!_txnOpsForSharding.empty()) {
+                transferOpsForShardingToParent();
+            }
+
+            _clientCursorRollback.preComplete();
+            _txn.commit(flags);
+        }
+        catch (std::exception &e) {
+            StackStringBuilder ssb;
+            ssb << "exception during critical section of txn child commit, aborting system: " << e.what();
+            rawOut(ssb.str());
+            ::abort();
+        }
+
+        // These rollback items must be processed after the ydb transaction completes.
+        _cappedRollback.transfer(_parent->_cappedRollback);
+        _collectionMapRollback.transfer(_parent->_collectionMapRollback);
+    }
+
+    void TxnContext::commitRoot(int flags) {
+        verify(!hasParent());
         bool gotGTID = false;
         GTID gtid;
         // do this in case we are writing the first entry
@@ -262,20 +196,7 @@ namespace mongo {
         // handle work related to logging of transaction for replication
         // this piece must be done before the _txn.commit
         try {
-            if (hasParent()) {
-                // This does something
-                // a bit dangerous in that it may spill parent's stuff
-                // with this child transaction that is committing. If something
-                // goes wrong and this child transaction aborts, we will miss
-                // some ops
-                //
-                // This ought to be ok, because we are in this try/catch block
-                // where if something goes wrong, we will crash the server.
-                // NOTHING better go wrong here, unless under bad rare
-                // circumstances
-                _txnOps.finishChildCommit();
-            }
-            else if (!_txnOps.empty()) {
+            if (!_txnOps.empty()) {
                 uint64_t timestamp = 0;
                 uint64_t hash = 0;
                 if (!_initiatingRS) {
@@ -296,21 +217,23 @@ namespace mongo {
             }
             // handle work related to logging of transaction for chunk migrations
             if (!_txnOpsForSharding.empty()) {
-                if (hasParent()) {
-                    transferOpsForShardingToParent();
-                }
-                else {
-                    writeTxnOpsToMigrateLog();
-                }
+                writeTxnOpsToMigrateLog();
             }
 
             _clientCursorRollback.preComplete();
-            _txn.commit(flags);
+            try {
+                _txn.commit(flags);
+            }
+            catch (std::exception &e) {
+                StackStringBuilder ssb;
+                ssb << "exception during critical section of txn root commit, aborting system: " << e.what();
+                rawOut(ssb.str());
+                ::abort();
+            }
 
             // if the commit of this transaction got a GTID, then notify 
             // the GTIDManager that the commit is now done.
             if (gotGTID && !_initiatingRS) {
-                dassert(txnGTIDManager);
                 // save the GTID for the client so that
                 // getLastError will know what GTID slaves
                 // need to be caught up to.
@@ -319,19 +242,23 @@ namespace mongo {
             }
         }
         catch (std::exception &e) {
-            log() << "exception during critical section of txn commit, aborting system: " << e.what() << endl;
-            printStackTrace();
-            logflush();
-            ::abort();
+            if (gotGTID && !_initiatingRS) {
+                txnGTIDManager->noteLiveGTIDDone(gtid);
+            }
         }
 
         // These rollback items must be processed after the ydb transaction completes.
+        _cappedRollback.commit();
+        _collectionMapRollback.commit();
+    }
+
+    void TxnContext::commit(int flags) {
+        verify(!_retired);
         if (hasParent()) {
-            _cappedRollback.transfer(_parent->_cappedRollback);
-            _nsIndexRollback.transfer(_parent->_nsIndexRollback);
-        } else {
-            _cappedRollback.commit();
-            _nsIndexRollback.commit();
+            commitChild(flags);
+        }
+        else {
+            commitRoot(flags);
         }
         _retired = true;
     }
@@ -339,7 +266,7 @@ namespace mongo {
     void TxnContext::abort() {
         verify(!_retired);
         _clientCursorRollback.preComplete();
-        _nsIndexRollback.preAbort();
+        _collectionMapRollback.preAbort();
         _txnOps.abort();
         _txn.abort();
         _cappedRollback.abort();
@@ -435,16 +362,16 @@ namespace mongo {
 
     /* --------------------------------------------------------------------- */
 
-    void NamespaceIndexRollback::commit() {
+    void CollectionMapRollback::commit() {
         // nothing to do on commit
     }
 
-    void NamespaceIndexRollback::preAbort() {
+    void CollectionMapRollback::preAbort() {
         _completeHooks->noteTxnAbortedFileOps(_namespaces, _dbs);
     }
 
-    void NamespaceIndexRollback::transfer(NamespaceIndexRollback &parent) {
-        TOKULOG(1) << "NamespaceIndexRollback::transfer processing "
+    void CollectionMapRollback::transfer(CollectionMapRollback &parent) {
+        TOKULOG(1) << "CollectionMapRollback::transfer processing "
                    << _namespaces.size() + _dbs.size() << " roll items." << endl;
 
         // Promote rollback entries to parent.
@@ -452,11 +379,11 @@ namespace mongo {
         parent._dbs.insert(_dbs.begin(), _dbs.end());
     }
 
-    void NamespaceIndexRollback::noteNs(const StringData& ns) {
+    void CollectionMapRollback::noteNs(const StringData& ns) {
         _namespaces.insert(ns.toString());
     }
 
-    void NamespaceIndexRollback::noteCreate(const StringData& dbname) {
+    void CollectionMapRollback::noteCreate(const StringData& dbname) {
         _dbs.insert(dbname.toString());
     }
 
@@ -556,14 +483,8 @@ namespace mongo {
     void TxnOplog::writeOpsDirectlyToOplog(GTID gtid, uint64_t timestamp, uint64_t hash) {
         dassert(logTxnOpsForReplication());
         dassert(_logTxnToOplog);
-        // build array of in memory ops
-        BSONArrayBuilder b;
-        for (deque<BSONObj>::iterator it = _m.begin(); it != _m.end(); it++) {
-            b.append(*it);
-        }
-        BSONArray a = b.arr();
         // log ops
-        _logTxnToOplog(gtid, timestamp, hash, a);
+        _logTxnToOplog(gtid, timestamp, hash, _m);
     }
 
     void TxnOplog::writeTxnRefToOplog(GTID gtid, uint64_t timestamp, uint64_t hash) {

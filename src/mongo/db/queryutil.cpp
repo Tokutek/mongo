@@ -16,7 +16,7 @@
 
 #include "pch.h"
 
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/querypattern.h"
 #include "mongo/db/matcher.h"
 #include "mongo/db/queryutil.h"
@@ -1307,6 +1307,15 @@ namespace mongo {
         return b.obj();
     }
 
+    bool FieldRangeVector::startKeyInclusive() const {
+        for( vector<FieldRange>::const_iterator i = _ranges.begin(); i != _ranges.end(); ++i ) {
+            if( !i->intervals().front()._lower._inclusive ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     BSONObj FieldRangeVector::endKey() const {
         BSONObjBuilder b;
         BSONObjIterator keys( _keyPattern );
@@ -1359,13 +1368,14 @@ namespace mongo {
         return b.obj();
     }
 
-    bool FieldRangeVector::containsOnlyPointIntervals() const {
-        for( vector<FieldRange>::const_iterator i = _ranges.begin(); i != _ranges.end(); ++i ) {
-            if (!i->isPointIntervalSet()) {
-                return false;
+    bool FieldRangeVector::prefixedByPointInterval() const {
+        if (_ranges.size() > 0) {
+            const FieldRange &range = *_ranges.begin();
+            if (range.isPointIntervalSet()) {
+                return true;
             }
         }
-        return true;
+        return false;
     }
     
     FieldRange *FieldRangeSet::__universalRange = 0;
@@ -1463,17 +1473,17 @@ namespace mongo {
                     ).jsonString();
     }
     
-    void FieldRangeSetPair::assertValidIndex( const NamespaceDetails *d, int idxNo ) const {
-        massert( 14048, "FieldRangeSetPair invalid index specified", idxNo >= 0 && idxNo < d->nIndexes() );   
+    void FieldRangeSetPair::assertValidIndex( const Collection *cl, int idxNo ) const {
+        massert( 14048, "FieldRangeSetPair invalid index specified", idxNo >= 0 && idxNo < cl->nIndexes() );   
     }
         
-    const FieldRangeSet &FieldRangeSetPair::frsForIndex( const NamespaceDetails* nsd, int idxNo ) const {
-        assertValidIndexOrNoIndex( nsd, idxNo );
+    const FieldRangeSet &FieldRangeSetPair::frsForIndex( const Collection *cl, int idxNo ) const {
+        assertValidIndexOrNoIndex( cl, idxNo );
         if ( idxNo < 0 ) {
             // An unindexed cursor cannot have a "single key" constraint.
             return _multiKey;
         }
-        return nsd->isMultikey( idxNo ) ? _multiKey : _singleKey;
+        return cl->isMultikey( idxNo ) ? _multiKey : _singleKey;
     }    
         
     bool FieldRangeVector::matchesElement( const BSONElement &e, int i, bool forward ) const {
@@ -1828,15 +1838,15 @@ namespace mongo {
         massert( 13274, "no or clause to pop", _orFound && !orRangesExhausted() );        
     }
     
-    void OrRangeGenerator::popOrClause( NamespaceDetails *nsd, int idxNo, const BSONObj &keyPattern ) {
+    void OrRangeGenerator::popOrClause( Collection *cl, int idxNo, const BSONObj &keyPattern ) {
         assertMayPopOrClause();
         auto_ptr<FieldRangeSet> holder;
-        const FieldRangeSet *toDiff = &_originalOrSets.front().frsForIndex( nsd, idxNo );
+        const FieldRangeSet *toDiff = &_originalOrSets.front().frsForIndex( cl, idxNo );
         if ( !keyPattern.isEmpty() && toDiff->matchPossibleForIndex( keyPattern ) ) {
             holder.reset( toDiff->subset( keyPattern ) );
             toDiff = holder.get();
         }
-        _popOrClause( toDiff, nsd, idxNo, keyPattern );
+        _popOrClause( toDiff, cl, idxNo, keyPattern );
     }
     
     void OrRangeGenerator::popOrClauseSingleKey() {
@@ -1855,7 +1865,7 @@ namespace mongo {
      * empty we do not constrain the previous clause's ranges using index keys,
      * which may reduce opportunities for range elimination.
      */
-    void OrRangeGenerator::_popOrClause( const FieldRangeSet *toDiff, NamespaceDetails *d, int idxNo, const BSONObj &keyPattern ) {
+    void OrRangeGenerator::_popOrClause( const FieldRangeSet *toDiff, Collection *cl, int idxNo, const BSONObj &keyPattern ) {
         list<FieldRangeSetPair>::iterator i = _orSets.begin();
         list<FieldRangeSetPair>::iterator j = _originalOrSets.begin();
         ++i;
@@ -1863,7 +1873,7 @@ namespace mongo {
         while( i != _orSets.end() ) {
             *i -= *toDiff;
             // Check if match is possible at all, and if it is possible for the recently scanned index.
-            if( !i->matchPossible() || ( d && !i->matchPossibleForIndex( d, idxNo, keyPattern ) ) ) {
+            if( !i->matchPossible() || ( cl && !i->matchPossibleForIndex( cl, idxNo, keyPattern ) ) ) {
                 i = _orSets.erase( i );
                 j = _originalOrSets.erase( j );
             }

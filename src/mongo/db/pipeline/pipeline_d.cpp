@@ -33,7 +33,7 @@
 #include "mongo/db/cursor.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/query_optimizer.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/pipeline/document_source.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/cursor.h"
@@ -146,8 +146,9 @@ namespace mongo {
         // Create the necessary context to use a Cursor, including taking a namespace read lock,
         // see SERVER-6123.
         // Note: this may throw if the sharding version for this connection is out of date.
+        LOCK_REASON(lockReason, "aggregate: creating document source cursor");
         shared_ptr<DocumentSourceCursor::CursorWithContext> cursorWithContext
-                ( new DocumentSourceCursor::CursorWithContext( fullName ) );
+                ( new DocumentSourceCursor::CursorWithContext( fullName, lockReason ) );
 
         /*
           Create the cursor.

@@ -31,6 +31,8 @@
 #include <time.h>
 #include <vector>
 
+#include "mongo/base/init.h"
+#include "mongo/base/status.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
@@ -47,23 +49,14 @@
 #include "mongo/db/repl_block.h"
 #include "mongo/db/parsed_query.h"
 #include "mongo/db/scanandorder.h"
+#include "mongo/db/server_parameters.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/platform/random.h"
+#include "mongo/util/debug_util.h"
 #include "mongo/util/processinfo.h"
 #include "mongo/util/timer.h"
 
 namespace mongo {
-
-    bool opForSlaveTooOld(uint64_t ts) {
-        const uint64_t expireMillis = expireOplogMilliseconds();
-        if (ts && expireMillis) {
-            const uint64_t minTime = curTimeMillis64() - expireMillis;
-            if (ts < minTime) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     CCById ClientCursor::clientCursorsById;
     boost::recursive_mutex& ClientCursor::ccmutex( *(new boost::recursive_mutex()) );
@@ -117,52 +110,58 @@ namespace mongo {
         }
     }
 
+    int ClientCursor::idleAgeTimeoutMillis = 600000;
+    /**
+     * CursorTimeoutParameter is only for use by cursor_timeout.js right now.
+     * Someday it might be worth exporting as a feature, but that doesn't seem too useful right now.
+     */
+    class CursorTimeoutParameter : public ExportedServerParameter<int> {
+      public:
+        CursorTimeoutParameter()
+                : ExportedServerParameter<int>( ServerParameterSet::getGlobal(), "cursorTimeout",
+                                                &ClientCursor::idleAgeTimeoutMillis, false, true ) {}
+      protected:
+        virtual Status validate(const int& potentialNewValue) {
+            if (potentialNewValue <= 0) {
+                return Status(ErrorCodes::BadValue, "cursorTimeout must be > 0");
+            }
+            return Status::OK();
+        }
+    };
+    MONGO_INITIALIZER(RegisterCursorTimeoutParameter)(InitializerContext* context) {
+        if (Command::testCommandsEnabled) {
+            // Leaked intentionally: a ServerParameter registers itself when constructed.
+            new CursorTimeoutParameter();
+        }
+        return Status::OK();
+    }
+
     /* note called outside of locks (other than ccmutex) so care must be exercised */
     bool ClientCursor::shouldTimeout( unsigned millis ) {
         _idleAgeMillis += millis;
-        return _idleAgeMillis > 600000 && _pinValue == 0;
+        dassert(idleAgeTimeoutMillis > 0);
+        return _idleAgeMillis > static_cast<unsigned>(idleAgeTimeoutMillis) && _pinValue == 0;
+    }
+
+    void ClientCursor::resetIdleAge() {
+        _idleAgeMillis = 0;
     }
 
     /* called every 4 seconds.  millis is amount of idle time passed since the last call -- could be zero */
     void ClientCursor::idleTimeReport(unsigned millis) {
-        bool foundSomeToTimeout = false;
-
-        // two passes so that we don't need to readlock unless we really do some timeouts
-        // we assume here that incrementing _idleAgeMillis outside readlock is ok.
-        {
-            recursive_scoped_lock lock(ccmutex);
-            {
-                unsigned sz = clientCursorsById.size();
-                static time_t last;
-                if( sz >= 100000 ) { 
-                    if( time(0) - last > 300 ) {
-                        last = time(0);
-                        log() << "warning number of open cursors is very large: " << sz << endl;
-                    }
-                }
-            }
-            for ( CCById::iterator i = clientCursorsById.begin(); i != clientCursorsById.end();  ) {
-                CCById::iterator j = i;
-                i++;
-                if( j->second->shouldTimeout( millis ) ) {
-                    foundSomeToTimeout = true;
-                }
-            }
+        LockedIterator i;
+        unsigned sz = clientCursorsById.size();
+        if (sz >= 100000) { 
+            RATELIMITED(300000) log() << "warning number of open cursors is very large: " << sz << endl;
         }
-
-        if( foundSomeToTimeout ) {
-            Lock::GlobalRead lk;
-            for( LockedIterator i; i.ok(); ) {
-                ClientCursor *cc = i.current();
-                if( cc->shouldTimeout(0) ) {
-                    numberTimedOut++;
-                    LOG(1) << "killing old cursor " << cc->_cursorid << ' ' << cc->_ns
-                           << " idle:" << cc->idleTime() << "ms\n";
-                    i.deleteAndAdvance();
-                }
-                else {
-                    i.advance();
-                }
+        while (i.ok()) {
+            ClientCursor *cc = i.current();
+            if (cc->shouldTimeout(millis)) {
+                LOG(1) << "killing old cursor " << cc->_cursorid << ' ' << cc->_ns
+                       << " idle:" << cc->idleTime() << "ms" << endl;
+                i.deleteAndAdvance();
+            } else {
+                i.advance();
             }
         }
     }
@@ -173,13 +172,29 @@ namespace mongo {
         delete cc;
         _i = clientCursorsById.upper_bound( id );
     }
+
+    void ClientCursor::initCursorID() {
+        {
+            recursive_scoped_lock lock(ccmutex);
+            _cursorid = allocCursorId_inlock();
+            clientCursorsById.insert( make_pair(_cursorid, this) );
+        }
+        
+        if (_partOfMultiStatementTxn) {
+            transactions = cc().txnStack();
+            // This cursor is now part of a multi-statement transaction and must be
+            // closed before that txn commits or aborts. Note it in the rollback.
+            ClientCursorRollback &rollback = cc().txn().clientCursorRollback();
+            rollback.noteClientCursor(_cursorid);
+        }
+    }
+
     
     ClientCursor::ClientCursor(int queryOptions, const shared_ptr<Cursor>& c, const string& ns,
-                               BSONObj query, const bool inMultiStatementTxn ) :
-        _ns(ns), _db( cc().database() ),
+                               BSONObj query, const bool inMultiStatementTxn, bool createCursorID ) :
+        _cursorid(INVALID_CURSOR_ID), _ns(ns), _db( cc().database() ),
         _c(c), _pos(0),
         _query(query),  _queryOptions(queryOptions),
-        _slaveReadTillTS(0),
         _idleAgeMillis(0), _pinValue(0),
         _partOfMultiStatementTxn(inMultiStatementTxn) {
 
@@ -189,18 +204,7 @@ namespace mongo {
         verify( str::startsWith(_ns, _db->name()) );
         if( queryOptions & QueryOption_NoCursorTimeout )
             noTimeout();
-        recursive_scoped_lock lock(ccmutex);
-        _cursorid = allocCursorId_inlock();
-        clientCursorsById.insert( make_pair(_cursorid, this) );
-
-        if (_partOfMultiStatementTxn) {
-            transactions = cc().txnStack();
-            // This cursor is now part of a multi-statement transaction and must be
-            // closed before that txn commits or aborts. Note it in the rollback.
-            ClientCursorRollback &rollback = cc().txn().clientCursorRollback();
-            rollback.noteClientCursor(_cursorid);
-        }
-
+        
         if ( ! _c->modifiedKeys() ) {
             // store index information so we can decide if we can
             // get something out of the index key rather than full object
@@ -216,7 +220,9 @@ namespace mongo {
                 x++;
             }
         }
-
+        if (createCursorID) {
+            initCursorID();
+        }
     }
 
     ClientCursor::~ClientCursor() {
@@ -226,7 +232,7 @@ namespace mongo {
             return;
         }
 
-        {
+        if (_cursorid != INVALID_CURSOR_ID) {
             recursive_scoped_lock lock(ccmutex);
 
             clientCursorsById.erase(_cursorid);
@@ -371,7 +377,6 @@ namespace mongo {
         BSONElement e = curr["_id"];
         if ( e.type() == BinData ) {
             _slaveReadTill = getGTIDFromBSON("_id", curr);
-            _slaveReadTillTS = curr["ts"]._numberLong();
         }
     }
 
@@ -379,10 +384,6 @@ namespace mongo {
         if ( _slaveReadTill.isInitial() )
             return;
         mongo::updateSlaveLocation( curop , _ns.c_str() , _slaveReadTill );
-    }
-
-    bool ClientCursor::lastOpForSlaveTooOld() {
-        return opForSlaveTooOld(_slaveReadTillTS);
     }
 
     void ClientCursor::appendStats( BSONObjBuilder& result ) {

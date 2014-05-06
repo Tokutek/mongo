@@ -30,6 +30,8 @@
 
 namespace CursorTests {
 
+    using boost::shared_ptr;
+
     namespace IndexCursor {
 
         using mongo::IndexCursor;
@@ -72,10 +74,10 @@ namespace CursorTests {
                 int v[] = { 1, 2, 4, 6 };
                 boost::shared_ptr< FieldRangeVector > frv( vec( v, 4 ) );
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Client::WriteContext tc(ns);
+                Client::WriteContext tc(ns, mongo::unittest::EMPTY_STRING);
                 {
-                    shared_ptr<IndexCursor> _c( IndexCursor::make( nsdetails( ns ), nsdetails( ns )->idx(1), frv, 0, 1 ) );
-                    IndexCursor &c = *_c.get();
+                    shared_ptr<Cursor> _c( Cursor::make( getCollection( ns ), getCollection( ns )->idx(1), frv, 0, 1 ) );
+                    Cursor &c = *_c.get();
                     ASSERT_EQUALS( "IndexCursor a_1 multi", c.toString() );
                     double expected[] = { 1, 2, 4, 5, 6 };
                     for( int i = 0; i < 5; ++i ) {
@@ -104,10 +106,10 @@ namespace CursorTests {
                 int v[] = { -50, 2, 40, 60, 109, 200 };
                 boost::shared_ptr< FieldRangeVector > frv( vec( v, 6 ) );
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Client::WriteContext tc(ns);
+                Client::WriteContext tc(ns, mongo::unittest::EMPTY_STRING);
                 {
-                    shared_ptr<IndexCursor> _c( IndexCursor::make(nsdetails( ns ), nsdetails( ns )->idx(1), frv, 0, 1 ) );
-                    IndexCursor &c = *_c.get();
+                    shared_ptr<Cursor> _c( Cursor::make(getCollection( ns ), getCollection( ns )->idx(1), frv, 0, 1 ) );
+                    Cursor &c = *_c.get();
                     ASSERT_EQUALS( "IndexCursor a_1 multi", c.toString() );
                     double expected[] = { 0, 1, 2, 109 };
                     for( int i = 0; i < 4; ++i ) {
@@ -134,10 +136,10 @@ namespace CursorTests {
                 int v[] = { 1, 2, 4, 6 };
                 boost::shared_ptr< FieldRangeVector > frv( vec( v, 4, -1 ) );
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Client::WriteContext ctx( ns );
+                Client::WriteContext ctx( ns , mongo::unittest::EMPTY_STRING );
                 {
-                    shared_ptr<IndexCursor> _c( IndexCursor::make( nsdetails( ns ), nsdetails( ns )->idx(1), frv, 0, -1 ) );
-                    IndexCursor& c = *_c.get();
+                    shared_ptr<Cursor> _c( Cursor::make( getCollection( ns ), getCollection( ns )->idx(1), frv, 0, -1 ) );
+                    Cursor& c = *_c.get();
                     ASSERT_EQUALS( "IndexCursor a_1 reverse multi", c.toString() );
                     double expected[] = { 6, 5, 4, 2, 1 };
                     for( int i = 0; i < 5; ++i ) {
@@ -171,14 +173,14 @@ namespace CursorTests {
                 }
 
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Client::WriteContext ctx( ns() );
+                Client::WriteContext ctx( ns(), mongo::unittest::EMPTY_STRING );
                 FieldRangeSet frs( ns(), spec, true, true );
                 boost::shared_ptr< FieldRangeVector > frv( new FieldRangeVector( frs, idx(), direction() ) );
                 {
-                    NamespaceDetails *d = nsdetails(ns());
+                    Collection *d = getCollection(ns());
                     int i = d->findIndexByKeyPattern(idx());
                     verify(i >= 0);
-                    shared_ptr<IndexCursor> c( IndexCursor::make( d, d->idx( i ), frv, 0, direction() ) );
+                    shared_ptr<Cursor> c( Cursor::make( d, d->idx( i ), frv, 0, direction() ) );
                     Matcher m( spec );
                     int count = 0;
                     while( c->ok() ) {
@@ -302,10 +304,10 @@ namespace CursorTests {
                 FieldRangeSet frs( ns(), BSON( "b" << 30 ), true, true );
                 boost::shared_ptr<FieldRangeVector> frv( new FieldRangeVector( frs, idxPattern, 1 ) );
                 Client::Transaction transaction(DB_SERIALIZABLE);
-                Client::WriteContext ctx( ns() );
+                Client::WriteContext ctx( ns(), mongo::unittest::EMPTY_STRING );
                 {
-                    shared_ptr<IndexCursor> c( IndexCursor::make( nsdetails( ns() ),
-                                                                  nsdetails( ns() )->idx(1),
+                    shared_ptr<Cursor> c( Cursor::make( getCollection( ns() ),
+                                                                  getCollection( ns() )->idx(1),
                                                                   frv,
                                                                   0, 1 ) );
 
@@ -387,7 +389,7 @@ namespace CursorTests {
                 int matchCount = 0;
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
-                    Client::ReadContext ctx( ns() );
+                    Client::ReadContext ctx( ns(), mongo::unittest::EMPTY_STRING );
                     boost::shared_ptr<Cursor> c = getOptimizedCursor( ns(),
                                                                       query,
                                                                       BSONObj(),
@@ -433,7 +435,7 @@ namespace CursorTests {
                 _c.insert( ns(), BSON( "_id" << 1 << "a" << 9 ) );
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
-                    Client::ReadContext ctx( ns() );
+                    Client::ReadContext ctx( ns(), mongo::unittest::EMPTY_STRING );
                     boost::shared_ptr<Cursor> c =
                             getOptimizedCursor( ns(),
                                                 BSON( "a" << GT << 0 << LT << 5 ),
@@ -472,7 +474,7 @@ namespace CursorTests {
                                                           BSONObj() ) ) );
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
-                    Client::ReadContext ctx( ns() );
+                    Client::ReadContext ctx( ns(), mongo::unittest::EMPTY_STRING );
                     boost::shared_ptr<Cursor> c =
                             getOptimizedCursor( ns(),
                                                                   BSON( "a.b" << 2 << "a.c" << 2 ),
@@ -505,7 +507,7 @@ namespace CursorTests {
                 _c.insert( ns(), BSON( "_id" << 1 << "a" << BSONObj() ) );
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
-                    Client::ReadContext ctx( ns() );
+                    Client::ReadContext ctx( ns(), mongo::unittest::EMPTY_STRING );
                     boost::shared_ptr<Cursor> c =
                             getOptimizedCursor( ns(),
                                                                   BSON( "a" << GTE << "" ),
@@ -537,7 +539,7 @@ namespace CursorTests {
                 _c.insert( ns(), BSON( "_id" << 1 << "a" << true ) );
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 {
-                    Client::ReadContext ctx( ns() );
+                    Client::ReadContext ctx( ns(), mongo::unittest::EMPTY_STRING );
                     boost::shared_ptr<Cursor> c =
                             getOptimizedCursor( ns(),
                                                                   BSON( "a" << LTE << Date_t( 1 ) ),
@@ -571,8 +573,8 @@ namespace CursorTests {
             public:
                 Base() :
                     _transaction(DB_SERIALIZABLE),
-                    _ctx( ns() ),
-                    _cursor( BasicCursor::make( nsdetails(ns()) ) ) {
+                    _ctx( ns(), mongo::unittest::EMPTY_STRING ),
+                    _cursor( BasicCursor::make( getCollection(ns()) ) ) {
                     ASSERT( _cursor );
                     _clientCursor.reset( new ClientCursor( 0, _cursor, ns() ) );
                 }

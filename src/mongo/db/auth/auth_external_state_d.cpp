@@ -20,11 +20,10 @@
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/client.h"
-#include "mongo/db/dbhelpers.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/jsobj.h"
-#include "mongo/db/namespace_details.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/storage/exception.h"
 
 namespace mongo {
@@ -44,17 +43,13 @@ namespace mongo {
         bool ok = false;
         try {
             Client::GodScope gs;
-            Client::ReadContext ctx(usersNamespace);
+            LOCK_REASON(lockReason, "auth: looking up user");
+            Client::ReadContext ctx(usersNamespace, lockReason);
             // we want all authentication stuff to happen on an alternate stack
             Client::AlternateTransactionStack altStack;
-
             Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
-            NamespaceDetails *d = nsdetails(usersNamespace);
-            if (d == NULL) {
-                return false;
-            }
-            BSONObj tmpResult;
-            ok = d->findOne(query, result != NULL ? *result : tmpResult);
+            BSONObj tmpresult;
+            ok = Collection::findOne(usersNamespace, query, result != NULL ? *result : tmpresult);
             if (ok) {
                 txn.commit();
             }
