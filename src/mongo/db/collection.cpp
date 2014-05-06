@@ -3402,6 +3402,15 @@ namespace mongo {
         dropPartitionInternal(id);
         sanityCheck();
     }
+
+    class OrderedBSONComparator {
+        const Ordering _ordering;
+      public:
+        OrderedBSONComparator(const Ordering ordering) : _ordering(ordering) {}
+        bool operator()(const BSONObj& a, const BSONObj &b) const {
+            return a.woCompare(b, _ordering) < 0;
+        }
+    };
     
     uint64_t PartitionedCollection::partitionWithPK(const BSONObj& pk) const {
         // if there is one partition, then the answer is easy
@@ -3413,28 +3422,15 @@ namespace mongo {
         if (pk.woCompare(_partitionPivots[numPartitions()-2], _ordering) > 0) {
             return numPartitions() - 1;
         }
-        // It is not in the last partition, now we must do a binary search
-        uint64_t high = numPartitions() - 2;
-        uint64_t low = 0;
-        while (low < high) {
-            uint64_t mid = (high + low) / 2;
-            int cmp = pk.woCompare(_partitionPivots[mid], _ordering);
-            if (cmp == 0) {
-                // we are right at a boundary, we know the result
-                // return it
-                return mid;
-            }
-            else if (cmp < 0 ) {
-                // too high
-                high = mid;
-            }
-            else {
-                // too low
-                low = mid+1;
-            }
-        }
-        verify (low == high);
-        return low;
+        // first check the last partition, as we expect many inserts and
+        //queries to go there
+        std::vector<BSONObj>::const_iterator low = std::lower_bound(
+            _partitionPivots.begin(),
+            _partitionPivots.end(),
+            pk,
+            OrderedBSONComparator(_ordering)
+            );
+        return low - _partitionPivots.begin();
     }
 
     bool PartitionedCollection::rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &result) {
