@@ -1,5 +1,3 @@
-// This test is temporarily disabled until it can be fixed to be reliable.  #929
-if (0) {
 
 load("jstests/replsets/rslib.js");
 
@@ -35,12 +33,7 @@ doTest = function( signal ) {
   //master.runCommand({getlasterror:1, w:2});
   // put a sleep here instead of a getlasterror, because getlasterror does
   // not guarantee that the data is applied, just that it is on the slave
-  sleep(500);
   var doc = master.foo.findOne();
-  assert.eq(doc.x, 1);
-
-  // make sure slave has it
-  var doc = slave[0].foo.findOne();
   assert.eq(doc.x, 1);
 
   // make sure delayed slave doesn't have it
@@ -66,12 +59,8 @@ doTest = function( signal ) {
     master.foo.insert({_id : i, "foo" : "bar"});
   }
   master.runCommand({getlasterror:1,w:2});
-  // put a sleep here instead of a getlasterror, because getlasterror does
-  // not guarantee that the data is applied, just that it is on the slave
-  sleep(500);
 
   assert.eq(master.foo.findOne({_id : 99}).foo, "bar");
-  assert.eq(slave[0].foo.findOne({_id : 99}).foo, "bar");
   assert.eq(slave[1].foo.findOne({_id : 99}), null);
 
   for (var i=0; i<8; i++) {
@@ -102,9 +91,6 @@ doTest = function( signal ) {
 
   master.foo.insert({_id : 123, "x" : "foo"});
   master.runCommand({getlasterror:1,w:2});
-  // put a sleep here instead of a getlasterror, because getlasterror does
-  // not guarantee that the data is applied, just that it is on the slave
-  sleep(500);
 
   conn.setSlaveOk();
 
@@ -153,4 +139,3 @@ doTest = function( signal ) {
 
 doTest(15);
 
-}
