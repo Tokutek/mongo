@@ -160,6 +160,9 @@ Bug fixes
       with only the `read` role from creating serializable transactions
       and running queries that take document-level locks.  (#1112)
 
+    - Replication secondaries now handle query errors while checking for
+      rollback by retrying, rather than crashing.  (#1113)
+
 
 tokumx 1.4.1
 ------------
