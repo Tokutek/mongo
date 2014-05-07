@@ -45,6 +45,7 @@
 #include "mongo/db/kill_current_op.h"
 #include "mongo/db/module.h"
 #include "mongo/db/ops/delete.h"
+#include "mongo/db/ops/insert.h"
 #include "mongo/db/ops/update.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/repl/rs.h"
@@ -330,6 +331,14 @@ namespace mongo {
         static const string versionNs;
         static const BSONFieldValue<string> versionIdValue;
         static const BSONField<int> valueField;
+        static const BSONField<int> upgradedToField;
+        static const BSONField<Date_t> upgradedAtField;
+        static const BSONField<BSONObj> upgradedByField;
+        static const BSONField<string> tokumxVersionField;
+        static const BSONField<string> mongodbVersionField;
+        static const BSONField<string> tokumxGitField;
+        static const BSONField<string> tokukvGitField;
+
 
         static Status countNamespaces(const StringData&) {
             _numNamespaces++;
@@ -545,6 +554,14 @@ namespace mongo {
                           false   // multi
                           );  // logop
 
+            // Keep a little history of what we've done
+            insertObject(versionNs.c_str(), BSON(upgradedToField(targetVersion) <<
+                                                 upgradedAtField(jsTime()) <<
+                                                 upgradedByField(BSON(tokumxVersionField(tokumxVersionString) <<
+                                                                      mongodbVersionField(mongodbVersionString) <<
+                                                                      tokumxGitField(gitVersion()) <<
+                                                                      tokukvGitField(tokukvVersion())))),
+                         0, false, false);
             _currentVersion = targetVersion;
             return Status::OK();
         }
@@ -619,6 +636,13 @@ namespace mongo {
     const string DiskFormatVersion::versionNs("local.system.version");
     const BSONFieldValue<string> DiskFormatVersion::versionIdValue("_id", "diskFormatVersion");
     const BSONField<int> DiskFormatVersion::valueField("value");
+    const BSONField<int> DiskFormatVersion::upgradedToField("upgradedTo");
+    const BSONField<Date_t> DiskFormatVersion::upgradedAtField("upgradedAt");
+    const BSONField<BSONObj> DiskFormatVersion::upgradedByField("upgradedBy");
+    const BSONField<string> DiskFormatVersion::tokumxVersionField("tokumxVersion");
+    const BSONField<string> DiskFormatVersion::mongodbVersionField("mongodbVersion");
+    const BSONField<string> DiskFormatVersion::tokumxGitField("tokumx");
+    const BSONField<string> DiskFormatVersion::tokukvGitField("tokukv");
 
     void _initAndListen(int listenPort ) {
 
