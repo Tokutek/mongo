@@ -396,4 +396,4 @@ namespace mongo {
         return NULL;
     }
 
-}
+}  // namespace mongo

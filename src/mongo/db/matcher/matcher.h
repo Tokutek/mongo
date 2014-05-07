@@ -101,4 +101,4 @@ namespace mongo {
 
     };
 
-}
+}  // namespace mongo
