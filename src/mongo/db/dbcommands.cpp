@@ -1088,6 +1088,27 @@ namespace mongo {
         }
     } cmdrenamecollection;
 
+    class CmdShowSizes : public InformationCommand {
+    public:
+        CmdShowSizes() : InformationCommand("showSizes") {}
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {} // No auth required
+        virtual void help( stringstream& help ) const {
+            help << "internal only";
+        }
+        bool run(const string& db, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            if (getenv("TOKUMX_SHOW_NO_SIZES")) {
+                result.append("showSizes", false);
+            }
+            else {
+                result.append("showSizes", true);
+            }
+            return true;
+        }
+    } cmdShowSizes;
+
+
     class CmdListDatabases : public Command {
     public:
         virtual bool slaveOk() const { return true; }

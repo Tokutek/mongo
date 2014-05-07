@@ -761,11 +761,17 @@ shellHelper.show = function (what) {
     }
 
     if (what == "collections" || what == "tables") {
+        var showSizes = db.runCommand("showSizes");
         db.forEachCollectionName(function (n) {
-            var c = db.runCommand({collStats : n, scale : 1});
-            var uncompressedSize = c.size + c.totalIndexSize;
-            var compressedSize = c.storageSize + c.totalIndexStorageSize;
-            print(n + "\t" + shellHelper._prettyBytes(uncompressedSize) + " (uncompressed),\t" + shellHelper._prettyBytes(compressedSize) + " (compressed)");
+            if (showSizes.showSizes) {
+                var c = db.runCommand({collStats : n, scale : 1});
+                var uncompressedSize = c.size + c.totalIndexSize;
+                var compressedSize = c.storageSize + c.totalIndexStorageSize;
+                print(n + "\t" + shellHelper._prettyBytes(uncompressedSize) + " (uncompressed),\t" + shellHelper._prettyBytes(compressedSize) + " (compressed)");
+            }
+            else {
+                print(n);
+            }
         });
         return "";
     }
