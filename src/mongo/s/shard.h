@@ -192,6 +192,12 @@ namespace mongo {
         }
 
         bool operator<( const ShardStatus& other ) const {
+            // draining shards are always "bigger", so we avoid picking them for new data
+            if (_isDraining && !other._isDraining) {
+                return false;
+            } else if (!_isDraining && other._isDraining) {
+                return true;
+            }
             return _dataSize < other._dataSize;
         }
 
@@ -215,6 +221,7 @@ namespace mongo {
         Shard _shard;
         long long _dataSize;
         bool _hasOpsQueued;  // true if 'writebacks' are pending
+        bool _isDraining;
         double _writeLock;
         string _mongoVersion;
     };

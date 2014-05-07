@@ -405,7 +405,7 @@ namespace mongo {
     }
 
     ShardStatus::ShardStatus( const Shard& shard , const BSONObj& obj , const BSONObj& dblistobj )
-        : _shard( shard ) {
+        : _shard( shard ), _isDraining(shard.isDraining()) {
         _dataSize = dblistobj.getFieldDotted("totalUncompressedSize").numberLong();
         _hasOpsQueued = obj["writeBacksQueued"].Bool();
         _writeLock = 0; // TODO
