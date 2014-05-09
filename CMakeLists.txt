@@ -273,7 +273,7 @@ function (remove_as_needed)
       set_target_properties(${arg} PROPERTIES LINK_FLAGS "${_as_needed_${arg}_link_flags} -Wl,--no-as-needed")
     endforeach ()
   endif ()
-endif ()
+endfunction ()
 
 if (CMAKE_SIZEOF_VOID_P EQUAL 8)
   set(INSTALL_LIBDIR lib64 CACHE STRING "where we should install libs")
