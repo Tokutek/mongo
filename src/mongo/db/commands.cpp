@@ -53,7 +53,7 @@ namespace mongo {
                                                            false);
     }
 
-    string Command::parseNsFullyQualified(const string& dbname, const BSONObj& cmdObj) const { 
+    string Command::parseNsFullyQualified(const string& dbname, const BSONObj& cmdObj) const {
         string s = cmdObj.firstElement().valuestr();
         StringData dbstr = nsToDatabaseSubstring(s);
         // these are for security, do not remove:

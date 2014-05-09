@@ -12,6 +12,18 @@
  *
  *    You should have received a copy of the GNU Affero General Public License
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *    As a special exception, the copyright holders give permission to link the
+ *    code of portions of this program with the OpenSSL library under certain
+ *    conditions as described in each individual source file and distribute
+ *    linked combinations including the program with the OpenSSL library. You
+ *    must comply with the GNU Affero General Public License in all respects for
+ *    all of the code used other than as permitted herein. If you modify file(s)
+ *    with this exception, you may extend this exception to your version of the
+ *    file(s), but you are not obligated to do so. If you do not wish to do so,
+ *    delete this exception statement from your version. If you delete this
+ *    exception statement from all source files in the program, then also delete
+ *    it in the license file.
  */
 
 #include "mongo/db/query_plan.h"
@@ -345,58 +357,8 @@ doneCheckOrder:
         return 0;
     }
 
-    /**
-     * Detects $exists:false predicates in a matcher.  All $exists:false predicates will be
-     * detected.  Some $exists:true predicates may be incorrectly reported as $exists:false due to
-     * the approximate nature of the implementation.
-     */
-    class ExistsFalseDetector : public MatcherVisitor {
-    public:
-        ExistsFalseDetector( const Matcher& originalMatcher );
-        bool hasFoundExistsFalse() const { return _foundExistsFalse; }
-        void visitMatcher( const Matcher& matcher ) { _currentMatcher = &matcher; }
-        void visitElementMatcher( const ElementMatcher& elementMatcher );
-    private:
-        const Matcher* _originalMatcher;
-        const Matcher* _currentMatcher;
-        bool _foundExistsFalse;
-    };
-
-    ExistsFalseDetector::ExistsFalseDetector( const Matcher& originalMatcher ) :
-        _originalMatcher( &originalMatcher ),
-        _currentMatcher( 0 ),
-        _foundExistsFalse() {
-    }
-
-    /** Matches $exists:false and $not:{$exists:true} exactly. */
-    static bool isExistsFalsePredicate( const ElementMatcher& elementMatcher ) {
-        bool hasTrueValue = elementMatcher._toMatch.trueValue();
-        bool hasNotModifier = elementMatcher._isNot;
-        return hasNotModifier ? hasTrueValue : !hasTrueValue;
-    }
-    
-    void ExistsFalseDetector::visitElementMatcher( const ElementMatcher& elementMatcher ) {
-        if ( elementMatcher._compareOp != BSONObj::opEXISTS ) {
-            // Only consider $exists predicates.
-            return;
-        }
-        if ( _currentMatcher != _originalMatcher ) {
-            // Treat all $exists predicates nested below the original matcher as $exists:false.
-            // This approximation is used because a nesting operator may change the matching
-            // semantics of $exists:true.
-            _foundExistsFalse = true;
-            return;
-        }
-        if ( isExistsFalsePredicate( elementMatcher ) ) {
-            // Top level $exists operators are matched exactly.
-            _foundExistsFalse = true;
-        }
-    }
-
     bool QueryPlan::hasPossibleExistsFalsePredicate() const {
-        ExistsFalseDetector detector( matcher()->docMatcher() );
-        matcher()->docMatcher().visit( detector );
-        return detector.hasFoundExistsFalse();
+        return matcher()->docMatcher().hasExistsFalse();
     }
     
     bool QueryPlan::queryBoundsExactOrderSuffix() const {

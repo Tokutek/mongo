@@ -46,16 +46,27 @@ add_library(coredb STATIC
   commands/rename_collection_common
   commands/parameters
   commands/server_status
-  pipeline/pipeline
   dbcommands_generic
   dbpath
   dbwebserver
   keypattern
   keygenerator
-  matcher
   spillable_vector
   txn_context
   gtid
+  matcher/expression_array
+  matcher/expression
+  matcher/expression_leaf
+  matcher/expression_parser
+  matcher/expression_parser_tree
+  matcher/expression_tree
+  matcher/expression_where
+  matcher/matchable
+  matcher/match_details
+  matcher/matcher
+  matcher/path
+  matcher/path_internal
+  pipeline/pipeline
   pipeline/accumulator
   pipeline/accumulator_add_to_set
   pipeline/accumulator_avg

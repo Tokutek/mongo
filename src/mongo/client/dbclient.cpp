@@ -1193,14 +1193,14 @@ namespace mongo {
                            BSON( "deleteIndexes" << nsToCollectionSubstring( ns ) << "index" << indexName ) ,
                            info ) ) {
             LOG(_logLevel) << "dropIndex failed: " << info << endl;
-            uassert( 10007 ,  "dropIndex failed" , 0 );
+            uassert( 17196 ,  "dropIndex failed" , 0 );
         }
         resetIndexCache();
     }
 
     void DBClientWithCommands::dropIndexes( const string& ns ) {
         BSONObj info;
-        uassert( 10008 ,  "dropIndexes failed" , runCommand( nsToDatabase( ns ) ,
+        uassert( 17197 ,  "dropIndexes failed" , runCommand( nsToDatabase( ns ) ,
                  BSON( "deleteIndexes" << nsToCollectionSubstring( ns ) << "index" << "*") ,
                  info ) );
         resetIndexCache();

@@ -257,9 +257,10 @@ public:
         }
 
         _curns = ns.c_str();
+
         NamespaceString nss(_curns);
-        _curdb = nss.db;
-        _curcoll = nss.coll;
+        _curdb = nss.db();
+        _curcoll = nss.coll();
 
         // If drop is not used, warn if the collection exists.
         if (!_drop) {
@@ -328,7 +329,8 @@ public:
             BSONObj userMatch = BSON("user" << obj["user"].String());
             conn().update(_curns, Query(userMatch), obj);
             _users.erase(obj["user"].String());
-        } else {
+        }
+        else {
             conn().insert( _curns , obj );
 
             // wait for insert to propagate to "w" nodes (doesn't warn if w used without replset)
