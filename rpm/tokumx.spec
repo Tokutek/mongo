@@ -223,6 +223,7 @@ install -dm755 %{buildroot}%{_mandir}/man1
 install -p -m644 -t %{buildroot}%{_mandir}/man1 debian/*.1
 
 mv %{buildroot}%{_libdir}/%{product_name}/libmongoclient.so %{buildroot}%{_libdir}
+install -p -dm755 %{buildroot}%{_libdir}/%{product_name}/plugins
 
 %post -p /sbin/ldconfig
 
@@ -333,6 +334,7 @@ fi
 
 %doc %{_docdir}/%{product_name}
 %{_libdir}/%{product_name}
+${_libdir}/${product_name}/plugins
 
 %files -n lib%{name}
 
