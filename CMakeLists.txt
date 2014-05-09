@@ -267,7 +267,7 @@ function(link_recursive_deps bin)
 endfunction()
 
 function (remove_as_needed)
-  if (UNIX)
+  if (UNIX AND NOT APPLE)
     foreach (arg ${ARGV})
       get_target_property(_as_needed_${arg}_link_flags ${arg} LINK_FLAGS)
       if (NOT _as_needed_${arg}_link_flags)
