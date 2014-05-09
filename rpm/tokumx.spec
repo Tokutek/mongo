@@ -334,7 +334,7 @@ fi
 
 %doc %{_docdir}/%{product_name}
 %{_libdir}/%{product_name}
-${_libdir}/${product_name}/plugins
+%{_libdir}/%{product_name}/plugins
 
 %files -n lib%{name}
 
