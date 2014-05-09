@@ -435,7 +435,7 @@ public:
             // Pass no indexes or collection options, since this tool has no
             // way of specifying either.
             NamespaceString n(ns);
-            loader.reset(new RemoteLoader(conn(), n.db, n.coll, vector<BSONObj>(), BSONObj()));
+            loader.reset(new RemoteLoader(conn(), n.db(), n.coll(), vector<BSONObj>(), BSONObj()));
         }
         while ( _jsonArray || in->rdstate() == 0 ) {
             try {

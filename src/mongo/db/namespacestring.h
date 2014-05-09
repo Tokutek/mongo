@@ -59,20 +59,23 @@ namespace mongo {
        cout << ns.coll; // "orders"
     */
     class NamespaceString {
+        string _db;
+        string _coll; // note collection names can have periods in them for organizing purposes (e.g. "system.indexes")
     public:
-        string db;
-        string coll; // note collection names can have periods in them for organizing purposes (e.g. "system.indexes")
+
+        const string &db() const { return _db; }
+        const string &coll() const { return _coll; } // note collection names can have periods in them for organizing purposes (e.g. "system.indexes")
 
         NamespaceString( const char * ns ) { init(ns); }
         NamespaceString( const string& ns ) { init(ns.c_str()); }
 
-        string ns() const { return db + '.' + coll; }
+        string ns() const { return _db + '.' + _coll; }
 
-        bool isSystem() const { return strncmp(coll.c_str(), "system.", 7) == 0; }
+        bool isSystem() const { return strncmp(_coll.c_str(), "system.", 7) == 0; }
         static bool isSystem(const StringData &ns) {
             return nsToCollectionSubstring(ns).startsWith("system.");
         }
-        bool isCommand() const { return coll == "$cmd"; }
+        bool isCommand() const { return _coll == "$cmd"; }
         static bool isCommand(const StringData &ns) {
             return nsToCollectionSubstring(ns) == "$cmd";
         }
@@ -81,7 +84,7 @@ namespace mongo {
          * @return true if the namespace is valid. Special namespaces for internal use are considered as valid.
          */
         bool isValid() const {
-            return validDBName( db ) && !coll.empty();
+            return validDBName( _db ) && !_coll.empty();
         }
         static bool isValid(const StringData &ns) {
             return validDBName(nsToDatabaseSubstring(ns)) && !nsToCollectionSubstring(ns).empty();
@@ -91,11 +94,11 @@ namespace mongo {
 
         bool operator==( const string& nsIn ) const { return nsIn == ns(); }
         bool operator==( const char* nsIn ) const { return (string)nsIn == ns(); }
-        bool operator==( const NamespaceString& nsIn ) const { return nsIn.db == db && nsIn.coll == coll; }
+        bool operator==( const NamespaceString& nsIn ) const { return nsIn._db == _db && nsIn._coll == _coll; }
 
         bool operator!=( const string& nsIn ) const { return nsIn != ns(); }
         bool operator!=( const char* nsIn ) const { return (string)nsIn != ns(); }
-        bool operator!=( const NamespaceString& nsIn ) const { return nsIn.db != db || nsIn.coll != coll; }
+        bool operator!=( const NamespaceString& nsIn ) const { return nsIn._db != _db || nsIn._coll != _coll; }
 
         size_t size() const { return ns().size(); }
 
@@ -123,15 +126,15 @@ namespace mongo {
 
         /**
          * samples:
-         *   good:  
-         *      foo  
+         *   good
+         *      foo
          *      bar
          *      foo-bar
          *   bad:
          *      foo bar
          *      foo.bar
          *      foo"bar
-         *        
+         *
          * @param db - a possible database name
          * @return if db is an allowed database name
          */
@@ -154,7 +157,7 @@ namespace mongo {
          *   bad:
          *      foo.
          *
-         * @param dbcoll - a possible collection name of the form db.coll
+         * @param ns - a full namesapce (a.b)
          * @return if db.coll is an allowed collection name
          */
         static bool validCollectionName(const StringData &dbcoll) {
@@ -166,8 +169,8 @@ namespace mongo {
         void init(const char *ns) {
             const char *p = strchr(ns, '.');
             if( p == 0 ) return;
-            db = string(ns, p - ns);
-            coll = p + 1;
+            _db = string(ns, p - ns);
+            _coll = p + 1;
         }
     };
 

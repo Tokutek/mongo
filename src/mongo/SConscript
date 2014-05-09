@@ -144,6 +144,50 @@ env.CppUnitTest('bson_validate_test', ['bson/bson_validate_test.cpp'],
 env.CppUnitTest('index_set_test', ['db/index_set_test.cpp'],
                 LIBDEPS=['bson','index_set'])
 
+env.StaticLibrary('path',
+                  ['db/matcher/path.cpp',
+                   'db/matcher/path_internal.cpp'],
+                  LIBDEPS=['bson',
+                           '$BUILD_DIR/mongo/db/common'])
+
+env.CppUnitTest('path_test', ['db/matcher/path_test.cpp'],
+                LIBDEPS=['path'])
+
+
+env.StaticLibrary('expressions',
+                  ['db/matcher/expression.cpp',
+                   'db/matcher/expression_array.cpp',
+                   'db/matcher/expression_leaf.cpp',
+                   'db/matcher/expression_tree.cpp',
+                   'db/matcher/expression_parser.cpp',
+                   'db/matcher/expression_parser_tree.cpp',
+                   'db/matcher/matchable.cpp',
+                   'db/matcher/match_details.cpp'],
+                  LIBDEPS=['bson',
+                           'path',
+                           '$BUILD_DIR/mongo/db/common',
+                           '$BUILD_DIR/third_party/pcrecpp'
+                           ] )
+
+env.StaticLibrary('expressions_where',
+                  ['db/matcher/expression_where.cpp'],
+                  LIBDEPS=['expressions'] )
+
+env.CppUnitTest('expression_test',
+                ['db/matcher/expression_test.cpp',
+                 'db/matcher/expression_leaf_test.cpp',
+                 'db/matcher/expression_tree_test.cpp',
+                 'db/matcher/expression_array_test.cpp'],
+                LIBDEPS=['expressions'] )
+
+env.CppUnitTest('expression_parser_test',
+                ['db/matcher/expression_parser_test.cpp',
+                 'db/matcher/expression_parser_array_test.cpp',
+                 'db/matcher/expression_parser_tree_test.cpp',
+                 'db/matcher/expression_parser_leaf_test.cpp'],
+                LIBDEPS=['expressions'] )
+
+
 env.CppUnitTest('bson_extract_test', ['bson/util/bson_extract_test.cpp'], LIBDEPS=['bson'])
 
 env.CppUnitTest('descriptive_stats_test',
@@ -279,6 +323,7 @@ env.StaticLibrary("coredb", [
         "db/spillable_vector.cpp",
         "db/txn_context.cpp",
         "db/gtid.cpp",
+        "db/matcher/matcher.cpp",
         "db/pipeline/accumulator.cpp",
         "db/pipeline/accumulator_add_to_set.cpp",
         "db/pipeline/accumulator_avg.cpp",
@@ -324,6 +369,8 @@ env.StaticLibrary("coredb", [
                            'db/common',
                            'plugins/plugins',
                            'server_parameters',
+                           'expressions',
+                           'expressions_where',
                            '$BUILD_DIR/mongo/foundation'])
 
 coreServerFiles = [ "db/client_basic.cpp",
@@ -574,6 +621,7 @@ env.StaticLibrary("serveronly", serverOnlyFiles,
                            "dbcmdline",
                            "defaultversion",
                            "index_set"])
+
 
 # These files go into mongos and mongod only, not into the shell or any tools.
 mongodAndMongosFiles = [

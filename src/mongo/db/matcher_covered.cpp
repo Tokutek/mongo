@@ -17,13 +17,25 @@
 *
 *    You should have received a copy of the GNU Affero General Public License
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*
+*    As a special exception, the copyright holders give permission to link the
+*    code of portions of this program with the OpenSSL library under certain
+*    conditions as described in each individual source file and distribute
+*    linked combinations including the program with the OpenSSL library. You
+*    must comply with the GNU Affero General Public License in all respects for
+*    all of the code used other than as permitted herein. If you modify file(s)
+*    with this exception, you may extend this exception to your version of the
+*    file(s), but you are not obligated to do so. If you do not wish to do so,
+*    delete this exception statement from your version. If you delete this
+*    exception statement from all source files in the program, then also delete
+*    it in the license file.
 */
 
-#include "pch.h"
-
-#include "mongo/db/matcher.h"
+#include "mongo/pch.h"
 
 #include "mongo/db/cursor.h"
+#include "mongo/db/matcher.h"
+#include "mongo/db/matcher_covered.h"
 #include "mongo/db/queryutil.h"
 
 namespace mongo {
@@ -54,11 +66,19 @@ namespace mongo {
     }
 
     bool CoveredIndexMatcher::matchesCurrent( Cursor * cursor , MatchDetails * details ) const {
-        const bool keyUsable = !cursor->indexKeyPattern().isEmpty() && !cursor->isMultiKey();
+        bool keyUsable = true;
+        if ( cursor->indexKeyPattern().isEmpty() ) { // unindexed cursor
+            keyUsable = false;
+        }
+        else if ( cursor->isMultiKey() ) {
+            keyUsable =
+                _keyMatcher.singleSimpleCriterion() &&
+                ( ! _docMatcher || _docMatcher->singleSimpleCriterion() );
+        }
         const BSONObj key = cursor->currKey();
-        dassert( key.isValid() );
+        LOG(5) << "CoveredIndexMatcher::matches() " << key.toString() << ", usable = " << keyUsable << endl;
 
-        LOG(5) << "CoveredIndexMatcher::matches() " << key.toString() << ", keyUsable " << keyUsable << endl;
+        dassert( key.isValid() );
 
         if ( details )
             details->resetOutput();
@@ -73,16 +93,18 @@ namespace mongo {
             }
         }
 
+        BSONObj obj = cursor->current();
+        bool res =
+            _docMatcher->matches( obj, details ) &&
+            !isOrClauseDup( obj );
+
         if ( details )
             details->setLoadedRecord( true );
 
-        // Couldn't match off key, need to read full document.
-        const BSONObj obj = cursor->current();
-        bool res = _docMatcher->matches( obj, details ) && !isOrClauseDup( obj );
         LOG(5) << "CoveredIndexMatcher _docMatcher->matches() returns " << res << endl;
         return res;
     }
-
+    
     bool CoveredIndexMatcher::isOrClauseDup( const BSONObj &obj ) const {
         for( vector<shared_ptr<FieldRangeVector> >::const_iterator i = _orDedupConstraints.begin();
             i != _orDedupConstraints.end(); ++i ) {

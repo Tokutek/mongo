@@ -70,7 +70,7 @@ namespace mongo {
         return Status::OK();
     }
 
-    string _extractHashFor(const BSONObj& dbHashResult, const string& collName) {
+    string _extractHashFor(const BSONObj& dbHashResult, const StringData& collName) {
 
         if (dbHashResult["collections"].type() != Object
             || dbHashResult["collections"].Obj()[collName].type() != String)
@@ -130,7 +130,7 @@ namespace mongo {
             connPtr.reset(ScopedDbConnection::getInternalScopedDbConnection(configLoc, 30));
             ScopedDbConnection& conn = *connPtr;
 
-            resultOk = conn->runCommand(nssA.db, BSON("dbHash" << true), result);
+            resultOk = conn->runCommand(nssA.db(), BSON("dbHash" << true), result);
         }
         catch (const DBException& e) {
             return e.toStatus();
@@ -140,11 +140,11 @@ namespace mongo {
 
         if (!resultOk) {
             return Status(ErrorCodes::UnknownError,
-                          stream() << "could not run dbHash command on " << nssA.db << " db"
+                          stream() << "could not run dbHash command on " << nssA.db() << " db"
                                    << causedBy(result.toString()));
         }
 
-        string hashResultA = _extractHashFor(result, nssA.coll);
+        string hashResultA = _extractHashFor(result, nssA.coll());
 
         if (hashResultA == "") {
             return Status(ErrorCodes::RemoteValidationError,
@@ -162,7 +162,7 @@ namespace mongo {
             connPtr.reset(ScopedDbConnection::getInternalScopedDbConnection(configLoc, 30));
             ScopedDbConnection& conn = *connPtr;
 
-            resultOk = conn->runCommand(nssB.db, BSON("dbHash" << true), result);
+            resultOk = conn->runCommand(nssB.db(), BSON("dbHash" << true), result);
         }
         catch (const DBException& e) {
             return e.toStatus();
@@ -172,11 +172,11 @@ namespace mongo {
 
         if (!resultOk) {
             return Status(ErrorCodes::UnknownError,
-                          stream() << "could not run dbHash command on " << nssB.db << " db"
+                          stream() << "could not run dbHash command on " << nssB.db() << " db"
                                    << causedBy(result.toString()));
         }
 
-        string hashResultB = _extractHashFor(result, nssB.coll);
+        string hashResultB = _extractHashFor(result, nssB.coll());
 
         if (hashResultB == "") {
             return Status(ErrorCodes::RemoteValidationError,
@@ -230,7 +230,7 @@ namespace mongo {
             verify(fromNSS.isValid());
 
             // TODO: EnsureIndex at some point, if it becomes easier?
-            string indexesNS = fromNSS.db + ".system.indexes";
+            string indexesNS = fromNSS.db() + ".system.indexes";
             scoped_ptr<DBClientCursor> cursor(_safeCursor(conn->query(indexesNS,
                                                                       BSON("ns" << fromNS))));
 
@@ -242,7 +242,7 @@ namespace mongo {
                 newIndexDesc.append("ns", toNS);
                 newIndexDesc.appendElementsUnique(next);
 
-                conn->insert(toNSS.db + ".system.indexes", newIndexDesc.done());
+                conn->insert(toNSS.db() + ".system.indexes", newIndexDesc.done());
                 _checkGLE(conn);
             }
         }
@@ -315,8 +315,8 @@ namespace mongo {
 
         // Verify indices haven't changed
         Status indexStatus = checkIdsTheSame(configLoc,
-                                             fromNSS.db + ".system.indexes",
-                                             toNSS.db + ".system.indexes");
+                                             fromNSS.db() + ".system.indexes",
+                                             toNSS.db() + ".system.indexes");
 
         if (!indexStatus.isOK()) {
             return indexStatus;
