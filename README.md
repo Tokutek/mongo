@@ -46,9 +46,9 @@ Packaging
 ---------
 
 TokuMX is available for 64-bit Linux systems.  Tokutek builds and provides
-packages for Centos 6, Debian 7, Fedora 20, and Ubuntu 12.04, 13.04, and
-13.10.  For other distributions of Linux, Tokutek provides a binary
-tarball that can be installed standalone.
+packages for Centos 5 and 6, Debian 7, Fedora 20, and Ubuntu 12.04, 12.10,
+13.04, 13.10, and 14.04.  For other distributions of Linux, Tokutek
+provides a binary tarball that can be installed standalone.
 
 Community downloads can be found [here][community].
 
