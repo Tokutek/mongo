@@ -311,15 +311,7 @@ namespace mongo {
                     root->add( s.getValue() );
                 }
                 else if ( mongoutils::str::equals( "text", rest ) ) {
-                    if ( e.type() != Object ) {
-                        return StatusWithMatchExpression( ErrorCodes::BadValue,
-                                                          "$text expects an object" );
-                    }
-                    StatusWithMatchExpression s = expressionParserTextCallback( e.Obj() );
-                    if ( !s.isOK() ) {
-                        return s;
-                    }
-                    root->add( s.getValue() );
+                    uasserted(0, "text matching not supported");
                 }
                 else if ( mongoutils::str::equals( "comment", rest ) ) {
                 }
@@ -715,13 +707,4 @@ namespace mongo {
 
     MatchExpressionParserWhereCallback expressionParserWhereCallback =
         expressionParserWhereCallbackDefault;
-
-    // Text
-    StatusWithMatchExpression expressionParserTextCallbackDefault( const BSONObj& queryObj ) {
-        return StatusWithMatchExpression( ErrorCodes::BadValue, "$text not linked in" );
-    }
-
-    MatchExpressionParserTextCallback expressionParserTextCallback =
-        expressionParserTextCallbackDefault;
-
 }

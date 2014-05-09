@@ -30,7 +30,7 @@
 
 #include "mongo/pch.h"
 #include "mongo/base/init.h"
-//#include "mongo/db/auth/authorization_session.h"
+#include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/client.h"
 #include "mongo/db/jsobj.h"
@@ -92,9 +92,8 @@ namespace mongo {
         _userScope = scope.getOwned();
 
         NamespaceString nswrapper( _ns );
-        const string userToken = ClientBasic::getCurrent()->getAuthorizationSession()
-                                                          ->getAuthenticatedUserNamesToken();
-        verify(false); // what do we do about userToken?
+        const string userToken = ClientBasic::getCurrent()->getAuthorizationManager()
+                                                          ->getAuthenticatedPrincipalNamesToken();
         _scope = globalScriptEngine->getPooledScope( nswrapper.db(),
                                                      "where" + userToken );
         _func = _scope->createFunction( _code.c_str() );

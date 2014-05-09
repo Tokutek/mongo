@@ -139,13 +139,7 @@ namespace mongo {
         static const int kMaximumTreeDepth;
     };
 
-    typedef boost::function<StatusWithMatchExpression(const char* name, int type, const BSONObj& section)> MatchExpressionParserGeoCallback;
-    extern MatchExpressionParserGeoCallback expressionParserGeoCallback;
-
     typedef boost::function<StatusWithMatchExpression(const BSONElement& where)> MatchExpressionParserWhereCallback;
     extern MatchExpressionParserWhereCallback expressionParserWhereCallback;
-
-    typedef boost::function<StatusWithMatchExpression(const BSONObj& queryObj)> MatchExpressionParserTextCallback;
-    extern MatchExpressionParserTextCallback expressionParserTextCallback;
 
 }
