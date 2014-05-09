@@ -696,6 +696,8 @@ if (APPLE OR PCAP_FOUND)
     )
 endif ()
 
+remove_as_needed(mongod mongos)
+
 set_source_files_properties(
   "${CMAKE_CURRENT_BINARY_DIR}/shell/mongo-server.cpp"
   PROPERTIES GENERATED TRUE)
