@@ -104,20 +104,8 @@ t.drop();
 
 // show that a unique index and a clustering index will work
 createData();
-t.ensureIndex({a:1}, {unique : true})// works, even though a is not truly unique, because it is unique per partition
-e = db.getLastErrorObj();
-assert(t.getIndexes().length == 2);
-assert(e.err == null);
-t.update({_id:15},{$set : {a : 1}}); // this should make adding a unique index fail
-e = db.getLastErrorObj();
-assert(e.err != null);
-simpleDropIndexTest(1);
-t.update({_id:15},{$set : {a : 1}}); // this should make adding a unique index fail
-e = db.getLastErrorObj();
-// now adding the unique index should fail
 t.ensureIndex({a:1}, {unique : true})
 e = db.getLastErrorObj();
-assert(t.getIndexes().length == 1);
 assert(e.err != null);
 t.drop();
 

@@ -2865,6 +2865,7 @@ namespace mongo {
         if (idx >= 0) {
             return false;
         }
+        uassert(17351, "cannot add a unique index to a partitioned collection", !info["unique"].trueValue());
         for (uint64_t i = 0; i < numPartitions(); i++) {
             BSONObjBuilder b;
             uint64_t currID = _partitionIDs[i];
