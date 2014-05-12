@@ -127,13 +127,18 @@ files.forEach(function(x) {
 	    'collections_exist_cmd|' +
             'update_fast|' +
             'update_fasterrors|' +
-            'partition_mst_886|' +
             'multi_key_mst_872|' +
             'partition_add|' +
-            'partition_stats|' +
-            'part_convert|' +
-            'part_coll_simple|' +
+            'partition_mst_886|' +
+            'partition_multikey|' +
             'partition_ops_multithread|' +
+            'partition_pk|' +
+            'partition_rename|' +
+            'partition_secondary_index|' +
+            'partition_sorted_cursor|' +
+            'partition_stats|' +
+            'part_coll_simple|' +
+            'part_convert|' +
             'pk_unique_check_param|' +
             'indexer_bg_unit' +
         ')\.js$');
