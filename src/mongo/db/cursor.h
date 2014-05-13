@@ -604,17 +604,19 @@ namespace mongo {
 
     //
     // a helper class for cursors that run over partitioned collections,
-    // As of this writing, that is the PartitionedCursor and SortedPartitionedCursor
-    // This class stores the information necessary such that
-    // the PartitionedCursor may create a cursor over a partition at any time.
+    // SinglePartitionCursorGenerator encapsulates the information needed by cursors
+    // over partitioned collections (e.g. PartitionedCursor and SortedPartitionedCursor)
+    // to generate cursors over the individual partitions.
+    // This generator is needed because the implementations of these partitioned
+    // cursors may need to generate new cursors for individual partitions at any time.
     //
-    class SubPartitionCursorGenerator {
+    class SinglePartitionCursorGenerator {
     public:
         // generate a cursor on partition with index of partitionIndex
         virtual shared_ptr<Cursor> makeSubCursor(uint64_t partitionIndex) = 0;
-        virtual ~SubPartitionCursorGenerator() { }
+        virtual ~SinglePartitionCursorGenerator() { }
     protected:
-        SubPartitionCursorGenerator(
+        SinglePartitionCursorGenerator(
             PartitionedCollection* pc,
             const int idxNo,
             const int direction,
@@ -633,14 +635,13 @@ namespace mongo {
         const bool _countCursor;
     };
 
-    // bad name
     // a helper class for cursors that run over partitioned collections
     // This class gives the cursor a mechanism for identifying which
     // partitions the cursor needs to run over. The functions below
     // are to allow the cursor a way to iterate over the indexes
-    class SubPartitionIDGenerator{
+    class PartitionedCursorIDGenerator{
     public:
-        virtual ~SubPartitionIDGenerator() { }
+        virtual ~PartitionedCursorIDGenerator() { }
         // get the current partition index that this class is identifying
         virtual uint64_t getCurrentPartitionIndex() = 0;
         // advance from the current partition index the cursor cares
@@ -743,16 +744,16 @@ namespace mongo {
     private:
         PartitionedCursor(
             const bool distributed,
-            shared_ptr<SubPartitionCursorGenerator> subCursorGenerator,
-            shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator,
+            shared_ptr<SinglePartitionCursorGenerator> subCursorGenerator,
+            shared_ptr<PartitionedCursorIDGenerator> subPartitionIDGenerator,
             const bool multiKey
             );
         void getNextSubCursor();
         void initializeSubCursor();
 
         const bool _distributed;
-        shared_ptr<SubPartitionCursorGenerator> _subCursorGenerator;
-        shared_ptr<SubPartitionIDGenerator> _subPartitionIDGenerator;
+        shared_ptr<SinglePartitionCursorGenerator> _subCursorGenerator;
+        shared_ptr<PartitionedCursorIDGenerator> _subPartitionIDGenerator;
         const bool _multiKey;
         // cursor currently being used to retrieve documents
         shared_ptr<Cursor> _currentCursor;
@@ -865,14 +866,14 @@ namespace mongo {
         SortedPartitionedCursor(
             const BSONObj idxPattern,
             const int direction,
-            shared_ptr<SubPartitionCursorGenerator> subCursorGenerator,
-            shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator,
+            shared_ptr<SinglePartitionCursorGenerator> subCursorGenerator,
+            shared_ptr<PartitionedCursorIDGenerator> subPartitionIDGenerator,
             const bool multiKey
             );
         const int _direction;
         const Ordering _ordering;
-        shared_ptr<SubPartitionCursorGenerator> _subCursorGenerator;
-        shared_ptr<SubPartitionIDGenerator> _subPartitionIDGenerator;
+        shared_ptr<SinglePartitionCursorGenerator> _subCursorGenerator;
+        shared_ptr<PartitionedCursorIDGenerator> _subPartitionIDGenerator;
         const bool _multiKey;
 
         // number of documents scanned
@@ -892,7 +893,7 @@ namespace mongo {
     // need better names
 
     // for range scans
-    class RangePartitionCursorGenerator: public SubPartitionCursorGenerator {
+    class RangePartitionCursorGenerator: public SinglePartitionCursorGenerator {
     public:
         virtual shared_ptr<Cursor> makeSubCursor(uint64_t partitionIndex);
         RangePartitionCursorGenerator(
@@ -905,7 +906,7 @@ namespace mongo {
             const BSONObj endKey,
             const bool endKeyInclusive
             ) :
-            SubPartitionCursorGenerator(pc, idxNo, direction, countCursor),
+            SinglePartitionCursorGenerator(pc, idxNo, direction, countCursor),
             _numWanted(numWanted),
             _startKey(startKey),
             _endKey(endKey),
@@ -920,7 +921,7 @@ namespace mongo {
     };
 
     // for scans that use bounds
-    class BoundsPartitionCursorGenerator: public SubPartitionCursorGenerator {
+    class BoundsPartitionCursorGenerator: public SinglePartitionCursorGenerator {
     public:
         virtual shared_ptr<Cursor> makeSubCursor(uint64_t partitionIndex);
         BoundsPartitionCursorGenerator(
@@ -932,7 +933,7 @@ namespace mongo {
             const shared_ptr<FieldRangeVector> bounds,
             const int singleIntervalLimit
             ) :
-            SubPartitionCursorGenerator(pc, idxNo, direction, countCursor),
+            SinglePartitionCursorGenerator(pc, idxNo, direction, countCursor),
             _numWanted(numWanted),
             _bounds(bounds),
             _singleIntervalLimit(singleIntervalLimit)
@@ -945,17 +946,17 @@ namespace mongo {
     };
 
     // for full index/full collection scans
-    class TablePartitionCursorGenerator: public SubPartitionCursorGenerator {
+    class ExhaustivePartitionCursorGenerator: public SinglePartitionCursorGenerator {
     public:
         virtual shared_ptr<Cursor> makeSubCursor(uint64_t partitionIndex);
-        TablePartitionCursorGenerator(
+        ExhaustivePartitionCursorGenerator(
             PartitionedCollection* pc,
             const int idxNo,
             const int direction,
             const bool countCursor,
             const bool cursorOverPartitionKey
             ) :
-            SubPartitionCursorGenerator(pc, idxNo, direction, countCursor),
+            SinglePartitionCursorGenerator(pc, idxNo, direction, countCursor),
             _cursorOverPartitionKey(cursorOverPartitionKey)
         {
         }
@@ -963,16 +964,16 @@ namespace mongo {
         const bool _cursorOverPartitionKey;
     };
 
-    class SubPartitionIDGeneratorImpl : public SubPartitionIDGenerator {
+    class PartitionedCursorIDGeneratorImpl : public PartitionedCursorIDGenerator {
     public:
-        SubPartitionIDGeneratorImpl(PartitionedCollection* pc, const int direction);
-        SubPartitionIDGeneratorImpl(
+        PartitionedCursorIDGeneratorImpl(PartitionedCollection* pc, const int direction);
+        PartitionedCursorIDGeneratorImpl(
             PartitionedCollection* pc,
             const BSONObj &startKey,
             const BSONObj &endKey,
             const int direction
             );        
-        SubPartitionIDGeneratorImpl(
+        PartitionedCursorIDGeneratorImpl(
             PartitionedCollection* pc,
             const shared_ptr<FieldRangeVector> &bounds,
             const int direction
@@ -988,7 +989,7 @@ namespace mongo {
         void sanityCheckPartitionEndpoints();
     };
 
-    class FilteredPartitionIDGeneratorImpl : public SubPartitionIDGenerator {
+    class FilteredPartitionIDGeneratorImpl : public PartitionedCursorIDGenerator {
     public:
         // get the current partition index that this class is identifying
         FilteredPartitionIDGeneratorImpl(

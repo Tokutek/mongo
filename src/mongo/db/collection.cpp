@@ -2891,8 +2891,8 @@ namespace mongo {
         )
     {
         // pass in an idxNo of 0, because we are assuming 0 is the pk
-        shared_ptr<SubPartitionCursorGenerator> subCursorGenerator (
-            new TablePartitionCursorGenerator(
+        shared_ptr<SinglePartitionCursorGenerator> subCursorGenerator (
+            new ExhaustivePartitionCursorGenerator(
                 this,
                 0,
                 direction,
@@ -2900,8 +2900,8 @@ namespace mongo {
                 true
                 )
             );
-        shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator (
-            new SubPartitionIDGeneratorImpl(this, direction)
+        shared_ptr<PartitionedCursorIDGenerator> subPartitionIDGenerator (
+            new PartitionedCursorIDGeneratorImpl(this, direction)
             );
         // pk cannot be multiKey, hence passing false for last parameter
         shared_ptr<Cursor> ret (new PartitionedCursor(false, subCursorGenerator, subPartitionIDGenerator, false));
@@ -2912,8 +2912,8 @@ namespace mongo {
                                     const int direction, 
                                     const bool countCursor) {
         bool isPK = isPKIndex(idx);
-        shared_ptr<SubPartitionCursorGenerator> subCursorGenerator (
-            new TablePartitionCursorGenerator(
+        shared_ptr<SinglePartitionCursorGenerator> subCursorGenerator (
+            new ExhaustivePartitionCursorGenerator(
                 this,
                 idxNo(idx),
                 direction,
@@ -2921,9 +2921,9 @@ namespace mongo {
                 isPK
                 )
             );
-        shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator;
+        shared_ptr<PartitionedCursorIDGenerator> subPartitionIDGenerator;
         if (isPK) {
-            subPartitionIDGenerator.reset(new SubPartitionIDGeneratorImpl(this, direction));
+            subPartitionIDGenerator.reset(new PartitionedCursorIDGeneratorImpl(this, direction));
         }
         else {
             subPartitionIDGenerator.reset(new FilteredPartitionIDGeneratorImpl(this, _ns.c_str(), _shardKeyPattern, direction));
@@ -2953,7 +2953,7 @@ namespace mongo {
                                    const bool countCursor)
     {
         bool isPK = isPKIndex(idx);
-        shared_ptr<SubPartitionCursorGenerator> subCursorGenerator ( new RangePartitionCursorGenerator(
+        shared_ptr<SinglePartitionCursorGenerator> subCursorGenerator ( new RangePartitionCursorGenerator(
             this,
             idxNo(idx),
             direction,
@@ -2964,9 +2964,9 @@ namespace mongo {
             endKeyInclusive
             )
             );
-        shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator;
+        shared_ptr<PartitionedCursorIDGenerator> subPartitionIDGenerator;
         if (isPK) {
-            subPartitionIDGenerator.reset(new SubPartitionIDGeneratorImpl(this, startKey, endKey, direction));
+            subPartitionIDGenerator.reset(new PartitionedCursorIDGeneratorImpl(this, startKey, endKey, direction));
         }
         else {
             subPartitionIDGenerator.reset(new FilteredPartitionIDGeneratorImpl(this, _ns.c_str(), _shardKeyPattern, direction));
@@ -2996,7 +2996,7 @@ namespace mongo {
                                    const bool countCursor)
     {
         bool isPK = isPKIndex(idx);
-        shared_ptr<SubPartitionCursorGenerator> subCursorGenerator ( new BoundsPartitionCursorGenerator(
+        shared_ptr<SinglePartitionCursorGenerator> subCursorGenerator ( new BoundsPartitionCursorGenerator(
             this,
             idxNo(idx),
             direction,
@@ -3006,9 +3006,9 @@ namespace mongo {
             singleIntervalLimit
             )
             );
-        shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator;
+        shared_ptr<PartitionedCursorIDGenerator> subPartitionIDGenerator;
         if (isPK) {
-            subPartitionIDGenerator.reset(new SubPartitionIDGeneratorImpl(this, bounds, direction));
+            subPartitionIDGenerator.reset(new PartitionedCursorIDGeneratorImpl(this, bounds, direction));
         }
         else {
             subPartitionIDGenerator.reset(new FilteredPartitionIDGeneratorImpl(this, _ns.c_str(), _shardKeyPattern, direction));

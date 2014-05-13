@@ -236,8 +236,8 @@ namespace mongo {
     // Partitioned Cursors (over the _id index)
     PartitionedCursor::PartitionedCursor(
         const bool distributed,
-        shared_ptr<SubPartitionCursorGenerator> subCursorGenerator,
-        shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator,
+        shared_ptr<SinglePartitionCursorGenerator> subCursorGenerator,
+        shared_ptr<PartitionedCursorIDGenerator> subPartitionIDGenerator,
         const bool multiKey
         ) :
         _distributed(distributed),
@@ -344,8 +344,8 @@ namespace mongo {
     SortedPartitionedCursor::SortedPartitionedCursor(
         const BSONObj idxPattern,
         const int direction,
-        shared_ptr<SubPartitionCursorGenerator> subCursorGenerator,
-        shared_ptr<SubPartitionIDGenerator> subPartitionIDGenerator,
+        shared_ptr<SinglePartitionCursorGenerator> subCursorGenerator,
+        shared_ptr<PartitionedCursorIDGenerator> subPartitionIDGenerator,
         const bool multiKey
         ) :
         _direction(direction),
@@ -419,7 +419,7 @@ namespace mongo {
             );
     }
 
-    shared_ptr<Cursor> TablePartitionCursorGenerator::makeSubCursor(uint64_t partitionIndex) {
+    shared_ptr<Cursor> ExhaustivePartitionCursorGenerator::makeSubCursor(uint64_t partitionIndex) {
         shared_ptr<CollectionData> currColl = _pc->getPartition(partitionIndex);
         if (_cursorOverPartitionKey) {
             return Cursor::make(
@@ -438,7 +438,7 @@ namespace mongo {
         }
     }
 
-    SubPartitionIDGeneratorImpl::SubPartitionIDGeneratorImpl(
+    PartitionedCursorIDGeneratorImpl::PartitionedCursorIDGeneratorImpl(
         PartitionedCollection* pc,
         const int direction
         ) :
@@ -450,7 +450,7 @@ namespace mongo {
         sanityCheckPartitionEndpoints();
     }
 
-    SubPartitionIDGeneratorImpl::SubPartitionIDGeneratorImpl(
+    PartitionedCursorIDGeneratorImpl::PartitionedCursorIDGeneratorImpl(
         PartitionedCollection* pc,
         const BSONObj &startKey,
         const BSONObj &endKey,
@@ -464,7 +464,7 @@ namespace mongo {
         sanityCheckPartitionEndpoints();
     }
 
-    SubPartitionIDGeneratorImpl::SubPartitionIDGeneratorImpl(
+    PartitionedCursorIDGeneratorImpl::PartitionedCursorIDGeneratorImpl(
         PartitionedCollection* pc,
         const shared_ptr<FieldRangeVector> &bounds,
         const int direction
@@ -477,7 +477,7 @@ namespace mongo {
         sanityCheckPartitionEndpoints();
     }
 
-    void SubPartitionIDGeneratorImpl::sanityCheckPartitionEndpoints() {
+    void PartitionedCursorIDGeneratorImpl::sanityCheckPartitionEndpoints() {
         // sanity check
         if (_direction > 0) {
             massert(17341, str::stream() << "bad _endPartition " << _endPartition << " and _startPartition " << _startPartition, _endPartition >= _startPartition);
@@ -487,11 +487,11 @@ namespace mongo {
         }
     }
 
-    uint64_t SubPartitionIDGeneratorImpl::getCurrentPartitionIndex() {
+    uint64_t PartitionedCursorIDGeneratorImpl::getCurrentPartitionIndex() {
         return _currPartition;
     }
 
-    void SubPartitionIDGeneratorImpl::advanceIndex() {
+    void PartitionedCursorIDGeneratorImpl::advanceIndex() {
         massert(17343, "cannot advanceIndex, at end", !lastIndex());
         if (_direction > 0) {
             _currPartition++;
@@ -501,7 +501,7 @@ namespace mongo {
         }
     }
     
-    bool SubPartitionIDGeneratorImpl::lastIndex() {
+    bool PartitionedCursorIDGeneratorImpl::lastIndex() {
             return (_currPartition == _endPartition);
     }
 
