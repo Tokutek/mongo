@@ -366,6 +366,13 @@ namespace mongo {
         //      and can prevent writes on a bulk loaded collection automatically.
         string bulkLoadNS() const { return _loadInfo ? _loadInfo->bulkLoadNS() : ""; }
 
+        /**
+         * Whether this client should be yielding to other threads that want a write lock.
+         */
+        bool isYieldingToWriteLock() const { return _isYieldingToWriteLock; }
+
+        void setYieldingToWriteLock(bool val) { _isYieldingToWriteLock = val; }
+
     private:
         Client(const char *desc, AbstractMessagingPort *p = 0);
         friend class CurOp;
@@ -392,6 +399,7 @@ namespace mongo {
         // and _checkForInterrupt will return false even if we are globally
         // killed
         bool _globallyUninterruptible;
+        bool _isYieldingToWriteLock;
 
         // for CmdCopyDb and CmdCopyDbGetNonce
         shared_ptr< DBClientConnection > _authConn;
