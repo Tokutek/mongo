@@ -373,7 +373,6 @@ namespace mongo {
     class CmdDropDatabase : public FileopsCommand {
     public:
         CmdDropDatabase() : FileopsCommand("dropDatabase") {}
-        virtual bool slaveOk() const { return false; }
         virtual bool logTheOp() { return true; }
         virtual void help( stringstream& help ) const {
             help << "drop (delete) this database";
@@ -680,7 +679,6 @@ namespace mongo {
     public:
         CmdDrop() : FileopsCommand("drop") { }
         virtual bool logTheOp() { return true; }
-        virtual bool slaveOk() const { return false; }
         virtual bool adminOnly() const { return false; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
@@ -764,7 +762,6 @@ namespace mongo {
     public:
         CmdCreate() : FileopsCommand("create") { }
         virtual bool logTheOp() { return false; }
-        virtual bool slaveOk() const { return false; }
         virtual bool adminOnly() const { return false; }
         virtual void help( stringstream& help ) const {
             help << "create a collection explicitly\n"
@@ -796,8 +793,6 @@ namespace mongo {
     public:
         CmdDropIndexes() : FileopsCommand("dropIndexes", false, "deleteIndexes") { }
         virtual bool logTheOp() { return true; }
-        // TODO: maybe slaveOk should be true?
-        virtual bool slaveOk() const { return false; }
         virtual void help( stringstream& help ) const {
             help << "drop indexes for a collection";
         }
@@ -963,7 +958,6 @@ namespace mongo {
         virtual bool adminOnly() const { return true; }
         virtual bool requiresAuth() { return true; }
         virtual bool lockGlobally() const { return true; }
-        virtual bool slaveOk() const { return false; }
         virtual bool logTheOp() {
             return true; // can't log steps when doing fast rename within a db, so always log the op rather than individual steps comprising it.
         }
@@ -1206,7 +1200,6 @@ namespace mongo {
         virtual bool adminOnly() const { return true; }
         virtual bool requiresAuth() { return true; }
         virtual bool lockGlobally() const { return true; }
-        virtual bool slaveOk() const { return false; }
         virtual bool logTheOp() { return false; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
@@ -1779,8 +1772,6 @@ namespace mongo {
     public:
         CmdDropPartition() : FileopsCommand("dropPartition") { }
         virtual bool logTheOp() { return false; }
-        // TODO: maybe slaveOk should be true?
-        virtual bool slaveOk() const { return true; }
         virtual void help( stringstream& help ) const {
             help << "drop partition with id retrieved from getPartitionInfo command\n" <<
                 "Example: {dropPartition: foo, id: 5}";
@@ -1818,8 +1809,6 @@ namespace mongo {
     public:
         CmdAddPartition() : FileopsCommand("addPartition") { }
         virtual bool logTheOp() { return false; }
-        // TODO: maybe slaveOk should be true?
-        virtual bool slaveOk() const { return true; }
         virtual void help( stringstream& help ) const {
             help << "add partition to a partitioned collection,\n" <<
                 "optionally provide pivot for last current partition\n." <<
@@ -1868,7 +1857,6 @@ namespace mongo {
     public:
         CmdConvertToPartitioned() : FileopsCommand("convertToPartitioned") { }
         virtual bool logTheOp() { return false; }
-        virtual bool slaveOk() const { return true; }
         virtual void help( stringstream& help ) const {
             help << "convert a normal collection to a partitioned collection\n" <<
                 "Example: {convertToPartitioned:\"foo\"}";

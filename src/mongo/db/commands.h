@@ -235,7 +235,7 @@ namespace mongo {
         virtual bool canRunInMultiStmtTxn() const { return true; }
         // These require some thought
         virtual bool logTheOp() = 0;
-        virtual bool slaveOk() const = 0;
+        virtual bool slaveOk() const { return false; }
     };
 
     /** A command that writes userdata to a Toku dictionary. */

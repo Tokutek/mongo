@@ -9,6 +9,11 @@ var master = replTest.getMaster();
 
 for (i=0;i<10000; i++) { master.getDB("bar").foo.insert({x:1,y:i,abc:123,str:"foo bar baz"}); }
 for (i=0;i<1000; i++) { master.getDB("bar").foo.update({y:i},{$push :{foo : "barrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"}}); }
+master.getDB("bar").createCollection("abra", {partitioned:1});
+master.getDB("bar").abra.insert([{},{},{}]);
+master.getDB("bar").abra.ensureIndex({a:1});
+assert.commandWorked(master.getDB("bar").abra.addPartition());
+master.getDB("bar").abra.insert([{},{},{}]);
 
 replTest.awaitReplication();
 
@@ -43,6 +48,12 @@ lastDoc = null;
 while (cursor.hasNext()) {
     lastDoc = cursor.next();
 }
+
+// now let's verify that some fileops commands don't work
+print("verify some commands fail");
+assert.commandFailed(conns[1].getDB("bar").abra.addPartition());
+assert.throws(conns[1].getDB("bar").abra.dropPartition(0));
+assert.throws(conns[1].getDB("bar").dropDatabase());
 
 print("the shell is currently stupid and won't throw once it's returned any query results");
 printjson(lastDoc);
