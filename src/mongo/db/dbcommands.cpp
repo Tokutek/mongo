@@ -1899,6 +1899,23 @@ namespace mongo {
         return Status::OK();
     }
 
+    class CmdSetWriteLockYielding : public InformationCommand {
+      public:
+        CmdSetWriteLockYielding() : InformationCommand("setWriteLockYielding") {}
+        virtual void help(stringstream &help) const {
+            help << "set whether this connection should yield to other connections' write locks\n"
+                 << "Example: {setWriteLockYielding: false}";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) { }
+        bool run(const string &, BSONObj &cmdObj, int, string &errmsg, BSONObjBuilder &result, bool) {
+            result.appendBool("was", cc().isYieldingToWriteLock());
+            cc().setYieldingToWriteLock(cmdObj.firstElement().trueValue());
+            return true;
+        }
+    } cmdSetWriteLockYielding;
+
 
     bool _execCommand(Command *c,
                       const string& dbname,

@@ -57,6 +57,9 @@ namespace mongo {
         static LockStat* globalLockStat();
         static LockStat* nestableLockStat( Nestable db );
 
+        static long long nestableWriteLockWaiters(Nestable db);
+        static long long globalWriteLockWaiters();
+
         class ScopedLock;
 
     public:

@@ -21,7 +21,11 @@
 #include "mongo/bson/util/atomic_int.h"
 #include "mongo/db/client.h"
 #include "mongo/db/curop.h"
+#include "mongo/db/d_concurrency.h"
+#include "mongo/db/lockstate.h"
+#include "mongo/db/relock.h"
 #include "mongo/scripting/engine.h"
+#include "mongo/util/concurrency/qlock.h"
 
 namespace mongo {
 
@@ -70,6 +74,33 @@ namespace mongo {
         return _checkForInterrupt( c );
     }
 
+    static bool shouldYieldForWriteLock(Client &c) {
+        LockState &ls = c.lockState();
+        if (ls.threadState() == 'R' || ls.threadState() == 'r') {
+            if (Lock::globalWriteLockWaiters() > 0) {
+                return true;
+            }
+        }
+        if (ls.threadState() == 'r') {
+            if (ls.adminLocked()) {
+                if (Lock::nestableWriteLockWaiters(Lock::admin) > 0) {
+                    return true;
+                }
+            }
+            if (ls.localLocked()) {
+                if (Lock::nestableWriteLockWaiters(Lock::local) > 0) {
+                    return true;
+                }
+            }
+            if (ls.otherLock() != NULL) {
+                if (ls.otherLock()->writeLockWaiters() > 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     void KillCurrentOp::_checkForInterrupt( Client &c ) {
         if (!c.globallyUninterruptible()) {
             if (_killForTransition > 0) {
@@ -81,6 +112,9 @@ namespace mongo {
         }
         if( c.curop()->killed() ) {
             uasserted(11601,"operation was interrupted");
+        }
+        if (c.isYieldingToWriteLock() && shouldYieldForWriteLock(c)) {
+            uasserted(17352, "interrupted by write lock, try this operation again");
         }
     }
     
@@ -97,6 +131,10 @@ namespace mongo {
             return "interrupted at shutdown";
         if( c.curop()->killed() )
             return "interrupted";
+
+        if (c.isYieldingToWriteLock() && shouldYieldForWriteLock(c)) {
+            return "interrupted by write lock";
+        }
         return "";
     }
 

@@ -20,6 +20,7 @@
 #pragma once
 
 #include "mongo/db/d_concurrency.h"
+#include "mongo/platform/atomic_word.h"
 
 namespace mongo {
 
@@ -122,14 +123,30 @@ namespace mongo {
 
     class WrapperForRWLock : boost::noncopyable { 
         SimpleRWLock r;
+        AtomicInt64 _writeLockWaiters;
     public:
         string name() const { return r.name; }
         LockStat stats;
-        WrapperForRWLock(const StringData& name) : r(name) { }
-        void lock()          { r.lock(); }
+        WrapperForRWLock(const StringData& name) : r(name), _writeLockWaiters(0) { }
+        void lock() {
+            class WaiterManager : boost::noncopyable {
+                AtomicInt64 &_val;
+              public:
+                WaiterManager(AtomicInt64 &val) : _val(val) {
+                    _val.addAndFetch(1);
+                }
+                ~WaiterManager() {
+                    _val.subtractAndFetch(1);
+                }
+            } wm(_writeLockWaiters);
+            r.lock();
+        }
         void lock_shared()   { r.lock_shared(); }
         void unlock()        { r.unlock(); }
         void unlock_shared() { r.unlock_shared(); }
+        long long writeLockWaiters() const {
+            return _writeLockWaiters.loadRelaxed();
+        }
     };
 
     class ScopedLock;

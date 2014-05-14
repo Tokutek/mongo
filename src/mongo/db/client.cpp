@@ -45,6 +45,7 @@
 #include "mongo/db/json.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/repl/rs.h"
+#include "mongo/db/server_parameters.h"
 #include "mongo/s/chunk_version.h"
 #include "mongo/s/d_logic.h"
 #include "mongo/s/stale_exception.h" // for SendStaleConfigException
@@ -59,6 +60,7 @@ namespace mongo {
 
     RWLockRecursive operationLock("operationLock");
 
+    MONGO_EXPORT_SERVER_PARAMETER(forceWriteLocks, bool, false);
 
     TSP_DEFINE(Client, currentClient)
 
@@ -116,7 +118,8 @@ namespace mongo {
         _creatingSystemUsers(""),
         _upgradingSystemUsers(false),
         _upgradingDiskFormatVersion(false),
-        _globallyUninterruptible(false)
+        _globallyUninterruptible(false),
+        _isYieldingToWriteLock(forceWriteLocks)
     {
         _connectionId = p ? p->connectionId() : 0;
         
