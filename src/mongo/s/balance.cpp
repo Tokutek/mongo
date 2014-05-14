@@ -78,9 +78,12 @@ namespace mongo {
                 }
 
                 BSONObj res;
-                if (c->moveAndCommit(Shard::make(chunkInfo.to), res)) {
-                    movedCount++;
-                    continue;
+                {
+                    Info::Holder<CandidateChunk> movingChunkHolder(_info, &Info::movingChunk, chunkInfo);
+                    if (c->moveAndCommit(Shard::make(chunkInfo.to), res)) {
+                        movedCount++;
+                        continue;
+                    }
                 }
 
                 // the move requires acquiring the collection metadata's lock, which can fail
@@ -474,6 +477,7 @@ namespace mongo {
                         _balancedLastTime = 0;
                     }
                     else {
+                        Info::Holder<vector<CandidateChunkPtr> > candidateChunksHolder(_info, &Info::candidateChunks, candidateChunks);
                         _balancedLastTime = _moveChunks(&candidateChunks);
                     }
                     
@@ -498,6 +502,35 @@ namespace mongo {
             }
         }
 
+    }
+
+    string Balancer::info(BSONObjBuilder &b) const {
+        b.append("me", _myid);
+        b.append("balancedLastTime", _balancedLastTime);
+        return _info.toBSON(b);
+    }
+
+    string Balancer::Info::toBSON(BSONObjBuilder &b) const {
+        SimpleMutex::scoped_lock lk(_m);
+        if (candidateChunks && !candidateChunks->empty()) {
+            BSONArrayBuilder chunksb(b.subarrayStart("candidateChunks"));
+            for (vector<CandidateChunkPtr>::const_iterator it = candidateChunks->begin(); it != candidateChunks->end(); ++it) {
+                BSONObjBuilder chunkb(chunksb.subobjStart());
+                CandidateChunkPtr chunk = *it;
+                if (chunk) {
+                    chunk->toBSON(chunkb);
+                }
+                chunkb.doneFast();
+            }
+            chunksb.doneFast();
+        }
+        if (movingChunk) {
+            BSONObjBuilder movingb(b.subobjStart("moving"));
+            movingChunk->toBSON(movingb);
+            movingb.doneFast();
+            return movingChunk->to;
+        }
+        return "";
     }
 
 }  // namespace mongo

@@ -27,6 +27,18 @@
 
 namespace mongo {
 
+    void MigrateInfo::toBSON(BSONObjBuilder &b) const {
+        b.append("ns", ns);
+        b.append("from", from);
+        b.append("to", to);
+        {
+            BSONArrayBuilder boundsb(b.subarrayStart("bounds"));
+            boundsb.append(chunk.min);
+            boundsb.append(chunk.max);
+            boundsb.doneFast();
+        }
+    }
+
     string TagRange::toString() const {
         return str::stream() << min << " -->> " << max << "  on  " << tag;
     }

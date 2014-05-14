@@ -110,7 +110,7 @@ namespace mongo {
         MigrateInfo( const string& a_ns , const string& a_to , const string& a_from , const BSONObj& a_chunk )
             : ns( a_ns ) , to( a_to ) , from( a_from ), chunk( a_chunk ) {}
 
-
+        void toBSON(BSONObjBuilder &b) const;
     };
 
     typedef map< string,ShardInfo > ShardInfoMap;

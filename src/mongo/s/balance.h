@@ -21,9 +21,11 @@
 
 #include "mongo/pch.h"
 
+#include "mongo/bson/bsonobjbuilder.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/s/balancer_policy.h"
 #include "mongo/util/background.h"
+#include "mongo/util/concurrency/mutex.h"
 
 namespace mongo {
 
@@ -46,6 +48,8 @@ namespace mongo {
         virtual void run();
 
         virtual string name() const { return "Balancer"; }
+
+        string info(BSONObjBuilder &b) const;
 
     private:
         typedef MigrateInfo CandidateChunk;
@@ -100,6 +104,44 @@ namespace mongo {
          * @return true if all the servers listed in configdb as being shards are reachable and are distinct processes
          */
         bool _checkOIDs();
+
+        /**
+         * Balancer::Info is a makeshift class so that the member functions of Balancer can report what they're up to.
+         * It is full of pointers to interesting data we want to report, and those pointers are managed with a mutex.
+         * Generating the info BSONObj holds the mutex so that we don't access data that's no longer valid on the stack.
+         */
+        class Info : boost::noncopyable {
+            mutable SimpleMutex _m;
+          public:
+            Info() : _m("BalancerInfo") {}
+
+            const vector<CandidateChunkPtr> *candidateChunks;
+            const CandidateChunk *movingChunk;
+
+            /**
+             * Holder manages which members of Info are valid; its lifetime must be strictly smaller than the lifetime of val on the stack.
+             */
+            template<typename T>
+            class Holder : boost::noncopyable {
+                Info &_info;
+                const T* Info::*_member;
+              public:
+                Holder(Info &info, const T* Info::*member, const T &val)
+                        : _info(info), _member(member) {
+                    SimpleMutex::scoped_lock lk(_info._m);
+                    _info.*_member = &val;
+                }
+                ~Holder() {
+                    SimpleMutex::scoped_lock lk(_info._m);
+                    _info.*_member = NULL;
+                }
+            };
+
+            // returns the "to" server of any in-progress migration, if one exists
+            string toBSON(BSONObjBuilder &b) const;
+        };
+
+        Info _info;
 
     };
 

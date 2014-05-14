@@ -124,6 +124,10 @@ sh.getBalancerHost = function() {
     return x.process.match(/[^:]+:[^:]+/)[0]
 }
 
+sh.getBalancerInfo = function() {
+    return db.runCommand('balancerInfo');
+}
+
 sh.stopBalancer = function( timeout, interval ) {
     sh.setBalancerState( false )
     sh.waitForBalancer( false, timeout, interval )

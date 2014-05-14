@@ -29,6 +29,7 @@
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/stats/counters.h"
 
+#include "mongo/s/balance.h"
 #include "mongo/s/chunk.h"
 #include "mongo/s/client_info.h"
 #include "mongo/s/config.h"
@@ -1392,6 +1393,36 @@ namespace mongo {
                 return true;
             }
         } cmdWhatsMyUri;
+
+
+        class CmdBalancerInfo : public InformationCommand {
+          public:
+            CmdBalancerInfo() : InformationCommand("balancerInfo") {}
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {} // No auth required
+            virtual void help(stringstream &h) const {
+                h << "{ balancerInfo: 1 }";
+            }
+            virtual bool run(const string &, BSONObj &cmdObj, int, string &errmsg, BSONObjBuilder &result, bool) {
+                string toShard = balancer.info(result);
+                if (!toShard.empty()) {
+                    Shard to(toShard);
+                    scoped_ptr<ScopedDbConnection> conn(
+                        ScopedDbConnection::getInternalScopedDbConnection(
+                            to.getConnString(), 30));
+                    BSONObj status;
+                    bool ok = conn->get()->runCommand("admin", BSON("_recvChunkStatus" << 1), status);
+                    if (!ok) {
+                        errmsg = mongoutils::str::stream() << "error getting migration status from shard " << toShard;
+                        conn->done();
+                        return false;
+                    }
+                    result.append("migrateStatus", status);
+                }
+                return true;
+            }
+        } cmdBalancerInfo;
 
 
         class CmdShardingGetPrevError : public InformationCommand {
