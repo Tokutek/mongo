@@ -562,23 +562,23 @@ namespace mongo {
         snprintf(buf, 1<<12, "DBException code: %d what: %s", e.getCode(), e.what());
         crashdump::reason(buf);
         crashdump::extraInfo();
-    } catch (DBException &e) {
+    } catch (DBException &newEx) {
         // can't rethrow here, might be crashing
         try {
             rawOut(" ");
             rawOut("Unhandled DBException while dumping crash info:");
-            rawOut(e.what());
+            rawOut(newEx.what());
             char buf[1<<12];
-            snprintf(buf, 1<<12, "code: %d", e.getCode());
+            snprintf(buf, 1<<12, "code: %d", newEx.getCode());
             rawOut(buf);
         } catch (...) {
             // uh-oh
         }
-    } catch (std::exception &e) {
+    } catch (std::exception &newEx) {
         try {
             rawOut(" ");
             rawOut("Unhandled exception while dumping crash info:");
-            rawOut(e.what());
+            rawOut(newEx.what());
         } catch (...) {
             // uh-oh
         }
