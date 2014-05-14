@@ -96,7 +96,7 @@ killproc_nice() {
 start() {
     if [ -f /sys/kernel/mm/transparent_hugepage/enabled ]; then
             echo never > /sys/kernel/mm/transparent_hugepage/enabled
-        if [ "$?" = 0 ]; then
+        if [ "$?" != 0 ]; then
             echo "Error disabling transparent_hugepages, are you running in a linux container?" >&2
             echo "If the server fails to start, check that transparent hugepages are disabled." >&2
         fi
