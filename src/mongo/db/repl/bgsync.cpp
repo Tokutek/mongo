@@ -64,6 +64,38 @@ namespace mongo {
     static ServerStatusMetricField<Counter64> displayOpsApplied( "repl.apply.ops",
                                                                 &opsAppliedStats );
 
+    bool isRollbackRequired(OplogReader& r, uint64_t *lastTS) {
+        string hn = r.conn()->getServerAddress();
+        if (!r.more()) {
+            // In vanilla Mongo, this happened for one of the
+            // following reasons:
+            //  - we were ahead of what we are syncing from (don't
+            //    think that is possible anymore)
+            //  - remote oplog is empty for some weird reason
+            // in either case, if it (strangely) happens, we'll just return
+            // and our caller will simply try again after a short sleep.
+            log() << "replSet error empty query result from " << hn << " oplog, attempting rollback" << rsLog;
+             return true;
+        }
+
+        BSONObj o = r.nextSafe();
+        uint64_t ts = o["ts"]._numberLong();
+        uint64_t lastHash = o["h"].numberLong();
+        GTID gtid = getGTIDFromBSON("_id", o);
+
+        if( !theReplSet->gtidManager->rollbackNeeded(gtid, ts, lastHash)) {
+            log() << "Rollback NOT needed! Our GTID" << gtid << endl;
+            return false;
+        }
+
+        log() << "Rollback needed! Our GTID" <<
+            theReplSet->gtidManager->getLiveState().toString() <<
+            " remote GTID: " << gtid.toString() << ". Attempting rollback." << rsLog;
+
+        *lastTS = ts;
+        return true;
+    }
+
     BackgroundSync::BackgroundSync() : _opSyncShouldRun(false),
                                             _opSyncRunning(false),
                                             _currentSyncTarget(NULL),
@@ -330,10 +362,9 @@ namespace mongo {
         OplogReader r(true /* doHandshake */);
 
         // find a target to sync from the last op time written
-        getOplogReader(r);
+        getOplogReader(&r);
 
         // no server found
-        GTID lastGTIDFetched = theReplSet->gtidManager->getLiveState();
         {
             boost::unique_lock<boost::mutex> lock(_mutex);
 
@@ -342,6 +373,7 @@ namespace mongo {
                 return 1; //sleep one second
             }
         }
+        GTID lastGTIDFetched = theReplSet->gtidManager->getLiveState();
         r.tailingQueryGTE(rsoplog, lastGTIDFetched);
 
         // if target cut connections between connecting and querying (for
@@ -352,10 +384,12 @@ namespace mongo {
 
         try {
             // this method may actually run rollback, yes, the name is bad
-            if (isRollbackRequired(r)) {
+            uint64_t ts;
+            if (isRollbackRequired(r, &ts)) {
                 // sleep 2 seconds and try again. (The 2 is arbitrary).
                 // If we are not fatal, then we will keep trying to sync
                 // from another machine
+                runRollback(r, ts);
                 return 2;
             }
         }
@@ -495,39 +529,26 @@ namespace mongo {
         return theReplSet->shouldChangeSyncTarget(_currentSyncTarget->hbinfo().opTime);
     }
 
-    void BackgroundSync::getOplogReader(OplogReader& r) {
-        const Member *target = NULL, *stale = NULL;
-        BSONObj oldest;
+    void BackgroundSync::getOplogReader(OplogReader* r) {
+        const Member* target = NULL;
 
-        verify(r.conn() == NULL);
+        verify(r->conn() == NULL);
         while ((target = theReplSet->getMemberToSyncTo()) != NULL) {
             string current = target->fullName();
 
-            if (!r.connect(current)) {
+            if (!r->connect(current)) {
                 LOG(2) << "replSet can't connect to " << current << " to read operations" << rsLog;
-                r.resetConnection();
+                r->resetConnection();
                 theReplSet->veto(current);
                 continue;
             }
 
-            // if we made it here, the target is up and not stale
             {
                 boost::unique_lock<boost::mutex> lock(_mutex);
                 _currentSyncTarget = target;
             }
 
             return;
-        }
-
-        // the only viable sync target was stale
-        if (stale) {
-            GTID remoteOldestGTID = getGTIDFromBSON("_id", oldest);
-            theReplSet->goStale(stale, remoteOldestGTID);
-            // vanilla Mongo used to do a sleep of 120 seconds here
-            // We removed it. It seems excessive, and if this machine is doing
-            // nothing anyway, sleeping won't help. It might as well
-            // return with a null sync target, and produce() will handle
-            // that fact and sleep one second
         }
 
         {
@@ -684,38 +705,6 @@ namespace mongo {
             throw RollbackOplogException(str::stream() << "Exception while trying to run rollback: " << e2.what());
         }
         
-    }
-
-    bool BackgroundSync::isRollbackRequired(OplogReader& r) {
-        string hn = r.conn()->getServerAddress();
-        if (!r.more()) {
-            // In vanilla Mongo, this happened for one of the
-            // following reasons:
-            //  - we were ahead of what we are syncing from (don't
-            //    think that is possible anymore)
-            //  - remote oplog is empty for some weird reason
-            // in either case, if it (strangely) happens, we'll just return
-            // and our caller will simply try again after a short sleep.
-            log() << "replSet error empty query result from " << hn << " oplog, attempting rollback" << rsLog;
-             return true;
-        }
-
-        BSONObj o = r.nextSafe();
-        uint64_t ts = o["ts"]._numberLong();
-        uint64_t lastHash = o["h"].numberLong();
-        GTID gtid = getGTIDFromBSON("_id", o);
-
-        if( !theReplSet->gtidManager->rollbackNeeded(gtid, ts, lastHash)) {
-            log() << "Rollback NOT needed! Our GTID" << gtid << endl;
-            return false;
-        }
-
-        log() << "Rollback needed! Our GTID" <<
-            theReplSet->gtidManager->getLiveState().toString() <<
-            " remote GTID: " << gtid.toString() << ". Attempting rollback." << rsLog;
-
-        runRollback(r, ts);
-        return true;
     }
 
     const Member* BackgroundSync::getSyncTarget() {
