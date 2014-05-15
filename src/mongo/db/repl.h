@@ -64,6 +64,7 @@ namespace mongo {
     extern ReplSettings replSettings;
 
     bool anyReplEnabled();
+    void sethbmsg(const string& s, const int level);
 
     extern TimerStats oplogInsertStats;
     extern Counter64 oplogInsertBytesStats;

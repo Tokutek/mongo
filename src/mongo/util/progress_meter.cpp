@@ -15,9 +15,12 @@
  *    limitations under the License.
  */
 
-#include "pch.h" // needed for log.h
-#include "progress_meter.h"
-#include "log.h"
+#include "mongo/util/progress_meter.h"
+
+#include "mongo/pch.h"
+
+#include "mongo/db/jsobj.h"
+#include "mongo/util/log.h"
 
 using namespace std;
 
@@ -54,26 +57,30 @@ namespace mongo {
         if ( _total > 0 ) {
             int per = (int)( ( (double)_done * 100.0 ) / (double)_total );
             Nullstream& out = log();
-            out << "\t\t" << _name << ": " << _done;
+            if (_parent != NULL) {
+                out << "\t\t" << treeString() << endl;
+            } else {
+                out << "\t\t" << _name << ": " << _done;
             
-            if (_showTotal) {
-                out << '/' << _total << '\t' << per << '%';
-            }
+                if (_showTotal) {
+                    out << '/' << _total << '\t' << per << '%';
+                }
 
-            if ( ! _units.empty() ) {
-                out << "\t(" << _units << ")";
-            }
+                if ( ! _units.empty() ) {
+                    out << "\t(" << _units << ")";
+                }
             
-            out << endl;
+                out << endl;
+            }
         }
         _lastTime = t;
         return true;
     }
     
-    string ProgressMeter::toString() const {
+    std::string ProgressMeter::toString() const {
         if ( ! _active )
             return "";
-        stringstream buf;
+        std::stringstream buf;
         buf << _name << ": " << _done << '/' << _total << ' ' << (_done*100)/_total << '%';
         
         if ( ! _units.empty() ) {
@@ -83,5 +90,57 @@ namespace mongo {
         return buf.str();
     }
 
+    void ProgressMeter::treeString(std::stringstream &ss) const {
+        if (_parent == NULL) {
+            ss << _name << ": ";
+        } else {
+            _parent->treeString(ss);
+            ss << ", ";
+        }
+        ss << _done << "/" << _total << " "
+           << std::fixed << std::setprecision(1) << (_done*100.0)/_total << "%";
+        if (!_units.empty()) {
+            ss << " " << _units;
+        }
+    }
+
+    std::string ProgressMeter::treeString() const {
+        std::stringstream ss;
+        treeString(ss);
+        return ss.str();
+    }
+
+    void ProgressMeter::appendInfo(BSONObjBuilder &b) const {
+        b.append("name", _name);
+        b.append("units", _units);
+        b.append("done", _done);
+        b.append("total", _total);
+    }
+
+    BufBuilder& ProgressMeter::treeObjForSubtree(BSONObjBuilder &b) const {
+        if (_parent != NULL) {
+            BSONObjBuilder sub(_parent->treeObjForSubtree(b));
+            appendInfo(sub);
+            return sub.subobjStart("child");
+        } else {
+            appendInfo(b);
+            return b.subobjStart("child");
+        }
+    }
+
+    void ProgressMeter::treeObj(BSONObjBuilder &b) const {
+        if (_parent != NULL) {
+            BSONObjBuilder sub(_parent->treeObjForSubtree(b));
+            appendInfo(sub);
+        } else {
+            appendInfo(b);
+        }
+    }
+
+    BSONObj ProgressMeter::treeObj() const {
+        BSONObjBuilder b;
+        treeObj(b);
+        return b.obj();
+    }
 
 }

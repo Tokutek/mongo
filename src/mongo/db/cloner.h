@@ -20,6 +20,7 @@
 #pragma once
 
 #include "jsobj.h"
+#include "mongo/util/progress_meter.h"
 
 namespace mongo {
 
@@ -53,7 +54,8 @@ namespace mongo {
         const string& masterHost , 
         const CloneOptions& options , 
         shared_ptr<DBClientBase> conn,
-        string& errmsg /* out */
+        string& errmsg, /* out */
+        ProgressMeter *parentProgress = NULL
         );
     
     void cloneCollection(
