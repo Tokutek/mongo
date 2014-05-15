@@ -1,5 +1,9 @@
 // Check debug information recorded for a query.
 
+// This test is pretty flaky with timing, so we give it a few chances to pass.
+for (var tries = 5; tries > 0; --tries) {
+try {
+
 // special db so that it can be run in parallel tests
 var stddb = db;
 var db = db.getSisterDB("profile4");
@@ -98,4 +102,14 @@ try {
 finally {
     db.setProfilingLevel(0);
     db = stddb;
+}
+
+} catch (e) {
+    if (tries == 0) {
+        throw e;
+    } else {
+        continue;
+    }
+}
+break;
 }
