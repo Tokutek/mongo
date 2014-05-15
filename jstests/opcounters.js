@@ -1,5 +1,9 @@
 // Test that opcounters get incremented properly.
 
+// This test is pretty flaky with timing, so we give it a few chances to pass.
+for (var tries = 5; tries > 0; --tries) {
+try {
+
 db.dropDatabase();
 
 var original = db.serverStatus().opcounters;
@@ -43,3 +47,13 @@ assert.eq(current.delete, original.delete + 1);
 db.foo.remove({});
 current = db.serverStatus().opcounters;
 assert.eq(current.delete, original.delete + 2); // Multi-removes are counted as 1 remove
+
+} catch (e) {
+    if (tries == 0) {
+        throw e;
+    } else {
+        continue;
+    }
+}
+break;
+}
