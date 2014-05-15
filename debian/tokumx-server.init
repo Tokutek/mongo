@@ -112,12 +112,14 @@ running() {
 start_server() {
 # Start the process using the wrapper
         if [ -f /sys/kernel/mm/transparent_hugepage/enabled ]; then
+            if grep -q "\[always\]" /sys/kernel/mm/transparent_hugepage/enabled; then
                 echo never > /sys/kernel/mm/transparent_hugepage/enabled
-		if [ "$?" != 0 ]; then
-			echo "Error disabling transparent_hugepages, are you running in a linux container?" >&2
-			echo "If the server fails to start, check that transparent hugepages are disabled." >&2
-		fi
-	fi
+                if [ "$?" != 0 ]; then
+                    echo "Error disabling transparent_hugepages, are you running in a linux container?" >&2
+                    echo "If the server fails to start, check that transparent hugepages are disabled." >&2
+                fi
+            fi
+        fi
 		
         start-stop-daemon --background --start --quiet --pidfile $PIDFILE \
                 --make-pidfile --chuid $DAEMONUSER \
