@@ -94,13 +94,17 @@ killproc_nice() {
 }
 
 start() {
-    if [ -f /sys/kernel/mm/transparent_hugepage/enabled ]; then
-            echo never > /sys/kernel/mm/transparent_hugepage/enabled
-        if [ "$?" != 0 ]; then
-            echo "Error disabling transparent_hugepages, are you running in a linux container?" >&2
-            echo "If the server fails to start, check that transparent hugepages are disabled." >&2
+    for _hugepage_file in /sys/kernel/mm/transparent_hugepage/enabled /sys/kernel/mm/redhat_transparent_hugepage/enabled; do
+        if [ -f $_hugepage_file ]; then
+            if grep -q "\[always\]" $_hugepage_file; then
+                echo never > $_hugepage_file
+                if [ "$?" != 0 ]; then
+                    echo "Error disabling transparent_hugepages, are you running in a linux container?" >&2
+                    echo "If the server fails to start, check that transparent hugepages are disabled." >&2
+                fi
+            fi
         fi
-    fi
+    done
     [ -x $exec ] || exit 5
     echo -n $"Starting $prog: "
     daemon --pidfile=${pidfile} --user tokumx "$exec --quiet $options run >> $logfile 2>&1 &"
