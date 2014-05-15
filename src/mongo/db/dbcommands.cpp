@@ -1771,7 +1771,7 @@ namespace mongo {
     class CmdDropPartition : public FileopsCommand {
     public:
         CmdDropPartition() : FileopsCommand("dropPartition") { }
-        virtual bool logTheOp() { return false; }
+        virtual bool logTheOp() { return true; }
         virtual void help( stringstream& help ) const {
             help << "drop partition with id retrieved from getPartitionInfo command\n" <<
                 "Example: {dropPartition: foo, id: 5}";
@@ -1800,7 +1800,6 @@ namespace mongo {
             PartitionedCollection *pc = cl->as<PartitionedCollection>();
             uint64_t partitionID = e.numberLong();
             pc->dropPartition(partitionID);
-            OplogHelpers::logDropPartition(ns.c_str(), partitionID);
             return true;
         }
     } cmdDropPartition;
@@ -1821,7 +1820,7 @@ namespace mongo {
             actions.addAction(ActionType::addPartition);
             out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
         }
-        bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& anObjBuilder, bool /*fromRepl*/) {
+        bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& anObjBuilder, bool fromRepl) {
             string coll = cmdObj[ "addPartition" ].valuestrsafe();
             uassert( 17304, "addPartition must specify a collection", !coll.empty() );
             string ns = dbname + "." + coll;
@@ -1831,12 +1830,16 @@ namespace mongo {
             Collection *cl = getCollection( ns );
             uassert( 17306, "addPartition no such collection", cl );
             uassert( 17307, "collection must be partitioned", cl->isPartitioned() );
-            BSONElement e = cmdObj["newMax"];            
+            BSONElement pivotElement = cmdObj["newMax"];
+            BSONElement infoElement = cmdObj["info"];
             PartitionedCollection *pc = cl->as<PartitionedCollection>();
-            if (e.ok()) {
-                BSONObj pivot = e.embeddedObjectUserCheck();
+            if (pivotElement.ok()) {
+                BSONObj pivot = pivotElement.embeddedObjectUserCheck();
                 validateInsert(pivot);
-                pc->manuallyAddPartition(pivot);
+                pc->manuallyAddPartition(
+                    pivot, 
+                    infoElement.ok() ? infoElement.embeddedObjectUserCheck() : BSONObj()
+                    );
             }
             else {
                 pc->addPartition();
@@ -1844,11 +1847,45 @@ namespace mongo {
             // now that we have added the partition, take care of the oplog
             uint64_t numPartitions = pc->numPartitions();
             massert(17347, str::stream() << "bad numPartitions after adding a partition " << numPartitions, numPartitions > 1);
+
+            if (!fromRepl) {
+                uint64_t numPartitions;
+                BSONArray partitionArray;
+                pc->getPartitionInfo(&numPartitions, &partitionArray);
+                vector<BSONElement> v;
+                partitionArray.elems(v);
+                
+                // now we need to log this thing for replication
+                BSONObj cmdWithPivot;
+                if (!pivotElement.ok()) {
+                    // add the pivot
+                    BSONObjBuilder bPivot;
+                    BSONObj o = v[numPartitions-2].Obj();
+                    cloneBSONWithFieldChanged(bPivot, cmdObj, "newMax", o["max"].Obj(), true);
+                    cmdWithPivot = bPivot.obj();
+                }
+                else {
+                    cmdWithPivot = cmdObj;
+                }
+                BSONObj cmdWithInfo;
+                if (!infoElement.ok()) {
+                    BSONObjBuilder bInfo;
+                    cloneBSONWithFieldChanged(bInfo, cmdWithPivot, "info", v[numPartitions-1].Obj(), true);
+                    cmdWithInfo = bInfo.obj();
+                }
+                else {
+                    cmdWithInfo = cmdWithPivot;
+                }
+                string logNs = dbname + ".$cmd";
+                OplogHelpers::logCommand(logNs.c_str(), cmdWithInfo);
+            }
+/*
             // this partition has the pivot that was capped
             BSONObj oldEnd = pc->getPartitionMetadata(numPartitions - 2);
             // this is the newly added partition
             BSONObj newEnd = pc->getPartitionMetadata(numPartitions - 1);            
             OplogHelpers::logAddPartition(ns.c_str(), oldEnd["max"].Obj(), newEnd);
+*/
             return true;
         }
     } cmdAddPartition;

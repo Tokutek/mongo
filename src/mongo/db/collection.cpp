@@ -3280,20 +3280,18 @@ namespace mongo {
         sanityCheck();
     }
 
-    void PartitionedCollection::manuallyAddPartition(const BSONObj& newPivot) {
+    void PartitionedCollection::manuallyAddPartition(const BSONObj& newPivot, const BSONObj &partitionInfo) {
         prepareAddPartition();
         manuallyCapLastPartition(getValidatedPKFromObject(newPivot));
-        appendNewPartition();
+        if (partitionInfo.isEmpty()) {
+            appendNewPartition();
+        }
+        else {
+            BSONObj o = cloneBSONWithFieldChanged(partitionInfo, "max", getValidatedPKFromObject(partitionInfo["max"].Obj()), false);
+            appendPartition(partitionInfo);
+        }
         sanityCheck();
     }
-
-    void PartitionedCollection::addPartitionFromOplog(const BSONObj& newPivot, const BSONObj &partitionInfo) {
-        prepareAddPartition();
-        manuallyCapLastPartition(newPivot);
-        appendPartition(partitionInfo);
-        sanityCheck();
-    }
-
 
     // returns the partition info with field names for the pivots filled in
     void PartitionedCollection::getPartitionInfo(uint64_t* numPartitions, BSONArray* partitionArray) {

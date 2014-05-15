@@ -47,10 +47,6 @@ namespace mongo {
 
         void logUnsupportedOperation(const char *ns);
 
-        void logDropPartition(const char *ns, uint64_t partitionID);
-
-        void logAddPartition(const char *ns, const BSONObj &cappedPivot, const BSONObj &newPartitionInfo);
-
         void logPartitionInfoAfterCreate(const char *ns, const vector<BSONElement> &partitionInfo);
         // Used by secondaries to process oplog entries
 

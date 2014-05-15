@@ -1563,8 +1563,7 @@ namespace mongo {
         // functions for adding/dropping partitions
         void dropPartition(uint64_t id);
         void addPartition();
-        void manuallyAddPartition(const BSONObj& newPivot);
-        void addPartitionFromOplog(const BSONObj& newPivot, const BSONObj &partitionInfo);
+        void manuallyAddPartition(const BSONObj& newPivot, const BSONObj &partitionInfo);
         void getPartitionInfo(uint64_t* numPartitions, BSONArray* partitionArray);
         void addClonedPartitionInfo(const vector<BSONElement> &partitionInfo);
         BSONObj getPartitionMetadata(uint64_t index);

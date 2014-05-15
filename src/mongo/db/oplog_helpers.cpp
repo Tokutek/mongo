@@ -38,9 +38,6 @@ static const char *KEY_STR_MODS = "m";
 static const char *KEY_STR_PK = "pk";
 static const char *KEY_STR_COMMENT = "o";
 static const char *KEY_STR_MIGRATE = "fromMigrate";
-static const char *KEY_STR_PARTITIONID = "pid";
-static const char *KEY_STR_CAPPED_PIVOT = "cp";
-static const char *KEY_STR_NEW_PARTITION_INFO = "pi";
 
 // values for types of operations in oplog
 static const char OP_STR_INSERT[] = "i"; // normal insert
@@ -51,8 +48,6 @@ static const char OP_STR_DELETE[] = "d"; // delete with full pre-image
 static const char OP_STR_CAPPED_DELETE[] = "cd"; // delete from capped collection
 static const char OP_STR_COMMENT[] = "n"; // a no-op
 static const char OP_STR_COMMAND[] = "c"; // command
-static const char OP_STR_DROP_PARTITION[] = "dp"; // drop partition from partitioned collection
-static const char OP_STR_ADD_PARTITION[] = "ap"; // add partition from partitioned collection
 static const char OP_STR_PARTITION_INFO[] = "pi"; // partition info from partitioned collection, used after create
 
 namespace mongo {
@@ -256,33 +251,6 @@ namespace mongo {
             }
         }
         
-        void logDropPartition(const char *ns, uint64_t partitionID) {
-            if (logTxnOpsForReplication()) {
-                BSONObjBuilder b;
-                if (isLocalNs(ns)) {
-                    return;
-                }
-                appendOpType(OP_STR_DROP_PARTITION, &b);
-                appendNsStr(ns, &b);
-                b.append(KEY_STR_PARTITIONID, partitionID);
-                cc().txn().logOpForReplication(b.obj());
-            }
-        }
-        
-        void logAddPartition(const char *ns, const BSONObj &cappedPivot, const BSONObj &newPartitionInfo) {
-            if (logTxnOpsForReplication()) {
-                BSONObjBuilder b;
-                if (isLocalNs(ns)) {
-                    return;
-                }
-                appendOpType(OP_STR_ADD_PARTITION, &b);
-                appendNsStr(ns, &b);
-                b.append(KEY_STR_CAPPED_PIVOT, cappedPivot);
-                b.append(KEY_STR_NEW_PARTITION_INFO, newPartitionInfo);
-                cc().txn().logOpForReplication(b.obj());
-            }
-        }
-
         void logPartitionInfoAfterCreate(const char *ns, const vector<BSONElement> &partitionInfo) {
             if (logTxnOpsForReplication()) {
                 BSONObjBuilder b;
@@ -617,42 +585,6 @@ namespace mongo {
             throw RollbackOplogException(str::stream() << "Could not rollback command " << command << " on ns " << ns);
         }
 
-        static void runDropPartitionFromOplog(const char *ns, const BSONObj &op) {
-            LOCK_REASON(lockReason, "repl: drop partition");
-            Client::WriteContext ctx(ns, lockReason);
-            Collection *cl = getCollection(ns);
-            verify(cl->isPartitioned());
-            PartitionedCollection* pc = cl->as<PartitionedCollection>();
-            uint64_t id = op[KEY_STR_PARTITIONID].numberLong();
-            pc->dropPartition(id);
-        }
-
-        static void rollbackDropPartitionFromOplog(const char *ns, const BSONObj &op) {
-            throw RollbackOplogException(str::stream() << "Could not rollback drop partition" << op << " on ns " << ns);
-        }
-
-        static void runAddPartitionFromOplog(const char *ns, const BSONObj &op) {
-            LOCK_REASON(lockReason, "repl: add partition");
-            Client::WriteContext ctx(ns, lockReason);
-            Collection *cl = getCollection(ns);
-            verify(cl->isPartitioned());
-            PartitionedCollection* pc = cl->as<PartitionedCollection>();
-            const BSONObj &newPivot = op[KEY_STR_CAPPED_PIVOT].Obj();
-            const BSONObj &partitionInfo = op[KEY_STR_NEW_PARTITION_INFO].Obj();
-            pc->addPartitionFromOplog(newPivot, partitionInfo);
-        }
-
-        static void rollbackAddPartitionFromOplog(const char *ns, const BSONObj &op) {
-            LOCK_REASON(lockReason, "repl: rollback add partition");
-            Client::WriteContext ctx(ns, lockReason);
-            Collection *cl = getCollection(ns);
-            verify(cl->isPartitioned());
-            PartitionedCollection* pc = cl->as<PartitionedCollection>();
-            const BSONObj &partitionInfo = op[KEY_STR_NEW_PARTITION_INFO].Obj();
-            uint64_t id = partitionInfo["_id"].numberLong();
-            pc->dropPartition(id);
-        }
-
         static void runPartitionInfoAfterCreate(const char *ns, const BSONObj &op) {
             LOCK_REASON(lockReason, "repl: setting partition info after create");
             Client::WriteContext ctx(ns, lockReason);
@@ -708,12 +640,6 @@ namespace mongo {
                 opCounters->gotDelete();
                 runCappedDeleteFromOplog(ns, op);
             }
-            else if (strcmp(opType, OP_STR_DROP_PARTITION) == 0) {
-                runDropPartitionFromOplog(ns, op);
-            }
-            else if (strcmp(opType, OP_STR_ADD_PARTITION) == 0) {
-                runAddPartitionFromOplog(ns, op);
-            }
             else if (strcmp(opType, OP_STR_PARTITION_INFO) == 0) {
                 runPartitionInfoAfterCreate(ns, op);
             }
@@ -767,12 +693,6 @@ namespace mongo {
             }
             else if (strcmp(opType, OP_STR_CAPPED_DELETE) == 0) {
                 runCappedInsertFromOplog(ns, op);
-            }
-            else if (strcmp(opType, OP_STR_DROP_PARTITION) == 0) {
-                rollbackDropPartitionFromOplog(ns, op);
-            }
-            else if (strcmp(opType, OP_STR_ADD_PARTITION) == 0) {
-                rollbackAddPartitionFromOplog(ns, op);
             }
             else if (strcmp(opType, OP_STR_PARTITION_INFO) == 0) {
                 rollbackPartitionInfoAfterCreate(ns, op);
