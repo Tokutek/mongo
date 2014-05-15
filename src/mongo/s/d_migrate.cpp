@@ -1483,7 +1483,7 @@ namespace mongo {
         
         MigrateStatus() : _lastAppliedMigrateLogID(-1), m_active("MigrateStatus") { active = false; }
 
-        void prepare() {
+        void prepare(const BSONObj &cmdObj) {
             scoped_lock l(m_active); // reading and writing 'active'
 
             verify( ! active );
@@ -1497,6 +1497,31 @@ namespace mongo {
             _lastAppliedMigrateLogID = -1;
 
             active = true;
+
+            ns = cmdObj.firstElement().String();
+            from = cmdObj["from"].String();
+            min = cmdObj["min"].Obj().getOwned();
+            max = cmdObj["max"].Obj().getOwned();
+            if (cmdObj.hasField("shardKeyPattern")) {
+                shardKeyPattern = cmdObj["shardKeyPattern"].Obj().getOwned();
+            } else {
+                // TODO: can we remove this section since TokuMX clusters shouldn't have any pre-2.2
+                // protocol artifacts?
+
+                // shardKeyPattern may not be provided if another shard is from pre 2.2
+                // In that case, assume the shard key pattern is the same as the range
+                // specifiers provided.
+                BSONObj keya = KeyPattern::inferKeyPattern(min);
+                BSONObj keyb = KeyPattern::inferKeyPattern(max);
+                verify( keya == keyb );
+
+                warning() << "No shard key pattern provided by source shard for migration."
+                    " This is likely because the source shard is running a version prior to 2.2."
+                    " Falling back to assuming the shard key matches the pattern of the min and max"
+                    " chunk range specifiers.  Inferred shard key: " << keya << endl;
+
+                shardKeyPattern = keya.getOwned();
+            }
         }
 
         /**
@@ -2239,35 +2264,7 @@ namespace mongo {
             if ( ! configServer.ok() )
                 ShardingState::initialize(cmdObj["configServer"].String());
 
-            // This used to be over the entire _recvChunkStart command, but
-            // ShardingState::initialize will take a GlobalWrite lock in order to enable sharding,
-            // so we can't take the lock until after that.
-            LOCK_REASON(lockReason, "sharding: _recvChunkStart");
-            Lock::DBWrite lk(dbname, lockReason);
-
-            migrateStatus.prepare();
-
-            migrateStatus.ns = cmdObj.firstElement().String();
-            migrateStatus.from = cmdObj["from"].String();
-            migrateStatus.min = cmdObj["min"].Obj().getOwned();
-            migrateStatus.max = cmdObj["max"].Obj().getOwned();
-            if (cmdObj.hasField("shardKeyPattern")) {
-                migrateStatus.shardKeyPattern = cmdObj["shardKeyPattern"].Obj().getOwned();
-            } else {
-                // shardKeyPattern may not be provided if another shard is from pre 2.2
-                // In that case, assume the shard key pattern is the same as the range
-                // specifiers provided.
-                BSONObj keya = KeyPattern::inferKeyPattern( migrateStatus.min );
-                BSONObj keyb = KeyPattern::inferKeyPattern( migrateStatus.max );
-                verify( keya == keyb );
-
-                warning() << "No shard key pattern provided by source shard for migration."
-                    " This is likely because the source shard is running a version prior to 2.2."
-                    " Falling back to assuming the shard key matches the pattern of the min and max"
-                    " chunk range specifiers.  Inferred shard key: " << keya << endl;
-
-                migrateStatus.shardKeyPattern = keya.getOwned();
-            }
+            migrateStatus.prepare(cmdObj);
 
             boost::thread m( migrateThread );
 
