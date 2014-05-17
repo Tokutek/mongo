@@ -46,8 +46,6 @@ namespace mongo {
         void logCommand(const char *ns, const BSONObj &row);
 
         void logUnsupportedOperation(const char *ns);
-
-        void logPartitionInfoAfterCreate(const char *ns, const vector<BSONElement> &partitionInfo);
         // Used by secondaries to process oplog entries
 
         void applyOperationFromOplog(const BSONObj& op);

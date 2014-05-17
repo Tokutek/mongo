@@ -48,7 +48,6 @@ static const char OP_STR_DELETE[] = "d"; // delete with full pre-image
 static const char OP_STR_CAPPED_DELETE[] = "cd"; // delete from capped collection
 static const char OP_STR_COMMENT[] = "n"; // a no-op
 static const char OP_STR_COMMAND[] = "c"; // command
-static const char OP_STR_PARTITION_INFO[] = "pi"; // partition info from partitioned collection, used after create
 
 namespace mongo {
 
@@ -251,24 +250,6 @@ namespace mongo {
             }
         }
         
-        void logPartitionInfoAfterCreate(const char *ns, const vector<BSONElement> &partitionInfo) {
-            if (logTxnOpsForReplication()) {
-                BSONObjBuilder b;
-                BSONArrayBuilder arrayBuilder;
-                if (isLocalNs(ns)) {
-                    return;
-                }
-                appendOpType(OP_STR_PARTITION_INFO, &b);
-                appendNsStr(ns, &b);
-                for (vector<BSONElement>::const_iterator it = partitionInfo.begin(); it != partitionInfo.end(); it++) {
-                    BSONObj curr = it->Obj();
-                    arrayBuilder.append(curr);
-                }
-                b.append(KEY_STR_ROW, arrayBuilder.arr());
-                cc().txn().logOpForReplication(b.obj());
-            }
-        }
-
         static void runColdIndexFromOplog(const char *ns, const BSONObj &row) {
             LOCK_REASON(lockReason, "repl: cold index build");
             Client::WriteContext ctx(ns, lockReason);
@@ -585,19 +566,6 @@ namespace mongo {
             throw RollbackOplogException(str::stream() << "Could not rollback command " << command << " on ns " << ns);
         }
 
-        static void runPartitionInfoAfterCreate(const char *ns, const BSONObj &op) {
-            LOCK_REASON(lockReason, "repl: setting partition info after create");
-            Client::WriteContext ctx(ns, lockReason);
-            Collection *cl = getCollection(ns);
-            verify(cl->isPartitioned());
-            PartitionedCollection* pc = cl->as<PartitionedCollection>();
-            pc->addClonedPartitionInfo(op[KEY_STR_ROW].Array());
-        }
-
-        static void rollbackPartitionInfoAfterCreate(const char* ns, const BSONObj &op) {
-            throw RollbackOplogException(str::stream() << "Could not rollback partition info op " << op << " on ns " << ns);
-        }
-        
         void applyOperationFromOplog(const BSONObj& op) {
             LOG(6) << "applying op: " << op << endl;
             OpCounters* opCounters = &replOpCounters;
@@ -639,9 +607,6 @@ namespace mongo {
             else if (strcmp(opType, OP_STR_CAPPED_DELETE) == 0) {
                 opCounters->gotDelete();
                 runCappedDeleteFromOplog(ns, op);
-            }
-            else if (strcmp(opType, OP_STR_PARTITION_INFO) == 0) {
-                runPartitionInfoAfterCreate(ns, op);
             }
             else {
                 throw MsgAssertionException( 14825 , ErrorMsg("error in applyOperation : unknown opType ", *opType) );
@@ -693,9 +658,6 @@ namespace mongo {
             }
             else if (strcmp(opType, OP_STR_CAPPED_DELETE) == 0) {
                 runCappedInsertFromOplog(ns, op);
-            }
-            else if (strcmp(opType, OP_STR_PARTITION_INFO) == 0) {
-                rollbackPartitionInfoAfterCreate(ns, op);
             }
             else {
                 throw MsgAssertionException( 16795 , ErrorMsg("error in applyOperation : unknown opType ", *opType) );

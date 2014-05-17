@@ -16,6 +16,7 @@
 "clone",
 "cloneCollectionLocalSource",
 "cloneCollectionTarget",
+"clonePartitionInfo",
 "closeAllDatabases",
 "collectionsExist",
 "collMod",

@@ -1890,6 +1890,35 @@ namespace mongo {
         }
     } cmdAddPartition;
 
+    // mainly used for replication
+    class CmdClonePartitionInfo : public FileopsCommand {
+    public:
+        CmdClonePartitionInfo() : FileopsCommand("clonePartitionInfo") { }
+        virtual bool logTheOp() { return true; }
+        virtual void help( stringstream& help ) const {
+            help << "Internal.\n";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::clonePartitionInfo);
+            out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
+        }
+        bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& anObjBuilder, bool /*fromRepl*/) {
+            string coll = cmdObj[ "clonePartitionInfo" ].valuestrsafe();
+            string ns = dbname + "." + coll;
+            Collection *cl = getCollection( ns );
+            uassert( 0, "collection must be partitioned", cl->isPartitioned() );
+
+            PartitionedCollection *pc = cl->as<PartitionedCollection>();
+            pc->addClonedPartitionInfo(cmdObj["info"].Array());
+            return true;
+        }
+    } cmdClonePartitionInfo;
+
+
+
     class CmdConvertToPartitioned : public FileopsCommand {
     public:
         CmdConvertToPartitioned() : FileopsCommand("convertToPartitioned") { }
