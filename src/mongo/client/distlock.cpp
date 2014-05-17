@@ -507,20 +507,33 @@ namespace mongo {
         return true;
     }
 
+    static bool errObjIsRetryable(const BSONObj &errObj) {
+        BSONElement codeElt = errObj["code"];
+        if (!codeElt.ok() || !codeElt.isNumber()) {
+            return false;
+        }
+        long long errCode = codeElt.numberLong();
+        return (errCode == 16759 || errCode == 16760 || errCode == 16768);
+    }
+
     // DBClientCursor::nextSafe (inside DBClientInterface::findOne) throws exceptions with the code
-    // 13106 and the string "nextSafe(): " concatenated with the BSONObj returned by the query.  We
-    // need to look at this string to figure out the original error code.  This is not ideal, but we
-    // have to deal with the C++ driver's weirdness here.  We use findOne a lot in lock_try so the
-    // right way to handle these types of problems is a construct like the following:
+    // 13106 and the string "nextSafe(): " concatenated with the BSONObj returned by the query.
+    //
+    // Additionally, when SyncClusterConnection gets an error from one server it wraps the exception
+    // in its own UserException with error code 8001.
+    //
+    // We need to look at this string to figure out the original error code.  This is not ideal, but
+    // we have to deal with the C++ driver's weirdness here.  We use findOne a lot in lock_try so
+    // the right way to handle these types of problems is a construct like the following:
     //
     //     catch (UserException &e) {
-    //         if (nextSafeExceptionIsRetryable(e)) {
+    //         if (userExceptionIsRetryable(e)) {
     //             conn.done();
     //             return false;
     //         }
     //         throw;
     //     }
-    static bool nextSafeExceptionIsRetryable(const UserException &e) {
+    static bool userExceptionIsRetryable(const UserException &e) {
         int code = e.getCode();
         if (code == 13106) {
             // Expected format:
@@ -532,14 +545,20 @@ namespace mongo {
             }
             StringData objStr = err.substr(prefix.size(), string::npos);
             BSONObj errObj = fromjson(objStr.toString());
-            BSONElement codeElt = errObj["code"];
-            if (!codeElt.ok() || !codeElt.isNumber()) {
+            return errObjIsRetryable(errObj);
+        } else if (code == 8001) {
+            // Expected format:
+            // 8001 SyncClusterConnection write op failed: localhost:30002: { err: "Lock not granted. Try restarting the transaction.", code: 16759, n: 0, connectionId: 5, ok: 1.0 }
+            StringData err = e.what();
+            StringData prefix("8001 SyncClusterConnection write op failed: ");
+            if (!err.startsWith(prefix)) {
                 return false;
             }
-            long long wrappedCode = codeElt.numberLong();
-            if (wrappedCode == 16759 || wrappedCode == 16760 || wrappedCode == 16768) {
-                return true;
-            }
+            StringData host = err.substr(prefix.size(), string::npos);
+            size_t openPos = host.find('{');
+            StringData objStr = host.substr(openPos, string::npos);
+            BSONObj errObj = fromjson(objStr.toString());
+            return errObjIsRetryable(errObj);
         }
         return false;
     }
@@ -641,6 +660,12 @@ namespace mongo {
                     return false;
                 }
                 catch ( UserException& e ) {
+                    if (userExceptionIsRetryable(e)) {
+                        conn.done();
+                        LOG( logLvl ) << "retryable error inserting initial doc in " << LocksType::ConfigNS
+                                      << " for lock " << _name << ": " << e.what() << endl;
+                        return false;
+                    }
                     warning() << "could not insert initial doc for distributed lock " << _name << causedBy( e ) << endl;
                 }
             }
@@ -866,7 +891,7 @@ namespace mongo {
             return false;
         }
         catch (UserException &e) {
-            if (nextSafeExceptionIsRetryable(e)) {
+            if (userExceptionIsRetryable(e)) {
                 conn.done();
                 LOG( logLvl ) << "retryable error looking up lock" << endl;
                 return false;
@@ -975,7 +1000,7 @@ namespace mongo {
                 }
                 catch (UserException &e) {
                     conn.done(); indDB.done();
-                    if (nextSafeExceptionIsRetryable(e)) {
+                    if (userExceptionIsRetryable(e)) {
                         LOG( logLvl ) << "retryable error forcing lock " << lockName << endl;
                         return false;
                     }
@@ -1024,7 +1049,7 @@ namespace mongo {
         }
         catch (UserException &e) {
             conn.done();
-            if (nextSafeExceptionIsRetryable(e)) {
+            if (userExceptionIsRetryable(e)) {
                 LOG( logLvl ) << "retryable error while acquiring lock " << lockName << endl;
                 return false;
             }
@@ -1081,7 +1106,7 @@ namespace mongo {
             }
             catch (UserException &e) {
                 conn.done();
-                if (nextSafeExceptionIsRetryable(e)) {
+                if (userExceptionIsRetryable(e)) {
                     LOG( logLvl ) << "retryable exception finalizing winning lock" << endl;
                     return false;
                 }
@@ -1181,7 +1206,7 @@ namespace mongo {
                 continue;
             }
             catch (UserException &e) {
-                if (nextSafeExceptionIsRetryable(e)) {
+                if (userExceptionIsRetryable(e)) {
                     conn.done();
                     continue;
                 }
