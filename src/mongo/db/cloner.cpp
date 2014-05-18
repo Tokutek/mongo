@@ -430,7 +430,7 @@ namespace mongo {
                     if (logForRepl) {
                         BSONObjBuilder b;
                         b.append("clonePartitionInfo", collectionName);
-                        b.append("info", res["partitions"].Array());
+                        b.appendAs(res["partitions"], "info");
                         string logNs = dbname + ".$cmd";
                         OplogHelpers::logCommand(logNs.c_str(), b.obj());
                     }
@@ -610,7 +610,7 @@ namespace mongo {
                 if (opts.logForRepl) {
                     BSONObjBuilder b;
                     b.append("clonePartitionInfo", collectionName);
-                    b.append("info", res["partitions"].Array());
+                    b.appendAs(res["partitions"], "info");
                     string logNs = todb + ".$cmd";
                     OplogHelpers::logCommand(logNs.c_str(), b.obj());
                 }
