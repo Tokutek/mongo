@@ -83,6 +83,14 @@ namespace mongo {
             cm->add_ns(ns, newCollection);
 
             cl = cm->getCollection(ns);
+            // The reason this functionality is here and not
+            // within the Collection constructor is there are funny interactions
+            // between adding these fields to system.indexes and the work
+            // done for adding data to system.namespaces. Putting them together
+            // causes a bad case where if both system.indexes and system.namespaces
+            // need to be created, each will try to create the other, causing an error
+            // in the Collection constructor. Therefore, as a workaround, this code
+            // is out here.
             cl->addDefaultIndexesToCatalog();
 
             // Keep the call to 'str()', it allows us to call it in gdb.
