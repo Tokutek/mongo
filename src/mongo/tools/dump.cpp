@@ -135,11 +135,12 @@ public:
     }
 
     void writeMetadataFile( const string coll, boost::filesystem::path outputFile, 
-                            map<string, BSONObj> options, multimap<string, BSONObj> indexes ) {
+                            map<string, BSONObj> options, multimap<string, BSONObj> indexes, map<string, BSONObj> partitionInfo) {
         log() << "\tMetadata for " << coll << " to " << outputFile.string() << endl;
 
         bool hasOptions = options.count(coll) > 0;
         bool hasIndexes = indexes.count(coll) > 0;
+        bool hasPartitionInfo = partitionInfo.count(coll) > 0;
 
         BSONObjBuilder metadata;
 
@@ -160,6 +161,9 @@ public:
 
             indexesOutput.done();
         }
+        if (hasPartitionInfo) {
+            metadata << "partitionInfo" << partitionInfo.find(coll)->second;
+        }
 
         ofstream file (outputFile.string().c_str());
         uassert(15933, "Couldn't open file: " + outputFile.string(), file.is_open());
@@ -178,6 +182,7 @@ public:
         boost::filesystem::create_directories( outdir );
 
         map <string, BSONObj> collectionOptions;
+        map <string, BSONObj> partitionInfo;
         multimap <string, BSONObj> indexes;
         vector <string> collections;
 
@@ -196,7 +201,15 @@ public:
             BSONObj obj = cursor->nextSafe();
             const string name = obj.getField( "name" ).valuestr();
             if (obj.hasField("options")) {
-                collectionOptions[name] = obj.getField("options").embeddedObject().getOwned();
+                BSONObj options = obj.getField("options").embeddedObject().getOwned();
+                if (options["partitioned"].trueValue()) {
+                    BSONObj res;
+                    StringData collectionName = nsToCollectionSubstring(name);
+                    bool ok = conn(true).runCommand(db, BSON("getPartitionInfo" << collectionName), res);
+                    uassert(0, str::stream() << "Could not get partition information for " << name, ok);
+                    partitionInfo[name] = res;
+                }
+                collectionOptions[name] = options;
             }
 
             // skip namespaces with $ in them only if we don't specify a collection to dump
@@ -235,7 +248,7 @@ public:
             string name = *it;
             const string filename = name.substr( db.size() + 1 );
             writeCollectionFile( name , outdir / ( filename + ".bson" ) );
-            writeMetadataFile( name, outdir / (filename + ".metadata.json"), collectionOptions, indexes);
+            writeMetadataFile( name, outdir / (filename + ".metadata.json"), collectionOptions, indexes, partitionInfo);
         }
 
     }

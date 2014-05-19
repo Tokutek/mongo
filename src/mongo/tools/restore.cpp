@@ -288,7 +288,7 @@ public:
                                               ? metadataObject["options"].Obj()
                                               : BSONObj());
 
-        if (_doBulkLoad) {
+        if (_doBulkLoad && !options["partitioned"].trueValue()) {
             RemoteLoader loader(conn(), _curdb, _curcoll, indexes, options);
             processFile( root );
             BSONObj res;
@@ -299,7 +299,7 @@ public:
         } else {
             // No bulk load. Create collection and indexes manually.
             if (!options.isEmpty()) {
-                createCollectionWithOptions(options);
+                createCollectionWithOptions(options, metadataObject);
             }
             // Build indexes last - it's a little faster.
             processFile( root );
@@ -406,7 +406,7 @@ private:
         return nfields == obj2.nFields();
     }
 
-    void createCollectionWithOptions(BSONObj obj) {
+    void createCollectionWithOptions(BSONObj obj, BSONObj metadataObject) {
         BSONObjIterator i(obj);
 
         // Rebuild obj as a command object for the "create" command.
@@ -436,6 +436,9 @@ private:
         bool createColl = true;
         if (cursor->more()) {
             createColl = false;
+            if (metadataObject["partitioned"].trueValue()) {
+                log() << "Collection " << _curns << " already exists, so we will not be creating the automatic partitions" << endl;
+            }
             BSONObj nsObj = cursor->next();
             if (!nsObj.hasField("options") || !optionsSame(obj, nsObj["options"].Obj())) {
                     log() << "WARNING: collection " << _curns << " exists with different options than are in the metadata.json file and not using --drop. Options in the metadata file will be ignored." << endl;
@@ -451,6 +454,17 @@ private:
             uasserted(15936, "Creating collection " + _curns + " failed. Errmsg: " + info["errmsg"].String());
         } else {
             log() << "\tCreated collection " << _curns << " with options: " << obj.jsonString() << endl;
+            if (metadataObject["partitionInfo"].trueValue()) {
+                BSONObj res;
+                BSONObjBuilder b;
+                b.append("clonePartitionInfo", obj["create"].String());
+                BSONObj pInfo = metadataObject["partitionInfo"].Obj();
+                b.appendAs(pInfo["partitions"], "info");
+                BSONObj o = b.obj();
+                log() << "the obj, " << o << endl;
+                bool ok = conn().runCommand(_curdb, o, info);
+                log() << "ok: " << ok << "info: " << info << endl;
+            }
         }
     }
 

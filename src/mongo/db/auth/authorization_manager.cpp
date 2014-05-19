@@ -109,6 +109,7 @@ namespace {
         readWriteRoleActions.addAction(ActionType::addPartition);
         readWriteRoleActions.addAction(ActionType::beginSerializableTransaction);
         readWriteRoleActions.addAction(ActionType::cloneCollectionTarget);
+        readWriteRoleActions.addAction(ActionType::clonePartitionInfo);
         readWriteRoleActions.addAction(ActionType::convertToCapped);
         readWriteRoleActions.addAction(ActionType::convertToPartitioned);
         readWriteRoleActions.addAction(ActionType::createCollection); // db admin gets this also
@@ -130,6 +131,7 @@ namespace {
         dbAdminRoleActions.addAction(ActionType::addPartition);
         dbAdminRoleActions.addAction(ActionType::clean);
         dbAdminRoleActions.addAction(ActionType::cloneCollectionLocalSource);
+        dbAdminRoleActions.addAction(ActionType::clonePartitionInfo);
         dbAdminRoleActions.addAction(ActionType::collMod);
         dbAdminRoleActions.addAction(ActionType::collStats);
         dbAdminRoleActions.addAction(ActionType::compact);

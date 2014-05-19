@@ -1374,7 +1374,7 @@ namespace mongo {
     bool userCreateNS(const StringData& ns, BSONObj options, string& err, bool logForReplication) {
         StringData coll = ns.substr(ns.find('.') + 1);
         massert( 16451 ,  str::stream() << "invalid ns: " << ns , NamespaceString::validCollectionName(ns));
-        StringData cl = nsToDatabaseSubstring( ns );
+        StringData dbname = nsToDatabaseSubstring( ns );
         if (getCollection(ns) != NULL) {
             // Namespace already exists
             err = "collection already exists";
@@ -1405,7 +1405,7 @@ namespace mongo {
                 b.appendElements( options );
                 options = b.obj();
             }
-            string logNs = cl.toString() + ".$cmd";
+            string logNs = dbname.toString() + ".$cmd";
             OplogHelpers::logCommand(logNs.c_str(), options);
             // now handle partitioned collections. It is a shame that
             // this needs to be done. We want to make sure that the initial
@@ -1420,9 +1420,10 @@ namespace mongo {
                 uint64_t numPartitions;
                 BSONArray partitionArray;
                 pc->getPartitionInfo(&numPartitions, &partitionArray);
-                vector<BSONElement> v;
-                partitionArray.elems(v);
-                OplogHelpers::logPartitionInfoAfterCreate(ns.rawData(), v);
+                BSONObjBuilder b;
+                b.append("clonePartitionInfo", coll);
+                b.append("info", partitionArray);
+                OplogHelpers::logCommand(logNs.c_str(), b.obj());
             }
         }
         return true;
@@ -3280,20 +3281,18 @@ namespace mongo {
         sanityCheck();
     }
 
-    void PartitionedCollection::manuallyAddPartition(const BSONObj& newPivot) {
+    void PartitionedCollection::manuallyAddPartition(const BSONObj& newPivot, const BSONObj &partitionInfo) {
         prepareAddPartition();
         manuallyCapLastPartition(getValidatedPKFromObject(newPivot));
-        appendNewPartition();
+        if (partitionInfo.isEmpty()) {
+            appendNewPartition();
+        }
+        else {
+            BSONObj o = cloneBSONWithFieldChanged(partitionInfo, "max", getValidatedPKFromObject(partitionInfo["max"].Obj()), false);
+            appendPartition(partitionInfo);
+        }
         sanityCheck();
     }
-
-    void PartitionedCollection::addPartitionFromOplog(const BSONObj& newPivot, const BSONObj &partitionInfo) {
-        prepareAddPartition();
-        manuallyCapLastPartition(newPivot);
-        appendPartition(partitionInfo);
-        sanityCheck();
-    }
-
 
     // returns the partition info with field names for the pivots filled in
     void PartitionedCollection::getPartitionInfo(uint64_t* numPartitions, BSONArray* partitionArray) {
