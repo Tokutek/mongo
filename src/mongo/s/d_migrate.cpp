@@ -444,15 +444,8 @@ namespace mongo {
         CursorId startCloneTransaction(const BSONObj &cmdobj, string &errmsg, BSONObjBuilder &result) {
             string ns(cmdobj["ns"].String());
             LOCK_REASON(lockReason, "sharding: starting clone transaction for migrate");
-            Client::WriteContext ctx(ns, lockReason);
+            Client::ReadContext ctx(ns, lockReason);
             massert(17223, "can't _migrateStartCloneTransaction with active snapshot", !_snapshotTaken);
-            enableLogTxnOpsForSharding(mongo::shouldLogOpForSharding,
-                                       mongo::shouldLogUpdateOpForSharding,
-                                       mongo::startObjForMigrateLog,
-                                       mongo::writeObjToMigrateLog,
-                                       mongo::writeObjToMigrateLogRef);
-            _snapshotTaken = true;
-            Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
 
             Collection *cl = getCollection(ns);
             if (cl == NULL) {
@@ -469,10 +462,45 @@ namespace mongo {
             KeyPattern kp(idx->keyPattern());
             BSONObj min = KeyPattern::toKeyFormat(kp.extendRangeBound(cmdobj["min"].Obj(), false));
             BSONObj max = KeyPattern::toKeyFormat(kp.extendRangeBound(cmdobj["max"].Obj(), false));
-            ClientCursor::Holder ccPointer(new ClientCursor(0, IndexCursor::make(cl, *idx, min, max, false, 1), ns, cmdobj.getOwned()));
-            CursorId cursorid = ccPointer->cursorid();
-            cc().swapTransactionStack(ccPointer->transactions);
-            ccPointer.release();
+
+            // This transaction will be used to associate the row locks we take below, until after
+            // we create the transaction and cursor we'll use later to pull all the data over.
+            Client::Transaction lockingTxn(DB_SERIALIZABLE | DB_TXN_READ_ONLY);
+
+            {
+                // Need these OpSettings to make sure this cursor will prelock and take row locks.
+                // Also need numWanted == 0 in Cursor::make.
+                Client::WithOpSettings wos(OpSettings().setQueryCursorMode(READ_LOCK_CURSOR).setJustOne(false));
+
+                // Just creating the cursor under these conditions will prelock the range.
+                // After this point (until lockingTxn commits), nothing else can write to our chunk, so we can create the snapshot.
+                // Note that this cursor "looks like" the cursor we'll use to read the chunk, in terms of startKey, endKey, and endKeyInclusive.
+                Cursor::make(cl, *idx, min, max, false, 1);
+
+                enableLogTxnOpsForSharding(mongo::shouldLogOpForSharding,
+                                           mongo::shouldLogUpdateOpForSharding,
+                                           mongo::startObjForMigrateLog,
+                                           mongo::writeObjToMigrateLog,
+                                           mongo::writeObjToMigrateLogRef);
+                _snapshotTaken = true;
+            }
+
+            // Need to avoid committing the above transaction until after we've created our cursor,
+            // so we'll make an AlternateTransactionStack here; this transaction will do the real
+            // work after we commit the above transaction, using this cursor.
+            CursorId cursorid;
+            {
+                Client::AlternateTransactionStack ats;
+                Client::Transaction txn(DB_TXN_SNAPSHOT | DB_TXN_READ_ONLY);
+                cc().setOpSettings(OpSettings().setQueryCursorMode(DEFAULT_LOCK_CURSOR).setBulkFetch(true));
+
+                ClientCursor::Holder ccPointer(new ClientCursor(0, Cursor::make(cl, *idx, min, max, false, 1), ns, cmdobj.getOwned()));
+                cursorid = ccPointer->cursorid();
+                cc().swapTransactionStack(ccPointer->transactions);
+                ccPointer.release();
+            }
+
+            lockingTxn.commit();
             return cursorid;
         }
 
@@ -523,7 +551,7 @@ namespace mongo {
                 BSONObj min = KeyPattern::toKeyFormat( kp.extendRangeBound( _min, false ) );
                 BSONObj max = KeyPattern::toKeyFormat( kp.extendRangeBound( _max, false ) );
 
-                shared_ptr<Cursor> idxCursor(IndexCursor::make( cl , *idx , min , max , false , 1 ));
+                shared_ptr<Cursor> idxCursor(Cursor::make( cl , *idx , min , max , false , 1 ));
                 _cc.reset(new ClientCursor(QueryOption_NoCursorTimeout, idxCursor, _ns));
 
                 cc().swapTransactionStack(_txnStack);
@@ -707,10 +735,7 @@ namespace mongo {
             BufBuilder &bb = result.bb();
             int lenBefore = bb.len();
             try {
-                OpSettings settings;
-                settings.setBulkFetch(true);
-                settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
-                cc().setOpSettings(settings);
+                cc().setOpSettings(OpSettings().setQueryCursorMode(DEFAULT_LOCK_CURSOR).setBulkFetch(true));
                 Client::WithTxnStack wts(cursor->transactions);
                 BSONObjBuilder cursorObj(result.subobjStart("cursor"));
                 cursorObj.append("id", id);
@@ -1458,7 +1483,7 @@ namespace mongo {
         
         MigrateStatus() : _lastAppliedMigrateLogID(-1), m_active("MigrateStatus") { active = false; }
 
-        void prepare() {
+        void prepare(const BSONObj &cmdObj) {
             scoped_lock l(m_active); // reading and writing 'active'
 
             verify( ! active );
@@ -1472,6 +1497,31 @@ namespace mongo {
             _lastAppliedMigrateLogID = -1;
 
             active = true;
+
+            ns = cmdObj.firstElement().String();
+            from = cmdObj["from"].String();
+            min = cmdObj["min"].Obj().getOwned();
+            max = cmdObj["max"].Obj().getOwned();
+            if (cmdObj.hasField("shardKeyPattern")) {
+                shardKeyPattern = cmdObj["shardKeyPattern"].Obj().getOwned();
+            } else {
+                // TODO: can we remove this section since TokuMX clusters shouldn't have any pre-2.2
+                // protocol artifacts?
+
+                // shardKeyPattern may not be provided if another shard is from pre 2.2
+                // In that case, assume the shard key pattern is the same as the range
+                // specifiers provided.
+                BSONObj keya = KeyPattern::inferKeyPattern(min);
+                BSONObj keyb = KeyPattern::inferKeyPattern(max);
+                verify( keya == keyb );
+
+                warning() << "No shard key pattern provided by source shard for migration."
+                    " This is likely because the source shard is running a version prior to 2.2."
+                    " Falling back to assuming the shard key matches the pattern of the min and max"
+                    " chunk range specifiers.  Inferred shard key: " << keya << endl;
+
+                shardKeyPattern = keya.getOwned();
+            }
         }
 
         /**
@@ -2214,35 +2264,7 @@ namespace mongo {
             if ( ! configServer.ok() )
                 ShardingState::initialize(cmdObj["configServer"].String());
 
-            // This used to be over the entire _recvChunkStart command, but
-            // ShardingState::initialize will take a GlobalWrite lock in order to enable sharding,
-            // so we can't take the lock until after that.
-            LOCK_REASON(lockReason, "sharding: _recvChunkStart");
-            Lock::DBWrite lk(dbname, lockReason);
-
-            migrateStatus.prepare();
-
-            migrateStatus.ns = cmdObj.firstElement().String();
-            migrateStatus.from = cmdObj["from"].String();
-            migrateStatus.min = cmdObj["min"].Obj().getOwned();
-            migrateStatus.max = cmdObj["max"].Obj().getOwned();
-            if (cmdObj.hasField("shardKeyPattern")) {
-                migrateStatus.shardKeyPattern = cmdObj["shardKeyPattern"].Obj().getOwned();
-            } else {
-                // shardKeyPattern may not be provided if another shard is from pre 2.2
-                // In that case, assume the shard key pattern is the same as the range
-                // specifiers provided.
-                BSONObj keya = KeyPattern::inferKeyPattern( migrateStatus.min );
-                BSONObj keyb = KeyPattern::inferKeyPattern( migrateStatus.max );
-                verify( keya == keyb );
-
-                warning() << "No shard key pattern provided by source shard for migration."
-                    " This is likely because the source shard is running a version prior to 2.2."
-                    " Falling back to assuming the shard key matches the pattern of the min and max"
-                    " chunk range specifiers.  Inferred shard key: " << keya << endl;
-
-                migrateStatus.shardKeyPattern = keya.getOwned();
-            }
+            migrateStatus.prepare(cmdObj);
 
             boost::thread m( migrateThread );
 

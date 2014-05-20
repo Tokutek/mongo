@@ -295,6 +295,19 @@ namespace mongo {
             _opSettings = settings;
         }
 
+        class WithOpSettings : boost::noncopyable {
+            Client &_c;
+            const OpSettings _oldSettings;
+          public:
+            WithOpSettings(const OpSettings &newSettings);
+            WithOpSettings(Client &c, const OpSettings &newSettings) : _c(c), _oldSettings(_c.opSettings()) {
+                _c.setOpSettings(newSettings);
+            }
+            ~WithOpSettings() {
+                _c.setOpSettings(_oldSettings);
+            }
+        };
+
         QuerySettings querySettings() const {
             return _querySettings;
         }
@@ -547,6 +560,10 @@ namespace mongo {
         if (!_released) {
             cc().swapTransactionStack(_stack);
         }
+    }
+
+    inline Client::WithOpSettings::WithOpSettings(const OpSettings &newSettings) : _c(cc()), _oldSettings(_c.opSettings()) {
+        _c.setOpSettings(newSettings);
     }
 
     inline Client::GodScope::GodScope() {
