@@ -628,7 +628,7 @@ namespace mongo {
             _countCursor(countCursor)
         {
         }
-        PartitionedCollection* _pc; // collection we are running cursor over
+        const PartitionedCollection* _pc; // collection we are running cursor over
         const int _idxNo;
         // variables that all cursors use
         const int _direction;
@@ -753,7 +753,7 @@ namespace mongo {
 
         const bool _distributed;
         shared_ptr<SinglePartitionCursorGenerator> _subCursorGenerator;
-        shared_ptr<PartitionedCursorIDGenerator> _subPartitionIDGenerator;
+        shared_ptr<PartitionedCursorIDGenerator> _partitionIDGenerator;
         const bool _multiKey;
         // cursor currently being used to retrieve documents
         shared_ptr<Cursor> _currentCursor;
@@ -782,25 +782,25 @@ namespace mongo {
     public:
 
         virtual bool ok() {
-            return (_cursors.front().first)->ok();
+            return (frontCursor())->ok();
         }
 
         virtual BSONObj current() {
-            return _cursors.front().first->current();
+            return frontCursor()->current();
         }
 
         virtual bool advance();
 
         virtual BSONObj currKey() const {
-            return _cursors.front().first->currKey();
+            return frontCursor()->currKey();
         }
 
         virtual BSONObj currPK() const {
-            return _cursors.front().first->currPK();
+            return frontCursor()->currPK();
         }
 
         virtual BSONObj indexKeyPattern() const {
-            return _cursors.front().first->indexKeyPattern();
+            return frontCursor()->indexKeyPattern();
         }
 
         virtual string toString() const {
@@ -823,13 +823,13 @@ namespace mongo {
         }
 
         virtual BSONObj prettyIndexBounds() const {
-            return _cursors.front().first->prettyIndexBounds();
+            return frontCursor()->prettyIndexBounds();
         }
 
         virtual long long nscanned() const {
             long long ret = 0;
-            for (uint32_t i = 0; i < _cursors.size(); i++) {
-                ret += _cursors[i].first->nscanned();
+            for (vector<SPCSubCursor>::const_iterator it = _cursors.begin(); it != _cursors.end(); it++) {
+                ret += it->first->nscanned();
             }
             return ret;
         }
@@ -839,13 +839,13 @@ namespace mongo {
         }
 
         virtual bool currentMatches( MatchDetails *details = 0 ) {
-            return _cursors.front().first->currentMatches(details);
+            return frontCursor()->currentMatches(details);
         }
 
         virtual void setMatcher( shared_ptr< CoveredIndexMatcher > matcher ) {
             _matcher = matcher;
-            for (uint32_t i = 0; i < _cursors.size(); i++) {
-                _cursors[i].first->setMatcher(matcher);
+            for (vector<SPCSubCursor>::const_iterator it = _cursors.begin(); it != _cursors.end(); it++) {
+                it->first->setMatcher(matcher);
             }
         }
 
@@ -853,8 +853,8 @@ namespace mongo {
         void setKeyFieldsOnly( const shared_ptr<Projection::KeyOnly> &keyFieldsOnly ) {
             _keyFieldsOnly = keyFieldsOnly;
             // unsure if this is necessary
-            for (uint32_t i = 0; i < _cursors.size(); i++) {
-                _cursors[i].first->setKeyFieldsOnly(keyFieldsOnly);
+            for (vector<SPCSubCursor>::const_iterator it = _cursors.begin(); it != _cursors.end(); it++) {
+                it->first->setKeyFieldsOnly(keyFieldsOnly);
             }
         }
         bool tailable() const { return false; }
@@ -870,10 +870,13 @@ namespace mongo {
             shared_ptr<PartitionedCursorIDGenerator> subPartitionIDGenerator,
             const bool multiKey
             );
+        const shared_ptr<Cursor> &frontCursor() const {
+            return _cursors.front().first;
+        }
         const int _direction;
         const Ordering _ordering;
         shared_ptr<SinglePartitionCursorGenerator> _subCursorGenerator;
-        shared_ptr<PartitionedCursorIDGenerator> _subPartitionIDGenerator;
+        shared_ptr<PartitionedCursorIDGenerator> _partitionIDGenerator;
         const bool _multiKey;
 
         // number of documents scanned
@@ -888,9 +891,6 @@ namespace mongo {
 
         friend class PartitionedCollection;
     };
-
-
-    // need better names
 
     // for range scans
     class RangePartitionCursorGenerator: public SinglePartitionCursorGenerator {
@@ -991,7 +991,6 @@ namespace mongo {
 
     class FilteredPartitionIDGeneratorImpl : public PartitionedCursorIDGenerator {
     public:
-        // get the current partition index that this class is identifying
         FilteredPartitionIDGeneratorImpl(
             PartitionedCollection* pc,
             const char* ns,

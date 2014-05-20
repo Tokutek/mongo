@@ -242,7 +242,7 @@ namespace mongo {
         ) :
         _distributed(distributed),
         _subCursorGenerator(subCursorGenerator),
-        _subPartitionIDGenerator(subPartitionIDGenerator),
+        _partitionIDGenerator(subPartitionIDGenerator),
         _multiKey(multiKey),
         _prevNScanned(0),
         _tailable(false)
@@ -251,9 +251,9 @@ namespace mongo {
     }
 
     void PartitionedCursor::getNextSubCursor() {
-        _subPartitionIDGenerator->advanceIndex();
+        _partitionIDGenerator->advanceIndex();
         shared_ptr<Cursor> oldCursor = _currentCursor;
-        _currentCursor = _subCursorGenerator->makeSubCursor(_subPartitionIDGenerator->getCurrentPartitionIndex());
+        _currentCursor = _subCursorGenerator->makeSubCursor(_partitionIDGenerator->getCurrentPartitionIndex());
         if (oldCursor) {
             if (_matcher) {
                 _currentCursor->setMatcher(_matcher);
@@ -265,9 +265,9 @@ namespace mongo {
 
     void PartitionedCursor::initializeSubCursor() {
         TOKULOG(3) << "Query: " << cc().querySettings().getQuery() << " sort: " << cc().querySettings().sortRequired() << endl;
-        uint64_t currPartition = _subPartitionIDGenerator->getCurrentPartitionIndex();
+        uint64_t currPartition = _partitionIDGenerator->getCurrentPartitionIndex();
         _currentCursor = _subCursorGenerator->makeSubCursor(currPartition);
-        while (!_currentCursor->ok() && !_subPartitionIDGenerator->lastIndex()) {
+        while (!_currentCursor->ok() && !_partitionIDGenerator->lastIndex()) {
             getNextSubCursor();
             // because we are called from a constructor,
             // we don't need to check to see if we are tailable
@@ -276,7 +276,9 @@ namespace mongo {
 
     bool PartitionedCursor::advance(){
         bool ret = _currentCursor->advance();
-        while (!_currentCursor->ok() && !_subPartitionIDGenerator->lastIndex()) {
+        while (!_currentCursor->ok() && !_partitionIDGenerator->lastIndex()) {
+            // just making sure that advance() outside of this loop returned false
+            // That is the only wany that _currentCursor->ok() should be false
             dassert(!ret);
             getNextSubCursor();
             // if we are iterating over the last partition and we are tailable,
@@ -284,7 +286,7 @@ namespace mongo {
             // invalidate cursors, so we don't need to worry about
             // partitions being added or dropped in the lifetime of
             // a cursor
-            if (_tailable && _subPartitionIDGenerator->lastIndex()) {
+            if (_tailable && _partitionIDGenerator->lastIndex()) {
                 _currentCursor->setTailable();
             }
             ret = _currentCursor->ok();
@@ -294,7 +296,7 @@ namespace mongo {
 
     void PartitionedCursor::setTailable() {
         _tailable = true;
-        if (_subPartitionIDGenerator->lastIndex()) {
+        if (_partitionIDGenerator->lastIndex()) {
             _currentCursor->setTailable();
         }
     }
@@ -303,14 +305,17 @@ namespace mongo {
     public:
         SPCComparator(const int direction, const Ordering* ordering) : _direction(direction), _ordering(ordering) {
         }
+        // The top of the heap is what this operator reports as the "largest".
+        // We want the top of the heap to be what the smallest value is, because
+        // that is what the cursor should return next. Therefore, this function will
+        // report the smallest value as "greater".
         bool operator()(const SPCSubCursor &left, const SPCSubCursor &right) const {
             shared_ptr<Cursor> leftCursor = left.first;
             shared_ptr<Cursor> rightCursor = right.first;
             uint32_t leftID = left.second;
             uint32_t rightID = right.second;
             if (!leftCursor->ok() && !rightCursor->ok()) {
-                bool ret = leftID < rightID;
-                return ret;
+                return leftID < rightID;
             }
             if (!leftCursor->ok()) {
                 // say rightCursor is bigger
@@ -323,7 +328,7 @@ namespace mongo {
             // we want to say that the smaller one is "greater", so it goes to the top of the heap
             if (_direction > 0) {
                 // if leftCursor < rightCursor, say leftCursor is bigger, so leftCursor gets put on top of heap
-                // this is what we want for diretion < 0
+                // this is what we want for direction < 0
                 if (rightCursor->currKey().woCompare(leftCursor->currKey(), *_ordering) == 0) {
                     return (rightID < leftID);
                 }
@@ -351,18 +356,18 @@ namespace mongo {
         _direction(direction),
         _ordering(Ordering::make(idxPattern)),
         _subCursorGenerator(subCursorGenerator),
-        _subPartitionIDGenerator(subPartitionIDGenerator),
+        _partitionIDGenerator(subPartitionIDGenerator),
         _multiKey(multiKey)
     {
         // create each sub cursor in _cursors
         SPCComparator comparator(_direction, &_ordering);
 
-        uint64_t curr = _subPartitionIDGenerator->getCurrentPartitionIndex();
+        uint64_t curr = _partitionIDGenerator->getCurrentPartitionIndex();
         shared_ptr<Cursor> currentCursor = _subCursorGenerator->makeSubCursor(curr);
         _cursors.push_back(SPCSubCursor(currentCursor, curr));
-        while (!_subPartitionIDGenerator->lastIndex()) {
-            _subPartitionIDGenerator->advanceIndex();
-            curr = _subPartitionIDGenerator->getCurrentPartitionIndex();
+        while (!_partitionIDGenerator->lastIndex()) {
+            _partitionIDGenerator->advanceIndex();
+            curr = _partitionIDGenerator->getCurrentPartitionIndex();
             currentCursor = _subCursorGenerator->makeSubCursor(curr);
             _cursors.push_back(SPCSubCursor(currentCursor, curr));
         }
@@ -502,7 +507,7 @@ namespace mongo {
     }
     
     bool PartitionedCursorIDGeneratorImpl::lastIndex() {
-            return (_currPartition == _endPartition);
+        return (_currPartition == _endPartition);
     }
 
     FilteredPartitionIDGeneratorImpl::FilteredPartitionIDGeneratorImpl(
@@ -600,7 +605,7 @@ namespace mongo {
     }
     
     bool FilteredPartitionIDGeneratorImpl::lastIndex() {
-            return (_currPartition == _endPartition);
+        return (_currPartition == _endPartition);
     }
     
 } // namespace mongo

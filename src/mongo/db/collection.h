@@ -1575,7 +1575,7 @@ namespace mongo {
         }
 
         // return the partition at offset index, note this is NOT the partition ID
-        shared_ptr<CollectionData> getPartition(uint64_t idx) {
+        shared_ptr<CollectionData> getPartition(uint64_t idx) const{
             massert(17254, mongoutils::str::stream() << "invalid index " << idx << " for partition (max: " << numPartitions() << ")",
                     idx < numPartitions());
             return _partitions[idx];
