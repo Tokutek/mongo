@@ -206,7 +206,7 @@ public:
                     BSONObj res;
                     StringData collectionName = nsToCollectionSubstring(name);
                     bool ok = conn(true).runCommand(db, BSON("getPartitionInfo" << collectionName), res);
-                    uassert(0, str::stream() << "Could not get partition information for " << name, ok);
+                    uassert(17354, str::stream() << "Could not get partition information for " << name, ok);
                     partitionInfo[name] = res;
                 }
                 collectionOptions[name] = options;

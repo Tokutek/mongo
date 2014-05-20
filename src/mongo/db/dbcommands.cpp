@@ -1909,7 +1909,7 @@ namespace mongo {
             string coll = cmdObj[ "clonePartitionInfo" ].valuestrsafe();
             string ns = dbname + "." + coll;
             Collection *cl = getCollection( ns );
-            uassert( 0, "collection must be partitioned", cl->isPartitioned() );
+            uassert( 17353, "collection must be partitioned", cl->isPartitioned() );
 
             PartitionedCollection *pc = cl->as<PartitionedCollection>();
             pc->addClonedPartitionInfo(cmdObj["info"].Array());
