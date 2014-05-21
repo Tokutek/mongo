@@ -324,7 +324,7 @@ public:
     }
     static volatile bool running;
 
-    OplogTool() : Tool("2toku", REMOTE_SERVER | LOCAL_SERVER, "admin"), _logAtExit(true), _player(), _reportingTimer() {
+    OplogTool() : Tool("2toku", (DBAccess) (REMOTE_SERVER | LOCAL_SERVER), "admin"), _logAtExit(true), _player(), _reportingTimer() {
         addFieldOptions();
         add_options()
         ("ts" , po::value<string>() , "max OpTime already applied (secs:inc)" )
