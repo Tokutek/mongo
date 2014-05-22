@@ -29,6 +29,7 @@ namespace mongo {
     /* started abstracting out the querying of the primary/master's oplog
        still fairly awkward but a start.
     */
+    const double default_so_timeout = 30;
 
     class OplogReader {
         shared_ptr<DBClientConnection> _conn;
@@ -50,7 +51,7 @@ namespace mongo {
         }
 
         /* ok to call if already connected */
-        bool connect(const std::string& hostname);
+        bool connect(const std::string& hostname, const double default_timeout = default_so_timeout);
 
         bool connect(const BSONObj& rid, const int from, const string& to);
 
@@ -109,7 +110,7 @@ namespace mongo {
 
     private:
         /** @return true iff connection was successful */ 
-        bool commonConnect(const string& hostName);
+        bool commonConnect(const string& hostName, const double default_timeout);
         bool passthroughHandshake(const BSONObj& rid, const int f);
         void tailingQuery(const char *ns, Query& query, const BSONObj* fields=0);
     };

@@ -407,7 +407,7 @@ namespace mongo {
             }
 
             sourceHostname = source->h().toString();
-            if( !r.connect(sourceHostname) ) {
+            if( !r.connect(sourceHostname, 0) ) {
                 sethbmsg( str::stream() << "initial sync couldn't connect to " << source->h().toString() , 0);
                 sleepsecs(15);
                 return false;

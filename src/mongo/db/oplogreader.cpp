@@ -148,11 +148,11 @@ namespace mongo {
         readersCreatedStats.increment();
     }
 
-    bool OplogReader::commonConnect(const string& hostName) {
+    bool OplogReader::commonConnect(const string& hostName, const double default_timeout) {
         if( conn() == 0 ) {
             _conn = shared_ptr<DBClientConnection>(new DBClientConnection(false,
                                                                           0,
-                                                                          30 /* tcp timeout */));
+                                                                          default_timeout /* tcp timeout */));
             string errmsg;
             if ( !_conn->connect(hostName.c_str(), errmsg) ||
                  (!noauth && !replAuthenticate(_conn.get(), true)) ) {
@@ -164,12 +164,12 @@ namespace mongo {
         return true;
     }
     
-    bool OplogReader::connect(const std::string& hostName) {
+    bool OplogReader::connect(const std::string& hostName, const double default_timeout) {
         if (conn() != 0) {
             return true;
         }
 
-        if ( ! commonConnect(hostName) ) {
+        if ( ! commonConnect(hostName, default_timeout) ) {
             return false;
         }
         
@@ -185,7 +185,7 @@ namespace mongo {
         if (conn() != 0) {
             return true;
         }
-        if (commonConnect(to)) {
+        if (commonConnect(to, default_so_timeout)) {
             log() << "handshake between " << from << " and " << to << endl;
             return passthroughHandshake(rid, from);
         }
