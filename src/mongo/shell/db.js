@@ -945,6 +945,7 @@ DB.prototype.printReplicationInfo = function() {
         if (expireOplog.expireOplogHours > 0) {
             s += expireOplog.expireOplogHours + 'h';
         }
+        print(s);
     }
     print("oplog user data size: " + result.logSizeMB.uncompressed.toFixed(2) + "MB");
     print("oplog on-disk size: " + result.logSizeMB.compressed.toFixed(2) + "MB");
