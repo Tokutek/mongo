@@ -298,7 +298,7 @@ namespace mongo {
         const int flags = overwrite ? 0 : DB_NOOVERWRITE;
         const int r = db->put(db, cc().txn().db_txn(), &ndbt, &ddbt, flags);
         if (r != 0) {
-            storage::handle_ydb_error_fatal(r);
+            storage::handle_ydb_error(r);
         }
     }
 

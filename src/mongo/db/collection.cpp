@@ -2795,6 +2795,7 @@ namespace mongo {
     void PartitionedCollection::initialize(const BSONObj &serialized) {
         // open the metadata collection
         BSONObj metaSerialized = makeMetaPartitionedSerialized(getMetaCollectionName(_ns));
+        Client::WithOpSettings wos(OpSettings().setQueryCursorMode(READ_LOCK_CURSOR));
         _metaCollection.reset(new IndexedCollection(metaSerialized));
         // now we need to query _metaCollection to get partition information
         for (shared_ptr<Cursor> c( Cursor::make(_metaCollection.get(), 1, false) ); c->ok() ; c->advance()) {
@@ -3196,6 +3197,7 @@ namespace mongo {
 
     // create partitions from the cloner or replication (after a create)
     void PartitionedCollection::addClonedPartitionInfo(const vector<BSONElement> &partitionInfo) {
+        Client::WithOpSettings wos(OpSettings().setQueryCursorMode(READ_LOCK_CURSOR));
         uassert(17279, "Called addClonedPartitionInfo with more than one current partition", (numPartitions() == 1));
         // Note that the caller of this function needs to be REALLY careful
         // we don't do a lot of sanity checks that we theoretically could do,
@@ -3240,6 +3242,7 @@ namespace mongo {
     }
 
     void PartitionedCollection::updatePartitionMetadata(uint64_t index, BSONObj newMetadata, bool checkCreateTime) {
+        Client::WithOpSettings wos(OpSettings().setQueryCursorMode(READ_LOCK_CURSOR));
         massert(17283, "bad index to updatePartitionMetadata", index < numPartitions());
 
         BSONObjBuilder b(64);
@@ -3283,6 +3286,7 @@ namespace mongo {
     }
 
     void PartitionedCollection::addPartition() {
+        Client::WithOpSettings wos(OpSettings().setQueryCursorMode(READ_LOCK_CURSOR));
         prepareAddPartition();
         capLastPartition();
         appendNewPartition();
@@ -3290,6 +3294,7 @@ namespace mongo {
     }
 
     void PartitionedCollection::manuallyAddPartition(const BSONObj& newPivot, const BSONObj &partitionInfo) {
+        Client::WithOpSettings wos(OpSettings().setQueryCursorMode(READ_LOCK_CURSOR));
         prepareAddPartition();
         manuallyCapLastPartition(getValidatedPKFromObject(newPivot));
         if (partitionInfo.isEmpty()) {
@@ -3405,7 +3410,8 @@ namespace mongo {
 
     // this is called by the user
     void PartitionedCollection::dropPartition(uint64_t id) {
-        sanityCheck();        
+        Client::WithOpSettings wos(OpSettings().setQueryCursorMode(READ_LOCK_CURSOR));
+        sanityCheck();
         uassert(17252, "cannot drop partition if only one exists", numPartitions() > 1);
         dropPartitionInternal(id);
         sanityCheck();

@@ -1879,13 +1879,6 @@ namespace mongo {
                 string logNs = dbname + ".$cmd";
                 OplogHelpers::logCommand(logNs.c_str(), cmdWithInfo);
             }
-/*
-            // this partition has the pivot that was capped
-            BSONObj oldEnd = pc->getPartitionMetadata(numPartitions - 2);
-            // this is the newly added partition
-            BSONObj newEnd = pc->getPartitionMetadata(numPartitions - 1);            
-            OplogHelpers::logAddPartition(ns.c_str(), oldEnd["max"].Obj(), newEnd);
-*/
             return true;
         }
     } cmdAddPartition;
