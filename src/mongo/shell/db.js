@@ -936,6 +936,16 @@ DB.prototype.printReplicationInfo = function() {
         print(tojson(result));
         return;
     }
+    var expireOplog = db.adminCommand('replGetExpireOplog');
+    if (expireOplog.ok) {
+        var s = 'oplog configured to expire after: ';
+        if (expireOplog.expireOplogDays > 0) {
+            s += expireOplog.expireOplogDays + 'd';
+        }
+        if (expireOplog.expireOplogHours > 0) {
+            s += expireOplog.expireOplogHours + 'h';
+        }
+    }
     print("oplog user data size: " + result.logSizeMB.uncompressed.toFixed(2) + "MB");
     print("oplog on-disk size: " + result.logSizeMB.compressed.toFixed(2) + "MB");
     print("log length start to end: " + result.timeDiff + "secs (" + result.timeDiffHours + "hrs)");
