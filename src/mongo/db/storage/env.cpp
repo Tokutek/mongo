@@ -766,14 +766,13 @@ namespace mongo {
                 {
                     NestedBuilder _n1(result, "checkpoint");
                     status.appendInfo(result, "count", "CP_CHECKPOINT_COUNT");
-                    // CP_TIME_CHECKPOINT_DURATION is a time_t but we don't want it displayed as a date
-                    result.b().append("time", status.getDuration("CP_TIME_CHECKPOINT_DURATION"));
+                    status.appendInfo(result, "time", "CP_TIME_CHECKPOINT_DURATION");
                     status.appendInfo(result, "lastBegin", "CP_TIME_LAST_CHECKPOINT_BEGIN");
                     {
                         NestedBuilder _n2(result, "lastComplete");
                         status.appendInfo(result, "begin", "CP_TIME_LAST_CHECKPOINT_BEGIN_COMPLETE");
                         status.appendInfo(result, "end", "CP_TIME_LAST_CHECKPOINT_END");
-                        result.b().append("time", status.getDuration("CP_TIME_CHECKPOINT_DURATION_LAST"));
+                        status.appendInfo(result, "time", "CP_TIME_CHECKPOINT_DURATION_LAST");
                     }
                     {
                         NestedBuilder _n2(result, "begin");
