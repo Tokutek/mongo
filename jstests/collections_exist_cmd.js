@@ -40,4 +40,24 @@ dropper();
 assert.commandFailed(odb.runCommand({'_collectionsExist': ['collections_exist_cmd.foo', 'collections_exist_cmd.bar']}));
 odb.runCommand('rollbackTransaction');
 
+// now do some tests with partitioned collections
+odb.bar.drop();
+odb.createCollection("bar", {partitioned:1});
+assert.commandWorked(odb.bar.addPartition({_id:10}));
+assert.commandWorked(odb.bar.addPartition({_id:20}));
+odb.beginTransaction();
+dropper = startParallelShell('var odb = db.getSiblingDB("collections_exist_cmd"); sleep(1000); assert.commandWorked(odb.bar.addPartition({_id:30})); ');
+assert.commandWorked(odb.runCommand({'_collectionsExist': ['collections_exist_cmd.bar']}));
+dropper();
+sleep(2000);
+assert.commandFailed(odb.runCommand({'_collectionsExist': ['collections_exist_cmd.bar']}));
+dropper = startParallelShell('var odb = db.getSiblingDB("collections_exist_cmd"); sleep(1000); assert.commandWorked(odb.bar.dropPartition(0)); ');
+dropper();
+sleep(2000);
+assert.commandFailed(odb.runCommand({'_collectionsExist': ['collections_exist_cmd.bar']}));
+dropper = startParallelShell('var odb = db.getSiblingDB("collections_exist_cmd"); sleep(1000); assert.commandWorked(odb.bar.dropPartition(1)); ');
+dropper();
+sleep(2000);
+assert.commandFailed(odb.runCommand({'_collectionsExist': ['collections_exist_cmd.bar']}));
+
 odb.dropDatabase();
