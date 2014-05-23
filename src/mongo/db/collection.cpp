@@ -535,6 +535,16 @@ namespace mongo {
         return false;
     }
 
+    bool CollectionBase::isVisibleFromCurrentTransaction() const {
+        massert(17355, "collection has no indexes", _indexes.size() >= 1);
+        try {
+            _indexes[0].getCursor();
+        } catch (storage::RetryableException::MvccDictionaryTooNew &e) {
+            return false;
+        }
+        return true;
+    }
+
     BSONObj CollectionBase::getSimplePKFromQuery(const BSONObj &query, const BSONObj& pk) const {
         const int numPKFields = pk.nFields();
         scoped_array<BSONElement> pkElements(new BSONElement[numPKFields]);

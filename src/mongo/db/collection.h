@@ -325,6 +325,7 @@ namespace mongo {
             return _pk;
         }
 
+        bool isVisibleFromCurrentTransaction() const = 0;
 
     protected:
         CollectionData(const StringData& ns, const BSONObj &pkIndexPattern) :
@@ -648,6 +649,10 @@ namespace mongo {
             return false;
         }
 
+        bool isVisibleFromCurrentTransaction() const {
+            return _cd->isVisibleFromCurrentTransaction();
+        }
+
         //
         // Subclass detection and type coersion.
         //
@@ -931,6 +936,8 @@ namespace mongo {
             const unsigned long long mask = 1ULL << i;
             return (_multiKeyIndexBits & mask) != 0;
         }
+
+        bool isVisibleFromCurrentTransaction() const;
 
         // table scan
         virtual shared_ptr<Cursor> makeCursor(const int direction, const bool countCursor);
@@ -1498,6 +1505,16 @@ namespace mongo {
         // for now, no multikey indexes on partitioned collections
         virtual bool isMultiKey(int i) const;
         
+        bool isVisibleFromCurrentTransaction() const {
+            for (IndexCollVector::const_iterator it = _partitions.begin(); it != _partitions.end(); ++it) {
+                CollectionData *cd = it->get();
+                if (!cd->isVisibleFromCurrentTransaction()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         // table scan
         virtual shared_ptr<Cursor> makeCursor(const int direction, const bool countCursor);
 

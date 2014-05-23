@@ -743,10 +743,7 @@ namespace mongo {
                 errmsg = mongoutils::str::stream() << "collection " << ns << " was dropped";
                 return false;
             }
-            try {
-                shared_ptr<Cursor> c(Cursor::make(cl));
-            }
-            catch (storage::RetryableException::MvccDictionaryTooNew &e) {
+            if (!cl->isVisibleFromCurrentTransaction()) {
                 errmsg = mongoutils::str::stream() << "collection " << ns << " was dropped and re-created";
                 return false;
             }
