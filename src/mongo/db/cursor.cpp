@@ -22,6 +22,7 @@
 #include "mongo/db/kill_current_op.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/collection.h"
+#include "mongo/db/storage/exception.h"
 
 namespace mongo {
 
@@ -390,7 +391,7 @@ namespace mongo {
         return ok();
     }
 
-    shared_ptr<Cursor> RangePartitionCursorGenerator::makeSubCursor(uint64_t partitionIndex) {
+    shared_ptr<Cursor> RangePartitionCursorGenerator::_makeSubCursor(uint64_t partitionIndex) {
         shared_ptr<CollectionData> currColl = _pc->getPartition(partitionIndex);
         // an optimization for a future day may be
         // if we know that the entire partition falls between startKey
@@ -407,7 +408,7 @@ namespace mongo {
             );
     }
 
-    shared_ptr<Cursor> BoundsPartitionCursorGenerator::makeSubCursor(uint64_t partitionIndex) {
+    shared_ptr<Cursor> BoundsPartitionCursorGenerator::_makeSubCursor(uint64_t partitionIndex) {
         shared_ptr<CollectionData> currColl = _pc->getPartition(partitionIndex);
         // I am not sure this case is currently possible
         // because the index is just a simple _id index
@@ -424,7 +425,16 @@ namespace mongo {
             );
     }
 
-    shared_ptr<Cursor> ExhaustivePartitionCursorGenerator::makeSubCursor(uint64_t partitionIndex) {
+    shared_ptr<Cursor> SinglePartitionCursorGenerator::makeSubCursor(uint64_t partitionIndex) {
+        try {
+            return _makeSubCursor(partitionIndex);
+        } catch (storage::RetryableException::MvccDictionaryTooNew) {
+            // this is how we make a dummy cursor, as it's only constructor is private
+            return Cursor::make(NULL);
+        }
+    }
+
+    shared_ptr<Cursor> ExhaustivePartitionCursorGenerator::_makeSubCursor(uint64_t partitionIndex) {
         shared_ptr<CollectionData> currColl = _pc->getPartition(partitionIndex);
         if (_cursorOverPartitionKey) {
             return Cursor::make(

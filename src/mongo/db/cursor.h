@@ -613,7 +613,7 @@ namespace mongo {
     class SinglePartitionCursorGenerator {
     public:
         // generate a cursor on partition with index of partitionIndex
-        virtual shared_ptr<Cursor> makeSubCursor(uint64_t partitionIndex) = 0;
+        shared_ptr<Cursor> makeSubCursor(uint64_t partitionIndex);
         virtual ~SinglePartitionCursorGenerator() { }
     protected:
         SinglePartitionCursorGenerator(
@@ -628,6 +628,7 @@ namespace mongo {
             _countCursor(countCursor)
         {
         }
+        virtual shared_ptr<Cursor> _makeSubCursor(uint64_t partitionIndex) = 0;
         const PartitionedCollection* _pc; // collection we are running cursor over
         const int _idxNo;
         // variables that all cursors use
@@ -895,7 +896,6 @@ namespace mongo {
     // for range scans
     class RangePartitionCursorGenerator: public SinglePartitionCursorGenerator {
     public:
-        virtual shared_ptr<Cursor> makeSubCursor(uint64_t partitionIndex);
         RangePartitionCursorGenerator(
             PartitionedCollection* pc,
             const int idxNo,
@@ -913,6 +913,8 @@ namespace mongo {
             _endKeyInclusive(endKeyInclusive)
         {
         }
+    protected:        
+        virtual shared_ptr<Cursor> _makeSubCursor(uint64_t partitionIndex);
     private:
         const int _numWanted;
         const BSONObj _startKey;
@@ -923,7 +925,6 @@ namespace mongo {
     // for scans that use bounds
     class BoundsPartitionCursorGenerator: public SinglePartitionCursorGenerator {
     public:
-        virtual shared_ptr<Cursor> makeSubCursor(uint64_t partitionIndex);
         BoundsPartitionCursorGenerator(
             PartitionedCollection* pc,
             const int idxNo,
@@ -939,6 +940,8 @@ namespace mongo {
             _singleIntervalLimit(singleIntervalLimit)
         {
         }
+    protected:        
+        virtual shared_ptr<Cursor> _makeSubCursor(uint64_t partitionIndex);
     private:
         const int _numWanted;
         const shared_ptr<FieldRangeVector> _bounds;
@@ -948,7 +951,6 @@ namespace mongo {
     // for full index/full collection scans
     class ExhaustivePartitionCursorGenerator: public SinglePartitionCursorGenerator {
     public:
-        virtual shared_ptr<Cursor> makeSubCursor(uint64_t partitionIndex);
         ExhaustivePartitionCursorGenerator(
             PartitionedCollection* pc,
             const int idxNo,
@@ -960,6 +962,8 @@ namespace mongo {
             _cursorOverPartitionKey(cursorOverPartitionKey)
         {
         }
+    protected:        
+        virtual shared_ptr<Cursor> _makeSubCursor(uint64_t partitionIndex);
     private:
         const bool _cursorOverPartitionKey;
     };
