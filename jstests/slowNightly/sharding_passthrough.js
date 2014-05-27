@@ -128,10 +128,12 @@ files.forEach(function(x) {
             'update_fast|' +
             'update_fasterrors|' +
             'multi_key_mst_872|' +
+            'partition_1149|' +
             'partition_add|' +
             'partition_mst_886|' +
             'partition_multikey|' +
             'partition_ops_multithread|' +
+            'partition_ops_multithread2|' +
             'partition_pk|' +
             'partition_rename|' +
             'partition_secondary_index|' +
