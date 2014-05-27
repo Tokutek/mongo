@@ -775,6 +775,53 @@ namespace mongo {
     // first() is the cursor, second() is the partitionID, which is used
     // in comparisons
     typedef std::pair<shared_ptr<Cursor>, uint32_t > SPCSubCursor;
+
+    // Used within SortedPartitionedCursor to sort the heap of cursors
+    class SPCComparator {
+    public:
+        SPCComparator(const int direction, const Ordering ordering) : _direction(direction), _ordering(ordering) {
+        }
+        // The top of the heap is what this operator reports as the "largest".
+        // We want the top of the heap to be what the smallest value is, because
+        // that is what the cursor should return next. Therefore, this function will
+        // report the smallest value as "greater".
+        bool operator()(const SPCSubCursor &left, const SPCSubCursor &right) const {
+            shared_ptr<Cursor> leftCursor = left.first;
+            shared_ptr<Cursor> rightCursor = right.first;
+            uint32_t leftID = left.second;
+            uint32_t rightID = right.second;
+            if (!leftCursor->ok() && !rightCursor->ok()) {
+                return leftID < rightID;
+            }
+            if (!leftCursor->ok()) {
+                // say rightCursor is bigger
+                return true;
+            }
+            else if (!rightCursor->ok()) {
+                // say leftCursor is bigger
+                return false;
+            }
+            // we want to say that the smaller one is "greater", so it goes to the top of the heap
+            if (_direction > 0) {
+                // if leftCursor < rightCursor, say leftCursor is bigger, so leftCursor gets put on top of heap
+                // this is what we want for direction < 0
+                if (rightCursor->currKey().woCompare(leftCursor->currKey(), _ordering) == 0) {
+                    return (rightID < leftID);
+                }
+                return (rightCursor->currKey().woCompare(leftCursor->currKey(), _ordering) < 0);
+            }
+            // if leftCursor < rightCursor, say leftCursor is smaller, so rightCursor gets put on top of heap
+            // this is what we want for direction < 0
+            if (leftCursor->currKey().woCompare(rightCursor->currKey(), _ordering) == 0) {
+                return (leftID < rightID);
+            }
+            return (leftCursor->currKey().woCompare(rightCursor->currKey(), _ordering) < 0);
+        }
+    private:
+        const int _direction;
+        const Ordering _ordering;
+    };
+
     // a cursor over a partitioned collection that returns
     // elements in sorted order (ove the key we are querying)
     // That means we run cursors over all the necessary partitions
@@ -879,6 +926,9 @@ namespace mongo {
         shared_ptr<SinglePartitionCursorGenerator> _subCursorGenerator;
         shared_ptr<PartitionedCursorIDGenerator> _partitionIDGenerator;
         const bool _multiKey;
+        // must be declared after _direction and _ordering,
+        // as it's initialization uses those variables
+        SPCComparator _comparator;
 
         // number of documents scanned
         // by previous cursors
