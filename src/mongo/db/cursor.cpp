@@ -319,12 +319,12 @@ namespace mongo {
         // create each sub cursor in _cursors
         uint64_t curr = _partitionIDGenerator->getCurrentPartitionIndex();
         shared_ptr<Cursor> currentCursor = _subCursorGenerator->makeSubCursor(curr);
-        _cursors.push_back(SPCSubCursor(currentCursor, curr));
+        _cursors.push_back(SPCSingleCursor(currentCursor, curr));
         while (!_partitionIDGenerator->lastIndex()) {
             _partitionIDGenerator->advanceIndex();
             curr = _partitionIDGenerator->getCurrentPartitionIndex();
             currentCursor = _subCursorGenerator->makeSubCursor(curr);
-            _cursors.push_back(SPCSubCursor(currentCursor, curr));
+            _cursors.push_back(SPCSingleCursor(currentCursor, curr));
         }
 
         // now that we have a vector of cursors, make a heap out of it
@@ -514,7 +514,7 @@ namespace mongo {
                     TOKULOG(3) << "Setting partitions " << min << " through " << max << " to be read" <<endl;
                     std::fill(_partitionsToRead.begin() + min, _partitionsToRead.begin() + max + 1, true);
                     if (min < minPartitionToRead) {
-                        minPartitionToRead = i;
+                        minPartitionToRead = min;
                     }
                     if (max > maxPartitionToRead) {
                         maxPartitionToRead = max;

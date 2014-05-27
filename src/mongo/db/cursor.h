@@ -774,7 +774,7 @@ namespace mongo {
     // of the vector we maintain in SortedPartitionedCursors::_cursors
     // first() is the cursor, second() is the partitionID, which is used
     // in comparisons
-    typedef std::pair<shared_ptr<Cursor>, uint32_t > SPCSubCursor;
+    typedef std::pair<shared_ptr<Cursor>, uint32_t > SPCSingleCursor;
 
     // Used within SortedPartitionedCursor to sort the heap of cursors
     class SPCComparator {
@@ -785,7 +785,7 @@ namespace mongo {
         // We want the top of the heap to be what the smallest value is, because
         // that is what the cursor should return next. Therefore, this function will
         // report the smallest value as "greater".
-        bool operator()(const SPCSubCursor &left, const SPCSubCursor &right) const {
+        bool operator()(const SPCSingleCursor &left, const SPCSingleCursor &right) const {
             shared_ptr<Cursor> leftCursor = left.first;
             shared_ptr<Cursor> rightCursor = right.first;
             uint32_t leftID = left.second;
@@ -876,7 +876,7 @@ namespace mongo {
 
         virtual long long nscanned() const {
             long long ret = 0;
-            for (vector<SPCSubCursor>::const_iterator it = _cursors.begin(); it != _cursors.end(); it++) {
+            for (vector<SPCSingleCursor>::const_iterator it = _cursors.begin(); it != _cursors.end(); it++) {
                 ret += it->first->nscanned();
             }
             return ret;
@@ -892,7 +892,7 @@ namespace mongo {
 
         virtual void setMatcher( shared_ptr< CoveredIndexMatcher > matcher ) {
             _matcher = matcher;
-            for (vector<SPCSubCursor>::const_iterator it = _cursors.begin(); it != _cursors.end(); it++) {
+            for (vector<SPCSingleCursor>::const_iterator it = _cursors.begin(); it != _cursors.end(); it++) {
                 it->first->setMatcher(matcher);
             }
         }
@@ -901,7 +901,7 @@ namespace mongo {
         void setKeyFieldsOnly( const shared_ptr<Projection::KeyOnly> &keyFieldsOnly ) {
             _keyFieldsOnly = keyFieldsOnly;
             // unsure if this is necessary
-            for (vector<SPCSubCursor>::const_iterator it = _cursors.begin(); it != _cursors.end(); it++) {
+            for (vector<SPCSingleCursor>::const_iterator it = _cursors.begin(); it != _cursors.end(); it++) {
                 it->first->setKeyFieldsOnly(keyFieldsOnly);
             }
         }
@@ -936,7 +936,7 @@ namespace mongo {
         shared_ptr<Projection::KeyOnly> _keyFieldsOnly;
 
         // cursors organized in a heap
-        vector< SPCSubCursor > _cursors;
+        vector< SPCSingleCursor > _cursors;
 
         PKDupSet _dups;
 
@@ -1038,7 +1038,7 @@ namespace mongo {
     private:
         uint64_t _currPartition;
         const uint64_t _startPartition;
-        const uint64_t _endPartition;       
+        const uint64_t _endPartition;
         const int _direction;
         void sanityCheckPartitionEndpoints();
     };
