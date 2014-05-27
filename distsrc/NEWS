@@ -1,6 +1,94 @@
 tokumx news
 ===========
 
+tokumx 1.5.0
+------------
+Release date: TBD
+
+General
+~~~~~~~
+
+    - This release is focused on the addition of a new collection type,
+      `partitioned` collections, which provide excellent performance and
+      flexibility for time-series workloads.
+
+
+Highlights
+~~~~~~~~~~
+
+    - Partitioned collections are a new feature with a similar use case to
+      `capped` collections in basic MongoDB, but with better concurrency
+      and flexibility.
+
+      Briefly, a partitioned collection is similar to a partitioned table
+      in some RDBMSes.  The collection is divided physically by primary
+      key into multiple underlying partitions, allowing for the
+      instantaneous and total deletion of entire partitions, but it is
+      treated as one logical collection from the client's perspective.
+
+      A typical use case for this would be to partition on a `{date: 1,
+      _id: 1}` primary key, and periodically add new partitions and drop
+      old ones to work with the latest data in a time-series data set.
+      (#1063)
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - Further reduced the locking done during migrations, to reduce
+      stalls.  (#1041, #1135)
+
+    - Initial sync now reports its progress in terms of the # of dbs,
+      collections within a db, and bytes copied, then indexes built for
+      a collection, in the server log, in `db.currentOp()`, and in
+      `rs.status()`.  (#1050)
+
+    - Added a new option to allow operations that require a metadata write
+      lock (such as adding an index) to interrupt operations that are
+      holding a read lock.  This option can be used to avoid those write
+      lock requests stalling behind a long read locked operation (such as
+      a large `multi: true` update), and in turn stalling all other
+      operations, including readers, behind itself.
+
+      To use this option, your application must be ready to handle failed
+      operations and retry them (transactional atomicity makes this
+      somewhat simpler), then you can turn it on for all clients with
+      `--setParameter forceWriteLocks=true` or with the `setParameter`
+      command.  This makes all future connections interruptible while they
+      have read locks, but this state can be controlled for each
+      connection with the `setWriteLockYielding` command.  See
+      https://github.com/Tokutek/mongo/issues/1132 for more details.
+      (#1132)
+
+    - During initial sync, there is a step that checks that all
+      collections that existed at the beginning of the sync's snapshot
+      transaction still exist, to maintain the snapshot's validity.  This
+      step has been optimized to avoid slowness in some rare situations.
+      (#1162)
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Cleaned up the way remote errors are handled in the distributed
+      locking framework, which will reduce the impact of some rare errors
+      on config servers.  (#857, #1140)
+
+    - While a shard is draining, it will no longer be chosen to receive
+      new chunks due to the sequential insert optimization, nor will it be
+      chosen as the primary shard for new databases.  (#1069)
+
+    - The `mongo2toku` tool now correctly uses the `admin` database for
+      authentication to the target cluster by default.  (#1125)
+
+    - Fixed the way packaging scripts check for transparent hugepages, and
+      changed them to allow `madvise` as an acceptable setting.  (#1130)
+
+    - Connections used to copy data for initial sync no longer time out
+      improperly if some operations (such as checking for snapshot
+      invalidation) take too long.  (#1147)
+
+
 tokumx 1.4.2
 ------------
 Release date: 2014-05-09
