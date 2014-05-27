@@ -1,8 +1,8 @@
-tokumx (1.5.0-pre-) UNRELEASED; urgency=low
+tokumx (1.5.0-alpha.0) unstable; urgency=low
 
   * see http://github.com/Tokutek/mongo/releases/1.5.0
 
- -- Leif Walsh <leif.walsh@gmail.com>  Thu, 08 May 2014 16:13:18 +0000
+ -- Leif Walsh <leif.walsh@gmail.com>  Tue, 27 May 2014 15:50:41 +0000
 
 tokumx (1.4.2) unstable; urgency=low
 
