@@ -66,6 +66,13 @@ New features and improvements
       step has been optimized to avoid slowness in some rare situations.
       (#1162)
 
+    - Serial insertions have been made significantly faster with
+      improvements to the storage engine.  (Tokutek/ft-index#158)
+
+    - Update workloads on extremely large data sets (where a large portion
+      of even internal nodes do not fit in main memory) have been
+      optimized somewhat.  (Tokutek/ft-index#226)
+
 
 Bug fixes
 ~~~~~~~~~
