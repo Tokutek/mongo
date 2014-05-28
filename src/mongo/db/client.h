@@ -308,6 +308,19 @@ namespace mongo {
             }
         };
 
+        class WithLockTimeout : boost::noncopyable {
+            Client &_c;
+            const uint64_t _oldLockTimeout;
+          public:
+            WithLockTimeout(uint64_t newLockTimeout);
+            WithLockTimeout(Client &c, uint64_t newLockTimeout) : _c(c), _oldLockTimeout(_c.lockTimeout()) {
+                _c.setLockTimeout(newLockTimeout);
+            }
+            ~WithLockTimeout() {
+                _c.setLockTimeout(_oldLockTimeout);
+            }
+        };
+
         QuerySettings querySettings() const {
             return _querySettings;
         }
@@ -386,6 +399,13 @@ namespace mongo {
 
         void setYieldingToWriteLock(bool val) { _isYieldingToWriteLock = val; }
 
+        /**
+         * How long this client should wait for document locks.
+         */
+        uint64_t lockTimeout() const { return _lockTimeout; }
+
+        void setLockTimeout(uint64_t val) { _lockTimeout = val; }
+
     private:
         Client(const char *desc, AbstractMessagingPort *p = 0);
         friend class CurOp;
@@ -413,6 +433,7 @@ namespace mongo {
         // killed
         bool _globallyUninterruptible;
         bool _isYieldingToWriteLock;
+        uint64_t _lockTimeout;
 
         // for CmdCopyDb and CmdCopyDbGetNonce
         shared_ptr< DBClientConnection > _authConn;
@@ -564,6 +585,10 @@ namespace mongo {
 
     inline Client::WithOpSettings::WithOpSettings(const OpSettings &newSettings) : _c(cc()), _oldSettings(_c.opSettings()) {
         _c.setOpSettings(newSettings);
+    }
+
+    inline Client::WithLockTimeout::WithLockTimeout(uint64_t newLockTimeout) : _c(cc()), _oldLockTimeout(_c.lockTimeout()) {
+        _c.setLockTimeout(newLockTimeout);
     }
 
     inline Client::GodScope::GodScope() {

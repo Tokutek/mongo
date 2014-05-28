@@ -119,7 +119,8 @@ namespace mongo {
         _upgradingSystemUsers(false),
         _upgradingDiskFormatVersion(false),
         _globallyUninterruptible(false),
-        _isYieldingToWriteLock(forceWriteLocks)
+        _isYieldingToWriteLock(forceWriteLocks),
+        _lockTimeout(cmdLine.lockTimeout)
     {
         _connectionId = p ? p->connectionId() : 0;
         

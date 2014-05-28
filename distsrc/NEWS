@@ -73,6 +73,14 @@ New features and improvements
       of even internal nodes do not fit in main memory) have been
       optimized somewhat.  (Tokutek/ft-index#226)
 
+    - Added per-connection control of document-level lock wait timeouts
+      with a new command, `{setClientLockTimeout: <timeoutms>}`.
+
+      This controls the same behavior as `--lockTimeout` which can also be
+      controlled server-wide with `setParameter` (which now controls the
+      default for all new connections).  The value should be specified in
+      milliseconds.  (#1168)
+
 
 Bug fixes
 ~~~~~~~~~
