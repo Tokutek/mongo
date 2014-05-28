@@ -238,7 +238,11 @@ namespace mongo {
         // For now, it's always the command-line specified timeout, but we could
         // make it a per-thread variable in the future.
         static uint64_t get_lock_timeout_callback(uint64_t default_timeout) {
-            return cmdLine.lockTimeout;
+            if (haveClient()) {
+                return cc().lockTimeout();
+            } else {
+                return cmdLine.lockTimeout;
+            }
         }
 
         static uint64_t get_loader_memory_size_callback(void) {
