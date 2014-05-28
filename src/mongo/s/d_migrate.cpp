@@ -91,6 +91,7 @@ using namespace std;
 namespace mongo {
 
     MONGO_EXPORT_SERVER_PARAMETER(migrateUniqueChecks, bool, true);
+    MONGO_EXPORT_SERVER_PARAMETER(migrateStartCloneLockTimeout, uint64_t, 60000);
 
     bool findShardKeyIndexPattern_locked( const string& ns,
                                           const BSONObj& shardKeyPattern,
@@ -471,6 +472,8 @@ namespace mongo {
                 // Need these OpSettings to make sure this cursor will prelock and take row locks.
                 // Also need numWanted == 0 in Cursor::make.
                 Client::WithOpSettings wos(OpSettings().setQueryCursorMode(READ_LOCK_CURSOR).setJustOne(false));
+                // This lock may take a while to grab, we want to try for a while to get it.
+                Client::WithLockTimeout wlt(migrateStartCloneLockTimeout);
 
                 // Just creating the cursor under these conditions will prelock the range.
                 // After this point (until lockingTxn commits), nothing else can write to our chunk, so we can create the snapshot.
