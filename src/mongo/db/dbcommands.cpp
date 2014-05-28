@@ -1963,6 +1963,25 @@ namespace mongo {
         }
     } cmdSetWriteLockYielding;
 
+    class CmdSetClientLockTimeout : public InformationCommand {
+      public:
+        CmdSetClientLockTimeout() : InformationCommand("setClientLockTimeout") {}
+        virtual void help(stringstream &help) const {
+            help << "set the lock wait timeout for this connection\n"
+                 << "Example: {setClientLockTimeout: 15000}";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) { }
+        bool run(const string &, BSONObj &cmdObj, int, string &errmsg, BSONObjBuilder &result, bool) {
+            BSONElement timeoutElt = cmdObj.firstElement();
+            uassert(17356, "setClientLockTimeout must be a non-negative number", timeoutElt.isNumber() && timeoutElt.numberLong() >= 0);
+            result.append("was", cc().lockTimeout());
+            cc().setLockTimeout(timeoutElt.numberLong());
+            return true;
+        }
+    } cmdSetClientLockTimeout;
+
 
     bool _execCommand(Command *c,
                       const string& dbname,

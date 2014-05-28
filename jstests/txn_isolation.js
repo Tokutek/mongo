@@ -77,6 +77,50 @@ assert.throws(function(){t.count()});
 r = db.runCommand({"commitTransaction":1});
 s();
 
+// lock wait timeout test after changing timeout
+t.drop();
+t.insert({a:"before"});
+s = startParallelShell(' \
+        t = db.jstests_txn_isolation; \
+        r = db.runCommand("beginTransaction"); \
+        t.insert({a:"during"}); \
+        sleep(10000); \
+        r = db.runCommand({"commitTransaction":1}); \
+        assert(r.ok == 1);      \
+');
+
+r = db.runCommand({setClientLockTimeout: 8000});
+assert.commandWorked(r);
+var oldTimeout = r.was;
+assert.commandWorked(db.runCommand({"beginTransaction":1, "isolation":"serializable"}));
+sleep(1000);
+assert.throws(function(){t.count()});
+assert.commandWorked(db.runCommand({"commitTransaction":1}));
+assert.commandWorked(db.runCommand({setClientLockTimeout: oldTimeout}));
+s();
+
+// lock wait timeout test after changing timeout part 2
+t.drop();
+t.insert({a:"before"});
+s = startParallelShell(' \
+        t = db.jstests_txn_isolation; \
+        r = db.runCommand("beginTransaction"); \
+        t.insert({a:"during"}); \
+        sleep(10000); \
+        r = db.runCommand({"commitTransaction":1}); \
+        assert(r.ok == 1);      \
+');
+
+r = db.runCommand({setClientLockTimeout: 12000});
+assert.commandWorked(r);
+var oldTimeout = r.was;
+sleep(1000);
+assert.commandWorked(db.runCommand({"beginTransaction":1, "isolation":"serializable"}));
+assert.eq(t.count(), 2);
+assert.commandWorked(db.runCommand({"commitTransaction":1}));
+assert.commandWorked(db.runCommand({setClientLockTimeout: oldTimeout}));
+s();
+
 // simple dictionary too new test
 t.drop();
 r = db.runCommand({"beginTransaction":1, "isolation":"mvcc"});
