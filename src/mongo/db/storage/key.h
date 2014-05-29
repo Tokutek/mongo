@@ -47,7 +47,35 @@ namespace mongo {
         class KeyV1 {
             void operator=(const KeyV1&); // disallowed just to make people be careful as we don't own the buffer
             KeyV1(const KeyV1Owned&);     // disallowed as this is not a great idea as KeyV1Owned likely will go out of scope
+
+            static int compare(const unsigned char *&l, const unsigned char *&r);
+            static int binDataCodeToLength(int codeByte);
+            static unsigned sizeOfElement(const unsigned char *p);
+
         public:
+            // [ ][HASMORE][x][y][canontype_4bits]
+            enum CanonicalsEtc { 
+                cminkey=1,
+                cnull=2,
+                cdouble=4,
+                cstring=6,
+                cbindata=7,
+                coid=8,
+                cfalse=10,
+                ctrue=11,
+                cdate=12,
+                cmaxkey=14,
+                cCANONTYPEMASK = 0xf,
+                cY = 0x10,
+                cint = cY | cdouble,
+                cX = 0x20,
+                clong = cX | cdouble,
+                cZ = 0x30,
+                cint64 = cZ | cdouble,
+                cHASMORE = 0x40,
+                cNOTUSED = 0x80 // but see IsBSON sentinel - this bit not usable without great care
+            };
+
             KeyV1() { _keyData = 0; }
             ~KeyV1() { DEV _keyData = (const unsigned char *) 1; }
 
@@ -260,6 +288,206 @@ namespace mongo {
             const char *_buf;
             size_t _size;
         };
+
+        inline int KeyV1::binDataCodeToLength(int codeByte) { 
+            static const int BinDataCodeToLength[] = { 
+                0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 24, 32
+            };
+            return BinDataCodeToLength[codeByte >> 4];
+        }
+
+        inline unsigned KeyV1::sizeOfElement(const unsigned char *p) { 
+            static unsigned sizes[] = {
+                0,
+                1, //cminkey=1,
+                1, //cnull=2,
+                0,
+                9, //cdouble=4,
+                0,
+                0, //cstring=6,
+                0,
+                13, //coid=8,
+                0,
+                1, //cfalse=10,
+                1, //ctrue=11,
+                9, //cdate=12,
+                0,
+                1, //cmaxkey=14,
+                0
+            };
+            unsigned type = *p & cCANONTYPEMASK;
+            unsigned sz = sizes[type];
+            if( sz == 0 ) {
+                if( type == cstring ) { 
+                    sz = ((unsigned) p[1]) + 2;
+                }
+                else {
+                    verify( type == cbindata );
+                    sz = binDataCodeToLength(p[1]) + 2;
+                }
+            }
+            return sz;
+        }
+
+        inline int KeyV1::compare(const unsigned char *&l, const unsigned char *&r) {
+            int lt_real = *l;
+            int rt_real = *r;
+            int lt = (lt_real & cCANONTYPEMASK);
+            int rt = (rt_real & cCANONTYPEMASK);
+            int x = lt - rt;
+            if( MONGO_unlikely(x) ) 
+                return x;
+
+            l++; r++;
+
+            // same type
+            switch( lt ) { 
+            case cdouble:
+                {
+                    if (MONGO_unlikely(lt_real == cint64 && rt_real == cint64)) {
+                        long long L = *reinterpret_cast<const long long *>(l);
+                        long long R = *reinterpret_cast<const long long *>(r);
+                        if (L < R) {
+                            return -1;
+                        }
+                        if (L != R) {
+                            return 1;
+                        }
+                    } else {
+                        // We only pack numbers as cint64 if they are larger than the largest thing
+                        // we would store as a double.  However, user inputted doubles can be larger
+                        // than 2^52 and just be packed as doubles because they came that way, so we
+                        // need to actually do the comparison, not just take the one that's packed
+                        // as an int to be greater or lesser.
+                        double L = (MONGO_unlikely(lt_real == cint64)
+                                    ? double(*reinterpret_cast<const long long *>(l))
+                                    : (reinterpret_cast<const PackedDouble *>(l))->d);
+                        double R = (MONGO_unlikely(rt_real == cint64)
+                                    ? double(*reinterpret_cast<const long long *>(r))
+                                    : (reinterpret_cast<const PackedDouble *>(r))->d);
+                        if (L < R) {
+                            return -1;
+                        }
+                        if (L != R) {
+                            return 1;
+                        }
+                    }
+                    l += 8; r += 8;
+                    break;
+                }
+            case cstring:
+                {
+                    int lsz = *l;
+                    int rsz = *r;
+                    int common = min(lsz, rsz);
+                    l++; r++; // skip the size byte
+                    // use memcmp as we (will) allow zeros in UTF8 strings
+                    int res = memcmp(l, r, common);
+                    if( res ) 
+                        return res;
+                    // longer string is the greater one
+                    int diff = lsz-rsz;
+                    if( diff ) 
+                        return diff;
+                    l += lsz; r += lsz;
+                    break;
+                }
+            case cbindata:
+                {
+                    int L = *l;
+                    int R = *r;
+                    int llen = binDataCodeToLength(L);
+                    int diff = L-R; // checks length and subtype simultaneously
+                    if( diff ) {
+                        // unfortunately nibbles are backwards to do subtype and len in one check (could bit swap...)
+                        int rlen = binDataCodeToLength(R);
+                        if( llen != rlen ) 
+                            return llen - rlen;
+                        return diff;
+                    }
+                    // same length, same type
+                    l++; r++;
+                    int res = memcmp(l, r, llen);
+                    if( res ) 
+                        return res;
+                    l += llen; r += llen;
+                    break;
+                }
+            case cdate:
+                {
+                    long long L = *((long long *) l);
+                    long long R = *((long long *) r);
+                    if( L < R )
+                        return -1;
+                    if( L > R )
+                        return 1;
+                    l += 8; r += 8;
+                    break;
+                }
+            case coid:
+                {
+                    int res = memcmp(l, r, sizeof(OID));
+                    if( res ) 
+                        return res;
+                    l += 12; r += 12;
+                    break;
+                }
+            default:
+                // all the others are a match -- e.g. null == null
+                ;
+            }
+
+            return 0;
+        }
+
+        inline int KeyV1::woCompare(const KeyV1& right, const Ordering &order) const {
+            const unsigned char *l = _keyData;
+            const unsigned char *r = right._keyData;
+
+            if(MONGO_unlikely((*l|*r) == IsBSON )) // only can do this if cNOTUSED maintained
+                return compareHybrid(right, order);
+
+            unsigned mask = 1;
+            while( 1 ) { 
+                char lval = *l; 
+                char rval = *r;
+                {
+                    int x = compare(l, r); // updates l and r pointers
+                    if( x ) {
+                        if( order.descending(mask) )
+                            x = -x;
+                        return x;
+                    }
+                }
+
+                {
+                    int x = ((int)(lval & cHASMORE)) - ((int)(rval & cHASMORE));
+                    if( x ) 
+                        return x;
+                    if( (lval & cHASMORE) == 0 )
+                        break;
+                }
+
+                mask <<= 1;
+            }
+
+            return 0;
+        }
+
+        inline int KeyV1::dataSize() const {
+            const unsigned char *p = _keyData;
+            if( !isCompactFormat() ) {
+                return bson().objsize() + 1;
+            }
+
+            bool more;
+            do { 
+                unsigned z = sizeOfElement(p);
+                more = (*p & cHASMORE) != 0;
+                p += z;
+            } while( more );
+            return p - _keyData;
+        }
 
     } // namespace storage
 
