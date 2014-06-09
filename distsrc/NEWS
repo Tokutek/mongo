@@ -104,6 +104,24 @@ Bug fixes
       invalidation) take too long.  (#1147)
 
 
+tokumx 1.4.3
+------------
+Release date: 2014-06-10
+
+General
+~~~~~~~
+
+    - This release contains a bug fix for 1.4.2.
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Fixed a rare memory accounting issue caused by differently typed
+      integers in indexed fields of BSON documents, that could lead to
+      crashes.  (Tokutek/ft-index#258)
+
+
 tokumx 1.4.2
 ------------
 Release date: 2014-05-09
