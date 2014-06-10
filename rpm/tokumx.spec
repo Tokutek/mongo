@@ -7,11 +7,10 @@
 
 %if 0%{tokumx_enterprise}
 Name: tokumx-enterprise
-Obsoletes: mongo, mongodb, mongo-stable, mongo-10gen, mongo-10gen-enterprise, mongo-10gen-unstable, mongo-10gen-unstable-shell, mongo-10gen-unstable-tools, mongodb-org, mongodb-org-shell, mongodb-org-tools, mongodb-org-unstable, mongodb-org-unstable-shell, mongodb-org-unstable-tools, tokumx
+Conflicts: mongo, mongodb, mongo-stable, mongo-10gen, mongo-10gen-enterprise, mongo-10gen-unstable, mongo-10gen-unstable-shell, mongo-10gen-unstable-tools, mongodb-org, mongodb-org-shell, mongodb-org-tools, mongodb-org-unstable, mongodb-org-unstable-shell, mongodb-org-unstable-tools, tokumx
 %else
 Name: tokumx
-Obsoletes: mongo, mongodb, mongo-stable, mongo-10gen, mongo-10gen-enterprise, mongo-10gen-unstable, mongo-10gen-unstable-shell, mongo-10gen-unstable-tools, mongodb-org, mongodb-org-shell, mongodb-org-tools, mongodb-org-unstable, mongodb-org-unstable-shell, mongodb-org-unstable-tools
-Conflicts: tokumx-enterprise
+Conflicts: mongo, mongodb, mongo-stable, mongo-10gen, mongo-10gen-enterprise, mongo-10gen-unstable, mongo-10gen-unstable-shell, mongo-10gen-unstable-tools, mongodb-org, mongodb-org-shell, mongodb-org-tools, mongodb-org-unstable, mongodb-org-unstable-shell, mongodb-org-unstable-tools, tokumx-enterprise
 %endif
 Version: %{?tokumx_version}%{!?tokumx_version:1.4.0}
 Release: %{?tokumx_rpm_release_version}%{!?tokumx_rpm_release_version:1}%{?dist}
@@ -61,7 +60,7 @@ client utilities.
 Summary: TokuMX common files
 Group: Applications/Databases
 %if 0%{tokumx_enterprise}
-Obsoletes: tokumx-common
+Conflicts: tokumx-common
 %else
 Conflicts: tokumx-enterprise-common
 %endif
@@ -88,10 +87,9 @@ Requires(preun): chkconfig
 Requires(postun): initscripts
 %endif
 %if 0%{tokumx_enterprise}
-Obsoletes: mongodb-server, mongo-10gen-server, mongo-10gen-unstable-server, mongodb-org-mongos, mongodb-org-server, mongodb-org-unstable-mongos, mongodb-org-unstable-server, tokumx-server
+Conflicts: mongodb-server, mongo-10gen-server, mongo-10gen-unstable-server, mongodb-org-mongos, mongodb-org-server, mongodb-org-unstable-mongos, mongodb-org-unstable-server, tokumx-server
 %else
-Obsoletes: mongodb-server, mongo-10gen-server, mongo-10gen-unstable-server, mongodb-org-mongos, mongodb-org-server, mongodb-org-unstable-mongos, mongodb-org-unstable-server
-Conflicts: tokumx-enterprise-server
+Conflicts: mongodb-server, mongo-10gen-server, mongo-10gen-unstable-server, mongodb-org-mongos, mongodb-org-server, mongodb-org-unstable-mongos, mongodb-org-unstable-server, tokumx-enterprise-server
 %endif
 
 %description server
@@ -106,10 +104,9 @@ Summary: TokuMX shared libraries
 Group: Development/Libraries
 Requires: %{name}-common = %{version}-%{release}
 %if 0%{tokumx_enterprise}
-Obsoletes: libtokumx libmongodb
+Conflicts: libtokumx, libmongodb
 %else
-Conflicts: libtokumx-enterprise
-Obsoletes: libmongodb
+Conflicts: libtokumx-enterprise, libmongodb
 %endif
 
 %description -n lib%{name}
@@ -125,10 +122,9 @@ Requires: lib%{name} = %{version}-%{release}
 Requires: boost-devel
 Provides: tokumx-devel = %{version}-%{release}
 %if 0%{tokumx_enterprise}
-Obsoletes: libtokumx-devel libmongodb-devel mongodb-devel
+Conflicts: libtokumx-devel, libmongodb-devel, mongodb-devel
 %else
-Conflicts: libtokumx-enterprise
-Obsoletes: libmongodb-devel mongodb-devel
+Conflicts: libtokumx-enterprise, libmongodb-devel, mongodb-devel
 %endif
 
 %description -n lib%{name}-devel
