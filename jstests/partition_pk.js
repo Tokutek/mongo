@@ -106,3 +106,16 @@ assert.eq(MinKey, x["partitions"][1]["max"]["a"]);
 assert.eq(MaxKey, x["partitions"][1]["max"]["_id"]);
 t.drop();
 
+// test for #1178, make sure that an update that moves
+// a document from one partition to another works properly
+assert.commandWorked(db.createCollection(tn, {partitioned:1, primaryKey : {a:1, _id:1 }}));
+assert.commandWorked(t.addPartition({a:10, _id:1}));
+t.insert({_id : 0, a : 0});
+// before fixing #1178, this would NOT move the document
+// from partition 0 to partition 1, so dropping partition
+t.update({_id : 0}, {$set : {a : 100}});
+assert.eq( 100 , t.findOne().a , "first" );
+assert.commandWorked(t.dropPartition(0));
+assert.eq( 100 , t.findOne().a , "first" );
+t.drop();
+
