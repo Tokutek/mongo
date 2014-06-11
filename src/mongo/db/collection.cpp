@@ -3531,6 +3531,11 @@ namespace mongo {
                                              uint64_t flags, bool* indexBitChanged) {
         int whichPartition = partitionWithPK(pk);
         _partitions[whichPartition]->updateObject(pk, oldObj, newObj, fromMigrate, flags, indexBitChanged);
+        // newObj only stores the proper post image AFTER
+        // calling updateObject on the appropriate partition (note that
+        // it is not a const variable). Therefore, we cannot reliably learn
+        // which partition newObj belongs in until after we have called updateObject
+        // on the appropriate partition
         BSONObj newPK = getValidatedPKFromObject(newObj);
         int newPartition = partitionWithRow(newObj);
         if (newPartition != whichPartition) {
