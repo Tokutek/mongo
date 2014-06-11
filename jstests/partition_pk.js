@@ -112,7 +112,8 @@ assert.commandWorked(db.createCollection(tn, {partitioned:1, primaryKey : {a:1, 
 assert.commandWorked(t.addPartition({a:10, _id:1}));
 t.insert({_id : 0, a : 0});
 // before fixing #1178, this would NOT move the document
-// from partition 0 to partition 1, so dropping partition
+// from partition 0 to partition 1, so dropping partition 0 would erroneously
+// drop the document, and the second findOne would fail
 t.update({_id : 0}, {$set : {a : 100}});
 assert.eq( 100 , t.findOne().a , "first" );
 assert.commandWorked(t.dropPartition(0));
