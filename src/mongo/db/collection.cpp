@@ -3531,6 +3531,12 @@ namespace mongo {
                                              uint64_t flags, bool* indexBitChanged) {
         int whichPartition = partitionWithPK(pk);
         _partitions[whichPartition]->updateObject(pk, oldObj, newObj, fromMigrate, flags, indexBitChanged);
+        BSONObj newPK = getValidatedPKFromObject(newObj);
+        int newPartition = partitionWithRow(newObj);
+        if (newPartition != whichPartition) {
+            _partitions[whichPartition]->deleteObject(newPK, newObj, flags);
+            _partitions[newPartition]->insertObject(newObj, flags, indexBitChanged);
+        }
     }
 
     BSONObj PartitionedCollection::getUpperBound() {
