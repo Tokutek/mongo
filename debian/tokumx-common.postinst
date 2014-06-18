@@ -6,5 +6,5 @@
 
 db_get tokumx-common/email_address
 if [ x"$RET" != x"" ]; then
-    /usr/bin/curl -X POST --data-urlencode "email=$RET" http://www.tokutek.com/simple_create_account.php
+    /usr/bin/curl -X POST --data-urlencode "email=$RET" --data-urlencode "source=deb-package" --data-urlencode "product=tokumx" http://www.tokutek.com/simple_create_account.php
 fi
