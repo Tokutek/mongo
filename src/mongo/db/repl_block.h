@@ -28,13 +28,19 @@
  */
 namespace mongo {
 
+    typedef enum {
+        REPL_SUCCESS = 0,
+        REPL_FAIL,
+        REPL_WAITING
+    } OP_REPL_STATUS;
+
+
     void updateSlaveLocation( CurOp& curop, const char * oplog_ns , GTID lastGTID );
 
     /** @return true if op has made it to w servers */
+    // TODO: FIX THIS FOR SHARDING
     bool opReplicatedEnough( GTID gtid , int w );
-    bool opReplicatedEnough( GTID gtid , BSONElement w );
-
-    bool waitForReplication( GTID gtid , int w , int maxSecondsToWait );
+    OP_REPL_STATUS opReplicatedEnough( GTID gtid , BSONElement w );
 
     std::vector<BSONObj> getHostsWrittenTo(GTID gtid);
 

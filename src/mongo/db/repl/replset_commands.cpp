@@ -737,4 +737,78 @@ namespace mongo {
             return true;
         }
     } cmdTrimOplog;
+
+    //
+    // used ONLY for unit testing. This command should NEVER be runnable
+    // by users
+    //
+    class CmdReplSetHKP : public ReplSetCommand {
+    public:
+        virtual void help( stringstream &help ) const {
+            help << "Internal command that should only be used by tests";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+        }
+        CmdReplSetHKP() : ReplSetCommand("_replSetHKP", true) { }
+        virtual bool needsTxn() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return false; }
+        virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            if( !check(errmsg, result) ) {
+                return false;
+            }
+            bool ret = theReplSet->handleHighestKnownPrimaryOfMember(cmdObj["hkp"].numberLong());
+            result.append("ret", ret);
+            return true;
+        }
+    } ;
+    // for now, making this a test only function until we make partitioning
+    // a more widely used feature
+    MONGO_INITIALIZER(RegisterReplSetHKP)(InitializerContext* context) {
+        if (Command::testCommandsEnabled) {
+            // Leaked intentionally: a Command registers itself when constructed.
+            new CmdReplSetHKP();
+        }
+        return Status::OK();
+    }
+
+    //
+    // used ONLY for unit testing. This command should NEVER be runnable
+    // by users
+    //
+    class CmdReplSetGTIDHKP : public ReplSetCommand {
+    public:
+        virtual void help( stringstream &help ) const {
+            help << "Internal command that should only be used by tests";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+        }
+        CmdReplSetGTIDHKP() : ReplSetCommand("_replSetGTIDHKP", true) { }
+        virtual bool needsTxn() const { return false; }
+        virtual bool canRunInMultiStmtTxn() const { return false; }
+        // this test command artificially bumps up the highest known primary in the GTID manager,
+        // the same task that an election would do. However, it does not percolate this new value
+        // via theReplSet->handleHighestKnownPrimaryOfMember. The purpose is to have
+        // a mechanism to only increase this value in the GTIDManager so that a jstest
+        // can test whether write acknowledgement properly works
+        virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            if( !check(errmsg, result) ) {
+                return false;
+            }
+            PRIMARY_VOTE ret = theReplSet->gtidManager->acceptPossiblePrimary(cmdObj["newPrimary"].numberLong(), GTID_MAX);
+            return (ret == VOTE_YES);
+        }
+    } ;
+    // for now, making this a test only function until we make partitioning
+    // a more widely used feature
+    MONGO_INITIALIZER(RegisterReplSetGTIDHKP)(InitializerContext* context) {
+        if (Command::testCommandsEnabled) {
+            // Leaked intentionally: a Command registers itself when constructed.
+            new CmdReplSetGTIDHKP();
+        }
+        return Status::OK();
+    }
 }

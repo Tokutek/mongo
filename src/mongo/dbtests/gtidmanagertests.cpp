@@ -27,21 +27,18 @@ namespace mongo {
         // simple test of GTIDs
         void GTIDtest() {
             GTID gtid1(1,0);
-            GTID gtid2(0,1);
+            GTID gtid2(0,0);
             ASSERT(!gtid1.isInitial());
             ASSERT(gtid2.isInitial());
             ASSERT(GTID::cmp(gtid1, gtid2) > 0);
             gtid1.inc();
-            gtid2.inc_primary();
             ASSERT(gtid1._primarySeqNo == 1);
             ASSERT(gtid1._GTSeqNo == 1);
-            ASSERT(gtid2._primarySeqNo == 1);
-            ASSERT(gtid2._GTSeqNo == 0);
         }
 
         void testGTIDManager() {
             GTID lastGTID(1,1);
-            GTIDManager mgr(lastGTID, 0, 0, 0);
+            GTIDManager mgr(lastGTID, 0, 0, 0, 0);
             
             // make sure initialization is what we expect
             ASSERT(GTID::cmp(mgr._lastLiveGTID, lastGTID) == 0);
@@ -81,16 +78,26 @@ namespace mongo {
             // simple test of resetManager
             currLast = mgr._lastLiveGTID;
             currMin = mgr._minLiveGTID;
-            mgr.resetManager();
+            uint64_t currHkp = mgr.getHighestKnownPrimary();
+            // just a sanity check, that hkp is 2
+            ASSERT(currHkp == 2);
+            ASSERT(mgr._newPrimaryValue == 0);
+            ASSERT(!mgr.resetManager(1));
+            ASSERT(!mgr.resetManager(2));
+            ASSERT(mgr.resetManager(4));
             mgr.verifyReadyToBecomePrimary();
             // make sure that lastLive and minLive not changed yet
             ASSERT(GTID::cmp(currMin, mgr._minLiveGTID) == 0);
             ASSERT(GTID::cmp(currLast, mgr._lastLiveGTID) == 0);
-            ASSERT(mgr._incPrimary);
             // now make sure that primary has increased
+            ASSERT(mgr._newPrimaryValue == 4);
             mgr.getGTIDForPrimary(&gtid, &ts, &hash);
-            ASSERT(!mgr._incPrimary);
+            ASSERT(mgr._newPrimaryValue == 0);
+
             ASSERT(gtid._primarySeqNo > currLast._primarySeqNo);
+            ASSERT(gtid._primarySeqNo == 4);
+            ASSERT(gtid._GTSeqNo == 0);
+
             mgr.noteLiveGTIDDone(gtid);
             mgr.verifyReadyToBecomePrimary();
 
@@ -181,9 +188,83 @@ namespace mongo {
             ASSERT(GTID::cmp(mgr._minUnappliedGTID, gtidUnapplied4) > 0);
         }
 
+        void simulateElectionRelatedStuff() {
+            GTIDManager mgr(GTID(1,1), 0, 0, 0, 0);
+            // make sure initialization is what we expect
+            mgr.catchUnappliedToLive();
+            GTID resetGTID(2,2);
+            mgr.resetAfterInitialSync(resetGTID, 1, 1);
+
+            // first simulation
+            ASSERT(GTID::cmp(mgr._lastLiveGTID, GTID(2,2)) == 0);
+            GTID p;
+            uint64_t ts;
+            uint64_t hash;
+            mgr.getGTIDForPrimary(&p, &ts, &hash);
+            ASSERT(GTID::cmp(p, GTID(2,3)) == 0);
+            ASSERT(GTID::cmp(mgr._lastLiveGTID, GTID(2,3)) == 0);
+            ASSERT(mgr.getHighestKnownPrimary() == 2);
+            // simulate a normal GTID coming in that bumps up the highestKnownPrimary
+            mgr.noteGTIDAdded(GTID(5,0), 2, 2);
+            ASSERT(mgr.getHighestKnownPrimary() == 5);
+            mgr.noteApplyingGTID(GTID(5,0));
+            mgr.noteGTIDApplied(GTID(5,0));
+            // normal GTID coming that does not bump up hkp
+            mgr.noteGTIDAdded(GTID(5,2), 2, 2);
+            ASSERT(mgr.getHighestKnownPrimary()== 5);
+            mgr.noteApplyingGTID(GTID(5,2));
+            mgr.noteGTIDApplied(GTID(5,2));
+
+            //
+            // test canAcknowledgeGTID and acceptPossiblePrimary
+            //
+
+            ASSERT(mgr.canAcknowledgeGTID()); // can acknowledge
+            // test possibilities for acceptPossiblePrimary
+            // new primary too low
+            ASSERT(mgr.acceptPossiblePrimary(3, GTID(5,5)) == VOTE_NO);
+            ASSERT(mgr.acceptPossiblePrimary(5, GTID(5,5)) == VOTE_NO);
+            ASSERT(mgr.canAcknowledgeGTID());
+            // GTID too low
+            ASSERT(mgr.acceptPossiblePrimary(6, GTID(5,1)) == VOTE_VETO);
+            ASSERT(mgr.canAcknowledgeGTID());
+            // both parameters no good
+            // in such case, low GTID takes precedence, and we veto
+            ASSERT(mgr.acceptPossiblePrimary(5, GTID(5,1)) == VOTE_VETO);
+            ASSERT(mgr.canAcknowledgeGTID());
+            // boundary case, where it is equal to _lastLiveGTID
+            ASSERT(GTID::cmp(GTID(5,2), mgr._lastLiveGTID) == 0);
+            ASSERT(mgr.acceptPossiblePrimary(6, GTID(5,2)) == VOTE_YES);
+            ASSERT(!mgr.canAcknowledgeGTID());
+            ASSERT(mgr.getHighestKnownPrimary()== 6);
+            ASSERT(mgr.acceptPossiblePrimary(8, GTID(5,2)) == VOTE_YES);
+            ASSERT(!mgr.canAcknowledgeGTID());
+            ASSERT(mgr.getHighestKnownPrimary()== 8);
+            mgr.noteGTIDAdded(GTID(6,0), 2, 2);
+            ASSERT(!mgr.canAcknowledgeGTID());
+            mgr.noteGTIDAdded(GTID(7,0), 2, 2);
+            ASSERT(!mgr.canAcknowledgeGTID());
+            mgr.noteGTIDAdded(GTID(8,0), 2, 2);
+            ASSERT(mgr.canAcknowledgeGTID());
+            mgr.noteApplyingGTID(GTID(6,2));
+            mgr.noteGTIDApplied(GTID(6,2));
+            mgr.noteApplyingGTID(GTID(7,2));
+            mgr.noteGTIDApplied(GTID(7,2));
+            mgr.noteApplyingGTID(GTID(8,2));
+            mgr.noteGTIDApplied(GTID(8,2));
+            ASSERT(mgr.getHighestKnownPrimary()== 8);
+            
+            GTIDManager one(GTID(5,5), 0, 0, 0, 4);
+            ASSERT(one.getHighestKnownPrimary() == 5);
+            GTIDManager two(GTID(2,5), 0, 0, 0, 4);
+            ASSERT(two.getHighestKnownPrimary() == 4);
+
+        }
+
         void run() {
             GTIDtest();
             testGTIDManager();
+            simulateElectionRelatedStuff();
         }
     };
 }

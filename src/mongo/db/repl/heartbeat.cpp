@@ -161,6 +161,7 @@ namespace mongo {
                 result
                 );
             result.append("oplogVersion", ReplSetConfig::OPLOG_VERSION);
+            result.append("hkp", theReplSet->getHighestKnownPrimaryAcrossSet());
             const Member *syncTarget = BackgroundSync::get()->getSyncTarget();
             if (syncTarget) {
                 result.append("syncingTo", syncTarget->fullName());
@@ -234,7 +235,7 @@ namespace mongo {
          */
         static int s_try_offset;
 
-        HostAndPort h;
+        const HostAndPort h;
         HeartbeatInfo m;
         int tries;
         const int threshold;
@@ -251,6 +252,8 @@ namespace mongo {
             s_try_offset += 7;
         }
 
+        const HostAndPort& hostAndPort() { return h; }
+
         string name() const { return "rsHealthPoll"; }
 
         void setUp() { }
@@ -263,6 +266,7 @@ namespace mongo {
 
             HeartbeatInfo mem = m;
             HeartbeatInfo old = mem;
+            bool needsNewStateChecked = false;
             try {
                 BSONObj info;
                 int theirConfigVersion = -10000;
@@ -276,7 +280,7 @@ namespace mongo {
                 }
 
                 if( ok ) {
-                    up(info, mem);
+                    up(info, mem, &needsNewStateChecked);
                 }
                 else if (!info["errmsg"].eoo() && info["errmsg"].str() == "unauthorized") {
                     authIssue(mem);
@@ -304,7 +308,7 @@ namespace mongo {
                 if( old.hbstate != mem.hbstate )
                     log() << "replSet member " << h.toString() << " is now in state " << mem.hbstate.toString() << rsLog;
             }
-            if( changed || now-last>4 ) {
+            if( needsNewStateChecked || changed || now-last>4 ) {
                 last = now;
                 theReplSet->mgr->send( boost::bind(&Manager::msgCheckNewState, theReplSet->mgr) );
             }
@@ -442,7 +446,7 @@ namespace mongo {
             theReplSet->rmFromElectable(mem.id());
         }
 
-        void up(const BSONObj& info, HeartbeatInfo& mem) {
+        void up(const BSONObj& info, HeartbeatInfo& mem, bool* needsNewStateChecked) {
             HeartbeatInfo::numPings++;
             mem.authIssue = false;
 
@@ -475,6 +479,17 @@ namespace mongo {
             }
             else {
                 mem.oplogVersion = 0;
+            }
+            // for "highest known primary"
+            if ( info.hasElement("hkp")) {
+                mem.highestKnownPrimaryInSet = info["hkp"].numberLong();
+                // if the highest known primary across the replica set has changed,
+                // communicate that to the caller so that Manager::msgCheckNewState
+                // eventually gets called
+                *needsNewStateChecked = theReplSet->handleHighestKnownPrimaryOfMember(mem.highestKnownPrimaryInSet);
+            }
+            else {
+                mem.highestKnownPrimaryInSet = 0;
             }
             // see if this member is in the electable set
             if( info["e"].eoo() ) {
@@ -557,7 +572,17 @@ namespace mongo {
         // member heartbeats are started in ReplSetImpl::initFromConfig
     }
 
+    void ReplSetImpl::forceHeartbeat(const Member* m) {
+        for( set<ReplSetHealthPollTask*>::iterator i = healthTasks.begin(); i != healthTasks.end(); i++ ) {
+            if ((*i)->hostAndPort().toString() == m->h().toString()) {
+                (*i)->signal();
+                break;
+            }
+        }
+    }
+
 }
+
 
 /* todo:
    stop bg job and delete on removefromset

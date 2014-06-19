@@ -251,6 +251,7 @@ namespace {
         internalActions.addAction(ActionType::clone);
         internalActions.addAction(ActionType::handshake);
         internalActions.addAction(ActionType::mapReduceShardedFinish);
+        internalActions.addAction(ActionType::replAssumedPrimary);
         internalActions.addAction(ActionType::replSetElect);
         internalActions.addAction(ActionType::replSetFresh);
         internalActions.addAction(ActionType::replSetGetRBID);

@@ -368,7 +368,8 @@ namespace mongo {
             }
         }
 
-        OplogReader r(true /* doHandshake */);
+        bool acknowledgingWrites = theReplSet->gtidManager->canAcknowledgeGTID();
+        OplogReader r(acknowledgingWrites /* doHandshake */);
 
         // find a target to sync from the last op time written
         getOplogReader(&r);
@@ -419,6 +420,17 @@ namespace mongo {
                     }
                 }
                 if (!r.moreInCurrentBatch()) {
+                    // now that we have no more in the current batch,
+                    // that means the next call to more() will contact the server.
+                    // It is this server contact that may or may not acknowledge the write,
+                    // depending on the value of acknowledgingWrites set above.
+                    // So, we check if the state of our acknowledgement has changed
+                    // If so, we return so that a new connection and OplogReader is created,
+                    // with the correct value for acknowledgingWrites
+                    bool canAck = theReplSet->gtidManager->canAcknowledgeGTID();
+                    if (canAck != acknowledgingWrites) {
+                        return 0;
+                    }
                     // check to see if we have a request to sync
                     // from a specific target. If so, get out so that
                     // we can restart the act of syncing and

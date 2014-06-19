@@ -76,6 +76,7 @@
 "removeShard",
 "renameCollectionSameDB",
 "repairDatabase",
+"replAssumedPrimary",
 "replAddPartition",
 "replGetExpireOplog",
 "replSetElect",

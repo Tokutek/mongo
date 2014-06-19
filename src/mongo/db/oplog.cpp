@@ -89,6 +89,19 @@ namespace mongo {
         BSONObj bb2 = b2.done();
         replInfoDetails->insertObject(bb2, flags);
     }
+
+    // assumed to be locked and with context grabbed on entry
+    void logHighestVotedForPrimary(uint64_t hkp) {
+        Collection* replInfoDetails = getCollection(rsVoteInfo);
+        verify(replInfoDetails);
+        BufBuilder bufbuilder(256);
+        BSONObjBuilder b(bufbuilder);
+        b.append("_id", "highestVote");
+        b.append("val", hkp);
+        BSONObj bb = b.done();
+        const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
+        replInfoDetails->insertObject(bb, flags);
+    }
     
     void logTransactionOps(GTID gtid, uint64_t timestamp, uint64_t hash, const deque<BSONObj>& ops) {
         LOCK_REASON(lockReason, "repl: logging to oplog");
@@ -731,7 +744,7 @@ namespace mongo {
         transaction.commit();
     }
 
-    void convertOplogToPartitionedIfNecessary(GTID gtid) {
+    void convertOplogToPartitionedIfNecessary() {
         LOCK_REASON(lockReason, "repl: maybe convert oplog to partitioned on startup");
         Client::WriteContext ctx(rsoplog, lockReason);
         Client::Transaction transaction(DB_SERIALIZABLE);

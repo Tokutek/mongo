@@ -34,12 +34,23 @@ namespace mongo {
             virtual string name() const = 0;            // name the thread
         public:
             Task();
+            // notify the Task to wake up and execute, instead
+            // of waiting for its current sleep period to end
+            void signal();
 
             /** for a repeating task, stop after current invocation ends. can be called by other threads
                 as long as the Task is still in scope.
                 */
             void halt();
         private:
+            // taskMutex and taskCond are used when we sleep
+            // between calls to doWork. We use them so that
+            // calls to signal() may wake them up early for execution,
+            // should a third party want to.
+            // These are currently used with ReplSetHealthPollTask after
+            // successful elections
+            boost::mutex taskMutex;
+            boost::condition_variable taskCond;
             unsigned n, repeat;
             friend void fork(Task* t);
             friend void repeat(Task* t, unsigned millis);

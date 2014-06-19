@@ -95,8 +95,11 @@ namespace mongo {
     void ReplSetImpl::leaveRollbackState() {
         changeState(MemberState::RS_SECONDARY);
     }
-    
-    bool ReplSetImpl::assumePrimary() {
+
+    // method to transition to state PRIMARY, using primaryToUse as
+    // the primary GTID value. Returns true if we successfully became
+    // PRIMARY, false otherwise.
+    bool ReplSetImpl::assumePrimary(uint64_t primaryToUse) {
         boost::unique_lock<boost::mutex> lock(stateChangeMutex);
         
         // Make sure replication has stopped
@@ -121,9 +124,27 @@ namespace mongo {
         Lock::GlobalWrite lk(lockReason);
 
         gtidManager->verifyReadyToBecomePrimary();
-
-        gtidManager->resetManager();
+        // in between the time the election succeeds and we stop replication
+        // more data may have been replicated that makes primaryToUse obsolete,
+        // resetManager will check this. If the check fails, we don't
+        // assume primary and simply let the election fail.
+        uint64_t hkpAcrossSet = getHighestKnownPrimaryAcrossSet();
+        if (primaryToUse < hkpAcrossSet) {
+            log() << "assuming primary with " << primaryToUse << \
+                " failing, because highestKnownPrimaryAcrossSet is " << \
+                hkpAcrossSet << rsLog;
+            return false;
+        }
+        if (!gtidManager->resetManager(primaryToUse)) {
+            log() << "assuming primary with " << primaryToUse << \
+                " failing, gtidManager->resetManager returned false." << rsLog;
+            return false;
+        }
         changeState(MemberState::RS_PRIMARY);
+        log() << "replset assuming primary with value " << primaryToUse << rsLog;
+        Client::Transaction txn (DB_SERIALIZABLE);
+        OplogHelpers::logComment(BSON("comment" << "assuming primary"));
+        txn.commit(DB_TXN_NOSYNC);
         return true;
     }
 
@@ -205,6 +226,22 @@ namespace mongo {
         }
 
         return max;
+    }
+
+    // returns true if _highestKnownPrimaryAcrossReplSet changes, is called when
+    // we receive a heartbeat from another member that communicates its highestKnownPrimary.
+    bool ReplSetImpl::handleHighestKnownPrimaryOfMember(uint64_t hkp) {
+        boost::unique_lock<boost::mutex> lock(_hkpAcrossReplSetMutex);
+        if (hkp > _highestKnownPrimaryAcrossReplSet) {
+            _highestKnownPrimaryAcrossReplSet = hkp;
+            return true;
+        }
+        return false;
+    }
+
+    uint64_t ReplSetImpl::getHighestKnownPrimaryAcrossSet() {
+        boost::unique_lock<boost::mutex> lock(_hkpAcrossReplSetMutex);
+        return _highestKnownPrimaryAcrossReplSet;
     }
 
     // Note, on input, stateChangeMutex and rslock must be held
@@ -467,6 +504,7 @@ namespace mongo {
         _replOplogPartitionRunning(false),
         _replKeepOplogAliveRunning(false),
         _keepOplogPeriodMillis(600*1000), // 10 minutes
+        _highestKnownPrimaryAcrossReplSet(0),
         _replBackgroundShouldRun(true),
         elect(this),
         _forceSyncTarget(0),
@@ -489,6 +527,7 @@ namespace mongo {
     }
 
     void ReplSetImpl::loadGTIDManager() {
+        uint64_t lastVotedForPrimary = getSavedHighestVotedForPrimary();
         LOCK_REASON(lockReason, "repl: initializing GTID manager");
         Lock::DBWrite lk(rsoplog, lockReason);
         Client::Transaction txn(DB_SERIALIZABLE);
@@ -497,7 +536,7 @@ namespace mongo {
             GTID lastGTID = getGTIDFromBSON("_id", o);
             uint64_t lastTime = o["ts"]._numberLong();
             uint64_t lastHash = o["h"].numberLong();
-            gtidManager.reset(new GTIDManager(lastGTID, lastTime, lastHash, _id));
+            gtidManager.reset(new GTIDManager(lastGTID, lastTime, lastHash, _id, lastVotedForPrimary));
             setTxnGTIDManager(gtidManager.get());            
         }
         else {
@@ -508,7 +547,7 @@ namespace mongo {
             // Either this, or we need to change the code in 
             // ReplSetHealthPollTask::up, where we check if a potential
             // primary is within 10 seconds of this machine
-            gtidManager.reset(new GTIDManager(lastGTID, 0, 0, _id));
+            gtidManager.reset(new GTIDManager(lastGTID, 0, 0, _id, lastVotedForPrimary));
             setTxnGTIDManager(gtidManager.get());
         }
         txn.commit();
@@ -529,6 +568,9 @@ namespace mongo {
             dbexit( EXIT_REPLICATION_ERROR );
             return;
         }
+        // call this before starting the manager, so we immedietely know what we can
+        // and cannot theoretically vote for
+        theReplSet->handleHighestKnownPrimaryOfMember(theReplSet->gtidManager->getHighestKnownPrimary());
 
         changeState(MemberState::RS_STARTUP2);
 
@@ -549,10 +591,7 @@ namespace mongo {
                 LOCK_REASON(lockReason, "repl: stepping up as primary");
                 Lock::GlobalWrite lk(lockReason);
                 theReplSet->gtidManager->catchUnappliedToLive();
-                GTID lastLiveGTID;
-                GTID lastUnappliedGTID;
-                theReplSet->gtidManager->getLiveGTIDs(&lastLiveGTID, &lastUnappliedGTID);
-                convertOplogToPartitionedIfNecessary(lastLiveGTID);
+                convertOplogToPartitionedIfNecessary();
                 changeState(MemberState::RS_PRIMARY);
             }
             else {
@@ -577,7 +616,7 @@ namespace mongo {
                         lastHash
                         );
                 }
-                convertOplogToPartitionedIfNecessary(lastGTID);
+                convertOplogToPartitionedIfNecessary();
                 goLiveAsSecondary = true;
             }
         }
@@ -585,6 +624,8 @@ namespace mongo {
             changeState(MemberState::RS_ARBITER);
         }
 
+        // call this again in case anything has changed since initial sync
+        theReplSet->handleHighestKnownPrimaryOfMember(theReplSet->gtidManager->getHighestKnownPrimary());
         // When we get here,
         // we know either the server is the sole primary in a single node
         // replica set, or it does not require an initial sync

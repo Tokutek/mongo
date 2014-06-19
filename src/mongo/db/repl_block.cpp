@@ -39,6 +39,31 @@ namespace mongo {
 
     using namespace mongoutils;
 
+    OP_REPL_STATUS gtidReplicated(GTID myGTID, GTID remoteGTID) {
+        //
+        //
+        // bleh, don't like this clause
+        //
+        //
+        if (remoteGTID == GTID_MAX) {
+            return REPL_SUCCESS;
+        }
+        // if our primary is less than the remote's primary, that means
+        // a failover happened and we cannot be sure of whether the write
+        // truly replicated
+        else if (myGTID.getPrimary() < remoteGTID.getPrimary()) {
+            return REPL_FAIL;
+        }
+        // otherwise, if myGTID < remoteGTID, then we know
+        // the primary values of the GTIDs are the same, and the write
+        // replicated
+        else if (GTID::cmp(myGTID, remoteGTID) <= 0) {
+            return REPL_SUCCESS;
+        }
+        // otherwise, we are waiting
+        return REPL_WAITING;
+    }
+
     class SlaveTracking { // SERVER-4328 todo review
     public:
         string name() const { return "SlaveTracking"; }
@@ -93,7 +118,7 @@ namespace mongo {
             _threadsWaitingForReplication.notify_all();
         }
 
-        bool opReplicatedEnough( const GTID& gtid, BSONElement w ) {
+        OP_REPL_STATUS opReplicatedEnough( const GTID& gtid, BSONElement w ) {
             RARELY {
                 REPLDEBUG( "looking for : " << op << " w=" << w );
             }
@@ -104,9 +129,7 @@ namespace mongo {
 
             uassert( 16250 , "w has to be a string or a number" , w.type() == String );
 
-            if (!theReplSet) {
-                return false;
-            }
+            uassert(0, "need to be running with replication to call opReplicatedEnough", theReplSet);
 
             string wStr = w.String();
             if (wStr == "majority") {
@@ -119,51 +142,34 @@ namespace mongo {
             uassert(14830, str::stream() << "unrecognized getLastError mode: " << wStr,
                     it != theReplSet->config().rules.end());
 
-            return GTID::cmp(gtid, (*it).second->last) <= 0; ;
+            return gtidReplicated(gtid, (*it).second->last);
         }
 
-        bool replicatedToNum(const GTID& gtid, int w) {
-            if ( w <= 1 || ! _isMaster() )
-                return true;
+        OP_REPL_STATUS replicatedToNum(const GTID& gtid, int w) {
+            if ( w <= 1 )
+                return REPL_SUCCESS;
 
             w--; // now this is the # of slaves i need
             scoped_lock mylk(_mutex);
             return _replicatedToNum_slaves_locked( gtid, w );
         }
 
-        bool waitForReplication(const GTID& gtid, int w, int maxSecondsToWait) {
-            if ( w <= 1 ) {
-                return true;
-            }
-            w--; // now this is the # of slaves i need
-
-            boost::xtime xt;
-            boost::xtime_get(&xt, MONGO_BOOST_TIME_UTC);
-            xt.sec += maxSecondsToWait;
-            
-            scoped_lock mylk(_mutex);
-            while ( ! _replicatedToNum_slaves_locked( gtid, w ) ) {
-                if ( ! _threadsWaitingForReplication.timed_wait( mylk.boost() , xt ) ) {
-                    massert(16804,
-                            "waitForReplication called but not master anymore", _isMaster());
-                    return false;
-                }
-                massert( 16806, "waitForReplication called but not master anymore", _isMaster() );
-            }
-            massert( 16805, "waitForReplication called but not master anymore", _isMaster() );
-            return true;
-        }
-
-        bool _replicatedToNum_slaves_locked(const GTID& gtid, int numSlaves ) {
+        OP_REPL_STATUS _replicatedToNum_slaves_locked(const GTID& gtid, int numSlaves ) {
             for ( map<Ident,GTID>::iterator i=_slaves.begin(); i!=_slaves.end(); i++) {
                 GTID s = i->second;
-                if ( GTID::cmp(s, gtid) < 0 ) {
+                OP_REPL_STATUS currStatus = gtidReplicated(gtid, s);
+                if (currStatus == REPL_FAIL) {
+                    return REPL_FAIL;
+                }
+                else if (currStatus == REPL_WAITING) {
                     continue;
                 }
-                if ( --numSlaves == 0 )
-                    return true;
+                // must be REPL_SUCCESS
+                if ( --numSlaves == 0 ) {
+                    return REPL_SUCCESS;
+                }
             }
-            return numSlaves <= 0;
+            return (numSlaves <= 0) ? REPL_SUCCESS : REPL_WAITING;
         }
 
         std::vector<BSONObj> getHostsAtOp(GTID gtid) {
@@ -228,16 +234,15 @@ namespace mongo {
         }
     }
 
-    bool opReplicatedEnough( GTID gtid, BSONElement w ) {
+    OP_REPL_STATUS opReplicatedEnough( GTID gtid, BSONElement w ) {
         return slaveTracking.opReplicatedEnough( gtid, w );
     }
 
+    // TODO: THIS IS ONLY CALLED IN SHARDING,
+    // make this better
     bool opReplicatedEnough( GTID gtid, int w ) {
-        return slaveTracking.replicatedToNum( gtid, w );
-    }
-
-    bool waitForReplication( GTID gtid, int w , int maxSecondsToWait ) {
-        return slaveTracking.waitForReplication( gtid, w, maxSecondsToWait );
+        OP_REPL_STATUS s = slaveTracking.replicatedToNum( gtid, w );
+        return (s == REPL_SUCCESS);
     }
 
     vector<BSONObj> getHostsWrittenTo(GTID gtid) {

@@ -27,7 +27,7 @@ namespace mongo {
     class GTID {
         uint64_t _primarySeqNo;
         uint64_t _GTSeqNo;
-        public:
+    public:
         static int cmp(GTID a, GTID b);
         static uint32_t GTIDBinarySize();
         GTID();
@@ -39,9 +39,13 @@ namespace mongo {
         ~GTID(){};
         void serializeBinaryData(char* binData) const;
         void inc();
-        void inc_primary();        
+        void setPrimaryTo(uint64_t newPrimary);
         string toString() const;
         bool isInitial() const;
+        uint64_t getPrimary() const;        
+        bool operator==(const GTID& other) const {
+            return _primarySeqNo == other._primarySeqNo && _GTSeqNo == other._GTSeqNo;
+        }
         friend class GTIDManagerTest; // for testing
     };
 
@@ -55,6 +59,12 @@ namespace mongo {
 
     typedef std::set<GTID, GTIDCmp> GTIDSet;
 
+    typedef enum {
+        VOTE_YES = 0,
+        VOTE_NO,
+        VOTE_VETO
+    } PRIMARY_VOTE;
+
     class GTIDManager {
         boost::mutex _lock;
 
@@ -62,15 +72,15 @@ namespace mongo {
         boost::condition_variable _minLiveCond;
 
         // when a machine newly assumes primary, we want to
-        // increment the primary sequence number of the GTIDs
-        // that are handed out, but we do not want to do it
+        // set the primary sequence number of the GTIDs
+        // that are handed out to something new, but we do not want to do it
         // until we call getGTIDForPrimary. Otherwise,
         // in a system where no writes are happening, elections
         // may stall because this machine will think the last GTID is
         // some high value that has never actually been given out.
-        // So, we use this bool as a signal to getGTIDForPrimary
-        // to increment the primary sequence number
-        bool _incPrimary;
+        // So, we use this value as a signal to getGTIDForPrimary
+        // to reset the primary sequence number
+        uint64_t _newPrimaryValue;
         
         // GTID to give out should a primary ask for one to use
         // On a secondary, this is the last GTID seen incremented
@@ -109,9 +119,18 @@ namespace mongo {
         uint64_t _lastHash;
 
         uint32_t _selfID; // used for hash construction
+
+        // specifies the highest known possible primary
+        // It ought to be the minimum of _lastLiveGTID.getPrimary() and
+        // whatever the last value we voted for in the election protocol
+        // Note that it ONLY relates to values that this member has voted
+        // for in elections, or oplog entries seen. This is completely
+        // independent from ReplSetImpl::highestKnownPrimaryAcrossReplSet.
+        // Also, this value controls what can and cannot be voted for in elections
+        uint64_t _highestKnownPossiblePrimary;
         
-        public:            
-        GTIDManager( GTID lastGTID, uint64_t lastTime, uint64_t lastHash, uint32_t id );
+    public:            
+        GTIDManager( GTID lastGTID, uint64_t lastTime, uint64_t lastHash, uint32_t id, uint64_t lastVotedForPrimary );
         ~GTIDManager();
 
         // methods for running on a primary
@@ -136,7 +155,7 @@ namespace mongo {
 
         void getMins(GTID* minLiveGTID, GTID* minUnappliedGTID);
         GTID getMinLiveGTID();
-        void resetManager();
+        bool resetManager(uint64_t newPrimary);
 
         GTID getLiveState();
         uint64_t getCurrTimestamp();
@@ -155,8 +174,13 @@ namespace mongo {
         void catchUnappliedToLive();
 
         bool rollbackNeeded(const GTID& last, uint64_t lastTime, uint64_t lastHash);
+        uint64_t getHighestKnownPrimary();
+        PRIMARY_VOTE acceptPossiblePrimary(uint64_t newPrimary, GTID remoteGTID);
+        bool canAcknowledgeGTID();
+    private:
+        void handleHighestKnownPrimary();
 
-        friend class GTIDManagerTest; // for testing
+    friend class GTIDManagerTest; // for testing
         
     };
 

@@ -410,6 +410,17 @@ if (typeof(BinData) != "undefined"){
         var secondary = parseInt(this.hex().substring(17,32), 16);
         return 'GTID(' + primary + ', ' + secondary + ')';
     }
+
+    BinData.prototype.GTIDPri = function() {
+        if (this.hex().length != 32)  throw "error: GTID should have length 32 in hex";
+        return parseInt(this.hex().substring(0,16), 16);
+    }
+
+    BinData.prototype.GTIDSec = function() {
+        if (this.hex().length != 32)  throw "error: GTID should have length 32 in hex";
+        return parseInt(this.hex().substring(17,32), 16);
+    }
+
 }
 else {
     print("warning: no BinData class");

@@ -42,6 +42,8 @@ namespace mongo {
     mongo::mutex ReplSetConfig::groupMx("RS tag group");
     const int ReplSetConfig::DEFAULT_HB_TIMEOUT = 10;
 
+    static AtomicUInt _warnedAboutVotes = 0;
+
     void assertOnlyHas(BSONObj o, const set<string>& fields) {
         BSONObj::iterator i(o);
         while( i.more() ) {
@@ -604,6 +606,16 @@ namespace mongo {
                     m.priority = mobj["priority"].Number();
                 if( mobj.hasElement("votes") )
                     m.votes = (unsigned) mobj["votes"].Number();
+                if (m.votes > 1 && !_warnedAboutVotes) {
+                    log() << "\t\tWARNING: Having more than 1 vote on a single replicaset member is"
+                          << startupWarningsLog;
+                    log() << "\t\tdeprecated, as it causes issues with majority write concern. For"
+                          << startupWarningsLog;
+                    log() << "\t\tmore information, see "
+                          << "http://docs.mongodb.org/manual/release-notes/2.6-compatibility/#replica-set-vote-configuration-validation"
+                          << startupWarningsLog;
+                    _warnedAboutVotes.set(1);
+                }
                 if( mobj.hasElement("tags") ) {
                     const BSONObj &t = mobj["tags"].Obj();
                     for (BSONObj::iterator c = t.begin(); c.more(); c.next()) {

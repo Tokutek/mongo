@@ -28,14 +28,6 @@ namespace mongo {
 
     namespace task {
 
-        /*void foo() {
-            boost::mutex m;
-            boost::mutex::scoped_lock lk(m);
-            boost::condition cond;
-            cond.wait(lk);
-            cond.notify_one();
-        }*/
-
         Task::Task()
             : BackgroundJob( true /* deleteSelf */ ) {
             n = 0;
@@ -57,7 +49,13 @@ namespace mongo {
                     doWork();
                 }
                 catch(...) { }
-                sleepmillis(repeat);
+                {
+                    boost::unique_lock<boost::mutex> lock(taskMutex);
+                    taskCond.timed_wait(
+                        lock,
+                        boost::posix_time::milliseconds(repeat)
+                        );
+                }
                 if( inShutdown() )
                     break;
                 if( repeat == 0 )
@@ -67,6 +65,11 @@ namespace mongo {
 
         void Task::begin() {
             go();
+        }
+
+        void Task::signal() {
+            boost::unique_lock<boost::mutex> lock(taskMutex);
+            taskCond.notify_all();
         }
 
         void fork(Task *t) {
