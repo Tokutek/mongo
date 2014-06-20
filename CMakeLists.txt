@@ -5,10 +5,6 @@ else ()
   cmake_minimum_required(VERSION 2.8.9 FATAL_ERROR)
 endif ()
 
-cmake_policy(SET CMP0026 OLD)
-cmake_policy(SET CMP0043 OLD)
-cmake_policy(SET CMP0045 OLD)
-
 project(tokumx)
 
 ## Versions of gcc >= 4.9.0 require special version of 'ar' and 'ranlib' for
