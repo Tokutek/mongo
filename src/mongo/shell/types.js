@@ -401,9 +401,49 @@ if (typeof(BinData) != "undefined"){
     BinData.prototype.length = function() {
         return this.len;
     }
+
+    // GTIDs are stored in the oplog in BinData format
+    // This is a helper function to make reading them simpler
+    BinData.prototype.printGTID = function() {
+        if (this.hex().length != 32)  throw "error: GTID should have length 32 in hex";
+        var primary = parseInt(this.hex().substring(0,16), 16);
+        var secondary = parseInt(this.hex().substring(17,32), 16);
+        return 'GTID(' + primary + ', ' + secondary + ')';
+    }
 }
 else {
     print("warning: no BinData class");
+}
+
+// these next two functions taken from
+// http://stackoverflow.com/questions/57803/how-to-convert-decimal-to-hex-in-javascript
+var btoa = function (bin) {
+    var tableStr = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    var table = tableStr.split("");
+    for (var i = 0, j = 0, len = bin.length / 3, base64 = []; i < len; ++i) {
+        var a = bin.charCodeAt(j++), b = bin.charCodeAt(j++), c = bin.charCodeAt(j++);
+        if ((a | b | c) > 255) throw new Error("String contains an invalid character");
+        base64[base64.length] = table[a >> 2] + table[((a << 4) & 63) | (b >> 4)] +
+            (isNaN(b) ? "=" : table[((b << 2) & 63) | (c >> 6)]) +
+            (isNaN(b + c) ? "=" : table[c & 63]);
+    }
+    return base64.join("");
+}
+
+var hexToBase64 = function (str) {
+    return btoa(String.fromCharCode.apply(null,
+        str.replace(/\r|\n/g, "").replace(/([\da-fA-F]{2}) ?/g, "0x$1 ").replace(/ +$/, "").split(" "))
+    );
+}
+
+GTID = function(primary, secondary) {
+    // gotten from http://www.codigomanso.com/en/2010/07/simple-javascript-formatting-zero-padding/
+    // Note that there must be 15 0's below for this to work.
+    var pHex = ("000000000000000" + primary.toString(16)).slice(-16);
+    var sHex = ("000000000000000" + secondary.toString(16)).slice(-16);
+    var gtidHex = pHex.concat(sHex);
+
+    return BinData(0, hexToBase64(gtidHex));
 }
 
 // Map

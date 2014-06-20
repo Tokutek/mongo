@@ -23,7 +23,6 @@
 
 namespace mongo {
 
-    // TODO: Is there a faster comparison function for this?
     int GTID::cmp(GTID a, GTID b) {
         if (a._primarySeqNo != b._primarySeqNo) {
             return (a._primarySeqNo < b._primarySeqNo) ? -1 : 1;
@@ -81,7 +80,7 @@ namespace mongo {
 
     string GTID::toString() const {
         stringstream ss;
-        ss << "primary: " << _primarySeqNo<< " secondary: " << _GTSeqNo;
+        ss << "GTID(" << _primarySeqNo<< ", " << _GTSeqNo << ")";
         return ss.str();
     }
 
