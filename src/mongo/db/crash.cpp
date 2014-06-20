@@ -18,7 +18,23 @@
 
 #include "mongo/db/crash.h"
 
-#include <string.h>
+#include <db.h>
+
+#include "mongo/base/init.h"
+#include "mongo/base/string_data.h"
+#include "mongo/db/client.h"
+#include "mongo/db/cmdline.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/curop.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/storage/env.h"
+#include "mongo/util/assert_util.h"
+#include "mongo/util/log.h"
+#include "mongo/util/paths.h"
+#include "mongo/util/processinfo.h"
+#include "mongo/util/stacktrace.h"
+#include "mongo/util/version.h"
+
 
 #if MONGO_HAVE_HEADER_LIMITS_H
   #include <limits.h>
@@ -62,21 +78,8 @@
   #define MONGO_CRASH_HAVE_STATFS_IMPL 0
 #endif
 
-#include <db.h>
+#include <string.h>
 
-#include "mongo/base/init.h"
-#include "mongo/base/string_data.h"
-#include "mongo/db/client.h"
-#include "mongo/db/cmdline.h"
-#include "mongo/db/commands.h"
-#include "mongo/db/curop.h"
-#include "mongo/db/storage/env.h"
-#include "mongo/util/assert_util.h"
-#include "mongo/util/log.h"
-#include "mongo/util/paths.h"
-#include "mongo/util/processinfo.h"
-#include "mongo/util/stacktrace.h"
-#include "mongo/util/version.h"
 
 namespace mongo {
 

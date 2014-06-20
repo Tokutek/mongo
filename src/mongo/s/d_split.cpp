@@ -409,6 +409,14 @@ namespace mongo {
             out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
         }
 
+        virtual string parseNs(const string& dbname, const BSONObj& cmdObj) const {
+            string coll = cmdObj.firstElement().valuestr();
+            if (nsToDatabaseSubstring(coll) != dbname) {
+                warning() << "splitVector called on db " << dbname << " for collection " << coll << endl;
+            }
+            return coll;
+        }
+
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
 
             //
@@ -417,11 +425,6 @@ namespace mongo {
             //
 
             const char* ns = jsobj.getStringField( "splitVector" );
-            if (nsToDatabaseSubstring(ns) != dbname) {
-                errmsg = mongoutils::str::stream() << "wrong database for splitVector: running in db "
-                                                   << dbname << " but splitting collection " << ns;
-                return false;
-            }
             BSONObj keyPattern = jsobj.getObjectField( "keyPattern" );
 
             if ( keyPattern.isEmpty() ) {

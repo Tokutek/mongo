@@ -13,7 +13,7 @@ st.stopBalancer();
 var mongos = st.s0;
 var admin = mongos.getDB( "admin" );
 var config = mongos.getDB( "config" );
-var shardFoo = st.shard0.getDB( "foo" );
+var shardAdmin = st.shard0.getDB( "admin" );
 var coll = mongos.getCollection( "foo.bar" );
 
 assert( admin.runCommand({ enableSharding : coll.getDB() + "" }).ok );
@@ -38,12 +38,12 @@ jsTest.log( "Get split points of the chunk using force : true..." );
 
 var maxChunkSizeBytes = 1024 * 1024;
 
-var splitKeys = shardFoo.runCommand({ splitVector : coll + "",
-                                      keyPattern : { _id : 1 },
-                                      min : { _id : 0 },
-                                      max : { _id : MaxKey },
-                                      force : true
-                                    }).splitKeys;
+var splitKeys = shardAdmin.runCommand({ splitVector : coll + "",
+                                        keyPattern : { _id : 1 },
+                                        min : { _id : 0 },
+                                        max : { _id : MaxKey },
+                                        force : true
+                                      }).splitKeys;
 
 printjson( splitKeys );
 printjson( coll.stats() );
