@@ -1239,7 +1239,7 @@ namespace mongo {
                     LOG(LL_ERROR) << " The assertion failure you are about to see is intentional." << endl;
                     LOG(LL_ERROR) << "************************************************************" << endl;
                     // uassert(17357, "for below SystemException");
-                    throw SystemException(17357, "Detected an unclean shutdown during version upgrade.");
+                    throw SystemException(error, 17357, "Detected an unclean shutdown during version upgrade.");
                 default: 
                 {
                     string s = str::stream() << "Unhandled ydb error: " << error;
