@@ -1225,6 +1225,21 @@ namespace mongo {
                                   << "************************************************************" << endl
                                   << endl;
                     verify(false);
+                case TOKUDB_UPGRADE_FAILURE:
+                    LOG(LL_ERROR) << endl << endl;
+                    LOG(LL_ERROR) << "************************************************************" << endl;
+                    LOG(LL_ERROR) << endl;
+                    LOG(LL_ERROR) << " Detected an unclean shutdown during version upgrade." << endl;
+                    LOG(LL_ERROR) << " Before upgrading, you must perform a clean shutdown of the" << endl;
+                    LOG(LL_ERROR) << " old version of TokuMX before starting the new version." << endl;
+                    LOG(LL_ERROR) << endl;
+                    LOG(LL_ERROR) << " You must go back to the old version, recover, and then" << endl;
+                    LOG(LL_ERROR) << " shut down cleanly before upgrading." << endl;
+                    LOG(LL_ERROR) << endl;
+                    LOG(LL_ERROR) << " The assertion failure you are about to see is intentional." << endl;
+                    LOG(LL_ERROR) << "************************************************************" << endl;
+                    // uassert(17357, "for below SystemException");
+                    throw SystemException(17357, "Detected an unclean shutdown during version upgrade.");
                 default: 
                 {
                     string s = str::stream() << "Unhandled ydb error: " << error;
