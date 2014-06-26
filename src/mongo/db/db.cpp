@@ -920,6 +920,7 @@ static void buildOptionsDescriptions(po::options_description *pVisible,
 
     hidden_options.add_options()
     ("fastsync", "indicate that this instance is starting from a dbpath snapshot of the repl peer")
+    ("rs_maintenance", "start the replica set machine in recovery mode")
     ("pretouch", po::value<int>(), "DEPRECATED")
     ("command", po::value< vector<string> >(), "command")
     ("nodur", "DEPRECATED")
@@ -1174,6 +1175,9 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
         }
         if (params.count("fastsync")) {
             replSettings.fastsync = true;
+        }
+        if (params.count("rs_maintenance")) {
+            replSettings.startInRecovery = true;
         }
         if (params.count("autoresync")) {
             replSettings.autoresync = true;

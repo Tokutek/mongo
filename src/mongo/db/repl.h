@@ -41,6 +41,7 @@ namespace mongo {
     class ReplSettings {
     public:
         bool fastsync;
+        bool startInRecovery;
 
         bool autoresync;
 
@@ -53,6 +54,7 @@ namespace mongo {
 
         ReplSettings()
             : fastsync(),
+            startInRecovery(false),
             autoresync(false),
             slavedelay(),
             discoveredSeeds(),

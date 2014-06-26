@@ -209,6 +209,7 @@ namespace {
         clusterAdminRoleWriteActions.addAction(ActionType::logReplInfo);
         clusterAdminRoleWriteActions.addAction(ActionType::moveChunk);
         clusterAdminRoleWriteActions.addAction(ActionType::movePrimary);
+        clusterAdminRoleWriteActions.addAction(ActionType::recoverToPoint);
         clusterAdminRoleWriteActions.addAction(ActionType::pluginLoad);
         clusterAdminRoleWriteActions.addAction(ActionType::removeShard);
         clusterAdminRoleWriteActions.addAction(ActionType::repairDatabase);
