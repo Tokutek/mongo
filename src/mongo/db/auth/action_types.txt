@@ -70,6 +70,7 @@
 "pluginList",
 "profileEnable",
 "profileRead",
+"recoverToPoint",
 "reIndex",
 "remove",
 "removeShard",

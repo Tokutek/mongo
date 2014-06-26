@@ -365,7 +365,6 @@ namespace mongo {
         const Member* getMemberToSyncTo();
         void veto(const string& host, unsigned secs=10);
         bool gotForceSync();
-        void goStale(const Member* stale, GTID remoteGTID);
         void goToRollbackState();
         void leaveRollbackState();
     private:
@@ -523,6 +522,7 @@ namespace mongo {
          * have called it again, passing in false.
          */
         bool setMaintenanceMode(const bool inc, string& errmsg);
+        bool inMaintenanceMode();
         // Records a new slave's id in the GhostSlave map, at handshake time.
         void registerSlave(const BSONObj& rid, const int memberId);
     private:

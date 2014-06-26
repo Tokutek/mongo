@@ -26,6 +26,8 @@
 
 namespace mongo {
 
+    // Check if rollback is necessary
+    bool isRollbackRequired(OplogReader& r, uint64_t* lastTS);
 
     /**
      * Lock order:
@@ -99,12 +101,10 @@ namespace mongo {
         // where it is ok to apply the operation to the oplog.
         // Called in produce()
         void handleSlaveDelay(uint64_t opTimestamp);
-        // Check if rollback is necessary
-        bool isRollbackRequired(OplogReader& r);
         // tries to perform a rollback. If the rollback is impossible,
         // throws a RollbackOplogException
         void runRollback(OplogReader& r, uint64_t oplogTS);
-        void getOplogReader(OplogReader& r);
+        void getOplogReader(OplogReader* r);
         // Evaluate if the current sync target is still good
         bool shouldChangeSyncTarget();
 
