@@ -98,6 +98,7 @@ namespace mongo {
 
     BackgroundSync::BackgroundSync() : _opSyncShouldRun(false),
                                             _opSyncRunning(false),
+                                            _seqCounter(0),
                                             _currentSyncTarget(NULL),
                                             _opSyncShouldExit(false),
                                             _opSyncInProgress(false),
@@ -281,7 +282,15 @@ namespace mongo {
                         // notify other threads that we are not running
                         _opSyncRunningCondVar.notify_all();
                         // wait for permission that we can run
-                        _opSyncCanRunCondVar.wait(lck);
+                        // do it in 2 second intervals. This is simply
+                        // defensive. Should we ever have a bug where
+                        // we are not getting signaled properly,
+                        // at worst, we delay waking up this thread for 2
+                        // seconds
+                        _opSyncCanRunCondVar.timed_wait(
+                            lck,
+                            boost::posix_time::milliseconds(2000)
+                            );
                     }
 
                     // notify other threads that we are running
@@ -425,15 +434,40 @@ namespace mongo {
                     }
                     //record time for each getmore
                     {
+                        uint64_t currentSeq;
+                        {
+                            // check if we should bail out
+                            boost::unique_lock<boost::mutex> lck(_mutex);
+                            currentSeq = _seqCounter;
+                            if (!_opSyncShouldRun) {
+                                return 0;
+                            }
+                            _opSyncRunning = false;
+                            // notify other threads that we are running
+                            _opSyncRunningCondVar.notify_all();
+                        }
                         TimerHolder batchTimer(&getmoreReplStats);
                         r.more();
+                        {
+                            // check if we should bail out
+                            boost::unique_lock<boost::mutex> lck(_mutex);
+                            // if we should not run, or notice that
+                            // replication has stopped and restarted since the call to
+                            // r.more(), return
+                            if (!_opSyncShouldRun || _seqCounter > currentSeq) {
+                                return 0;
+                            }
+                            _opSyncRunning = true;
+                            // notify other threads that we are running
+                            _opSyncRunningCondVar.notify_all();
+                        }
                     }
                     //increment
                     networkByteStats.increment(r.currentBatchMessageSize());
 
                 }
 
-                if (!r.more()) {
+                if (!r.moreInCurrentBatch()) {
                     break;
                 }
 
@@ -752,6 +786,7 @@ namespace mongo {
 
     void BackgroundSync::stopOpSyncThread() {
         boost::unique_lock<boost::mutex> lock(_mutex);
+        _seqCounter++;
         _opSyncShouldRun = false;
         while (_opSyncRunning) {
             _opSyncRunningCondVar.wait(lock);
@@ -769,6 +804,7 @@ namespace mongo {
 
     void BackgroundSync::startOpSyncThread() {
         boost::unique_lock<boost::mutex> lock(_mutex);
+        _seqCounter++;
         // if we are shutting down, don't start replication
         // otherwise, we will be stuck waiting on _opSyncRunning
         // to go true, and it may never go true
@@ -777,11 +813,10 @@ namespace mongo {
 
             _opSyncShouldRun = true;
             _opSyncCanRunCondVar.notify_all();
-            while (!_opSyncRunning) {
-                _opSyncRunningCondVar.wait(lock);
-            }
-            // sanity check that no one has changed this variable
-            verify(_opSyncShouldRun);
+            // we trust the fact that this thread will signal
+            // the producer to wake up
+            // No need to wait for it, as the producer may be
+            // sleeping, or hung on a r.more() call in ::produce
         }
     }
 

@@ -64,6 +64,8 @@ namespace mongo {
         // thread.
         bool _opSyncRunning;
 
+        uint64_t _seqCounter;
+
         const Member* _currentSyncTarget;
 
         // double ended queue containing the ops

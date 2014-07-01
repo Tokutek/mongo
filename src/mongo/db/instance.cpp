@@ -692,7 +692,7 @@ namespace mongo {
                     else {
                         theReplSet->gtidManager->waitForDifferentMinLive(
                             last, 
-                            2000 // ms, this will be called twice
+                            4000 // ms, this will be called twice
                             );
                     }
                 }
