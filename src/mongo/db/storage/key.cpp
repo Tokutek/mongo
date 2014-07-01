@@ -49,6 +49,7 @@ namespace mongo {
             clong = cX | cdouble,
             cZ = 0x30,
             cint64 = cZ | cdouble,
+            cFULLTYPEMASK = 0x3f,
             cHASMORE = 0x40,
             cNOTUSED = 0x80 // but see IsBSON sentinel - this bit not usable without great care
         };
@@ -215,7 +216,7 @@ namespace mongo {
             while( 1 ) { 
                 unsigned bits = *p++;
 
-                switch( bits & 0x3f ) {
+                switch( bits & cFULLTYPEMASK ) {
                     case cminkey: b.appendMinKey(""); break;
                     case cnull:   b.appendNull(""); break;
                     case cfalse:  b.appendBool("", false); break;
@@ -282,8 +283,8 @@ namespace mongo {
         }
 
         static int compare(const unsigned char *&l, const unsigned char *&r) {
-            int lt_real = *l;
-            int rt_real = *r;
+            int lt_real = (*l & cFULLTYPEMASK);
+            int rt_real = (*r & cFULLTYPEMASK);
             int lt = (lt_real & cCANONTYPEMASK);
             int rt = (rt_real & cCANONTYPEMASK);
             int x = lt - rt;
