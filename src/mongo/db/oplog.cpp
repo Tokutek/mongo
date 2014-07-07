@@ -379,11 +379,21 @@ namespace mongo {
             }
             // set the applied bool to true, to let the oplog know that
             // this entry has been applied to collections
-            BSONElementManipulator(entry["a"]).setBool(true);
             {
                 LOCK_REASON(lockReason, "repl: setting oplog entry's applied bit");
                 Client::ReadContext ctx(rsoplog, lockReason);
-                writeEntryToOplog(entry, false);
+                Collection* rsOplogDetails = getCollection(rsoplog);
+                verify(rsOplogDetails);
+                const BSONObj pk = rsOplogDetails->getValidatedPKFromObject(entry);
+                const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
+
+                BSONObjBuilder b;
+                // build the _id
+                BSONObjBuilder b_id( b.subobjStart( "$set" ) );
+                b_id.append("a", true);
+                b_id.done();
+
+                rsOplogDetails->updateObjectMods(pk, b.done(), false, flags);
             }
             // If this code fails, it is impossible to recover from
             // because we don't know if the transaction successfully committed
