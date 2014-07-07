@@ -174,9 +174,16 @@ IRC:
 
  * [irc.freenode.net/tokutek][irc] for discussion about TokuMX and TokuDB.
 
+Issue tracker:
+
+ * [TokuMX JIRA][jira-mx] for problems with TokuMX.
+ * [TokuFT JIRA][jira-ft] for problems with [TokuFT][ft-index].
+
 [tokumx-user]: https://groups.google.com/forum/#!forum/tokumx-user
 [tokumx-dev]: https://groups.google.com/forum/#!forum/tokumx-dev
 [irc]: http://webchat.freenode.net/?channels=tokutek
+[jira-mx]: https://tokutek.atlassian.net/browse/MX/
+[jira-ft]: https://tokutek.atlassian.net/browse/FT/
 
 
 License

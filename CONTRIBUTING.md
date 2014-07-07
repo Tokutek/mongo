@@ -44,7 +44,7 @@ much information, the more the better.
 ### Where to send it ###
 
 The best place to send bug reports is to the [tokumx-user][tokumx-user] google group.  Once we
-figure out what the underlying problem is, we can create issues in the github issue tracker, and
+figure out what the underlying problem is, we can create issues in the [issue tracker][jira], and
 we'll let you know what they are so you can follow development progress.
 
 If you have sensitive data in your log files or for some other reason don't want to send this
@@ -119,6 +119,7 @@ can just use the master branch.
 [bugfixes-14]: https://github.com/Tokutek/mongo/tree/bugfixes/tokumx-1.4
 [fork-tokumx]: https://github.com/Tokutek/mongo/fork
 [github-account]: https://github.com/signup/free
+[jira]: https://tokutek.atlassian.net/browse/MX/
 [pull-request]: https://github.com/Tokutek/mongo/compare/
 [tokudb]: http://www.tokutek.com/products/tokudb-for-mysql/
 [tokumx-user]: https://groups.google.com/forum/#!forum/tokumx-user
