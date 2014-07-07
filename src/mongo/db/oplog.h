@@ -44,7 +44,6 @@ namespace mongo {
     GTID getGTIDFromOplogEntry(BSONObj o);
     bool getLastGTIDinOplog(GTID* gtid);
     bool gtidExistsInOplog(GTID gtid);
-    void writeEntryToOplog(BSONObj entry, bool recordStats);
     void writeEntryToOplogRefs(BSONObj entry);
     void replicateFullTransactionToOplog(BSONObj& o, OplogReader& r, bool* bigTxn);
     void applyTransactionFromOplog(BSONObj entry);

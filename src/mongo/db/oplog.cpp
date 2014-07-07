@@ -89,6 +89,20 @@ namespace mongo {
         BSONObj bb2 = b2.done();
         replInfoDetails->insertObject(bb2, flags);
     }
+
+    static void _writeEntryToOplog(BSONObj entry) {
+        Collection* rsOplogDetails = getCollection(rsoplog);
+        verify(rsOplogDetails);
+
+        const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
+        rsOplogDetails->insertObject(entry, flags);
+    }
+
+    static void writeEntryToOplog(BSONObj entry) {
+        TimerHolder insertTimer(&oplogInsertStats);
+        oplogInsertBytesStats.increment(entry.objsize());
+        _writeEntryToOplog(entry);
+    }
     
     void logTransactionOps(GTID gtid, uint64_t timestamp, uint64_t hash, const deque<BSONObj>& ops) {
         LOCK_REASON(lockReason, "repl: logging to oplog");
@@ -109,7 +123,7 @@ namespace mongo {
         BSONObj bb = b.done();
         // write it to oplog
         LOG(3) << "writing " << bb.toString(false, true) << " to master " << endl;
-        writeEntryToOplog(bb, true);
+        writeEntryToOplog(bb);
     }
 
     static void updateMaxRefGTID(BSONObj refMeta, uint64_t i, PartitionedCollection* pc, GTID gtid) {
@@ -134,7 +148,7 @@ namespace mongo {
         b.append("a", true);
         b.append("ref", oid);
         BSONObj bb = b.done();
-        writeEntryToOplog(bb, true);
+        writeEntryToOplog(bb);
         // If the OID has elements that are not in the last partition,
         // then we need to update the last partition's metadata to reflect
         // this, so when it comes time to trimming, we don't
@@ -248,24 +262,6 @@ namespace mongo {
         return found;
     }
 
-    static void _writeEntryToOplog(BSONObj entry) {
-        Collection* rsOplogDetails = getCollection(rsoplog);
-        verify(rsOplogDetails);
-
-        const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
-        rsOplogDetails->insertObject(entry, flags);
-    }
-
-    void writeEntryToOplog(BSONObj entry, bool recordStats) {
-        if (recordStats) {
-            TimerHolder insertTimer(&oplogInsertStats);
-            oplogInsertBytesStats.increment(entry.objsize());
-            _writeEntryToOplog(entry);
-        } else {
-            _writeEntryToOplog(entry);
-        }
-    }
-
     void writeEntryToOplogRefs(BSONObj o) {
         Collection* rsOplogRefsDetails = getCollection(rsOplogRefs);
         verify(rsOplogRefsDetails);
@@ -282,7 +278,7 @@ namespace mongo {
         // set the applied bool to false, to let the oplog know that
         // this entry has not been applied to collections
         BSONElementManipulator(op["a"]).setBool(false);
-        writeEntryToOplog(op, true);
+        writeEntryToOplog(op);
     }
 
     void replicateFullTransactionToOplog(BSONObj& o, OplogReader& r, bool* bigTxn) {
@@ -359,6 +355,21 @@ namespace mongo {
             applyOps(entry["ops"].Array());
         }
     }
+
+    static void updateApplyBitToEntry(BSONObj entry, bool apply) {
+        Collection* rsOplogDetails = getCollection(rsoplog);
+        verify(rsOplogDetails);
+        const BSONObj pk = rsOplogDetails->getValidatedPKFromObject(entry);
+        const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
+
+        BSONObjBuilder b;
+        // build the _id
+        BSONObjBuilder b_id( b.subobjStart( "$set" ) );
+        b_id.append("a", apply);
+        b_id.done();
+
+        rsOplogDetails->updateObjectMods(pk, b.done(), false, flags);
+    }
     
     // takes an entry that was written _logTransactionOps
     // and applies them to collections
@@ -382,18 +393,7 @@ namespace mongo {
             {
                 LOCK_REASON(lockReason, "repl: setting oplog entry's applied bit");
                 Client::ReadContext ctx(rsoplog, lockReason);
-                Collection* rsOplogDetails = getCollection(rsoplog);
-                verify(rsOplogDetails);
-                const BSONObj pk = rsOplogDetails->getValidatedPKFromObject(entry);
-                const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
-
-                BSONObjBuilder b;
-                // build the _id
-                BSONObjBuilder b_id( b.subobjStart( "$set" ) );
-                b_id.append("a", true);
-                b_id.done();
-
-                rsOplogDetails->updateObjectMods(pk, b.done(), false, flags);
+                updateApplyBitToEntry(entry, true);
             }
             // If this code fails, it is impossible to recover from
             // because we don't know if the transaction successfully committed
@@ -484,8 +484,8 @@ namespace mongo {
             else {
                 // set the applied bool to false, to let the oplog know that
                 // this entry has not been applied to collections
-                BSONElementManipulator(entry["a"]).setBool(false);
-                writeEntryToOplog(entry, false);
+                // currently, this is just a test hook
+                updateApplyBitToEntry(entry, false);
             }
         }
         transaction.commit(DB_TXN_NOSYNC);
