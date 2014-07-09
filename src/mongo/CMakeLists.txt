@@ -124,7 +124,6 @@ set(client_sources
   client/dbclient_rs.cpp
   client/dbclientcursor.cpp
   client/gridfs.cpp
-  client/model.cpp
   client/remote_loader.cpp
   client/remote_transaction.cpp
   client/sasl_client_authenticate.cpp
