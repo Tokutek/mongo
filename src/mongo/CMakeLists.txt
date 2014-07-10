@@ -135,6 +135,7 @@ set(client_sources
   pch.cpp
   platform/backtrace.cpp
   platform/posix_fadvise.cpp
+  platform/process_id.cpp
   platform/random.cpp
   util/assert_util.cpp
   util/background.cpp
@@ -406,12 +407,26 @@ if (BUILD_TESTING)
   foreach (test
       atomic_word_test
       bits_test
-      random_test
       )
     add_executable(${test} platform/${test})
     add_dependencies(${test} generate_error_codes generate_action_types)
     link_recursive_deps(${test}
       COMBINED_LIBNAME basic_unittest_deps
+      unittest_main
+      unittest_crutch
+      ${TOKUMX_SSL_LIBRARIES}
+      )
+  endforeach ()
+
+  foreach (test
+      process_id_test
+      random_test
+      )
+    add_executable(${test} platform/${test})
+    add_dependencies(${test} generate_error_codes generate_action_types)
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME platform_unittest_deps
+      platform
       unittest_main
       unittest_crutch
       ${TOKUMX_SSL_LIBRARIES}
@@ -814,6 +829,7 @@ if (BUILD_TESTING)
   foreach (test
       atomic_word_test
       bits_test
+      process_id_test
       random_test
       )
     add_mongo_test(platform ${test} ${test})
