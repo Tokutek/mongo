@@ -21,10 +21,10 @@ set -e
 case "$1" in
     configure)
 	# create a tokumx group and user
-        if ! grep -q tokumx /etc/passwd; then
-		adduser --system --no-create-home tokumx
-		addgroup --system tokumx
-		adduser tokumx tokumx
+        if ! getent passwd tokumx >/dev/null 2>&1; then
+            adduser --system --no-create-home tokumx
+            addgroup --system tokumx
+            adduser tokumx tokumx
         fi
 
 	# create db -- note: this should agree with dbpath in tokumx.conf

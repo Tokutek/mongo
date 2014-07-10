@@ -129,7 +129,7 @@ binary-arch: build install
 	    mv debian/tokumx-server.$$suffix debian/$(PRODUCT)-server.tokumx.$$suffix; \
 	done
 
-	dh_installinit --name=tokumx
+	dh_installinit -p$(PRODUCT)-server --name=tokumx
 #	dh_installinfo
 	dh_installman
 	dh_link

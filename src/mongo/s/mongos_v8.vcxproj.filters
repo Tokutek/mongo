@@ -242,9 +242,6 @@
     <ClCompile Include="..\client\dbclientcursor.cpp">
       <Filter>client</Filter>
     </ClCompile>
-    <ClCompile Include="..\client\model.cpp">
-      <Filter>client</Filter>
-    </ClCompile>
     <ClCompile Include="shardconnection.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -273,9 +270,6 @@
       <Filter>client</Filter>
     </ClInclude>
     <ClInclude Include="..\client\dbclient.h">
-      <Filter>client</Filter>
-    </ClInclude>
-    <ClInclude Include="..\client\model.h">
       <Filter>client</Filter>
     </ClInclude>
     <ClCompile Include="interrupt_status_mongos.cpp">
@@ -369,9 +363,6 @@
       <Filter>client</Filter>
     </ClCompile>
     <ClCompile Include="..\scripting\engine.cpp">
-      <Filter>scripting</Filter>
-    </ClCompile>
-    <ClCompile Include="..\scripting\engine_spidermonkey.cpp">
       <Filter>scripting</Filter>
     </ClCompile>
     <ClCompile Include="..\db\stats\counters.cpp">
@@ -695,9 +686,6 @@
     </ClCompile>
     <ClCompile Include="..\util\time_support.cpp">
       <Filter>util\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\scripting\sm_db.cpp">
-      <Filter>scripting</Filter>
     </ClCompile>
     <ClCompile Include="..\util\concurrency\mutexdebugger.cpp">
       <Filter>util\concurrency</Filter>
@@ -2236,12 +2224,6 @@
       <Filter>scripting</Filter>
     </ClInclude>
     <ClInclude Include="..\scripting\engine.h">
-      <Filter>scripting</Filter>
-    </ClInclude>
-    <ClInclude Include="..\scripting\engine_spidermonkey.h">
-      <Filter>scripting</Filter>
-    </ClInclude>
-    <ClInclude Include="..\scripting\engine_spidermonkey_internal.h">
       <Filter>scripting</Filter>
     </ClInclude>
     <ClInclude Include="..\db\client_basic.h">

@@ -185,7 +185,6 @@ add_option( "asio" , "Use Asynchronous IO (NOT READY YET)" , 0 , True )
 add_option( "ssl" , "Enable SSL" , 0 , True )
 
 # library choices
-add_option( "usesm" , "use spider monkey for javascript" , 0 , True )
 add_option( "usev8" , "use v8 for javascript" , 0 , True )
 
 # mongo feature options
@@ -202,7 +201,6 @@ add_option( "durableDefaultOff" , "have durable default to off" , 0 , True )
 add_option( "pch" , "use precompiled headers to speed up the build (experimental)" , 0 , True , "usePCH" )
 add_option( "distcc" , "use distcc for distributing builds" , 0 , False )
 add_option( "ccache" , "use ccache for caching compilation" , 0 , False )
-add_option( "clang" , "use clang++ rather than g++ (experimental)" , 0 , True )
 
 # debugging/profiling help
 
@@ -231,9 +229,6 @@ add_option( "use-system-all" , "use all system libraries", 0 , True )
 
 add_option("mongod-concurrency-level", "Concurrency level, \"global\" or \"db\"", 1, True,
            type="choice", choices=["global", "db"])
-
-add_option('client-dist-basename', "Name of the client source archive.", 1, False,
-           default='mongo-cxx-driver')
 
 # don't run configure if user calls --help
 if GetOption('help'):
@@ -279,7 +274,6 @@ debugBuild = has_option( "debugBuild" ) or has_option( "debugBuildAndLogging" )
 debugLogging = has_option( "debugBuildAndLogging" )
 noshell = has_option( "noshell" ) 
 
-usesm = has_option( "usesm" )
 usev8 = has_option( "usev8" ) 
 
 asio = has_option( "asio" )
@@ -289,10 +283,6 @@ usePCH = has_option( "usePCH" )
 justClientLib = (COMMAND_LINE_TARGETS == ['mongoclient'])
 
 env = Environment( BUILD_DIR=variantDir,
-                   CLIENT_ARCHIVE='${CLIENT_DIST_BASENAME}${DIST_ARCHIVE_SUFFIX}',
-                   CLIENT_DIST_BASENAME=get_option('client-dist-basename'),
-                   CLIENT_LICENSE='#distsrc/client/LICENSE.txt',
-                   CLIENT_SCONSTRUCT='#distsrc/client/SConstruct',
                    DIST_ARCHIVE_SUFFIX='.tgz',
                    EXTRAPATH=get_option("extrapath"),
                    MODULE_BANNERS=[],
@@ -345,9 +335,6 @@ else:
 if has_option( "cxx" ):
     env["CC"] = get_option( "cxx" )
     env["CXX"] = get_option( "cxx" )
-elif has_option("clang"):
-    env["CC"] = 'clang'
-    env["CXX"] = 'clang++'
 
 # determine compiler version
 if env['CC']:
@@ -420,7 +407,7 @@ if boostVersion is None:
 else:
     boostVersion = "-" + boostVersion
 
-if ( not ( usesm or usev8 or justClientLib) ):
+if ( not ( usev8 or justClientLib) ):
     usev8 = True
     options_topass["usev8"] = True
 
@@ -505,6 +492,12 @@ def filterExists(paths):
 if "darwin" == os.sys.platform:
     darwin = True
     platform = "osx" # prettier than darwin
+
+    # Unfortunately, we are too late here to affect the variant dir. We could maybe make this
+    # flag available on all platforms and complain if it is used on non-darwin targets.
+    osx_version_choices = ['10.6', '10.7', '10.8']
+    add_option("osx-version-min", "minimum OS X version to support", 1, False,
+               type = 'choice', default = osx_version_choices[0], choices = osx_version_choices)
 
     if env["CXX"] is None:
         print( "YO" )
@@ -708,10 +701,10 @@ if nix:
                          "-Wno-unknown-pragmas",
                          "-Winvalid-pch"] )
     # env.Append( " -Wconversion" ) TODO: this doesn't really work yet
-    if linux:
+    if linux or darwin:
         env.Append( CCFLAGS=["-Werror", "-pipe"] )
-        if not has_option('clang'):
-            env.Append( CCFLAGS=["-fno-builtin-memcmp"] ) # glibc's memcmp is faster than gcc's
+        # Don't make deprecated declarations errors.
+        env.Append( CCFLAGS=["-Wno-error=deprecated-declarations"] )
 
     env.Append( CPPDEFINES=["_FILE_OFFSET_BITS=64"] )
     env.Append( CXXFLAGS=["-Wnon-virtual-dtor", "-Woverloaded-virtual"] )
@@ -752,24 +745,6 @@ if nix:
 
     if has_option( "gdbserver" ):
         env.Append( CPPDEFINES=["USE_GDBSERVER"] )
-
-    # pre-compiled headers
-    if usePCH and 'Gch' in dir( env ):
-        print( "using precompiled headers" )
-        if has_option('clang'):
-            #env['GCHSUFFIX']  = '.pch' # clang++ uses pch.h.pch rather than pch.h.gch
-            #env.Prepend( CXXFLAGS=' -include pch.h ' ) # clang++ only uses pch from command line
-            print( "ERROR: clang pch is broken for now" )
-            Exit(1)
-        env['Gch'] = env.Gch( "$BUILD_DIR/mongo/pch.h$GCHSUFFIX",
-                              "src/mongo/pch.h" )[0]
-        env['GchSh'] = env[ 'Gch' ]
-    elif os.path.exists( env.File("$BUILD_DIR/mongo/pch.h$GCHSUFFIX").abspath ):
-        print( "removing precompiled headers" )
-        os.unlink( env.File("$BUILD_DIR/mongo/pch.h.$GCHSUFFIX").abspath ) # gcc uses the file if it exists
-
-if usesm:
-    env.Append( CPPDEFINES=["JS_C_STRINGS_ARE_UTF8"] )
 
 if "uname" in dir(os):
     hacks = buildscripts.findHacks( os.uname() )
@@ -822,12 +797,169 @@ env['MONGO_MODULES'] = [m.name for m in mongo_modules]
 
 
 def doConfigure(myenv):
-    conf = Configure(myenv)
+
+    def CheckToolIsClang(context, tool_name, tool, extension):
+        test_body = """
+                    #ifndef __clang__
+                    #error
+                    #endif
+                    """
+        context.Message('Checking if %s compiler "%s" is clang ...' % (tool_name, tool))
+        ret = context.TryCompile(test_body, extension)
+        context.Result(ret)
+        return ret
+
+    conf = Configure(myenv, clean=False, help=False, custom_tests = {
+        'CheckCCIsClang'  : lambda(ctx): CheckToolIsClang(ctx, "C", ctx.env["CC"], ".c"),
+        'CheckCXXIsClang' : lambda(ctx): CheckToolIsClang(ctx, "C++", ctx.env["CXX"], ".cpp"),
+    })
+
+    if 'CheckCC' in dir( conf ):
+        if not conf.CheckCC():
+            print( "C compiler not installed!" )
+            Exit(1)
+    cc_is_clang = conf.CheckCCIsClang()
 
     if 'CheckCXX' in dir( conf ):
-        if  not conf.CheckCXX():
-            print( "c++ compiler not installed!" )
+        if not conf.CheckCXX():
+            print( "C++ compiler not installed!" )
             Exit(1)
+    cxx_is_clang = conf.CheckCXXIsClang()
+
+    if not cc_is_clang == cxx_is_clang:
+        print("C and C++ compiler should either both be from clang, or both not from clang!")
+        Exit(1)
+
+    myenv = conf.Finish()
+
+    # TODO: OK, so where do we store our clangy-ness so we can ask for it later? I'm hoping
+    # that the answer is *not* in some global and that we can attach it to our Vars, Options,
+    # or Env. For now, it only seems to be needed within this method though.
+    using_clang = cc_is_clang
+
+    # Enable PCH if we are on 'NIX, the 'Gch' tool is enabled, and if we are not using
+    # clang. Otherwise, remove any pre-compiled header since gcc will try to use it if it
+    # exists.
+    if nix and usePCH and 'Gch' in dir( myenv ):
+        if using_clang:
+            # clang++ uses pch.h.pch rather than pch.h.gch
+            myenv['GCHSUFFIX'] = '.pch'
+            # clang++ only uses pch from command line
+            myenv.Prepend( CXXFLAGS=' -include pch.h ' )
+            # But it doesn't appear to work, so error out for now.
+            print( "ERROR: clang pch is broken for now" )
+            Exit(1)
+        myenv['Gch'] = myenv.Gch( "$BUILD_DIR/mongo/pch.h$GCHSUFFIX",
+                                    "src/mongo/pch.h" )[0]
+        myenv['GchSh'] = myenv[ 'Gch' ]
+    elif os.path.exists( myenv.File("$BUILD_DIR/mongo/pch.h$GCHSUFFIX").abspath ):
+        print( "removing precompiled headers" )
+        os.unlink( myenv.File("$BUILD_DIR/mongo/pch.h.$GCHSUFFIX").abspath )
+
+    def AddFlagIfSupported(env, tool, extension, flag, **mutation):
+        def CheckFlagTest(context, tool, extension, flag):
+            test_body = ""
+            context.Message('Checking if %s compiler supports %s ...' % (tool, flag))
+            ret = context.TryCompile(test_body, extension)
+            context.Result(ret)
+            return ret
+
+        cloned = env.Clone()
+        cloned.Append(**mutation)
+
+        if windows:
+            # TODO: Should be checking for MSVC, not windows here.
+            print("AddFlagIfSupported is not currently supported on Windows")
+            Exit(1)
+
+        # For GCC, we don't need anything since bad flags are already errors, but
+        # adding -Werror won't hurt. For clang, bad flags are only warnings, so we need -Werror
+        # to make them real errors.
+        cloned.Append(CCFLAGS=['-Werror'])
+        conf = Configure(cloned, clean=False, help=False, custom_tests = {
+                'CheckFlag' : lambda(ctx) : CheckFlagTest(ctx, tool, extension, flag)
+        })
+        available = conf.CheckFlag()
+        conf.Finish()
+        if available:
+            env.Append(**mutation)
+        return available
+
+    # TOOD(acm): For clang, for instance, we need -Werror or invalid
+    # flags are only warnings. This should be handled more flexibly, but I'm
+    # leaving it here just to demonstrate.
+    def AddToCCFLAGSIfSupported(env, flag):
+        return AddFlagIfSupported(env, 'C', '.c', flag, CCFLAGS=[flag])
+
+    def AddToCXXFLAGSIfSupported(env, flag):
+        return AddFlagIfSupported(env, 'C++', '.cpp', flag, CXXFLAGS=[flag])
+
+    if using_clang:
+        # Clang likes to warn about unused functions, which seems a tad aggressive and breaks
+        # -Werror, which we want to be able to use.
+        AddToCCFLAGSIfSupported(myenv, '-Wno-unused-function')
+
+        # TODO: Note that the following two flags are added to CCFLAGS even though they are
+        # really C++ specific. We need to do this because SCons passes CXXFLAGS *before*
+        # CCFLAGS, but CCFLAGS contains -Wall, which re-enables the warnings we are trying to
+        # suppress. In the future, we should move all warning flags to CCWARNFLAGS and
+        # CXXWARNFLAGS and add these to CCOM and CXXCOM as appropriate.
+        #
+        # Clang likes to warn about unused private fields, but some of our third_party
+        # libraries have such things.
+        AddToCCFLAGSIfSupported(myenv, '-Wno-unused-private-field')
+        # Clang warns about struct/class tag mismatch, but most people think that that is not
+        # really an issue, see
+        # http://stackoverflow.com/questions/4866425/mixing-class-and-struct. We disable the
+        # warning so it doesn't become an error.
+        AddToCCFLAGSIfSupported(myenv, '-Wno-mismatched-tags')
+
+    if has_option('c++11'):
+        # The Microsoft compiler does not need a switch to enable C++11. Again we should be
+        # checking for MSVC, not windows. In theory, we might be using clang or icc on windows.
+        if not windows:
+            # For our other compilers (gcc and clang) we need to pass -std=c++0x or -std=c++11,
+            # but we prefer the latter. Try that first, and fall back to c++0x if we don't
+            # detect that --std=c++11 works.
+            if not AddToCXXFLAGSIfSupported(myenv, '-std=c++11'):
+                if not AddToCXXFLAGSIfSupported(myenv, '-std=c++0x'):
+                    print( 'C++11 mode requested, but cannot find a flag to enable it' )
+                    Exit(1)
+            # Our current builtin tcmalloc is not compilable in C++11 mode. Remove this
+            # check when our builtin release of tcmalloc contains the resolution to
+            # http://code.google.com/p/gperftools/issues/detail?id=477.
+            if get_option('allocator') == 'tcmalloc':
+                if not use_system_version_of_library('tcmalloc'):
+                    print( 'TCMalloc is not currently compatible with C++11' )
+                    Exit(1)
+
+    # This needs to happen before we check for libc++, since it affects whether libc++ is available.
+    if darwin and has_option('osx-version-min'):
+        min_version = get_option('osx-version-min')
+        if not AddToCCFLAGSIfSupported(myenv, '-mmacosx-version-min=%s' % (min_version)):
+            print( "Can't set minimum OS X version with this compiler" )
+            Exit(1)
+
+    if has_option('libc++'):
+        if not using_clang:
+            print( 'libc++ is currently only supported for clang')
+            Exit(1)
+        if AddToCXXFLAGSIfSupported(myenv, '-stdlib=libc++'):
+            myenv.Append(LINKFLAGS=['-stdlib=libc++'])
+        else:
+            print( 'libc++ requested, but compiler does not support -stdlib=libc++' )
+            Exit(1)
+
+    # glibc's memcmp is faster than gcc's
+    if nix and linux:
+        AddToCCFLAGSIfSupported(myenv, "-fno-builtin-memcmp")
+
+    conf = Configure(myenv)
+    libdeps.setup_conftests(conf)
+
+    if use_system_version_of_library("pcre"):
+        conf.FindSysLibDep("pcre", ["pcre"])
+        conf.FindSysLibDep("pcrecpp", ["pcrecpp"])
 
     if use_system_version_of_library("boost"):
         if not conf.CheckCXXHeader( "boost/filesystem/operations.hpp" ):
@@ -836,12 +968,12 @@ def doConfigure(myenv):
 
         for b in boostLibs:
             l = "boost_" + b
-            if not conf.CheckLib([ l + boostCompiler + "-mt" + boostVersion,
-                                   l + boostCompiler + boostVersion ], language='C++' ):
-                Exit(1)
+            conf.FindSysLibDep(l,
+                [ l + boostCompiler + "-mt" + boostVersion,
+                  l + boostCompiler + boostVersion ], language='C++' )
 
     if conf.CheckHeader('unistd.h'):
-        myenv.Append(CPPDEFINES=['MONGO_HAVE_HEADER_UNISTD_H'])
+        conf.env.Append(CPPDEFINES=['MONGO_HAVE_HEADER_UNISTD_H'])
 
     if solaris or conf.CheckDeclaration('clock_gettime', includes='#include <time.h>'):
         conf.CheckLib('rt')
@@ -851,9 +983,9 @@ def doConfigure(myenv):
         conf.CheckDeclaration('backtrace_symbols', includes='#include <execinfo.h>') and
         conf.CheckDeclaration('backtrace_symbols_fd', includes='#include <execinfo.h>')):
 
-        myenv.Append( CPPDEFINES=[ "MONGO_HAVE_EXECINFO_BACKTRACE" ] )
+        conf.env.Append( CPPDEFINES=[ "MONGO_HAVE_EXECINFO_BACKTRACE" ] )
 
-    myenv["_HAVEPCAP"] = conf.CheckLib( ["pcap", "wpcap"], autoadd=False )
+    conf.env["_HAVEPCAP"] = conf.CheckLib( ["pcap", "wpcap"], autoadd=False )
 
     if solaris:
         conf.CheckLib( "nsl" )
@@ -863,13 +995,11 @@ def doConfigure(myenv):
             v8_lib_choices = ["v8_g", "v8"]
         else:
             v8_lib_choices = ["v8"]
-        if not conf.CheckLib( v8_lib_choices ):
-            Exit(1)
+        conf.FindSysLibDep( "v8", v8_lib_choices )
 
     conf.env['MONGO_BUILD_SASL_CLIENT'] = bool(has_option("use-sasl-client"))
     if conf.env['MONGO_BUILD_SASL_CLIENT'] and not conf.CheckLibWithHeader(
-        "sasl2", "sasl/sasl.h", "C", "sasl_version_info(0, 0, 0, 0, 0, 0);", autoadd=False):
-
+        "sasl2", "sasl/sasl.h", "C", "sasl_version_info(0, 0, 0, 0, 0, 0);", autoadd=False ):
         Exit(1)
 
     # requires ports devel/libexecinfo to be installed
@@ -891,7 +1021,7 @@ def doConfigure(myenv):
     myenv.Append(RPATH=[Literal("'%s'" % p) for p in ['$$ORIGIN/../lib', '$$ORIGIN/../lib64']])
 
     # ask each module to configure itself and the build environment.
-    moduleconfig.configure_modules(mongo_modules, conf, env)
+    moduleconfig.configure_modules(mongo_modules, conf)
 
     return conf.Finish()
 
@@ -1107,16 +1237,11 @@ env.AlwaysBuild( "s3shell" )
 def s3dist( env , target , source ):
     s3push( str(source[0]) , "mongodb" )
 
-def s3distclient(env, target, source):
-    s3push(str(source[0]), "cxx-driver/mongodb", platformDir=False)
-
 if (solaris or linux) and (not has_option("nostrip")):
     env.Alias( "dist" , ['$SERVER_ARCHIVE', '$SERVER_DEBUGINFO_ARCHIVE'] )
 else:
     env.Alias( "dist" , '$SERVER_ARCHIVE' )
-env.Alias( "distclient", "$CLIENT_ARCHIVE")
 env.AlwaysBuild(env.Alias( "s3dist" , [ '$SERVER_ARCHIVE' ] , [ s3dist ] ))
-env.AlwaysBuild(env.Alias( "s3distclient" , [ '$CLIENT_ARCHIVE' ] , [ s3distclient ] ))
 
 # --- an uninstall target ---
 if len(COMMAND_LINE_TARGETS) > 0 and 'uninstall' in COMMAND_LINE_TARGETS:
@@ -1141,7 +1266,7 @@ Export("shellEnv")
 Export("testEnv")
 Export("has_option use_system_version_of_library")
 Export("installSetup")
-Export("usesm usev8")
+Export("usev8")
 Export("darwin windows solaris linux freebsd nix")
 Export('module_sconscripts')
 Export("debugBuild")

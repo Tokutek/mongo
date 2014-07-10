@@ -11,7 +11,7 @@ Import("env")
 Import("shellEnv")
 Import("testEnv")
 Import("has_option")
-Import("usesm usev8")
+Import("usev8")
 Import("installSetup")
 Import("darwin windows solaris linux nix")
 
@@ -188,7 +188,6 @@ commonFiles = [ "pch.cpp",
                 "client/dbclient.cpp",
                 "client/dbclient_rs.cpp",
                 "client/dbclientcursor.cpp",
-                "client/model.cpp",
                 "client/remote_loader.cpp",
                 "client/remote_transaction.cpp",
                 'client/sasl_client_authenticate.cpp',
@@ -349,11 +348,7 @@ env.StaticLibrary('bson_template_evaluator', ["scripting/bson_template_evaluator
 env.CppUnitTest('bson_template_evaluator_test', ['scripting/bson_template_evaluator_test.cpp'],
                 LIBDEPS=['bson_template_evaluator'])
 
-if usesm:
-    env.StaticLibrary('scripting', scripting_common_files + ['scripting/engine_spidermonkey.cpp',
-                                                             'scripting/sm_db.cpp'],
-                      LIBDEPS=['$BUILD_DIR/third_party/js-1.7/js', 'bson_template_evaluator'])
-elif usev8:
+if usev8:
     env.StaticLibrary('scripting', scripting_common_files + ['scripting/engine_v8.cpp',
                                                              'scripting/v8_db.cpp',
                                                              'scripting/v8_utils.cpp',
@@ -894,10 +889,3 @@ if not has_option("skip-tarballs"):
 
 #final alias
 env.Alias( "install", "$INSTALL_DIR" )
-
-env.Alias("clientBuild", ['#buildscripts/build_and_test_client.py',
-                          '#/${PROGPREFIX}mongod${PROGSUFFIX}',
-                          '#$CLIENT_ARCHIVE'],
-          '$PYTHON ${SOURCES[0]} ${SOURCES[2]} ${EXTRAPATH and "--extrapath"} $EXTRAPATH'
-          )
-env.AlwaysBuild("clientBuild")

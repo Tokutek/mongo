@@ -24,7 +24,6 @@
 
 #pragma once
 
-#include "mongo/client/model.h"
 #include "mongo/client/dbclient_rs.h"
 
 #include "mongo/s/chunk.h"
@@ -162,8 +161,6 @@ namespace mongo {
         bool reload();
 
         bool dropDatabase( string& errmsg );
-
-        // model stuff
 
         // lockless loading
         void serialize(BSONObjBuilder& to);

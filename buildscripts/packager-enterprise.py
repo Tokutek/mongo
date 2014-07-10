@@ -48,7 +48,7 @@ REPOPATH="/var/www/repo"
 ARCHES=["x86_64"]
 
 # Made up names for the flavors of distribution we package for.
-DISTROS=["debian-sysvinit", "ubuntu-upstart", "redhat"]
+DISTROS=["ubuntu-upstart", "redhat"]
 
 # When we're preparing a directory containing packaging tool inputs
 # and our binaries, use this relative subdirectory for placing the
@@ -126,23 +126,23 @@ class Distro(object):
         else:
             raise Exception("BUG: unsupported platform?")
 
-    def repodir(self, arch):
+    def repodir(self, arch, build_os):
         """Return the directory where we'll place the package files for
         (distro, distro_version) in that distro's preferred repository
         layout (as distinct from where that distro's packaging building
         tools place the package files)."""
         if re.search("^(debian|ubuntu)", self.n):
-            return "repo/%s/dists/dist/mongodb/binary-%s/" % (self.n, self.archname(arch))
+            return "repo/%s/dists/dist/10gen/binary-%s/" % (self.n, self.archname(arch))
         elif re.search("(redhat|fedora|centos)", self.n):
-            return "repo/%s/os/%s/RPMS/" % (self.n, self.archname(arch))
+            return "repo/%s/os/%s/%s/RPMS/" % (self.n, build_os, self.archname(arch))
         else:
             raise Exception("BUG: unsupported platform?")
     
-    def make_pkg(self, arch, spec, srcdir):
+    def make_pkg(self, build_os, arch, spec, srcdir):
         if re.search("^(debian|ubuntu)", self.n):
-            return make_deb(self, arch, spec, srcdir)
+            return make_deb(self, build_os, arch, spec, srcdir)
         elif re.search("^(centos|redhat|fedora)", self.n):
-            return make_rpm(self, arch, spec, srcdir)
+            return make_rpm(self, build_os, arch, spec, srcdir)
         else:
             raise Exception("BUG: unsupported platform?")
 
@@ -151,9 +151,9 @@ class Distro(object):
         for redhat, "ubuntu1204" for Ubuntu and Debian)"""
 
         if re.search("^(debian|ubuntu)", self.n):
-            return "ubuntu1204"
+            return [ "ubuntu1204" ]
         elif re.search("(redhat|fedora|centos)", self.n):
-            return "rhel62"
+            return [ "rhel57", "rhel62" ]
         else:
             raise Exception("BUG: unsupported platform?")
 def main(argv):
@@ -175,15 +175,17 @@ def main(argv):
     os.chdir(prefix)
     try:
         # Download the binaries.
-        urlfmt="http://downloads.mongodb.com/linux/mongodb-linux-%s-subscription-%s-%s.tgz"
+        urlfmt="http://downloads.mongodb.com/linux/mongodb-linux-%s-enterprise-%s-%s.tgz"
     
         # Build a pacakge for each distro/spec/arch tuple, and
         # accumulate the repository-layout directories.
         for (distro, spec, arch) in crossproduct(distros, specs, ARCHES):
 
-          httpget(urlfmt % (arch, distro.build_os(), spec.version()), ensure_dir(tarfile(distro, arch, spec)))
+          for build_os in distro.build_os():
 
-          repos.append(make_package(distro, arch, spec, srcdir))
+            httpget(urlfmt % (arch, build_os, spec.version()), ensure_dir(tarfile(build_os, arch, spec)))
+
+            repos.append(make_package(distro, build_os, arch, spec, srcdir))
     
         # Build the repos' metadatas.
         for repo in set(repos):
@@ -273,21 +275,22 @@ def ensure_dir(filename):
     return filename
 
 
-def tarfile(distro, arch, spec):
+def tarfile(build_os, arch, spec):
     """Return the location where we store the downloaded tarball for
-    (arch, spec)"""
-    return "dl/mongodb-linux-%s-subscription-%s-%s.tar.gz" % (spec.version(), distro.build_os(), arch)
+    this package"""
+    return "dl/mongodb-linux-%s-subscription-%s-%s.tar.gz" % (spec.version(), build_os, arch)
 
-def setupdir(distro, arch, spec):
+def setupdir(distro, build_os, arch, spec):
     # The setupdir will be a directory containing all inputs to the
     # distro's packaging tools (e.g., package metadata files, init
     # scripts, etc), along with the already-built binaries).  In case
     # the following format string is unclear, an example setupdir
-    # would be dst/x86_64/debian-sysvinit/mongodb-org-unstable/
-    return "dst/%s/%s/%s%s-%s/" % (arch, distro.name(), distro.pkgbase(), spec.suffix(), spec.pversion(distro))
+    # would be dst/x86_64/debian-sysvinit/wheezy/mongodb-org-unstable/
+    # or dst/x86_64/redhat/rhel57/mongodb-org-unstable/
+    return "dst/%s/%s/%s/%s%s-%s/" % (arch, distro.name(), build_os, distro.pkgbase(), spec.suffix(), spec.pversion(distro))
 
-def unpack_binaries_into(distro, arch, spec, where):
-    """Unpack the tarfile for (distro, arch, spec) into directory where."""
+def unpack_binaries_into(build_os, arch, spec, where):
+    """Unpack the tarfile for (build_os, arch, spec) into directory where."""
     rootdir=os.getcwd()
     ensure_dir(where)
     # Note: POSIX tar doesn't require support for gtar's "-C" option,
@@ -296,21 +299,21 @@ def unpack_binaries_into(distro, arch, spec, where):
     # thing and chdir into where and run tar there.
     os.chdir(where)
     try:
-        sysassert(["tar", "xvzf", rootdir+"/"+tarfile(distro, arch, spec), "mongodb-linux-%s-subscription-%s-%s/bin" % (arch, distro.build_os(), spec.version())])
-        os.rename("mongodb-linux-%s-subscription-%s-%s/bin" % (arch, distro.build_os(), spec.version()), "bin")
-        os.rmdir("mongodb-linux-%s-subscription-%s-%s" % (arch, distro.build_os(), spec.version()))
+        sysassert(["tar", "xvzf", rootdir+"/"+tarfile(build_os, arch, spec), "mongodb-linux-%s-subscription-%s-%s/bin" % (arch, build_os, spec.version())])
+        os.rename("mongodb-linux-%s-subscription-%s-%s/bin" % (arch, build_os, spec.version()), "bin")
+        os.rmdir("mongodb-linux-%s-subscription-%s-%s" % (arch, build_os, spec.version()))
     except Exception:
         exc=sys.exc_value
         os.chdir(rootdir)
         raise exc
     os.chdir(rootdir)
 
-def make_package(distro, arch, spec, srcdir):
+def make_package(distro, build_os, arch, spec, srcdir):
     """Construct the package for (arch, distro, spec), getting
     packaging files from srcdir and any user-specified suffix from
     suffixes"""
 
-    sdir=setupdir(distro, arch, spec)
+    sdir=setupdir(distro, build_os, arch, spec)
     ensure_dir(sdir)
     # Note that the RPM packages get their man pages from the debian
     # directory, so the debian directory is needed in all cases (and
@@ -322,13 +325,13 @@ def make_package(distro, arch, spec, srcdir):
     # Splat the binaries under sdir.  The "build" stages of the
     # packaging infrastructure will move the binaries to wherever they
     # need to go.  
-    unpack_binaries_into(distro, arch, spec, sdir+("%s/usr/"%BINARYDIR))
+    unpack_binaries_into(build_os, arch, spec, sdir+("%s/usr/"%BINARYDIR))
     # Remove the mongosniff binary due to libpcap dynamic
     # linkage.  FIXME: this removal should go away
     # eventually.
     if os.path.exists(sdir+("%s/usr/bin/mongosniff"%BINARYDIR)):
       os.unlink(sdir+("%s/usr/bin/mongosniff"%BINARYDIR))
-    return distro.make_pkg(arch, spec, srcdir)
+    return distro.make_pkg(build_os, arch, spec, srcdir)
 
 def make_repo(repodir):
     if re.search("(debian|ubuntu)", repodir):
@@ -338,13 +341,13 @@ def make_repo(repodir):
     else:
         raise Exception("BUG: unsupported platform?")
 
-def make_deb(distro, arch, spec, srcdir):
+def make_deb(distro, build_os, arch, spec, srcdir):
     # I can't remember the details anymore, but the initscript/upstart
     # job files' names must match the package name in some way; and
     # see also the --name flag to dh_installinit in the generated
     # debian/rules file.
     suffix=spec.suffix()
-    sdir=setupdir(distro, arch, spec)
+    sdir=setupdir(distro, build_os, arch, spec)
     if re.search("sysvinit", distro.name()):
         os.link(sdir+"debian/init.d", sdir+"debian/%s%s-server.mongod.init" % (distro.pkgbase(), suffix))
         os.unlink(sdir+"debian/mongod.upstart")
@@ -354,10 +357,21 @@ def make_deb(distro, arch, spec, srcdir):
     else:
         raise Exception("unknown debianoid flavor: not sysvinit or upstart?")
     # Rewrite the control and rules files
-    write_debian_control_file(sdir+"debian/control", spec)
-    write_debian_rules_file(sdir+"debian/rules", spec)
     write_debian_changelog(sdir+"debian/changelog", spec, srcdir)
     distro_arch=distro.archname(arch)
+    sysassert(["cp", "-v", srcdir+"debian/control", sdir+"debian/"])
+    sysassert(["cp", "-v", srcdir+"debian/rules", sdir+"debian/"])
+
+
+    # old non-server-package postinst will be hanging around for old versions
+    #
+    if os.path.exists(sdir+"debian/postinst"):
+      os.unlink(sdir+"debian/postinst")
+
+    # copy our postinst files
+    #
+    sysassert(["sh", "-c", "cp -v \"%sdebian/\"*.postinst \"%sdebian/\""%(srcdir, sdir)])
+
     # Do the packaging.
     oldcwd=os.getcwd()
     try:
@@ -365,11 +379,12 @@ def make_deb(distro, arch, spec, srcdir):
         sysassert(["dpkg-buildpackage", "-a"+distro_arch, "-k Richard Kreuter <richard@10gen.com>"])
     finally:
         os.chdir(oldcwd)
-    r=distro.repodir(arch)
+    r=distro.repodir(arch, build_os)
     ensure_dir(r)
     # FIXME: see if shutil.copyfile or something can do this without
     # much pain.
-    sysassert(["cp", "-v", sdir+"../%s%s_%s%s_%s.deb"%(distro.pkgbase(), suffix, spec.pversion(distro), "-"+spec.param("revision") if spec.param("revision") else"", distro_arch), r])
+    #sysassert(["cp", "-v", sdir+"../%s%s_%s%s_%s.deb"%(distro.pkgbase(), suffix, spec.pversion(distro), "-"+spec.param("revision") if spec.param("revision") else"", distro_arch), r])
+    sysassert(["sh", "-c", "cp -v \"%s/../\"*.deb \"%s\""%(sdir, r)])
     return r
 
 def make_deb_repo(repo):
@@ -403,7 +418,7 @@ Label: mongodb
 Suite: mongodb
 Codename: %s
 Version: %s
-Architectures: i386 amd64
+Architectures: amd64
 Components: mongodb
 Description: mongodb packages
 """ % ("dist", "dist")
@@ -529,178 +544,11 @@ def write_debian_changelog(path, spec, srcdir):
     finally:
         f.close()
 
-def write_debian_control_file(path, spec):
-    s="""Source: @@PACKAGE_BASENAME@@
-Section: devel
-Priority: optional
-Maintainer: Richard Kreuter <richard@10gen.com>
-Build-Depends: 
-Standards-Version: 3.8.0
-Homepage: http://www.mongodb.org
-
-Package: @@PACKAGE_BASENAME@@
-Conflicts: mongo-10gen, mongo-10gen-enterprise, mongo-10gen-enterprise-server, mongo-10gen-server, mongo-10gen-unstable, mongo-10gen-unstable-enterprise, mongo-10gen-unstable-enterprise-mongos, mongo-10gen-unstable-enterprise-server, mongo-10gen-unstable-enterprise-shell, mongo-10gen-unstable-enterprise-tools, mongo-10gen-unstable-mongos, mongo-10gen-unstable-server, mongo-10gen-unstable-shell, mongo-10gen-unstable-tools, mongo18-10gen, mongo18-10gen-server, mongo20-10gen, mongo20-10gen-server, mongodb, mongodb-10gen, mongodb-10gen-enterprise, mongodb-10gen-unstable, mongodb-10gen-unstable-enterprise, mongodb-10gen-unstable-enterprise-mongos, mongodb-10gen-unstable-enterprise-server, mongodb-10gen-unstable-enterprise-shell, mongodb-10gen-unstable-enterprise-tools, mongodb-10gen-unstable-mongos, mongodb-10gen-unstable-server, mongodb-10gen-unstable-shell, mongodb-10gen-unstable-tools, mongodb-enterprise, mongodb-enterprise-mongos, mongodb-enterprise-server, mongodb-enterprise-shell, mongodb-enterprise-tools, mongodb-nightly, mongodb-org, mongodb-org-mongos, mongodb-org-server, mongodb-org-shell, mongodb-org-tools, mongodb-stable, mongodb18-10gen, mongodb20-10gen, mongodb-org-unstable, mongodb-org-unstable-mongos, mongodb-org-unstable-server, mongodb-org-unstable-shell, mongodb-org-unstable-tools
-Architecture: any
-Depends: libc6 (>= 2.3.2), libgcc1 (>= 1:4.1.1), libstdc++6 (>= 4.1.1), libsnmp15, libsasl2-2, libssl1.0.0
-Description: An object/document-oriented database
- MongoDB is a high-performance, open source, schema-free 
- document-oriented  data store that's easy to deploy, manage
- and use. It's network accessible, written in C++ and offers
- the following features :
- .
-    * Collection oriented storage - easy storage of object-
-      style data
-    * Full index support, including on inner objects
-    * Query profiling
-    * Replication and fail-over support
-    * Efficient storage of binary data including large 
-      objects (e.g. videos)
-    * Auto-sharding for cloud-level scalability (Q209)
- .
- High performance, scalability, and reasonable depth of
- functionality are the goals for the project.
-"""
-    s=re.sub("@@PACKAGE_BASENAME@@", "mongodb%s" % spec.suffix(), s)
-
-    f=open(path, 'w')
-    try:
-        f.write(s)
-    finally:
-        f.close()
-
-def write_debian_rules_file(path, spec):
-    # Note debian/rules is a makefile, so for visual disambiguation we
-    # make all tabs here \t.
-    s="""#!/usr/bin/make -f
-# -*- makefile -*-
-# Sample debian/rules that uses debhelper.
-# This file was originally written by Joey Hess and Craig Small.
-# As a special exception, when this file is copied by dh-make into a
-# dh-make output file, you may use that output file without restriction.
-# This special exception was added by Craig Small in version 0.37 of dh-make.
-
-# Uncomment this to turn on verbose mode.
-#export DH_VERBOSE=1
-
-
-configure: configure-stamp
-configure-stamp:
-\tdh_testdir
-        # Add here commands to configure the package.
-
-\ttouch configure-stamp
-
-
-build: build-stamp
-
-build-stamp: configure-stamp  
-\tdh_testdir
-
-        # Add here commands to compile the package.
-# THE FOLLOWING LINE IS INTENTIONALLY COMMENTED. 
-\t# scons 
-        #docbook-to-man debian/mongodb.sgml > mongodb.1
-\tls debian/*.1 > debian/@@PACKAGE_NAME@@.manpages
-
-\ttouch $@
-
-clean: 
-\tdh_testdir
-\tdh_testroot
-\trm -f build-stamp configure-stamp
-
-\t# FIXME: scons freaks out at the presence of target files
-\t# under debian/mongodb.
-\t#scons -c
-\trm -rf $(CURDIR)/debian/@@PACKAGE_NAME@@
-\trm -f config.log
-\trm -f mongo
-\trm -f mongod
-\trm -f mongoimportjson
-\trm -f mongoexport
-\trm -f mongorestore
-\trm -f mongodump
-\trm -f mongofiles
-\trm -f .sconsign.dblite
-\trm -f libmongoclient.a
-\trm -rf client/*.o
-\trm -rf tools/*.o
-\trm -rf shell/*.o
-\trm -rf .sconf_temp
-\trm -f buildscripts/*.pyc 
-\trm -f *.pyc
-\trm -f buildinfo.cpp
-\tdh_clean debian/files
-
-install: build
-\tdh_testdir
-\tdh_testroot
-\tdh_prep
-\tdh_installdirs
-
-# THE FOLLOWING LINE IS INTENTIONALLY COMMENTED.
-\t# scons --prefix=$(CURDIR)/debian/mongodb/usr install
-\tcp -v $(CURDIR)/@@BINARYDIR@@/usr/bin/* $(CURDIR)/debian/@@PACKAGE_NAME@@/usr/bin
-\tmkdir -p $(CURDIR)/debian/@@PACKAGE_NAME@@/etc
-\tcp $(CURDIR)/debian/mongod.conf $(CURDIR)/debian/@@PACKAGE_NAME@@/etc/mongod.conf 
-
-\tmkdir -p $(CURDIR)/debian/@@PACKAGE_NAME@@/usr/share/lintian/overrides/
-\tinstall -m 644 $(CURDIR)/debian/lintian-overrides \
-\t\t$(CURDIR)/debian/@@PACKAGE_NAME@@/usr/share/lintian/overrides/@@PACKAGE_NAME@@
-
-# Build architecture-independent files here.
-binary-indep: build install
-# We have nothing to do by default.
-
-# Build architecture-dependent files here.
-binary-arch: build install
-\tdh_testdir
-\tdh_testroot
-\tdh_installchangelogs 
-\tdh_installdocs
-\tdh_installexamples
-#\tdh_install
-#\tdh_installmenu
-#\tdh_installdebconf\t
-#\tdh_installlogrotate
-#\tdh_installemacsen
-#\tdh_installpam
-#\tdh_installmime
-\tdh_installinit --name=@@PACKAGE_BASENAME@@
-#\tdh_installinfo
-\tdh_installman
-\tdh_link
-# Appears to be broken on Ubuntu 11.10...?
-#\tdh_strip
-\tdh_compress
-\tdh_fixperms
-\tdh_installdeb
-\tdh_shlibdeps
-\tdh_gencontrol
-\tdh_md5sums
-\tdh_builddeb
-
-binary: binary-indep binary-arch
-.PHONY: build clean binary-indep binary-arch binary install configure
-"""
-    s=re.sub("@@PACKAGE_NAME@@", "mongodb%s" % spec.suffix(), s)
-    s=re.sub("@@PACKAGE_BASENAME@@", "mongodb", s)
-    s=re.sub("@@BINARYDIR@@", BINARYDIR, s)
-    f=open(path, 'w')
-    try:
-        f.write(s)
-    finally:
-        f.close()
-    # FIXME: some versions of debianoids seem to
-    # need the rules file to be 755?
-    os.chmod(path, stat.S_IXUSR|stat.S_IWUSR|stat.S_IRUSR|stat.S_IXGRP|stat.S_IRGRP|stat.S_IXOTH|stat.S_IWOTH)
-
-def make_rpm(distro, arch, spec, srcdir):
+def make_rpm(distro, build_os, arch, spec, srcdir):
     # Create the specfile.
     suffix=spec.suffix()
-    sdir=setupdir(distro, arch, spec)
-    specfile=sdir+"rpm/mongodb%s.spec" % suffix
-    write_rpm_spec_file(specfile, spec)
+    sdir=setupdir(distro, build_os, arch, spec)
+    specfile=srcdir+"rpm/mongodb%s.spec" % suffix
     topdir=ensure_dir(os.getcwd()+'/rpmbuild/')
     for subdir in ["BUILD", "RPMS", "SOURCES", "SPECS", "SRPMS"]:
         ensure_dir("%s/%s/" % (topdir, subdir))
@@ -747,7 +595,7 @@ def make_rpm(distro, arch, spec, srcdir):
         os.chdir(oldcwd)
     # Do the build.
     sysassert(["rpmbuild", "-ba", "--target", distro_arch] + flags + ["%s/SPECS/mongodb%s.spec" % (topdir, suffix)])
-    r=distro.repodir(arch)
+    r=distro.repodir(arch, build_os)
     ensure_dir(r)
     # FIXME: see if some combination of shutil.copy<hoohah> and glob
     # can do this without shelling out.
@@ -774,217 +622,6 @@ def write_rpm_macros_file(path, topdir):
     f=open(path, 'w')
     try:
         f.write("%%_topdir	%s" % topdir)
-    finally:
-        f.close()
-
-def write_rpm_spec_file(path, spec):
-    s="""Name: @@PACKAGE_BASENAME@@
-Conflicts: mongo-10gen, mongo-10gen-enterprise, mongo-10gen-enterprise-server, mongo-10gen-server, mongo-10gen-unstable, mongo-10gen-unstable-enterprise, mongo-10gen-unstable-enterprise-mongos, mongo-10gen-unstable-enterprise-server, mongo-10gen-unstable-enterprise-shell, mongo-10gen-unstable-enterprise-tools, mongo-10gen-unstable-mongos, mongo-10gen-unstable-server, mongo-10gen-unstable-shell, mongo-10gen-unstable-tools, mongo18-10gen, mongo18-10gen-server, mongo20-10gen, mongo20-10gen-server, mongodb, mongodb-10gen, mongodb-10gen-enterprise, mongodb-10gen-unstable, mongodb-10gen-unstable-enterprise, mongodb-10gen-unstable-enterprise-mongos, mongodb-10gen-unstable-enterprise-server, mongodb-10gen-unstable-enterprise-shell, mongodb-10gen-unstable-enterprise-tools, mongodb-10gen-unstable-mongos, mongodb-10gen-unstable-server, mongodb-10gen-unstable-shell, mongodb-10gen-unstable-tools, mongodb-enterprise, mongodb-enterprise-mongos, mongodb-enterprise-server, mongodb-enterprise-shell, mongodb-enterprise-tools, mongodb-nightly, mongodb-org, mongodb-org-mongos, mongodb-org-server, mongodb-org-shell, mongodb-org-tools, mongodb-stable, mongodb18-10gen, mongodb20-10gen, mongodb-org-unstable, mongodb-org-unstable-mongos, mongodb-org-unstable-server, mongodb-org-unstable-shell, mongodb-org-unstable-tools
-Obsoletes: @@PACKAGE_OBSOLETES@@
-Version: @@PACKAGE_VERSION@@
-Release: mongodb_@@PACKAGE_REVISION@@%{?dist}
-Summary: mongo client shell and tools
-License: AGPL 3.0
-URL: http://www.mongodb.org
-Group: Applications/Databases
-Requires: cyrus-sasl, net-snmp-libs
-
-Source0: %{name}-%{version}.tar.gz
-BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
-
-%description
-Mongo (from "huMONGOus") is a schema-free document-oriented database.
-It features dynamic profileable queries, full indexing, replication
-and fail-over support, efficient storage of large binary data objects,
-and auto-sharding.
-
-This package provides the mongo shell, import/export tools, and other
-client utilities.
-
-%package server
-Summary: mongo server, sharding server, and support scripts
-Group: Applications/Databases
-Requires: @@PACKAGE_BASENAME@@
-
-%description server
-Mongo (from "huMONGOus") is a schema-free document-oriented database.
-
-This package provides the mongo server software, mongo sharding server
-softwware, default configuration files, and init.d scripts.
-
-%package devel
-Summary: Headers and libraries for mongo development. 
-Group: Applications/Databases
-
-%description devel
-Mongo (from "huMONGOus") is a schema-free document-oriented database.
-
-This package provides the mongo static library and header files needed
-to develop mongo client software.
-
-%prep
-%setup
-
-%build
-#scons --prefix=$RPM_BUILD_ROOT/usr all
-# XXX really should have shared library here
-
-%install
-#scons --prefix=$RPM_BUILD_ROOT/usr install
-mkdir -p $RPM_BUILD_ROOT/usr
-cp -rv @@BINARYDIR@@/usr/bin $RPM_BUILD_ROOT/usr
-mkdir -p $RPM_BUILD_ROOT/usr/share/man/man1
-cp debian/*.1 $RPM_BUILD_ROOT/usr/share/man/man1/
-# FIXME: remove this rm when mongosniff is back in the package
-rm -v $RPM_BUILD_ROOT/usr/share/man/man1/mongosniff.1*
-mkdir -p $RPM_BUILD_ROOT/etc/rc.d/init.d
-cp -v rpm/init.d-mongod $RPM_BUILD_ROOT/etc/rc.d/init.d/mongod
-chmod a+x $RPM_BUILD_ROOT/etc/rc.d/init.d/mongod
-mkdir -p $RPM_BUILD_ROOT/etc
-cp -v rpm/mongod.conf $RPM_BUILD_ROOT/etc/mongod.conf
-mkdir -p $RPM_BUILD_ROOT/etc/sysconfig
-cp -v rpm/mongod.sysconfig $RPM_BUILD_ROOT/etc/sysconfig/mongod
-mkdir -p $RPM_BUILD_ROOT/var/lib/mongodb
-mkdir -p $RPM_BUILD_ROOT/var/log/mongodb
-touch $RPM_BUILD_ROOT/var/log/mongodb/mongod.log
-
-%clean
-#scons -c
-rm -rf $RPM_BUILD_ROOT
-
-%pre server
-if ! /usr/bin/id -g mongodb &>/dev/null; then
-    /usr/sbin/groupadd -r mongod
-fi
-if ! /usr/bin/id mongodb &>/dev/null; then
-    /usr/sbin/useradd -M -r -g mongodb -d /var/lib/mongodb -s /bin/false \
-	-c mongodb mongodb > /dev/null 2>&1
-fi
-
-%post server
-if test $1 = 1
-then
-  /sbin/chkconfig --add mongod
-fi
-
-%preun server
-if test $1 = 0
-then
-  /sbin/chkconfig --del mongod
-fi
-
-%postun server
-if test $1 -ge 1
-then
-  /sbin/service mongod condrestart >/dev/null 2>&1 || :
-fi
-
-%files
-%defattr(-,root,root,-)
-#%doc README GNU-AGPL-3.0.txt
-
-%{_bindir}/bsondump
-%{_bindir}/mongo
-%{_bindir}/mongodump
-%{_bindir}/mongoexport
-#@@VERSION!=2.1.0@@%{_bindir}/mongofiles
-%{_bindir}/mongoimport
-#@@VERSION>=2.1.0@@%{_bindir}/mongooplog
-#@@VERSION>=2.1.0@@%{_bindir}/mongoperf
-%{_bindir}/mongorestore
-#@@VERSION>1.9@@%{_bindir}/mongotop
-%{_bindir}/mongostat
-# FIXME: uncomment when mongosniff is back in the package
-#%{_bindir}/mongosniff
-
-# FIXME: uncomment this when there's a stable release whose source
-# tree contains a bsondump man page.
-#@@VERSION>1.9@@%{_mandir}/man1/bsondump.1*
-%{_mandir}/man1/mongo.1*
-%{_mandir}/man1/mongodump.1*
-%{_mandir}/man1/mongoexport.1*
-%{_mandir}/man1/mongofiles.1*
-%{_mandir}/man1/mongoimport.1*
-%{_mandir}/man1/mongorestore.1*
-%{_mandir}/man1/mongostat.1*
-# FIXME: uncomment when mongosniff is back in the package
-#%{_mandir}/man1/mongosniff.1*
-#@@VERSION>=2.4.0@@%{_mandir}/man1/mongotop.1*
-#@@VERSION>=2.4.0@@%{_mandir}/man1/mongoperf.1*
-#@@VERSION>=2.4.0@@%{_mandir}/man1/mongooplog.1*
-
-%files server
-%defattr(-,root,root,-)
-%config(noreplace) /etc/mongod.conf
-%{_bindir}/mongod
-%{_bindir}/mongos
-%{_mandir}/man1/mongod.1*
-%{_mandir}/man1/mongos.1*
-/etc/rc.d/init.d/mongod
-/etc/sysconfig/mongod
-#/etc/rc.d/init.d/mongos
-%attr(0755,mongodb,mongodb) %dir /var/lib/mongodb
-%attr(0755,mongodb,mongodb) %dir /var/log/mongodb
-%attr(0640,mongodb,mongodb) %config(noreplace) %verify(not md5 size mtime) /var/log/mongodb/mongod.log
-
-%changelog
-* Thu Jan 28 2010 Richard M Kreuter <richard@10gen.com>
-- Minor fixes.
-
-* Sat Oct 24 2009 Joe Miklojcik <jmiklojcik@shopwiki.com> - 
-- Wrote mongo.spec.
-"""
-    suffix=spec.suffix()
-    s=re.sub("@@PACKAGE_BASENAME@@", "mongodb%s" % suffix, s)
-    s=re.sub("@@PACKAGE_VERSION@@", spec.pversion(Distro("redhat")), s)
-    # FIXME, maybe: the RPM guide says that Release numbers ought to
-    # be integers starting at 1, but we use "mongodb_1{%dist}",
-    # whatever the hell that means.
-    s=re.sub("@@PACKAGE_REVISION@@", str(int(spec.param("revision"))+1) if spec.param("revision") else "1", s)
-    s=re.sub("@@BINARYDIR@@", BINARYDIR, s)
-    if suffix.endswith("-org"):
-        s=re.sub("@@PACKAGE_PROVIDES@@", "mongodb-stable", s)
-        s=re.sub("@@PACKAGE_OBSOLETES@@", "mongodb-stable,mongo-stable", s)
-    elif suffix == "-org-unstable":
-        s=re.sub("@@PACKAGE_PROVIDES@@", "mongodb-unstable", s)
-        s=re.sub("@@PACKAGE_OBSOLETES@@", "mongodb-unstable,mongo-unstable", s)
-    elif suffix == "-enterprise":
-        s=re.sub("@@PACKAGE_PROVIDES@@", "mongodb-enterprise", s)
-        s=re.sub("@@PACKAGE_OBSOLETES@@", "mongodb-enterprise,mongo-enterprise", s)
-    elif suffix == "-enterprise-unstable":
-        s=re.sub("@@PACKAGE_PROVIDES@@", "mongodb-enterprise-unstable", s)
-        s=re.sub("@@PACKAGE_OBSOLETES@@", "mongodb-enterprise-unstable,mongo-enterprise-unstable", s)
-    else:
-        raise Exception("BUG: unknown suffix %s" % suffix)
-
-    lines=[]
-    for line in s.split("\n"):
-        m = re.search("@@VERSION(>|>=|!=)(\d.*)@@(.*)", line)
-        if m:
-          op = m.group(1)
-          ver = m.group(2)
-          fn = m.group(3)
-          if op == '>':
-            if spec.version_better_than(ver):
-              lines.append(fn)
-          elif op == '>=':
-            if spec.version() == ver or spec.version_better_than(ver):
-              lines.append(fn)
-          elif op == '!=':
-            if spec.version() != ver:
-              lines.append(fn)
-          else:
-            # Since we're inventing our own template system for RPM
-            # specfiles here, we oughtn't use template syntax we don't
-            # support.
-            raise Exception("BUG: probable bug in packager script: %s, %s, %s" % (m.group(1), m.group(2), m.group(3)))
-        else:
-            lines.append(line)
-    s="\n".join(lines)
-
-    f=open(path, 'w')
-    try:
-        f.write(s)
     finally:
         f.close()
 

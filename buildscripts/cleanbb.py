@@ -1,20 +1,14 @@
+#!/usr/bin/env python
 
+import re
 import sys
 import os, os.path
 import utils
 import time
-import exceptions
 from optparse import OptionParser
 
-# set cwd to the root mongo dir, one level up from this
-# file's location (if we're not already running from there)
-cwd = os.getcwd()
-if os.path.basename(cwd) == 'buildscripts':
-    cwd = os.path.dirname(cwd)
+def shouldKill( c, root=None ):
 
-print( "cwd [" + cwd + "]" )
-
-def shouldKill( c ):
     if "smoke.py" in c:
         return False
 
@@ -33,10 +27,13 @@ def shouldKill( c ):
     if "vim" in c:
         return False
 
-    if c.find( cwd ) >= 0:
+    # if root directory is provided, see if command line matches mongod process running
+    # with the same data directory
+
+    if root and re.compile("(\W|^)mongod(.exe)?\s+.*--dbpath(\s+|=)%s(\s+|$)" % root).search( c ):
         return True
 
-    if ( c.find( "buildbot" ) >= 0 or c.find( "slave" ) ) and c.find( "/mongo/" ) >= 0:
+    if ( c.find( "buildbot" ) >= 0 or c.find( "slave" ) >= 0 ) and c.find( "/mongo/" ) >= 0:
         return True
 
     if c.find( "xml-data/build-dir" ) >= 0: # for bamboo
@@ -44,7 +41,7 @@ def shouldKill( c ):
 
     return False
 
-def killprocs( signal="" ):
+def killprocs( signal="", root=None ):
     killed = 0
 
     if sys.platform == 'win32':
@@ -61,7 +58,7 @@ def killprocs( signal="" ):
 
     for x in l:
         x = x.lstrip()
-        if not shouldKill( x ):
+        if not shouldKill( x, root=root ):
             continue
 
         pid = x.split( " " )[0]
@@ -72,29 +69,38 @@ def killprocs( signal="" ):
     return killed
 
 
+def tryToRemove(path):
+    for _ in range(60):
+        try:
+            os.remove(path)
+            return True
+        except OSError, e:
+            errno = getattr(e, 'winerror', None)
+            # check for the access denied and file in use WindowsErrors
+            if errno in (5, 32):
+                print("os.remove(%s) failed, retrying in one second." % path)
+                time.sleep(1)
+            else:
+                raise e
+    return False
+
+
 def cleanup( root , nokill ):
     if nokill:
         print "nokill requested, not killing anybody"
     else:
-        if killprocs() > 0:
+        if killprocs( root=root ) > 0:
             time.sleep(3)
-            killprocs("-9")
+            killprocs( "-9", root=root )
 
     # delete all regular files, directories can stay
     # NOTE: if we delete directories later, we can't delete diskfulltest
     for ( dirpath , dirnames , filenames ) in os.walk( root , topdown=False ):
         for x in filenames:
             foo = dirpath + "/" + x
-            print( "removing: " + foo )
-            try:
-                os.remove(foo)
-            except exceptions.OSError, e:
-                # SERVER-10462 compensate for Windows file locking race
-                # We want to catch WindowsError but can't use that name on other platforms
-                print(repr(e))
-                print("os.remove(%s) failed, retrying once." % foo)
-                time.sleep(1)
-                os.remove(foo)
+            if os.path.exists(foo):
+                if not tryToRemove(foo):
+                    raise Exception("Couldn't remove file '%s' after 60 seconds" % foo)
 
 if __name__ == "__main__":
     parser = OptionParser(usage="read the script")

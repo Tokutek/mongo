@@ -53,7 +53,7 @@
 config.log
 settings.py
 log_config.py
-tags
+/tags
 TAGS
 failfile.smoke
 
@@ -87,6 +87,8 @@ scratch
 /mongotop
 /mongooplog
 /bsondump
+/loadgen
+/docgen
 
 /docgen
 /loadgen
@@ -135,6 +137,7 @@ debian/mongodb
 #osx
 .DS_Store
 ._.DS_Store
+*.fuse_*
 
 # QtCreator
 *.config
@@ -154,15 +157,16 @@ src/mongo/base/error_codes.cpp
 src/mongo/base/error_codes.h
 src/mongo/db/auth/action_type.cpp
 src/mongo/db/auth/action_type.h
-src/third_party/js-1.7/jscpucfg
-src/third_party/js-1.7/jskwgen
 src/mongo/buildinfo.cpp
 src/mongo/shell/mongo-server.cpp
 src/mongo/shell/mongo.cpp
-src/third_party/js-1.7/jsautocfg.h
-src/third_party/js-1.7/jsautokw.h
 src/third_party/v8/src/experimental-libraries.cc
 src/third_party/v8/src/libraries.cc
+
+# Eclipse build artifacts
+.cproject
+.project
+
 buildinfo.cpp
 /.settings/
 

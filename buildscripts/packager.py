@@ -341,7 +341,8 @@ def make_package(distro, arch, spec, srcdir):
     # Remove the mongosniff binary due to libpcap dynamic
     # linkage.  FIXME: this removal should go away
     # eventually.
-    os.unlink(sdir+("%s/usr/bin/mongosniff"%BINARYDIR))
+    if os.path.exists(sdir+("%s/usr/bin/mongosniff"%BINARYDIR)):
+      os.unlink(sdir+("%s/usr/bin/mongosniff"%BINARYDIR))
     return distro.make_pkg(arch, spec, srcdir)
 
 def make_repo(repodir):
@@ -360,10 +361,10 @@ def make_deb(distro, arch, spec, srcdir):
     suffix=spec.suffix()
     sdir=setupdir(distro, arch, spec)
     if re.search("sysvinit", distro.name()):
-        os.link(sdir+"debian/init.d", sdir+"debian/%s%s.mongodb.init" % (distro.pkgbase(), suffix))
-        os.unlink(sdir+"debian/mongodb.upstart")
+        os.link(sdir+"debian/init.d", sdir+"debian/%s%s-server.mongod.init" % (distro.pkgbase(), suffix))
+        os.unlink(sdir+"debian/mongod.upstart")
     elif re.search("upstart", distro.name()):
-        os.link(sdir+"debian/mongodb.upstart", sdir+"debian/%s%s.upstart" % (distro.pkgbase(), suffix))
+        os.link(sdir+"debian/mongod.upstart", sdir+"debian/%s%s-server.mongod.upstart" % (distro.pkgbase(), suffix))
         os.unlink(sdir+"debian/init.d")
     else:
         raise Exception("unknown debianoid flavor: not sysvinit or upstart?")

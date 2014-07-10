@@ -342,12 +342,14 @@ var _jsTestOptions = { enableTestCommands : true }; // Test commands should be e
 jsTestOptions = function(){
     if( TestData ) {
         return Object.merge(_jsTestOptions,
-                            { noJournal : TestData.noJournal,
+                            { setParameters : TestData.setParameters,
+                              noJournal : TestData.noJournal,
                               noJournalPrealloc : TestData.noJournalPrealloc,
                               auth : TestData.auth,
                               keyFile : TestData.keyFile,
                               authUser : "__system",
                               authPassword : TestData.keyFileData,
+                              authMechanism : TestData.authMechanism,
                               adminUser : TestData.adminUser || "admin",
                               adminPassword : TestData.adminPassword || "password" });
     }

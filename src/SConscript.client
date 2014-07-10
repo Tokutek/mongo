@@ -43,7 +43,6 @@ clientSourceBasic = [
     'mongo/client/dbclient_rs.cpp',
     'mongo/client/dbclientcursor.cpp',
     'mongo/client/gridfs.cpp',
-    'mongo/client/model.cpp',
     'mongo/client/remote_loader.cpp',
     'mongo/client/remote_transaction.cpp',
     'mongo/client/sasl_client_authenticate.cpp',
@@ -68,6 +67,7 @@ clientSourceBasic = [
     'mongo/util/concurrency/mutexdebugger.cpp',
     'mongo/util/debug_util.cpp',
     'mongo/util/stacktrace.cpp',
+    'mongo/util/file.cpp',
     'mongo/util/fail_point.cpp',
     'mongo/util/fail_point_registry.cpp',
     'mongo/util/fail_point_service.cpp',
@@ -153,31 +153,31 @@ for path in clientHeaderDirectories:
 clientObjects = [env.Object(source) for source in clientSource]
 
 mongoClientLibs = []
-mongoClientLibDeps = []
+mongoClientLibDeps = ['$BUILD_DIR/third_party/shim_boost']
 mongoClientSysLibDeps = []
 
 if usingSasl:
     mongoClientSysLibDeps += ["sasl2"]
 
-if use_system_version_of_library("boost"):
-    mongoClientLibs.append(['boost_thread-mt'])
-else:
-    mongoClientLibDeps.append(['$BUILD_DIR/third_party/shim_boost'])
-
 mongoClientInstalls = []
 mongoClientPrefixInstalls = []
-
-if windows and buildShared:
-    print("Building the client driver as a DLL is not supported, see SERVER-5650")
-    Exit(1)
 
 staticLibEnv = env.Clone()
 staticLibEnv.AppendUnique(
     LIBDEPS=mongoClientLibDeps,
     SYSLIBDEPS=mongoClientSysLibDeps)
 
+if windows:
+    # On Windows, we need to have the static library target and the
+    # import library target have different names, so that they aren't
+    # ambiguous to scons.  Boost names the static library libxxxx.lib and
+    # the import library xxxx.lib, so we shall follow their lead.
+    staticLibName = 'libmongoclient'
+else:
+    staticLibName = 'mongoclient'
+
 mongoClientStaticLib = staticLibEnv.StaticLibrary(
-    'mongoclient', clientObjects),
+    staticLibName, clientObjects),
 mongoClientInstalls.append(staticLibEnv.Install('#/', mongoClientStaticLib))
 
 if installSetup.libraries:
@@ -188,10 +188,8 @@ mongoClientSharedLib = None
 if buildShared:
 
     # TODO: When we are ready to set a SONAME for mongoclient, set SHLIBVERSION=x.y.z in this
-    # environment to enable SCons versioned shared library support, and then change the two
-    # 'Install' calls in this block to 'InstallVersionedLibrary'. SHLIBVERSION and
-    # InstallVersionedLibrary support is only stable in SCons > 2.3.0, so if you add support
-    # here, be sure to add an EnsuredSconsVersion here as well.
+    # environment to enable SCons versioned shared library support. This support is only stable
+    # in SCons > 2.3.0, so if you add it here, be sure to add a EnsuredSconsVersion as well.
     sharedLibEnv = env.Clone()
     sharedLibEnv.AppendUnique(
         LIBS=mongoClientLibs + mongoClientSysLibDeps,
@@ -203,9 +201,19 @@ if buildShared:
     if linux:
         sharedLibEnv.AppendUnique(SHLINKFLAGS=["-Wl,--as-needed", "-Wl,-zdefs"])
 
+    if windows:
+        # Ignore warning LNK4102, which complains about exposing deleting destructors.
+        sharedLibEnv.AppendUnique(SHLINKFLAGS=["/IGNORE:4102"])
+        env.Command(['mongoclient.def'],
+                    ['#buildscripts/generate_def.py', mongoClientStaticLib],
+            '$PYTHON ${SOURCES[0]} $TARGETS ${SOURCES[1:]}')
+        # SCons automatically looks for this file in the source list and passes the proper
+        # parameter to MS-LINK automatically.
+        clientObjects.append('mongoclient.def')
+    
     mongoClientSharedLib = sharedLibEnv.SharedLibrary('mongoclient', clientObjects)
 
-    mongoClientSharedLibInstall = sharedLibEnv.Install(
+    mongoClientSharedLibInstall = sharedLibEnv.InstallVersionedLib(
         '#/sharedclient', mongoClientSharedLib)
 
     if darwin:
@@ -220,7 +228,7 @@ if buildShared:
     mongoClientInstalls.append(mongoClientSharedLibInstall)
 
     if installSetup.libraries:
-        mongoClientSharedLibPrefixInstall = sharedLibEnv.Install(
+        mongoClientSharedLibPrefixInstall = sharedLibEnv.InstallVersionedLib(
             '$INSTALL_DIR/lib', mongoClientSharedLib)
         if darwin:
             sharedLibEnv.AddPostAction(
@@ -249,13 +257,8 @@ clientEnv['CPPDEFINES'].remove('MONGO_EXPOSE_MACROS')
 # Compile the example files to .o so that we can link them twice: once statically, once shared.
 exampleObjMap = [(target, clientEnv.Object(source)) for (target, source) in exampleSourceMap]
 
-# Create an environment for linking the examples to the static library. For out of tree builds,
-# we need to use LIBS. For in-tree builds we need LIBDEPS.
 staticClientEnv = clientEnv.Clone()
-if '_LIBDEPS' in clientEnv:
-    staticClientEnv.AppendUnique(LIBDEPS=[mongoClientStaticLib])
-else:
-    staticClientEnv.AppendUnique(LIBS=[mongoClientStaticLib])
+staticClientEnv.AppendUnique(LIBDEPS=[mongoClientStaticLib])
 
 # Build each statically linked client program
 staticClientPrograms = [staticClientEnv.Program(target, obj) for (target, obj) in exampleObjMap]
@@ -267,19 +270,21 @@ clientTests = staticClientEnv.Install("#/", staticClientPrograms)
 if buildShared:
     sharedClientEnv = clientEnv.Clone()
 
+    # Arrange for the tests to link against the mongoclient in the #/sharedclient directory,
+    # and against boost explicitly rather than picking up the symbols through mongoclient.
+    sharedClientEnv.AppendUnique(
+        LIBS=['mongoclient'],
+        LIBPATH=["#/sharedclient"],
+        LIBDEPS=['$BUILD_DIR/third_party/shim_boost']
+    )
+
     # Deal with the different lookup models between regular UNIX and Darwin. For regular unix,
     # we can just link against the shared lib wherever it lives, and set $ORIGIN to pull the
     # copy we run against from the current directory (#/sharedclient). This won't work on
     # Darwin though, so to work around, we link against the staged copy of the mongoclient
     # dylib in #sharedclient, which has @executable path set as its install_name.
-    if nix:
-        if darwin:
-            sharedClientEnv.AppendUnique(
-                LIBS=['mongoclient'],
-                LIBPATH=["#/sharedclient"]
-            )
-        else:
-            sharedClientEnv.AppendUnique(
+    if nix and not darwin:
+        sharedClientEnv.AppendUnique(
                 LIBS=[mongoClientSharedLib],
                 LINKFLAGS="-Wl,-z,origin",
                 RPATH=[sharedClientEnv.Literal("\\$$ORIGIN")])
@@ -291,32 +296,4 @@ if buildShared:
     sharedClientProgramInstalls = sharedClientEnv.Install("#/sharedclient", sharedClientPrograms)
     clientTests.append(sharedClientProgramInstalls)
 
-clientTests.append(
-    clientEnv.Install('#/', clientEnv.Program('bsondemo', 'mongo/bson/bsondemo/bsondemo.cpp')))
-
 clientEnv.Alias('clientTests', clientTests, [])
-
-env.Install(
-    '#/',
-    env.Command('$CLIENT_ARCHIVE',
-                ['#buildscripts/make_archive.py',
-                 '$CLIENT_SCONSTRUCT',
-                 '$CLIENT_LICENSE',
-                 'SConscript.client',
-                 'mongo/base/generate_error_codes.py',
-                 'mongo/base/error_codes.err',
-                 'mongo/db/auth/generate_action_types.py',
-                 'mongo/db/auth/action_types.txt',
-                 'third_party/murmurhash3/MurmurHash3.h',
-                 '#buildscripts/make_archive.py',
-                 clientSourceAll,
-                 clientHeaders,
-                 [source for (target, source) in exampleSourceMap],
-                 'mongo/bson/bsondemo/bsondemo.cpp',
-                 ],
-                '${PYTHON} ${SOURCES[0]} -o $TARGET '
-                '--transform ${str(Dir(BUILD_DIR))}/client_build=$CLIENT_DIST_BASENAME/src '
-                '--transform ${str(Dir(BUILD_DIR))}=$CLIENT_DIST_BASENAME/src '
-                '--transform distsrc/client=$CLIENT_DIST_BASENAME '
-                '--transform =$CLIENT_DIST_BASENAME/ '
-                '${TEMPFILE(SOURCES[1:])}'))

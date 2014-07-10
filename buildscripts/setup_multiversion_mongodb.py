@@ -17,6 +17,28 @@ import gzip
 # Only really tested/works on Linux.
 #
 
+def version_tuple(version):
+    """Returns a version tuple that can be used for numeric sorting
+    of version strings such as '2.6.0-rc1' and '2.4.0'"""
+
+    RC_OFFSET = -100
+    version_parts = re.split(r'\.|-', version[0])
+
+    if version_parts[-1].startswith("rc"):
+        rc_part = version_parts.pop()
+        rc_part = rc_part.split('rc')[1]
+
+        # RC versions are weighted down to allow future RCs and general
+        # releases to be sorted in ascending order (e.g., 2.6.0-rc1,
+        # 2.6.0-rc2, 2.6.0).
+        version_parts.append(int(rc_part) + RC_OFFSET)
+    else:
+        # Non-RC releases have an extra 0 appended so version tuples like
+        # (2, 6, 0, -100) and (2, 6, 0, 0) sort in ascending order.
+        version_parts.append(0)
+
+    return tuple(map(int, version_parts))
+
 class MultiVersionDownloader :
 
     def __init__(self, install_dir, link_dir, platform):
@@ -25,7 +47,13 @@ class MultiVersionDownloader :
         match = re.compile("(.*)\/(.*)").match(platform)
         self.platform = match.group(1)
         self.arch = match.group(2)
-        self.links = self.download_links()
+        self._links = None
+
+    @property
+    def links(self):
+        if self._links is None:
+            self._links = self.download_links()
+        return self._links
 
     def download_links(self):
         href = "http://dl.mongodb.org/dl/%s/%s" \
@@ -70,39 +98,45 @@ class MultiVersionDownloader :
             raise Exception("Cannot find a link for version %s, versions %s found." \
                 % (version, self.links))
 
-        urls.sort()
+        urls.sort(key=version_tuple)
         full_version = urls[-1][0]
         url = urls[-1][1]
+        extract_dir = url.split("/")[-1][:-4]
 
-        temp_dir = tempfile.mkdtemp()
-        temp_file = tempfile.mktemp(suffix=".tgz")
-
-        data = urllib2.urlopen(url)
-
-        print "Downloading data for version %s (%s)..." % (version, full_version)
-
-        with open(temp_file, 'wb') as f:
-            f.write(data.read())
-            print "Uncompressing data for version %s (%s)..." % (version, full_version)
-
-        # Can't use cool with syntax b/c of python 2.6
-        tf = tarfile.open(temp_file, 'r:gz')
-
-        try:
-            tf.extractall(path=temp_dir)
-        except:
+        # only download if we don't already have the directory
+        already_downloaded = os.path.isdir(os.path.join( self.install_dir, extract_dir))
+        if already_downloaded:
+            print "Skipping download for version %s (%s) since the dest already exists '%s'" \
+                % (version, full_version, extract_dir)
+        else:
+            temp_dir = tempfile.mkdtemp()
+            temp_file = tempfile.mktemp(suffix=".tgz")
+    
+            data = urllib2.urlopen(url)
+    
+            print "Downloading data for version %s (%s)..." % (version, full_version)
+    
+            with open(temp_file, 'wb') as f:
+                f.write(data.read())
+                print "Uncompressing data for version %s (%s)..." % (version, full_version)
+    
+            # Can't use cool with syntax b/c of python 2.6
+            tf = tarfile.open(temp_file, 'r:gz')
+    
+            try:
+                tf.extractall(path=temp_dir)
+            except:
+                tf.close()
+                raise
+    
             tf.close()
-            raise
-
-        tf.close()
-
-        extract_dir = os.listdir(temp_dir)[0]
-        temp_install_dir = os.path.join(temp_dir, extract_dir)
-
-        shutil.move(temp_install_dir, self.install_dir)
-
-        shutil.rmtree(temp_dir)
-        os.remove(temp_file)
+    
+            temp_install_dir = os.path.join(temp_dir, extract_dir)
+    
+            shutil.move(temp_install_dir, self.install_dir)
+    
+            shutil.rmtree(temp_dir)
+            os.remove(temp_file)
 
         self.symlink_version(version, os.path.abspath(os.path.join(self.install_dir, extract_dir)))
 
@@ -120,20 +154,32 @@ class MultiVersionDownloader :
 
             link_name = "%s-%s" % (executable, version)
 
-            os.symlink(os.path.join(installed_dir, "bin", executable),\
-                       os.path.join(self.link_dir, link_name))
+            try:
+                os.symlink(os.path.join(installed_dir, "bin", executable),\
+                           os.path.join(self.link_dir, link_name))
+            except OSError as exc:
+                if exc.errno == errno.EEXIST:
+                    pass
+                else: raise
 
 
 CL_HELP_MESSAGE = \
 """
-Downloads and installs particular mongodb versions into an install directory and symlinks the binaries with versions to
-another directory.
+Downloads and installs particular mongodb versions (each binary is renamed to include its version) 
+into an install directory and symlinks the binaries with versions to another directory.
 
-Usage: install_multiversion_mongodb.sh INSTALL_DIR LINK_DIR PLATFORM_AND_ARCH VERSION1 [VERSION2 VERSION3 ...]
+Usage: setup_multiversion_mongodb.py INSTALL_DIR LINK_DIR PLATFORM_AND_ARCH VERSION1 [VERSION2 VERSION3 ...]
 
-Ex: install_multiversion_mongodb.sh ./install ./link "Linux/x86_64" "2.0.6" "2.0.3-rc0" "2.0" "2.2" "2.3"
+Ex: setup_multiversion_mongodb.py ./install ./link "Linux/x86_64" "2.0.6" "2.0.3-rc0" "2.0" "2.2" "2.3"
+Ex: setup_multiversion_mongodb.py ./install ./link "OSX/x86_64" "2.4" "2.2"
 
-If "rc" is included in the version name, we'll use the exact rc, otherwise we'll pull the highest non-rc
+After running the script you will have a directory structure like this:
+./install/[mongodb-osx-x86_64-2.4.9, mongodb-osx-x86_64-2.2.7]
+./link/[mongod-2.4.9, mongod-2.2.7, mongo-2.4.9...]
+
+You should then add ./link/ to your path so multi-version tests will work.
+
+Note: If "rc" is included in the version name, we'll use the exact rc, otherwise we'll pull the highest non-rc
 version compatible with the version specified.
 """
 

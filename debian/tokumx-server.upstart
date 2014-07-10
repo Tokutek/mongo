@@ -1,7 +1,15 @@
 # Ubuntu upstart file at /etc/init/tokumx.conf
 description "TokuMX"
 
-limit nofile 20000 20000
+# Recommended ulimit values for mongod or mongos
+# See http://docs.mongodb.org/manual/reference/ulimit/#recommended-settings
+#
+limit fsize unlimited unlimited
+limit cpu unlimited unlimited
+limit as unlimited unlimited
+limit nofile 64000 64000
+limit rss unlimited unlimited
+limit nproc 32000 32000
 
 kill timeout 300 # wait 300s between SIGTERM and SIGKILL.
 
@@ -24,6 +32,13 @@ stop on runlevel [06]
 
 script
   ENABLE_TOKUMX="yes"
+  CONF=/etc/tokumx.conf
+  DAEMON=/usr/bin/mongod
+  DAEMONUSER=${DAEMONUSER:-tokumx}
+
   if [ -f /etc/default/tokumx ]; then . /etc/default/tokumx; fi
-  if [ "x$ENABLE_TOKUMX" = "xyes" ]; then exec start-stop-daemon --start --quiet --chuid tokumx --exec  /usr/bin/mongod -- --config /etc/tokumx.conf; fi
+  if [ "x$ENABLE_TOKUMX" = "xyes" ]
+  then
+    exec start-stop-daemon --start --quiet --chuid $DAEMONUSER --exec $DAEMON -- --config $CONF
+  fi
 end script

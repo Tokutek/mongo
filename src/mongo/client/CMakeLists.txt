@@ -3,7 +3,6 @@ set(common_files
   dbclient
   dbclient_rs
   dbclientcursor
-  model
   remote_loader
   remote_transaction
   sasl_client_authenticate
