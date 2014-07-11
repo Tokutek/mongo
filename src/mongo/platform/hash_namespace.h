@@ -1,4 +1,4 @@
-/*    Copyright 2012 10gen Inc.
+/*    Copyright 2013 10gen Inc.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -21,42 +21,44 @@
 #include <new>
 
 // NOTE(acm): Before gcc-4.7, __cplusplus is always defined to be 1, so we can't reliably
-// detect C++11 support by exclusively checking the value of __cplusplus. Additionaly, libc++,
+// detect C++11 support by exclusively checking the value of __cplusplus.  Additionaly, libc++,
 // whether in C++11 or C++03 mode, doesn't use TR1 and drops things into std instead.
 #if __cplusplus >= 201103L || defined(__GXX_EXPERIMENTAL_CXX0X__) || defined(_LIBCPP_VERSION)
 
-#include <unordered_map>
+#include <functional>
 
-namespace mongo {
-
-    using std::unordered_map;
-
-}  // namespace mongo
+#define MONGO_HASH_NAMESPACE_START namespace std {
+#define MONGO_HASH_NAMESPACE_END }
+#define MONGO_HASH_NAMESPACE std
 
 #elif defined(_MSC_VER) && _MSC_VER >= 1500
 
-#include <unordered_map>
-
-namespace mongo {
-
 #if _MSC_VER >= 1600  /* Visual Studio 2010+ */
-    using std::unordered_map;
-#else
-    using std::tr1::unordered_map;
-#endif
 
-}  // namespace mongo
+#include <functional>
+
+#define MONGO_HASH_NAMESPACE_START namespace std {
+#define MONGO_HASH_NAMESPACE_END }
+#define MONGO_HASH_NAMESPACE std
+
+#else /* Older Visual Studio */
+
+#include <tr1/functional>
+
+#define MONGO_HASH_NAMESPACE_START namespace std { namespace tr1 {
+#define MONGO_HASH_NAMESPACE_END }}
+#define MONGO_HASH_NAMESPACE std::tr1
+
+#endif
 
 #elif defined(__GNUC__)
 
-#include <tr1/unordered_map>
+#include <tr1/functional>
 
-namespace mongo {
-
-    using std::tr1::unordered_map;
-
-}  // namespace mongo
+#define MONGO_HASH_NAMESPACE_START namespace std { namespace tr1 {
+#define MONGO_HASH_NAMESPACE_END }}
+#define MONGO_HASH_NAMESPACE std::tr1
 
 #else
-#error "Compiler's standard library does not provide a C++ unordered_map implementation."
+#error "Cannot determine namespace for 'hash'"
 #endif

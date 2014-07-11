@@ -56,6 +56,7 @@
 #include "mongo/db/ttl.h"
 #include "mongo/db/txn_complete_hooks.h"
 #include "mongo/plugins/loader.h"
+#include "mongo/platform/process_id.h"
 #include "mongo/s/d_writeback.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/util/background.h"
@@ -244,7 +245,7 @@ namespace mongo {
         toLog.append( "startTimeLocal", buf );
 
         toLog.append( "cmdLine", CmdLine::getParsedOpts() );
-        toLog.append( "pid", getpid() );
+        toLog.append( "pid", ProcessId::getCurrent().asLongLong() );
 
         BSONObjBuilder buildinfo( toLog.subobjStart("buildinfo"));
         appendBuildInfo(buildinfo);
@@ -653,11 +654,7 @@ namespace mongo {
         bool is32bit = sizeof(int*) == 4;
 
         {
-#if !defined(_WIN32)
-            pid_t pid = getpid();
-#else
-            DWORD pid=GetCurrentProcessId();
-#endif
+            ProcessId pid = ProcessId::getCurrent();
             Nullstream& l = log();
             l << "TokuMX starting : pid=" << pid << " port=" << cmdLine.port << " dbpath=" << dbpath;
             l << ( is32bit ? " 32" : " 64" ) << "-bit host=" << getHostNameCached() << endl;

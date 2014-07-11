@@ -1,6 +1,7 @@
 add_library(platform STATIC
   backtrace
   posix_fadvise
+  process_id.cpp
   random
   strcasestr
   )

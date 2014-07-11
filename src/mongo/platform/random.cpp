@@ -15,6 +15,8 @@
  *    limitations under the License.
  */
 
+#include "mongo/platform/basic.h"
+
 #include "mongo/platform/random.h"
 
 #include <stdio.h>
@@ -22,15 +24,12 @@
 
 #ifndef _WIN32
 #include <errno.h>
-#define _CRT_RAND_S
 #endif
 
 #define _CRT_RAND_S
 #include <cstdlib>
 #include <iostream>
 #include <fstream>
-
-#include "mongo/platform/basic.h"
 
 namespace mongo {
 
