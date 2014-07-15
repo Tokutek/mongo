@@ -167,8 +167,7 @@ wait(function() {
         printjson(op3);
       });
     
-    return friendlyEqual(getLatestOp(master), getLatestOp(slave1)) &&
-      friendlyEqual(getLatestOp(master), getLatestOp(slave2));
+    return friendlyEqual(op1["_id"],op2["_id"]) &&  friendlyEqual(op2, op3);
   });
 
 replTest.stopSet();
