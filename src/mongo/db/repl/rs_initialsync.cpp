@@ -326,7 +326,7 @@ namespace mongo {
         catchupTransaction.commit(0);
     }
 
-    void ReplSetImpl::_applyMissingOpsDuringInitialSync() {
+    void applyMissingOpsInOplog(GTID minUnappliedGTID) {
         std::deque<BSONObj> unappliedTransactions;
         {
             // accumulate a list of transactions that are unapplied
@@ -334,14 +334,16 @@ namespace mongo {
             Client::ReadContext ctx(rsoplog, lockReason);
             Client::Transaction catchupTransaction(0);        
 
-            // now we should have replInfo on this machine,
-            // let's query the minUnappliedGTID to figure out from where
-            // we should copy the opLog
-            BSONObj result;
-            const bool foundMinUnapplied = Collection::findOne(rsReplInfo, BSON("_id" << "minUnapplied"), result);
-            verify(foundMinUnapplied);
-            GTID minUnappliedGTID;
-            minUnappliedGTID = getGTIDFromBSON("GTID", result);
+            if (minUnappliedGTID.isInitial()) {
+                // now we should have replInfo on this machine,
+                // let's query the minUnappliedGTID to figure out from where
+                // we should copy the opLog
+                BSONObj result;
+                const bool foundMinUnapplied = Collection::findOne(rsReplInfo, BSON("_id" << "minUnapplied"), result);
+                verify(foundMinUnapplied);
+                GTID minUnappliedGTID;
+                minUnappliedGTID = getGTIDFromBSON("GTID", result);
+            }
             // now we need to read the oplog forward
             GTID lastEntry;
             bool ret = getLastGTIDinOplog(&lastEntry);
@@ -359,7 +361,7 @@ namespace mongo {
                 shared_ptr<Cursor> c = getOptimizedCursor(rsoplog, query.done());
                 while( c->ok() ) {
                     if ( c->currentMatches()) {
-                        BSONObj curr = c->current();                    
+                        BSONObj curr = c->current();
                         bool transactionAlreadyApplied = curr["a"].Bool();
                         if (!transactionAlreadyApplied) {
                             GTID currEntry = getGTIDFromBSON("_id", curr);
@@ -374,7 +376,7 @@ namespace mongo {
         }
         while (unappliedTransactions.size() > 0) {
             BSONObj curr = unappliedTransactions.front();
-            applyTransactionFromOplog(curr);            
+            applyTransactionFromOplog(curr, NULL);            
             unappliedTransactions.pop_front();
         }
     }
@@ -415,7 +417,7 @@ namespace mongo {
         }
 
         if( needsFullSync ) {
-            BSONObj lastOp = r.getLastOp(rsoplog);
+            BSONObj lastOp = r.getLastOp();
             if( lastOp.isEmpty() ) {
                 sethbmsg("initial sync couldn't read remote oplog", 0);
                 sleepsecs(15);
@@ -524,7 +526,8 @@ namespace mongo {
         if (needGapsFilled) {
             _fillGaps(&r);
         }
-        _applyMissingOpsDuringInitialSync();
+        GTID dummy;
+        applyMissingOpsInOplog(dummy);
 
         sethbmsg("initial sync done",0);
 

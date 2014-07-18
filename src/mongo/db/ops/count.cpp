@@ -67,10 +67,7 @@ namespace mongo {
             limit  = -limit;
         }
 
-        OpSettings settings;
-        settings.setBulkFetch(true);
-        settings.setQueryCursorMode(DEFAULT_LOCK_CURSOR);
-        cc().setOpSettings(settings);
+        Client::WithOpSettings wos(OpSettings().setQueryCursorMode(DEFAULT_LOCK_CURSOR).setBulkFetch(true));
 
         Lock::assertAtLeastReadLocked(ns);
         try {

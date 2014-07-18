@@ -329,11 +329,11 @@ namespace mongo {
     }
 
     // apply all operations in the array
-    void applyOps(std::vector<BSONElement> ops) {
+    static void applyOps(std::vector<BSONElement> ops, RollbackDocsMap* docsMap) {
         const size_t numOps = ops.size();
         for(size_t i = 0; i < numOps; ++i) {
             BSONElement* curr = &ops[i];
-            OplogHelpers::applyOperationFromOplog(curr->Obj());
+            OplogHelpers::applyOperationFromOplog(curr->Obj(), docsMap);
         }
     }
 
@@ -343,7 +343,7 @@ namespace mongo {
     // did not work, so it a sequence of point queries.  
     // TODO verify that the query plan is a indexed lookup.
     // TODO verify that the query plan does not fetch too many docs and then only process one of them.
-    void applyRefOp(BSONObj entry) {
+    void applyRefOp(BSONObj entry, RollbackDocsMap* docsMap) {
         OID oid = entry["ref"].OID();
         LOG(3) << "apply ref " << entry << " oid " << oid << endl;
         long long seq = 0; // note that 0 is smaller than any of the seq numbers
@@ -364,7 +364,7 @@ namespace mongo {
                 break;
             }
             LOG(3) << "apply " << entry << " seq=" << seq << endl;
-            applyOps(entry["ops"].Array());
+            applyOps(entry["ops"].Array(), docsMap);
         }
     }
 
@@ -389,14 +389,14 @@ namespace mongo {
     // TODO: possibly improve performance of this. We create and destroy a
     // context for each operation. Find a way to amortize it out if necessary
     //
-    void applyTransactionFromOplog(BSONObj entry) {
+    void applyTransactionFromOplog(BSONObj entry, RollbackDocsMap* docsMap) {
         bool transactionAlreadyApplied = entry["a"].Bool();
         if (!transactionAlreadyApplied) {
             Client::Transaction transaction(DB_SERIALIZABLE);
             if (entry.hasElement("ref")) {
-                applyRefOp(entry);
+                applyRefOp(entry, docsMap);
             } else if (entry.hasElement("ops")) {
-                applyOps(entry["ops"].Array());
+                applyOps(entry["ops"].Array(), docsMap);
             } else {
                 verify(0);
             }
@@ -425,16 +425,16 @@ namespace mongo {
     }
     
     // apply all operations in the array
-    void rollbackOps(std::vector<BSONElement> ops) {
+    static void rollbackOps(std::vector<BSONElement> ops, RollbackDocsMap* docsMap) {
         const size_t numOps = ops.size();
         for(size_t i = 0; i < numOps; ++i) {
             // note that we have to rollback the transaction backwards
             BSONElement* curr = &ops[numOps - i - 1];
-            OplogHelpers::rollbackOperationFromOplog(curr->Obj());
+            OplogHelpers::rollbackOperationFromOplog(curr->Obj(), docsMap);
         }
     }
 
-    void rollbackRefOp(BSONObj entry) {
+    static void rollbackRefOp(BSONObj entry, RollbackDocsMap* docsMap) {
         OID oid = entry["ref"].OID();
         LOG(3) << "rollback ref " << entry << " oid " << oid << endl;
         long long seq = LLONG_MAX;
@@ -469,20 +469,20 @@ namespace mongo {
                 break;
             }
             LOG(3) << "apply " << currEntry << " seq=" << seq << endl;
-            rollbackOps(currEntry["ops"].Array());
+            rollbackOps(currEntry["ops"].Array(), docsMap);
             // decrement seq so next query gets the next value
             seq--;
         }
     }
 
-    void rollbackTransactionFromOplog(BSONObj entry, bool purgeEntry) {
+    void rollbackTransactionFromOplog(BSONObj entry, bool purgeEntry, RollbackDocsMap* docsMap) {
         bool transactionAlreadyApplied = entry["a"].Bool();
         Client::Transaction transaction(DB_SERIALIZABLE);
         if (transactionAlreadyApplied) {
             if (entry.hasElement("ref")) {
-                rollbackRefOp(entry);
+                rollbackRefOp(entry, docsMap);
             } else if (entry.hasElement("ops")) {
-                rollbackOps(entry["ops"].Array());
+                rollbackOps(entry["ops"].Array(), docsMap);
             } else {
                 verify(0);
             }

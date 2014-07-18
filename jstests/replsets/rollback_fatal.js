@@ -1,80 +1,90 @@
+// tests that various commands that show up in the backward scan cause us to go fatal.
 
+var filename;
+//if (TestData.testDir !== undefined) {
+//    load(TestData.testDir + "/replsets/_rollback_helpers.js");
+//} else {
+    load('jstests/replsets/_rollback_helpers.js');
+//}
 
-doTest = function (signal, txnLimit, startPort) {
-
-    var num = 3;
-    var host = getHostName();
-    var name = "rollback_simple";
-    var timeout = 60000;
-
-    var replTest = new ReplSetTest( {name: name, nodes: num, startPort:startPort, txnMemLimit: txnLimit} );
-    var conns = replTest.startSet();
-    var port = replTest.ports;
-    var config = {_id : name, members :
-            [
-             {_id:0, host : host+":"+port[0], priority:10 },
-             {_id:1, host : host+":"+port[1]},
-             {_id:2, host : host+":"+port[2], arbiterOnly : true},
-            ],
-             };
-
-    replTest.initiate(config);
-    replTest.awaitReplication();
-    assert.soon(function() { return conns[0].getDB("admin").isMaster().ismaster; });
-
-    // Make sure we have a master
-    conns[0].setSlaveOk();
-    conns[0].setSlaveOk();
-
-    //deb(master);
-
-    // Make sure we have an arbiter
-    assert.soon(function () {
-        res = conns[2].getDB("admin").runCommand({ replSetGetStatus: 1 });
-        return res.myState == 7;
-    }, "Arbiter failed to initialize.");
-
-    // Wait for initial replication
-    var a = conns[0].getDB("foo");
-    var b = conns[1].getDB("foo");
-
-    // do a simple insertion
-    a.foo.insert({a:1});
-
-    print("shutting down conn 0");
-    replTest.stop(0);
-    print("waiting for conn 1 to become master");
-    assert.soon(function() { return conns[1].getDB("admin").isMaster().ismaster; });
-
-    print("do Items to Rollback");
-    // when this is attempted to be rolled back, it will cause us to go fatal
-    b.createCollection("bar");
-    print("shutting down conn1");
-    replTest.stop(1);
-
-
-    print("shutting down conn1");
-    replTest.stop(1);
-    print("restarting conn0");
-    replTest.restart(0);
-    print("waiting for conn 0 to become master");
-    assert.soon(function() { return conns[0].getDB("admin").isMaster().ismaster; });
-
-    for (var i = 0; i < 1000; i++) {
-        conns[0].getDB("foo").foo.insert({_id:i});
+preloadData = function(conn) {
+    conn.getDB("test").createCollection("foo");
+    conn.getDB("test").foo.ensureIndex({a:1});
+    // do some insertions
+    for (var i = 0; i < 10; i++) {
+        conn.getDB("test").foo.insert({_id : i, state : "before rollback"});
     }
-    
-    // this should invoke the createCollection to try to rollback, and cause the slave to go fatal,
-    print("restarting conn1, and waiting for it to go fatal");
-    replTest.restart(1);
-    assert.soon(function() { var status = conns[1].getDB("admin").runCommand("replSetGetStatus"); print("status.myState is " + status.myState); return (status.myState == 4);});
+}
 
-    print("rollback_fatal.js SUCCESS");
-    replTest.stopSet(signal);
+preloadMoreData = function(conn) {
+    for (var i = 10; i < 20; i++) {
+        conn.getDB("test").foo.insert({_id : i, state : "after split"});
+    }
 };
 
-print("rollback_fatal.js");
+doCreate = function(conn) {
+    // dummy
+    conn.getDB("test").foo.insert({_id : 15, state : "God"});
+    conn.getDB("test").foo.insert({_id : 16, state : "God"});
 
-doTest( 15, 1000000, 31000 );
-doTest( 15, 0, 41000 );
+    conn.getDB("test").createCollection("bar");
+
+    // dummy
+    conn.getDB("test").foo.insert({_id : 17, state : "God"});
+    conn.getDB("test").foo.insert({_id : 18, state : "God"});
+};
+
+doAddIndex = function(conn) {
+    // dummy
+    conn.getDB("test").foo.insert({_id : 15, state : "God"});
+    conn.getDB("test").foo.insert({_id : 16, state : "God"});
+
+    conn.getDB("test").foo.ensureIndex({b:1});
+
+    // dummy
+    conn.getDB("test").foo.insert({_id : 17, state : "God"});
+    conn.getDB("test").foo.insert({_id : 18, state : "God"});
+};
+
+doDrop = function(conn) {
+    // dummy
+    conn.getDB("test").foo.insert({_id : 15, state : "God"});
+    conn.getDB("test").foo.insert({_id : 16, state : "God"});
+
+    conn.getDB("test").foo.drop();
+
+    // dummy
+    conn.getDB("test").foo.insert({_id : 17, state : "God"});
+    conn.getDB("test").foo.insert({_id : 18, state : "God"});
+};
+
+doDropIndex = function(conn) {
+    // dummy
+    conn.getDB("test").foo.insert({_id : 15, state : "God"});
+    conn.getDB("test").foo.insert({_id : 16, state : "God"});
+
+    assert.commandWorked(conn.getDB("test").foo.dropIndex({a:1}));
+
+    // dummy
+    conn.getDB("test").foo.insert({_id : 17, state : "God"});
+    conn.getDB("test").foo.insert({_id : 18, state : "God"});
+};
+
+doDropDatabase = function(conn) {
+    // dummy
+    conn.getDB("test").foo.insert({_id : 15, state : "God"});
+    conn.getDB("test").foo.insert({_id : 16, state : "God"});
+
+    assert.commandWorked(conn.getDB("test").dropDatabase());
+
+    // dummy
+    conn.getDB("test").foo.insert({_id : 17, state : "God"});
+    conn.getDB("test").foo.insert({_id : 18, state : "God"});
+};
+
+doRollbackTest( 15, 1000000, 31000, preloadData, preloadMoreData, doCreate, true );
+doRollbackTest( 15, 1000000, 31000, preloadData, preloadMoreData, doAddIndex, true );
+doRollbackTest( 15, 1000000, 31000, preloadData, preloadMoreData, doDrop, true );
+doRollbackTest( 15, 1000000, 31000, preloadData, preloadMoreData, doDropIndex, true );
+doRollbackTest( 15, 1000000, 31000, preloadData, preloadMoreData, doDropDatabase, true );
 

@@ -145,4 +145,40 @@ namespace mongo {
         }
         return Status::OK();
     }
+
+    class CmdSetGod: public InformationCommand {
+    public:
+        CmdSetGod() : InformationCommand("_setGod") {};
+        virtual void help( stringstream& help ) const {
+            help << "internal command used for testing";
+        }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {}
+
+        bool run(
+            const string& db,
+            BSONObj& cmdObj,
+            int options, string& errmsg,
+            BSONObjBuilder& result,
+            bool fromRepl = false )
+        {
+            // this test command allows writes to happen on a non-primary
+            // the idea currently is to have writes occur to a node that is in
+            // maintenance mode to induce rollback, hence unit testing
+            // some rollback scenarios
+            cc().setGod(cmdObj["_setGod"].trueValue());
+            return true;
+        }
+    };
+
+    MONGO_INITIALIZER(RegisterSetGodCmd)(InitializerContext* context) {
+        if (Command::testCommandsEnabled) {
+            // Leaked intentionally: a Command registers itself when constructed.
+            new CmdSetGod();
+        }
+        return Status::OK();
+    }
+
+
 }

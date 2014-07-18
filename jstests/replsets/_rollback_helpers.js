@@ -1,0 +1,105 @@
+function dbs_match(a, b) {
+    print("dbs_match");
+
+    var ac = a.system.namespaces.find().sort({name:1}).toArray();
+    var bc = b.system.namespaces.find().sort({name:1}).toArray();
+    if (ac.length != bc.length) {
+        print("dbs_match: namespaces don't match, lengths different");
+        print("\n\n");
+        printjson(ac);
+        print("\n\n");
+        printjson(bc);
+        print("\n\n");
+        return false;
+    }
+    for (var i = 0; i < ac.length; i++) {
+        if (ac[i].name != bc[i].name) {
+            print("dbs_match: namespaces don't match");
+            print("\n\n");
+            printjson(ac);
+            print("\n\n");
+            printjson(bc);
+            print("\n\n");
+            return false;
+        }
+    }
+
+    var c = a.getCollectionNames();
+    for( var i in c ) {
+        print("checking " + c[i]);
+        if( !friendlyEqual( a[c[i]].find().sort({_id:1}).toArray(), b[c[i]].find().sort({_id:1}).toArray() ) ) { 
+            print("dbs_match: collections don't match " + c[i]);
+            return false;
+        }
+    }
+    return true;
+};
+
+
+doRollbackTest = function (signal, txnLimit, startPort, preloadFunction, persistentFunction, rollbackFunction, goFatal) {
+    var num = 3;
+    var host = getHostName();
+    var name = "rollback_unit";
+    var timeout = 60000;
+
+    var replTest = new ReplSetTest( {name: name, nodes: num, startPort:startPort, txnMemLimit: txnLimit} );
+    var conns = replTest.startSet();
+    var port = replTest.ports;
+    var config = {_id : name, members :
+            [
+             {_id:0, host : host+":"+port[0], priority:10 },
+             {_id:1, host : host+":"+port[1]},
+             {_id:2, host : host+":"+port[2], arbiterOnly : true},
+            ],
+             };
+
+    replTest.initiate(config);
+    replTest.awaitReplication();
+    assert.soon(function() { return conns[0].getDB("admin").isMaster().ismaster; });
+
+    // Make sure we have a master
+    conns[0].setSlaveOk();
+    conns[1].setSlaveOk();
+
+    // Make sure we have an arbiter
+    assert.soon(function () {
+        res = conns[2].getDB("admin").runCommand({ replSetGetStatus: 1 });
+        return res.myState == 7;
+    }, "Arbiter failed to initialize.");
+
+    //create a dummy collection
+    preloadFunction(conns[0]);
+    replTest.awaitReplication();
+
+    // take secondary into maintenance mode and put it in God mode so we can do insertions
+    assert.commandWorked(conns[1].getDB("admin").runCommand({replSetMaintenance : 1}));
+    assert.commandWorked(conns[1].getDB("admin").runCommand({_setGod : 1}));
+
+    // crank up some insertions into master, so GTID of master is ahead of whatever we do on slave
+    persistentFunction(conns[0]);
+
+    // do something to secondary in God mode that will be rolled back
+    rollbackFunction(conns[1]);
+    
+    // now bring secondary out of maintenance, and rollback should occur
+    assert.commandWorked(conns[1].getDB("admin").runCommand({replSetMaintenance : 0}));
+
+    if (goFatal) {
+        assert.soon(function() { var status = conns[1].getDB("admin").runCommand("replSetGetStatus"); print("status.myState is " + status.myState); return (status.myState == 4);});
+    }
+    else {
+        replTest.awaitReplication();
+
+        // now do verifications
+        var a = conns[0].getDB("test");
+        var b = conns[1].getDB("test");
+        assert( dbs_match(a,b), "server data sets do not match after rollback, something is wrong");
+        assert.commandFailed(conns[1].getDB("local").runCommand({'_collectionsExist': ['local.rollback.gtidset']}));
+        assert.commandFailed(conns[1].getDB("local").runCommand({'_collectionsExist': ['local.rollback.docs']}));
+    }
+    
+    print("rollback_unit.js SUCCESS");
+    replTest.stopSet(signal);
+};
+
+

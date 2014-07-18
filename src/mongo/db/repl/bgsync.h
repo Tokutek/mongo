@@ -105,12 +105,13 @@ namespace mongo {
         void handleSlaveDelay(uint64_t opTimestamp);
         // tries to perform a rollback. If the rollback is impossible,
         // throws a RollbackOplogException
-        void runRollback(OplogReader& r, uint64_t oplogTS);
+        uint32_t runRollback(OplogReader& r, uint64_t oplogTS);
         void getOplogReader(OplogReader* r);
         // Evaluate if the current sync target is still good
         bool shouldChangeSyncTarget();
 
         bool hasCursor();
+        void settleApplierForRollback();
         void verifySettled();
     public:
         static BackgroundSync* get();

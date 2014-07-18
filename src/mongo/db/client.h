@@ -112,6 +112,10 @@ namespace mongo {
         void appendLastGTID( BSONObjBuilder& b ) const;
 
         bool isGod() const { return _god; } /* this is for map/reduce writes */
+        // currently used for test hook. It allows non-primaries to do queries and
+        // writes. Be VERY careful using this function
+        void setGod(bool val) { _god = val; }
+        
         string toString() const;
         void gotHandshake( const BSONObj& o );
         BSONObj getRemoteID() const { return _remoteId; }

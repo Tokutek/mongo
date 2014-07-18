@@ -64,38 +64,6 @@ namespace mongo {
     static ServerStatusMetricField<Counter64> displayOpsApplied( "repl.apply.ops",
                                                                 &opsAppliedStats );
 
-    bool isRollbackRequired(OplogReader& r, uint64_t *lastTS) {
-        string hn = r.conn()->getServerAddress();
-        if (!r.more()) {
-            // In vanilla Mongo, this happened for one of the
-            // following reasons:
-            //  - we were ahead of what we are syncing from (don't
-            //    think that is possible anymore)
-            //  - remote oplog is empty for some weird reason
-            // in either case, if it (strangely) happens, we'll just return
-            // and our caller will simply try again after a short sleep.
-            log() << "replSet error empty query result from " << hn << " oplog, attempting rollback" << rsLog;
-             return true;
-        }
-
-        BSONObj o = r.nextSafe();
-        uint64_t ts = o["ts"]._numberLong();
-        uint64_t lastHash = o["h"].numberLong();
-        GTID gtid = getGTIDFromBSON("_id", o);
-
-        if( !theReplSet->gtidManager->rollbackNeeded(gtid, ts, lastHash)) {
-            log() << "Rollback NOT needed! Our GTID" << gtid << endl;
-            return false;
-        }
-
-        log() << "Rollback needed! Our GTID" <<
-            theReplSet->gtidManager->getLiveState().toString() <<
-            " remote GTID: " << gtid.toString() << ". Attempting rollback." << rsLog;
-
-        *lastTS = ts;
-        return true;
-    }
-
     BackgroundSync::BackgroundSync() : _opSyncShouldRun(false),
                                             _opSyncRunning(false),
                                             _seqCounter(0),
@@ -198,7 +166,7 @@ namespace mongo {
                     try {
                         numTries++;
                         TimerHolder timer(&applyBatchStats);
-                        applyTransactionFromOplog(curr);
+                        applyTransactionFromOplog(curr, NULL);
                         opsAppliedStats.increment();
                         break;
                     }
@@ -388,7 +356,7 @@ namespace mongo {
 
         // if target cut connections between connecting and querying (for
         // example, because it stepped down) we might not have a cursor
-        if (!r.haveCursor()) {
+        if (!r.haveCursor() || !r.more()) {
             return 0;
         }
 
@@ -399,8 +367,7 @@ namespace mongo {
                 // sleep 2 seconds and try again. (The 2 is arbitrary).
                 // If we are not fatal, then we will keep trying to sync
                 // from another machine
-                runRollback(r, ts);
-                return 2;
+                return runRollback(r, ts);
             }
         }
         catch (RollbackOplogException& re){
@@ -601,156 +568,6 @@ namespace mongo {
             boost::unique_lock<boost::mutex> lock(_mutex);
             _currentSyncTarget = NULL;
         }
-    }
-
-    void BackgroundSync::runRollback(OplogReader& r, uint64_t oplogTS) {
-        // starting from ourLast, we need to read the remote oplog
-        // backwards until we find an entry in the remote oplog
-        // that has the same GTID, timestamp, and hash as
-        // what we have in our oplog. If we don't find one that is within
-        // some reasonable timeframe, then we go fatal
-        GTID ourLast = theReplSet->gtidManager->getLiveState();
-        GTID idToRollbackTo;
-        uint64_t rollbackPointTS = 0;
-        uint64_t rollbackPointHash = 0;
-        incRBID();
-        try {
-            shared_ptr<DBClientCursor> rollbackCursor = r.getRollbackCursor(ourLast);
-            uassert(17350, "rollback failed to get a cursor to start reading backwards from.", rollbackCursor.get());
-            while (rollbackCursor->more()) {
-                BSONObj remoteObj = rollbackCursor->next();
-                GTID remoteGTID = getGTIDFromBSON("_id", remoteObj);
-                uint64_t remoteTS = remoteObj["ts"]._numberLong();
-                uint64_t remoteLastHash = remoteObj["h"].numberLong();
-                if (remoteTS + 1800*1000 < oplogTS) {
-                    log() << "Rollback takes us too far back, throwing exception. remoteTS: " << remoteTS << " oplogTS: " << oplogTS << rsLog;
-                    throw RollbackOplogException("replSet rollback too long a time period for a rollback (at least 30 minutes).");
-                    break;
-                }
-                //now try to find an entry in our oplog with that GTID
-                BSONObjBuilder localQuery;
-                BSONObj localObj;
-                addGTIDToBSON("_id", remoteGTID, localQuery);
-                bool foundLocally = false;
-                {
-                    LOCK_REASON(lockReason, "repl: looking up oplog entry for rollback");
-                    Client::ReadContext ctx(rsoplog, lockReason);
-                    Client::Transaction transaction(DB_SERIALIZABLE);
-                    foundLocally = Collection::findOne(rsoplog, localQuery.done(), localObj);
-                    transaction.commit();
-                }
-                if (foundLocally) {
-                    GTID localGTID = getGTIDFromBSON("_id", localObj);
-                    uint64_t localTS = localObj["ts"]._numberLong();
-                    uint64_t localLastHash = localObj["h"].numberLong();
-                    if (localLastHash == remoteLastHash &&
-                        localTS == remoteTS &&
-                        GTID::cmp(localGTID, remoteGTID) == 0
-                        )
-                    {
-                        idToRollbackTo = localGTID;
-                        rollbackPointTS = localTS;
-                        rollbackPointHash = localLastHash;
-                        log() << "found id to rollback to " << idToRollbackTo << rsLog;
-                        break;
-                    }
-                }
-            }
-            // At this point, either we have found the point to try to rollback to,
-            // or we have determined that we cannot rollback
-            if (idToRollbackTo.isInitial()) {
-                // we cannot rollback
-                throw RollbackOplogException("could not find ID to rollback to");
-            }
-        }
-        catch (DBException& e) {
-            log() << "Caught DBException during rollback " << e.toString() << rsLog;
-            throw RollbackOplogException("DBException while trying to find ID to rollback to: " + e.toString());
-        }
-        catch (std::exception& e2) {
-            log() << "Caught std::exception during rollback " << e2.what() << rsLog;
-            throw RollbackOplogException(str::stream() << "Exception while trying to find ID to rollback to: " << e2.what());
-        }
-
-        // proceed with the rollback to point idToRollbackTo
-        // probably ought to grab a global write lock while doing this
-        // I don't think we want oplog cursors reading from this machine
-        // while we are rolling back. Or at least do something to protect against this
-
-        // first, let's get all the operations that are being applied out of the way,
-        // we don't want to rollback an item in the oplog while simultaneously,
-        // the applier thread is applying it to the oplog
-        {
-            boost::unique_lock<boost::mutex> lock(_mutex);
-            while (_deque.size() > 0) {
-                log() << "waiting for applier to finish work before doing rollback " << rsLog;
-                _queueDone.wait(lock);
-            }
-            verifySettled();
-        }
-
-        // now let's tell the system we are going to rollback, to do so,
-        // abort live multi statement transactions, invalidate cursors, and
-        // change the state to RS_ROLLBACK
-        {
-            // so we know nothing is simultaneously occurring
-            RWLockRecursive::Exclusive e(operationLock);
-            LOCK_REASON(lockReason, "repl: killing all operations for rollback");
-            Lock::GlobalWrite lk(lockReason);
-            ClientCursor::invalidateAllCursors();
-            Client::abortLiveTransactions();
-            theReplSet->goToRollbackState();
-        }
-
-        try {
-            // now that we are settled, we have to take care of the GTIDManager
-            // and the repl info thread.
-            // We need to reset the state of the GTIDManager to the point
-            // we intend to rollback to, and we need to make sure that the repl info thread
-            // has captured this information.
-            theReplSet->gtidManager->resetAfterInitialSync(
-                idToRollbackTo,
-                rollbackPointTS,
-                rollbackPointHash
-                );
-            // now force an update of the repl info thread
-            theReplSet->forceUpdateReplInfo();
-
-            // at this point, everything should be settled, the applier should
-            // have nothing left (and remain that way, because this is the only
-            // thread that can put work on the applier). Now we can rollback
-            // the data.
-            while (true) {
-                BSONObj o;
-                {
-                    LOCK_REASON(lockReason, "repl: checking for oplog data");
-                    Lock::DBRead lk(rsoplog, lockReason);
-                    Client::Transaction txn(DB_SERIALIZABLE);
-                    // if there is nothing in the oplog, break
-                    o = getLastEntryInOplog();
-                    if( o.isEmpty() ) {
-                        break;
-                    }
-                }
-                GTID lastGTID = getGTIDFromBSON("_id", o);
-                // if we have rolled back enough, break from while loop
-                if (GTID::cmp(lastGTID, idToRollbackTo) <= 0) {
-                    dassert(GTID::cmp(lastGTID, idToRollbackTo) == 0);
-                    break;
-                }
-                rollbackTransactionFromOplog(o, true);
-            }
-            theReplSet->leaveRollbackState();
-        }
-        catch (DBException& e) {
-            log() << "Caught DBException during rollback " << e.toString() << rsLog;
-            throw RollbackOplogException("DBException while trying to run rollback: " + e.toString());
-        }
-        catch (std::exception& e2) {
-            log() << "Caught std::exception during rollback " << e2.what() << rsLog;
-            throw RollbackOplogException(str::stream() << "Exception while trying to run rollback: " << e2.what());
-        }
-        
     }
 
     const Member* BackgroundSync::getSyncTarget() {

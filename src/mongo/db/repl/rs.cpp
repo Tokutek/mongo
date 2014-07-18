@@ -41,6 +41,7 @@
 #include "mongo/util/net/sock.h"
 #include "mongo/db/query_optimizer.h"
 #include "mongo/db/kill_current_op.h"
+#include "mongo/util/fail_point_service.h"
 
 using namespace std;
 
@@ -1218,6 +1219,8 @@ namespace mongo {
         transaction.commit();
     }
 
+    MONGO_FP_DECLARE(disableReplInfoThread);
+
     void ReplSetImpl::updateReplInfoThread() {
         _replInfoUpdateRunning = true;
         GTID lastMinUnappliedGTID;
@@ -1241,13 +1244,15 @@ namespace mongo {
                         GTID::cmp(lastMinUnappliedGTID, minUnappliedGTID) != 0
                         )
                     {
-                        LOCK_REASON(lockReason, "repl: updating repl info");
-                        Lock::DBRead lk("local", lockReason);
-                        Client::Transaction transaction(DB_SERIALIZABLE);
-                        logToReplInfo(minLiveGTID, minUnappliedGTID);
-                        lastMinUnappliedGTID = minUnappliedGTID;
-                        lastMinLiveGTID = minLiveGTID;
-                        transaction.commit();
+                        if (!MONGO_FAIL_POINT(disableReplInfoThread)) {
+                            LOCK_REASON(lockReason, "repl: updating repl info");
+                            Lock::DBRead lk("local", lockReason);
+                            Client::Transaction transaction(DB_SERIALIZABLE);
+                            logToReplInfo(minLiveGTID, minUnappliedGTID);
+                            lastMinUnappliedGTID = minUnappliedGTID;
+                            lastMinLiveGTID = minLiveGTID;
+                            transaction.commit();
+                        }
                     }
                 }
                 catch (...) {

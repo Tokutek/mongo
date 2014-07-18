@@ -27,4 +27,6 @@ namespace mongo {
     const char rsOplogRefs[] = "local.oplog.refs";
     const char rsReplInfo[] = "local.replInfo";
     const char rsVoteInfo[] = "local.replVote";
+    const char rsRollbackGTIDSet[] = "local.rollback.gtidset";
+    const char rsRollbackDocs[] = "local.rollback.docs";
 }

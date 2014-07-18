@@ -1580,7 +1580,7 @@ namespace mongo {
                             }
                             SpillableVectorIterator it(op, conn.conn(), MigrateFromStatus::MIGRATE_LOG_REF_NS);
                             while (it.more()) {
-                                OplogHelpers::applyOperationFromOplog(it.next());
+                                OplogHelpers::applyOperationFromOplog(it.next(), NULL);
                                 if (state == CATCHUP) {
                                     numCatchup++;
                                 } else {
@@ -1612,7 +1612,7 @@ namespace mongo {
                                     CounterResetter<long long> cr(numCatchup);
                                     CounterResetter<long long> sr(numSteady);
                                     while (it.moreInCurrentBatch()) {
-                                        OplogHelpers::applyOperationFromOplog(it.next());
+                                        OplogHelpers::applyOperationFromOplog(it.next(), NULL);
                                         if (state == CATCHUP) {
                                             numCatchup++;
                                         } else {
@@ -1627,7 +1627,7 @@ namespace mongo {
                                     Client::WriteContext ctx(ns, lockReasonInner);
                                     Client::Transaction txn(DB_SERIALIZABLE);
                                     while (it.moreInCurrentBatch()) {
-                                        OplogHelpers::applyOperationFromOplog(it.next());
+                                        OplogHelpers::applyOperationFromOplog(it.next(), NULL);
                                         if (state == CATCHUP) {
                                             numCatchup++;
                                         } else {
@@ -1677,7 +1677,7 @@ namespace mongo {
                         }
                         SpillableVectorIterator it(op, conn.conn(), MigrateFromStatus::MIGRATE_LOG_REF_NS);
                         while (it.more()) {
-                            OplogHelpers::applyOperationFromOplog(it.next());
+                            OplogHelpers::applyOperationFromOplog(it.next(), NULL);
                             if (state == CATCHUP) {
                                 numCatchup++;
                             } else {
@@ -2150,7 +2150,7 @@ namespace mongo {
                 BSONObj mod = it->Obj();
                 vector<BSONElement> logObjElts = mod["a"].Array();
                 for (vector<BSONElement>::const_iterator lit = logObjElts.begin(); lit != logObjElts.end(); ++lit) {
-                    OplogHelpers::applyOperationFromOplog(lit->Obj());
+                    OplogHelpers::applyOperationFromOplog(lit->Obj(), NULL);
                 }
             }
 

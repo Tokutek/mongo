@@ -608,7 +608,8 @@ namespace mongo {
                 if (cmdObj.hasElement("keepEntry")) {
                     purgeEntry = false;
                 }
-                rollbackTransactionFromOplog(oplogEntry, purgeEntry);
+                RollbackDocsMap docsMap; // stores the documents we need to get images of
+                rollbackTransactionFromOplog(oplogEntry, purgeEntry, &docsMap);
             }
             catch (std::exception& e2) {
                 log() << "Caught std::exception during replUndoOplogEntry" << e2.what() << endl;

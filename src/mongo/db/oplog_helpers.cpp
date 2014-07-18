@@ -27,6 +27,8 @@
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/stats/counters.h"
 #include "mongo/db/relock.h"
+#include "mongo/db/ops/count.h"
+#include "mongo/db/query_optimizer.h"
 
 // BSON fields for oplog entries
 static const char *KEY_STR_OP_NAME = "op";
@@ -249,6 +251,19 @@ namespace mongo {
                 uasserted(17293, "The operation is not supported for replication");
             }
         }
+
+        // used for rolling back inserts and deletes
+        static bool rowInDocsMap(const char *ns, const BSONObj &op, const char* opStr, RollbackDocsMap* docsMap) {
+            if (docsMap == NULL) {
+                return false;
+            }
+            LOCK_REASON(lockReason, "repl: checking docsMap before an insert or delete");
+            Client::ReadContext ctx(ns, lockReason);
+            Collection *cl = getCollection(ns);
+            const BSONObj row = op[opStr].Obj();
+            const BSONObj pk = cl->getValidatedPKFromObject(row);
+            return docsMap->docExists(ns,pk);
+        }
         
         static void runColdIndexFromOplog(const char *ns, const BSONObj &row) {
             LOCK_REASON(lockReason, "repl: cold index build");
@@ -374,9 +389,12 @@ namespace mongo {
             cl->notifyOfWriteOp();
         }
 
-        static void runCappedInsertFromOplog(const char *ns, const BSONObj &op) {
+        static void runCappedInsertFromOplog(const char *ns, const BSONObj &op, RollbackDocsMap* docsMap) {
             const BSONObj pk = op[KEY_STR_PK].Obj();
             const BSONObj row = op[KEY_STR_ROW].Obj();
+            if (docsMap && docsMap->docExists(ns,pk)) {
+                return; // do nothing if it is in the docsMap
+            }
             try {
                 LOCK_REASON(lockReason, "repl: applying capped insert");
                 Client::ReadContext ctx(ns, lockReason);
@@ -409,14 +427,15 @@ namespace mongo {
             runDeleteFromOplogWithLock(ns, op);
         }
         
-        static void runCappedDeleteFromOplog(const char *ns, const BSONObj &op) {
+        static void runCappedDeleteFromOplog(const char *ns, const BSONObj &op, RollbackDocsMap* docsMap) {
             LOCK_REASON(lockReason, "repl: applying capped delete");
-            Client::ReadContext ctx(ns, lockReason);
-            Collection *cl = getCollection(ns);
-
             const BSONObj row = op[KEY_STR_ROW].Obj();
             const BSONObj pk = op[KEY_STR_PK].Obj();
-
+            if (docsMap && docsMap->docExists(ns,pk)) {
+                return; // do nothing if it is in the docsMap
+            }
+            Client::ReadContext ctx(ns, lockReason);
+            Collection *cl = getCollection(ns);
             verify(cl->isCapped());
             CappedCollection *cappedCl = cl->as<CappedCollection>();
             const uint64_t flags = Collection::NO_LOCKTREE;
@@ -424,40 +443,69 @@ namespace mongo {
             cl->notifyOfWriteOp();
         }
 
+        static bool runUpdateFromOplogWithDocsMap(
+            const char* ns,
+            const BSONObj &pk,
+            const BSONObj &oldObj,
+            BSONObj newObj,
+            Collection *cl,
+            const RollbackDocsMap* docsMap
+            )
+        {
+            bool oldObjExistsInDocsMap = docsMap && docsMap->docExists(ns, pk);
+            bool newObjExistsInDocsMap = false;
+            if (cl->isPKHidden()) {
+                newObjExistsInDocsMap = oldObjExistsInDocsMap;
+            }
+            else {
+                const BSONObj newPK = cl->getValidatedPKFromObject(newObj);
+                newObjExistsInDocsMap = docsMap && docsMap->docExists(ns, newPK);
+            }
+            if (!oldObjExistsInDocsMap && !newObjExistsInDocsMap) {
+                return false;
+            }
+            // now we are in the weird case of one existing in docsMap
+            // and the other not existing in docsMap. Not sure this is possible
+            else if (!oldObjExistsInDocsMap) {
+                // delete old row
+                verify(!cl->isPKHidden());
+                runRowDelete(newObj, cl);
+            }
+            else if (!newObjExistsInDocsMap) {
+                verify(!cl->isPKHidden());
+                const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
+                BSONObj obj = newObj;
+                insertOneObject(cl, obj, flags);
+            }
+            else {
+                // NO-OP
+                // just keeping this here so I can logically reason
+                // about this code in the future.
+                // This is the case where both old and new exist in docsMap,
+                // and in this case, we do nothing.
+            }
+            return true;
+        }
+
         static void runUpdateFromOplogWithLock(
             const char* ns,
             const BSONObj &pk,
             const BSONObj &oldObj,
             BSONObj newObj,
-            bool isRollback
+            RollbackDocsMap* docsMap
             )
         {
             Collection *cl = getCollection(ns);
 
+            if (runUpdateFromOplogWithDocsMap(ns, pk, oldObj, newObj, cl, docsMap)) {
+                return;
+            }
+
             uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
-            if (isRollback) {
-                if (cl->isPKHidden()) {
-                    // if this is a rollback, then the newObj is what is in the
-                    // collections, that we want to replace with oldObj
-                    // with a hidden PK, we know the PK cannot change
-                    BSONObj oldObjCopy = oldObj.copy(); // to get around constness, it's rollback, so we don't care about memcpy
-                    updateOneObject(cl, pk, newObj, oldObjCopy, BSONObj(), false, flags);
-                }
-                else {
-                    // the pk is not hidden, so it may change
-                    // even though this is inefficient, just do a delete followed by an insert
-                    LOG(6) << "update rollback: running delete and insert on " << oldObj << " " << newObj << rsLog;
-                    runRowDelete(newObj, cl);
-                    runNonSystemInsertFromOplogWithLock(ns, oldObj);
-                }
-            }
-            else {
-                // normal replication case
-                updateOneObject(cl, pk, oldObj, newObj, BSONObj(), false, flags);
-            }
+            updateOneObject(cl, pk, oldObj, newObj, BSONObj(), false, flags);
         }
 
-        static void runUpdateFromOplog(const char *ns, const BSONObj &op, bool isRollback) {
+        static void runUpdateFromOplog(const char *ns, const BSONObj &op, RollbackDocsMap* docsMap) {
             const char *names[] = {
                 KEY_STR_PK,
                 KEY_STR_OLD_ROW, 
@@ -474,12 +522,12 @@ namespace mongo {
             try {
                 LOCK_REASON(lockReason, "repl: applying update");
                 Client::ReadContext ctx(ns, lockReason);
-                runUpdateFromOplogWithLock(ns, pk, oldObj, newObj, isRollback);
+                runUpdateFromOplogWithLock(ns, pk, oldObj, newObj, docsMap);
             }
             catch (RetryWithWriteLock &e) {
                 LOCK_REASON(lockReason, "repl: applying update with write lock");
                 Client::WriteContext ctx(ns, lockReason);
-                runUpdateFromOplogWithLock(ns, pk, oldObj, newObj, isRollback);
+                runUpdateFromOplogWithLock(ns, pk, oldObj, newObj, docsMap);
             }
         }
 
@@ -488,42 +536,31 @@ namespace mongo {
             const BSONObj &pk,
             const BSONObj &oldObj,
             const BSONObj &updateobj,
-            bool isRollback
+            const RollbackDocsMap* docsMap
             )
         {
             Collection *cl = getCollection(ns);
             scoped_ptr<ModSet> mods(new ModSet(updateobj, cl->indexKeys()));
             auto_ptr<ModSetState> mss = mods->prepare(oldObj);
             BSONObj newObj = mss->createNewFromMods();
+
+            if (runUpdateFromOplogWithDocsMap(ns, pk, oldObj, newObj, cl, docsMap)) {
+                return;
+            }
             // Make sure we pass the best hint in the case of an unindexed update
 
-            if (isRollback) {
-                // we've generated the newObj and the oldObj, reuse code.
-                // This code is correct for both cases, but we only run it in this
-                // case because it is more inefficient.  It never uses
-                // the updateUsingMods path
-                runUpdateFromOplogWithLock(
-                    ns,
-                    pk,
-                    oldObj,
-                    newObj,
-                    isRollback
-                    );
+            uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
+            if (mods->isIndexed() <= 0) {
+                flags |= Collection::KEYS_UNAFFECTED_HINT;
             }
-            else {
-                uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
-                if (mods->isIndexed() <= 0) {
-                    flags |= Collection::KEYS_UNAFFECTED_HINT;
-                }
-                // normal replication case
-                // optimization for later: if we know we are using
-                // the updateUsingMods path in updateOneObject,
-                // then we have constructed newObj unnecessarily
-                updateOneObject(cl, pk, oldObj, newObj, updateobj, false, flags);
-            }
+            // normal replication case
+            // optimization for later: if we know we are using
+            // the updateUsingMods path in updateOneObject,
+            // then we have constructed newObj unnecessarily
+            updateOneObject(cl, pk, oldObj, newObj, updateobj, false, flags);
         }
 
-        static void runUpdateModsWithRowFromOplog(const char *ns, const BSONObj &op, bool isRollback) {
+        static void runUpdateModsWithRowFromOplog(const char *ns, const BSONObj &op, const RollbackDocsMap* docsMap) {
             const char *names[] = {
                 KEY_STR_PK,
                 KEY_STR_OLD_ROW,
@@ -541,12 +578,12 @@ namespace mongo {
             try {
                 LOCK_REASON(lockReason, "repl: applying update");
                 Client::ReadContext ctx(ns, lockReason);
-                runUpdateModsWithRowWithLock(ns, pk, oldObj, updateobj, isRollback);
+                runUpdateModsWithRowWithLock(ns, pk, oldObj, updateobj, docsMap);
             }
             catch (RetryWithWriteLock &e) {
                 LOCK_REASON(lockReason, "repl: applying update with write lock");
                 Client::WriteContext ctx(ns, lockReason);
-                runUpdateModsWithRowWithLock(ns, pk, oldObj, updateobj, isRollback);
+                runUpdateModsWithRowWithLock(ns, pk, oldObj, updateobj, docsMap);
             }
         }
 
@@ -560,13 +597,14 @@ namespace mongo {
             massert(17220, str::stream() << "Command " << op.str() << " failed under runCommandFromOplog: " << ob.done(), ret);
         }
 
-        static void rollbackCommandFromOplog(const char *ns, const BSONObj &op) {
-            BSONObj command = op[KEY_STR_ROW].embeddedObject();
-            log() << "Cannot rollback command " << op << rsLog;
-            throw RollbackOplogException(str::stream() << "Could not rollback command " << command << " on ns " << ns);
-        }
-
-        void applyOperationFromOplog(const BSONObj& op) {
+        // apply an operation that comes from the oplog
+        // If docsMap is non-NULL, that means we are running during rollback
+        // and that there may be documents to ignore. It is the responsibility of
+        // each case below to handle the fact that we are running during rollback
+        // and act accordingly. For instance, some inserts may ignore the operation
+        // because the document is in the docsMap, while a command may throw
+        // a RollbackOplogException because it cannot be run during rollback
+        void applyOperationFromOplog(const BSONObj& op, RollbackDocsMap* docsMap) {
             LOG(6) << "applying op: " << op << endl;
             OpCounters* opCounters = &replOpCounters;
             const char *names[] = { 
@@ -578,53 +616,140 @@ namespace mongo {
             const char *ns = fields[0].valuestrsafe();
             const char *opType = fields[1].valuestrsafe();
             if (strcmp(opType, OP_STR_INSERT) == 0) {
-                opCounters->gotInsert();
-                runInsertFromOplog(ns, op);
+                if (!rowInDocsMap(ns, op, KEY_STR_ROW, docsMap)) {
+                    opCounters->gotInsert();
+                    runInsertFromOplog(ns, op);
+                }
             }
             else if (strcmp(opType, OP_STR_UPDATE) == 0) {
                 opCounters->gotUpdate();
-                runUpdateFromOplog(ns, op, false);
+                runUpdateFromOplog(ns, op, docsMap);
             }
             else if (strcmp(opType, OP_STR_UPDATE_ROW_WITH_MOD) == 0) {
                 opCounters->gotUpdate();
-                runUpdateModsWithRowFromOplog(ns, op, false);
+                runUpdateModsWithRowFromOplog(ns, op, docsMap);
             }
             else if (strcmp(opType, OP_STR_DELETE) == 0) {
+                if (!rowInDocsMap(ns, op, KEY_STR_ROW, docsMap)) {
+                    opCounters->gotDelete();
+                    runDeleteFromOplog(ns, op);
+                }
+            }
+            else if (strcmp(opType, OP_STR_CAPPED_INSERT) == 0) {
+                opCounters->gotInsert();
+                runCappedInsertFromOplog(ns, op, docsMap);
+            }
+            else if (strcmp(opType, OP_STR_CAPPED_DELETE) == 0) {
                 opCounters->gotDelete();
-                runDeleteFromOplog(ns, op);
+                runCappedDeleteFromOplog(ns, op, docsMap);
             }
             else if (strcmp(opType, OP_STR_COMMAND) == 0) {
+                // for now, every command should thrown an exception if run during
+                // rollback. Soon, we will make this finer grained. For example, dropping
+                // an index should not be an issue, whereas dropping or creating a
+                // collection should remove all instances in docsMap for the associated
+                // collection.
+                if (docsMap != NULL) {
+                    throw RollbackOplogException(str::stream() << "Cannot apply command during rollback op: " << op);
+                }
                 opCounters->gotCommand();
                 runCommandFromOplog(ns, op);
             }
             else if (strcmp(opType, OP_STR_COMMENT) == 0) {
                 // no-op
             }
-            else if (strcmp(opType, OP_STR_CAPPED_INSERT) == 0) {
-                opCounters->gotInsert();
-                runCappedInsertFromOplog(ns, op);
-            }
-            else if (strcmp(opType, OP_STR_CAPPED_DELETE) == 0) {
-                opCounters->gotDelete();
-                runCappedDeleteFromOplog(ns, op);
-            }
             else {
                 throw MsgAssertionException( 14825 , ErrorMsg("error in applyOperation : unknown opType ", *opType) );
             }
         }
 
-        static void runRollbackInsertFromOplog(const char *ns, const BSONObj &op) {
+        static void rollbackInsertFromOplog(const char *ns, const BSONObj &op, RollbackDocsMap* docsMap) {
             // handle add index case
             if (nsToCollectionSubstring(ns) == "system.indexes") {
                 throw RollbackOplogException(str::stream() << "Not rolling back an add index on " << ns << ". Op: " << op.toString(false, true));
             }
             else {
                 // the rollback of a normal insert is to do the delete
-                runDeleteFromOplog(ns, op);
+                if (!rowInDocsMap(ns, op, KEY_STR_ROW, docsMap)) {
+                    runDeleteFromOplog(ns, op);
+                }
             }
         }
 
-        void rollbackOperationFromOplog(const BSONObj& op) {
+        static void rollbackUpdateFromOplog(const char *ns, const BSONObj &op, RollbackDocsMap* docsMap) {
+            const BSONObj pk = op[KEY_STR_PK].Obj();
+            const BSONObj newObj = op[KEY_STR_NEW_ROW].Obj(); // must exist
+            LOCK_REASON(lockReason, "repl: checking newRow for rollback");
+            Client::ReadContext ctx(ns, lockReason);
+            Collection *cl = getCollection(ns);
+            if (!cl->isPKHidden()) {
+                docsMap->addDoc(ns, pk);
+                const BSONObj newPK = cl->getValidatedPKFromObject(newObj);
+                docsMap->addDoc(ns, newPK);
+            }
+            else {
+                // do the reverse update
+                BSONObj oldObj = op[KEY_STR_OLD_ROW].Obj(); // must exist
+                runUpdateFromOplogWithLock(
+                    ns,
+                    pk,
+                    newObj,
+                    oldObj,
+                    NULL
+                    );                
+            }
+        }
+
+        static void rollbackUpdateModsFromOplog(const char *ns, const BSONObj &op, RollbackDocsMap* docsMap) {
+            const BSONObj pk = op[KEY_STR_PK].Obj();
+            const BSONObj oldObj = op[KEY_STR_OLD_ROW].Obj(); // must exist
+            const BSONObj updateobj = op[KEY_STR_MODS].Obj(); // must exist
+            {
+                LOCK_REASON(lockReason, "repl: checking newRow with mods for rollback");
+                Client::ReadContext ctx(ns, lockReason);
+                Collection *cl = getCollection(ns);
+                scoped_ptr<ModSet> mods(new ModSet(updateobj, cl->indexKeys()));
+                auto_ptr<ModSetState> mss = mods->prepare(oldObj);
+                BSONObj newObj = mss->createNewFromMods();
+                if (!cl->isPKHidden()) {
+                    docsMap->addDoc(ns, pk);
+                    const BSONObj newPK = cl->getValidatedPKFromObject(newObj);
+                    docsMap->addDoc(ns, newPK);
+                }
+                else {
+                    runUpdateFromOplogWithLock(
+                        ns,
+                        pk,
+                        newObj,
+                        oldObj,
+                        NULL
+                        );                
+                }
+            }
+        }
+
+        static void rollbackDeleteFromOplog(const char *ns, const BSONObj &op, RollbackDocsMap* docsMap) {
+            // the rollback of a delete is to do the insert
+            if (!rowInDocsMap(ns, op, KEY_STR_ROW, docsMap)) {
+                runInsertFromOplog(ns, op);
+            }
+        }
+
+        static void rollbackCappedInsertFromOplog(const char *ns, const BSONObj &op, RollbackDocsMap* docsMap) {
+            runCappedDeleteFromOplog(ns, op, docsMap);
+        }
+
+        static void rollbackCappedDeleteFromOplog(const char *ns, const BSONObj &op, RollbackDocsMap* docsMap) {
+            runCappedInsertFromOplog(ns, op, docsMap);
+        }
+
+        static void rollbackCommandFromOplog(const char *ns, const BSONObj &op) {
+            BSONObj command = op[KEY_STR_ROW].embeddedObject();
+            log() << "Cannot rollback command " << op << rsLog;
+            throw RollbackOplogException(str::stream() << "Could not rollback command " << command << " on ns " << ns);
+        }
+
+        void rollbackOperationFromOplog(const BSONObj& op, RollbackDocsMap* docsMap) {
             LOG(6) << "rolling back op: " << op << endl;
             const char *names[] = { 
                 KEY_STR_NS, 
@@ -635,29 +760,28 @@ namespace mongo {
             const char *ns = fields[0].valuestrsafe();
             const char *opType = fields[1].valuestrsafe();
             if (strcmp(opType, OP_STR_INSERT) == 0) {
-                runRollbackInsertFromOplog(ns, op);
+                rollbackInsertFromOplog(ns, op, docsMap);
             }
             else if (strcmp(opType, OP_STR_UPDATE) == 0) {
-                runUpdateFromOplog(ns, op, true);
+                rollbackUpdateFromOplog(ns, op, docsMap);
             }
             else if (strcmp(opType, OP_STR_UPDATE_ROW_WITH_MOD) == 0) {
-                runUpdateModsWithRowFromOplog(ns, op, true);
+                rollbackUpdateModsFromOplog(ns, op, docsMap);
             }
             else if (strcmp(opType, OP_STR_DELETE) == 0) {
-                // the rollback of a delete is to do the insert
-                runInsertFromOplog(ns, op);
+                rollbackDeleteFromOplog(ns, op, docsMap);
+            }
+            else if (strcmp(opType, OP_STR_CAPPED_INSERT) == 0) {
+                rollbackCappedInsertFromOplog(ns, op, docsMap);
+            }
+            else if (strcmp(opType, OP_STR_CAPPED_DELETE) == 0) {
+                rollbackCappedDeleteFromOplog(ns, op, docsMap);
             }
             else if (strcmp(opType, OP_STR_COMMAND) == 0) {
                 rollbackCommandFromOplog(ns, op);
             }
             else if (strcmp(opType, OP_STR_COMMENT) == 0) {
                 // no-op
-            }
-            else if (strcmp(opType, OP_STR_CAPPED_INSERT) == 0) {
-                runCappedDeleteFromOplog(ns, op);
-            }
-            else if (strcmp(opType, OP_STR_CAPPED_DELETE) == 0) {
-                runCappedInsertFromOplog(ns, op);
             }
             else {
                 throw MsgAssertionException( 16795 , ErrorMsg("error in applyOperation : unknown opType ", *opType) );
@@ -666,4 +790,125 @@ namespace mongo {
 
     } // namespace OplogHelpers
 
+    void RollbackDocsMap::initialize() {
+        LOCK_REASON(lockReason, "repl rollback: initializing RollbackDocsMap");
+        Client::WriteContext ctx(rsRollbackDocs, lockReason);
+        Client::Transaction transaction(DB_SERIALIZABLE);
+        string errmsg;
+        Collection* cl = getCollection(rsRollbackDocs);
+        if (cl != NULL) {
+            BSONObjBuilder result;
+            cl->drop(errmsg,result);
+            cl = NULL;
+        }
+        bool ret = userCreateNS(rsRollbackDocs, BSONObj(), errmsg, false);
+        verify(ret);
+        // sanity check that we get the collection
+        cl = getCollection(rsRollbackDocs);
+        verify(cl);
+        transaction.commit();
+    }
+
+    void RollbackDocsMap::dropDocsMap() {
+        LOCK_REASON(lockReason, "repl rollback: dropping RollbackDocsMap");
+        Client::WriteContext ctx(rsRollbackDocs, lockReason);
+        string errmsg;
+        Collection* cl = getCollection(rsRollbackDocs);
+        if (cl != NULL) {
+            BSONObjBuilder result;
+            cl->drop(errmsg,result);
+        }
+    }
+
+    bool RollbackDocsMap::docExists(const char* ns, const BSONObj pk) const {
+        // this function should be called from repl with a transaction already created
+        LOCK_REASON(lockReason, "repl rollback: RollbackDocsMap::docExists");
+        Client::ReadContext ctx(rsRollbackDocs, lockReason);
+        BSONObj result;
+        Collection* cl = getCollection(rsRollbackDocs);
+        verify(cl);
+        BSONObjBuilder docBuilder;
+        BSONObjBuilder idBuilder(docBuilder.subobjStart(""));
+        idBuilder.append("ns", ns);
+        idBuilder.append("pk", pk);
+        idBuilder.done();
+        bool ret = cl->findByPK(docBuilder.done(), result);
+        return ret;
+
+    }
+    
+    void RollbackDocsMap::addDoc(const char* ns, const BSONObj pk) {
+        // this function should be called from repl with a transaction already created
+        LOCK_REASON(lockReason, "repl rollback: RollbackDocsMap::addDoc");
+        Client::ReadContext ctx(rsRollbackDocs, lockReason);
+        Collection* cl = getCollection(rsRollbackDocs);
+        verify(cl);
+        BSONObjBuilder docBuilder;
+        BSONObjBuilder idBuilder(docBuilder.subobjStart("_id"));
+        idBuilder.append("ns", ns);
+        idBuilder.append("pk", pk);
+        idBuilder.done();
+        // by having NO_UNIQUE_CHECKS, I don't need to worry about inserting the
+        // same thing multiple times, it will just overwrite the doc with an identical one
+        const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
+        BSONObj doc = docBuilder.obj();
+        insertOneObject(cl, doc, flags);                                
+    }
+
+    long long RollbackDocsMap::size() {
+        LOCK_REASON(lockReason, "repl rollback: getting size of RollbackDocsMap");
+        Client::ReadContext ctx(rsRollbackDocs, lockReason);
+        Client::Transaction transaction(DB_READ_UNCOMMITTED);
+        string err;
+        int errCode;
+        long long ret = runCount(rsRollbackDocs, BSONObj(), err, errCode);
+        verify(ret >= 0);
+        transaction.commit();
+        return ret;
+    }
+
+    void RollbackDocsMap::startIterator() {
+        LOCK_REASON(lockReason, "repl rollback: starting iterator of rollback docs");
+        Client::ReadContext ctx(rsRollbackDocs, lockReason);
+        BSONObjBuilder queryBuilder;
+        BSONObjBuilder idBuilder(queryBuilder.subobjStart("_id"));
+        idBuilder.appendMinKey("$gt");
+        idBuilder.done();
+        BSONObj result;
+        LOG(2) << "starting iterator with query " << queryBuilder.done() << rsLog;
+        bool ret = Collection::findOne(rsRollbackDocs, queryBuilder.done(), result, false);
+        LOG(2) << "iterator started with " << ret << " returned" << rsLog;
+        if (ret) {
+            _current = result["_id"].Obj().copy();
+            LOG(2) << "Setting _current of iterator to " << _current << rsLog;
+        }
+        else {
+            _current = BSONObj();
+        }
+    }
+    bool RollbackDocsMap::ok() {
+        return !_current.isEmpty();
+    }
+    void RollbackDocsMap::advance() {
+        verify(ok());
+        LOCK_REASON(lockReason, "repl rollback: advancing iterator of rollback docs");
+        Client::ReadContext ctx(rsRollbackDocs, lockReason);
+        const BSONObj query = BSON("_id" << BSON("$gt" << _current));
+        BSONObj result;
+        LOG(2) << "advancing iterator with query " << query << rsLog;
+        bool ret = Collection::findOne(rsRollbackDocs, query, result, true);
+        LOG(2) << "iterator advanced with " << ret << " returned" << rsLog;
+        if (ret) {
+            _current = result["_id"].Obj().copy();
+            LOG(2) << "Setting _current of iterator to " << _current << rsLog;
+        }
+        else {
+            _current = BSONObj();
+        }
+    }
+
+    DocID RollbackDocsMap::current() {
+        verify(ok());
+        return DocID(_current["ns"].String().c_str(), _current["pk"].Obj());
+    }
 } // namespace mongo

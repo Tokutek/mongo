@@ -47,6 +47,18 @@ namespace mongo {
     static void removeFromNamespacesCatalog(const StringData &ns);
     static void removeFromIndexesCatalog(const StringData &ns, const StringData &name);
 
+    void fillPKWithFields(const BSONObj pk, const BSONObj pkPattern, BSONObjBuilder& result) {
+        BSONObjIterator patternIT(pkPattern); 
+        BSONObjIterator pkIT(pk);
+        while (pkIT.more()) {
+            BSONElement pkElement = *pkIT;
+            result.appendAs(pkElement, (*patternIT).fieldName());
+            patternIT.next();
+            pkIT.next();
+        }
+        massert(17339, str::stream() << "There should be no more PK fields available for pk " << pk, !pkIT.more());
+    }
+
     CollectionMap *collectionMap(const StringData &ns) {
         Database *database = cc().database();
         verify(database);
@@ -3352,17 +3364,8 @@ namespace mongo {
             // field names back. Probably not the most efficient code,
             // but it does not need to be. This function probably is not called
             // very often
-            BSONObj pivot = curr["max"].Obj();
             BSONObjBuilder filledPivot;
-            BSONObjIterator pkIT(_pk); 
-            BSONObjIterator pivotIT(pivot);
-            while (pivotIT.more()) {
-                BSONElement pivotElement = *pivotIT;
-                filledPivot.appendAs(pivotElement, (*pkIT).fieldName());
-                pivotIT.next();
-                pkIT.next();
-            }
-            massert(17339, str::stream() << "There should be no more PK fields available for pivot " << curr, !pkIT.more());
+            fillPKWithFields(curr["max"].Obj(), _pk, filledPivot);
             BSONObjBuilder currWithFilledPivot;
             cloneBSONWithFieldChanged(currWithFilledPivot, curr, "max", filledPivot.done(), false);
             b.append(currWithFilledPivot.obj());

@@ -968,9 +968,8 @@ namespace mongo {
         virtual bool adminOnly() const { return true; }
         virtual bool requiresAuth() { return true; }
         virtual bool lockGlobally() const { return true; }
-        virtual bool logTheOp() {
-            return true; // can't log steps when doing fast rename within a db, so always log the op rather than individual steps comprising it.
-        }
+        // can't log steps when doing fast rename within a db, so always log the op rather than individual steps comprising it.
+        virtual bool logTheOp() { return true; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {
@@ -1717,7 +1716,7 @@ namespace mongo {
     class EmptyCapped : public ModifyCommand {
     public:
         EmptyCapped() : ModifyCommand( "emptycapped" ) {}
-        virtual bool logTheOp() { return true; }
+        virtual bool logTheOp() { return false; }
         // No auth needed because it only works when enabled via command line.
         virtual bool requiresAuth() { return false; }
         virtual void addRequiredPrivileges(const std::string& dbname,

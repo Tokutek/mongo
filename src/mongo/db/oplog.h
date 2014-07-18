@@ -28,6 +28,7 @@
 #include "mongo/db/oplogreader.h"
 #include "mongo/util/optime.h"
 #include "mongo/util/timer.h"
+#include "mongo/db/oplog_helpers.h"
 
 namespace mongo {
 
@@ -47,8 +48,8 @@ namespace mongo {
     bool gtidExistsInOplog(GTID gtid);
     void writeEntryToOplogRefs(BSONObj entry);
     void replicateFullTransactionToOplog(BSONObj& o, OplogReader& r, bool* bigTxn);
-    void applyTransactionFromOplog(BSONObj entry);
-    void rollbackTransactionFromOplog(BSONObj entry, bool purgeEntry);
+    void applyTransactionFromOplog(BSONObj entry, RollbackDocsMap* docsMap);
+    void rollbackTransactionFromOplog(BSONObj entry, bool purgeEntry, RollbackDocsMap* docsMap);
     void purgeEntryFromOplog(BSONObj entry);
 
     // @return the age, in milliseconds, when an oplog entry expires.

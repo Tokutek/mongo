@@ -21,6 +21,7 @@
 
 #include "mongo/client/constants.h"
 #include "mongo/client/dbclientcursor.h"
+#include "mongo/db/repl/rs_optime.h"
 
 namespace mongo {
 
@@ -46,8 +47,12 @@ namespace mongo {
         }
         shared_ptr<DBClientConnection> conn_shared() { return _conn; }
         DBClientConnection* conn() { return _conn.get(); }
-        BSONObj getLastOp(const char *ns) {
-            return conn()->findOne(ns, Query().sort(reverseIDObj), 0, QueryOption_SlaveOk);
+        BSONObj getLastOp() {
+            return conn()->findOne(rsoplog, Query().sort(reverseIDObj), 0, QueryOption_SlaveOk);
+        }
+
+        BSONObj findOpWithGTID(GTID gtid) {
+            return conn()->findOne(rsoplog, Query(BSON("_id" << gtid)), 0, QueryOption_SlaveOk);
         }
 
         /* ok to call if already connected */

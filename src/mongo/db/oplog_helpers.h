@@ -21,6 +21,41 @@
 
 namespace mongo {
 
+    // objects used for rollback
+    class DocID {
+    public:
+        const string coll;
+        const BSONObj pk;
+        DocID(const char* ns, const BSONObj& primaryKey) : coll(ns), pk(primaryKey.copy()){
+        }
+    };
+
+    struct DocIDCmp {
+        bool operator()( const DocID& l, const DocID& r ) const {
+            int stringCmp = l.coll.compare(r.coll);
+            if (stringCmp != 0) {
+                return stringCmp < 0;
+            }
+            return l.pk.woCompare(r.pk) < 0;
+        }
+    };
+
+    class RollbackDocsMap {
+        BSONObj _current;
+    public:
+        RollbackDocsMap() {}
+        void initialize();
+        static void dropDocsMap();
+        bool docExists(const char* ns, const BSONObj pk) const;
+        void addDoc(const char* ns, const BSONObj pk);
+        long long size();
+
+        void startIterator();
+        bool ok();
+        void advance();
+        DocID current();
+    };
+
     namespace OplogHelpers {
 
         // helper functions for sharding
@@ -48,9 +83,9 @@ namespace mongo {
         void logUnsupportedOperation(const char *ns);
         // Used by secondaries to process oplog entries
 
-        void applyOperationFromOplog(const BSONObj& op);
+        void applyOperationFromOplog(const BSONObj& op, RollbackDocsMap* docsMap);
 
-        void rollbackOperationFromOplog(const BSONObj& op);
+        void rollbackOperationFromOplog(const BSONObj& op, RollbackDocsMap* docsMap);
 
     }
 
