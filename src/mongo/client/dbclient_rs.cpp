@@ -1685,8 +1685,8 @@ namespace mongo {
                                       bool digestPassword ) {
         try {
             authAny(BSON(saslCommandMechanismFieldName << "MONGODB-CR" <<
-                         saslCommandPrincipalSourceFieldName << dbname <<
-                         saslCommandPrincipalFieldName << username <<
+                         saslCommandUserSourceFieldName << dbname <<
+                         saslCommandUserFieldName << username <<
                          saslCommandPasswordFieldName << password_text <<
                          saslCommandDigestPasswordFieldName << digestPassword));
             return true;
@@ -1726,7 +1726,7 @@ namespace mongo {
                 conn->auth( params );
 
                 // Cache the new auth information since we've now validated it's good
-                _auths[params[saslCommandPrincipalSourceFieldName].str()] = params.getOwned();
+                _auths[params[saslCommandUserSourceFieldName].str()] = params.getOwned();
 
                 // Ensure the only child connection open is the one we authenticated against - other
                 // child connections may not have full authentication information.
