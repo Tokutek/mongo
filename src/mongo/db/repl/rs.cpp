@@ -21,6 +21,7 @@
 #include "mongo/base/owned_pointer_vector.h"
 #include "mongo/base/status.h"
 #include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/auth/principal.h"
 #include "mongo/db/client.h"
 #include "mongo/db/cmdline.h"
@@ -1040,7 +1041,7 @@ namespace mongo {
     void replLocalAuth() {
         if (!AuthorizationManager::isAuthEnabled())
             return;
-        cc().getAuthorizationManager()->grantInternalAuthorization("_repl");
+        cc().getAuthorizationSession()->grantInternalAuthorization("_repl");
     }
 
     // for testing only

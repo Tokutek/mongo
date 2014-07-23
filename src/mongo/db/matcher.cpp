@@ -73,7 +73,7 @@ namespace mongo {
                 return;
             _initCalled = true;
 
-            const string userToken = ClientBasic::getCurrent()->getAuthorizationManager()
+            const string userToken = ClientBasic::getCurrent()->getAuthorizationSession()
                                                               ->getAuthenticatedPrincipalNamesToken();
             string dbstr = nsToDatabase(_ns);
             _scope = globalScriptEngine->getPooledScope( dbstr.c_str(), "where" + userToken );

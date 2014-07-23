@@ -32,6 +32,7 @@ add_library(authcore STATIC
   authorization_manager
   role_graph
   role_name
+  authorization_session
   principal
   principal_name
   principal_set
@@ -77,7 +78,7 @@ if (BUILD_TESTING)
       principal_set_test
       privilege_set_test
       role_graph_test
-      authorization_manager_test
+      authorization_session_test
       )
     add_executable(${test} ${test})
     add_dependencies(${test} generate_error_codes generate_action_types)

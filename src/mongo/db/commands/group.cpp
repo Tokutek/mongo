@@ -75,7 +75,7 @@ namespace mongo {
                     string& errmsg,
                     BSONObjBuilder& result ) {
 
-            const string userToken = ClientBasic::getCurrent()->getAuthorizationManager()
+            const string userToken = ClientBasic::getCurrent()->getAuthorizationSession()
                                                               ->getAuthenticatedPrincipalNamesToken();
             auto_ptr<Scope> s = globalScriptEngine->getPooledScope(realdbname, "group" + userToken);
 

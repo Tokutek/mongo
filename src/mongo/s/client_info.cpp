@@ -19,7 +19,7 @@
 
 #include "pch.h"
 
-#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/auth/auth_external_state_s.h"
 #include "server.h"
 #include "../util/scopeguard.h"
@@ -78,14 +78,14 @@ namespace mongo {
         _cur = _prev;
         _prev = temp;
         _cur->clear();
-        getAuthorizationManager()->startRequest();
+        getAuthorizationSession()->startRequest();
     }
 
     ClientInfo* ClientInfo::create(AbstractMessagingPort* messagingPort) {
         ClientInfo * info = _tlInfo.get();
         massert(17007, "A ClientInfo already exists for this thread", !info);
         info = new ClientInfo(messagingPort);
-        info->setAuthorizationManager(new AuthorizationManager(new AuthExternalStateMongos()));
+        info->setAuthorizationSession(new AuthorizationSession(new AuthExternalStateMongos()));
         _tlInfo.reset( info );
         info->newRequest();
         return info;

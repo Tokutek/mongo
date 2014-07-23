@@ -37,7 +37,7 @@
 #include "mongo/bson/util/atomic_int.h"
 
 #include "mongo/db/auth/action_type.h"
-#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/databaseholder.h"
 #include "mongo/db/introspect.h"
 #include "mongo/db/repl.h"
@@ -140,7 +140,7 @@ namespace mongo {
     void inProgCmd( Message &m, DbResponse &dbresponse ) {
         BSONObjBuilder b;
 
-        if (!cc().getAuthorizationManager()->checkAuthorization(
+        if (!cc().getAuthorizationSession()->checkAuthorization(
                 AuthorizationManager::SERVER_RESOURCE_NAME, ActionType::inprog)) {
             b.append("err", "unauthorized");
         }
@@ -186,7 +186,7 @@ namespace mongo {
 
     void killOp( Message &m, DbResponse &dbresponse ) {
         BSONObj obj;
-        if (!cc().getAuthorizationManager()->checkAuthorization(
+        if (!cc().getAuthorizationSession()->checkAuthorization(
                 AuthorizationManager::SERVER_RESOURCE_NAME, ActionType::killop)) {
             obj = fromjson("{\"err\":\"unauthorized\"}");
         }
@@ -224,7 +224,7 @@ namespace mongo {
         try {
             if (!NamespaceString::isCommand(d.getns())) {
                 // Auth checking for Commands happens later.
-                Status status = cc().getAuthorizationManager()->checkAuthForQuery(d.getns());
+                Status status = cc().getAuthorizationSession()->checkAuthForQuery(d.getns());
                 uassert(16550, status.reason(), status.isOK());
             }
             dbresponse.exhaustNS = runQuery(m, q, op, *resp);
@@ -361,7 +361,7 @@ namespace mongo {
         globalOpCounters.gotOp( op , isCommand );
 
         Client& c = cc();
-        c.getAuthorizationManager()->startRequest();
+        c.getAuthorizationSession()->startRequest();
 
         // initialize the default OpSettings, 
         OpSettings settings;
@@ -558,7 +558,7 @@ namespace mongo {
         const bool multi = flags & UpdateOption_Multi;
         const bool broadcast = flags & UpdateOption_Broadcast;
 
-        Status status = cc().getAuthorizationManager()->checkAuthForUpdate(ns, upsert);
+        Status status = cc().getAuthorizationSession()->checkAuthForUpdate(ns, upsert);
         uassert(16538, status.reason(), status.isOK());
 
         OpSettings settings;
@@ -586,7 +586,7 @@ namespace mongo {
         DbMessage d(m);
         const char *ns = d.getns();
 
-        Status status = cc().getAuthorizationManager()->checkAuthForDelete(ns);
+        Status status = cc().getAuthorizationSession()->checkAuthForDelete(ns);
         uassert(16542, status.reason(), status.isOK());
 
         op.debug().ns = ns;
@@ -662,7 +662,7 @@ namespace mongo {
             try {
                 uassert( 16258, str::stream() << "Invalid ns [" << ns << "]", NamespaceString::isValid(ns) );
 
-                Status status = cc().getAuthorizationManager()->checkAuthForGetMore(ns);
+                Status status = cc().getAuthorizationSession()->checkAuthForGetMore(ns);
                 uassert(16543, status.reason(), status.isOK());
 
                 // I (Zardosht), am not crazy about this, but I cannot think of
@@ -923,7 +923,7 @@ namespace mongo {
         StringData coll = nsToCollectionSubstring(ns);
         // Auth checking for index writes happens later.
         if (coll != "system.indexes") {
-            Status status = cc().getAuthorizationManager()->checkAuthForInsert(ns);
+            Status status = cc().getAuthorizationSession()->checkAuthForInsert(ns);
             uassert(16544, status.reason(), status.isOK());
         }
 

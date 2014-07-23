@@ -5,6 +5,9 @@
 #include <boost/thread/thread.hpp>
 
 #include "mongo/base/counter.h"
+#include "mongo/client/dbclientinterface.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/repl.h"
 #include "mongo/util/net/message.h"
@@ -37,7 +40,7 @@ namespace mongo {
         if(!AuthorizationManager::isAuthEnabled()) {
             return true;
         }
-        if (!skipAuthCheck && !cc().getAuthorizationManager()->hasInternalAuthorization()) {
+        if (!skipAuthCheck && !cc().getAuthorizationSession()->hasInternalAuthorization()) {
             log() << "replauthenticate: requires internal authorization, failing" << endl;
             return false;
         }

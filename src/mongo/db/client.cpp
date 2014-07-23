@@ -31,7 +31,7 @@
 #include "mongo/base/status.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
-#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/auth/auth_external_state_d.h"
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/curop.h"
@@ -104,7 +104,7 @@ namespace mongo {
         Client *c = new Client(desc, mp);
         currentClient.reset(c);
         mongo::lastError.initThread();
-        c->setAuthorizationManager(new AuthorizationManager(new AuthExternalStateMongod()));
+        c->setAuthorizationSession(new AuthorizationSession(new AuthExternalStateMongod()));
         return *c;
     }
 

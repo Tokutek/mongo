@@ -21,6 +21,7 @@
 
 #include "mongo/bson/util/builder.h"
 #include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/auth/principal_set.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/database.h"
@@ -34,8 +35,10 @@
 namespace mongo {
 
 namespace {
-    void _appendUserInfo(const Client& c, BSONObjBuilder& builder, AuthorizationManager* authManager) {
-        PrincipalSet::NameIterator nameIter = authManager->getAuthenticatedPrincipalNames();
+    void _appendUserInfo(const Client& c,
+                         BSONObjBuilder& builder,
+                         AuthorizationSession* authSession) {
+        PrincipalSet::NameIterator nameIter = authSession->getAuthenticatedPrincipalNames();
 
         PrincipalName bestUser;
         if (nameIter.more())
@@ -71,8 +74,8 @@ namespace {
         currentOp.debug().append( currentOp , b );
         b.append("client", c.clientAddress());
 
-        AuthorizationManager* authManager = c.getAuthorizationManager();
-        _appendUserInfo(c, b, authManager);
+        AuthorizationSession * authSession = c.getAuthorizationSession();
+        _appendUserInfo(c, b, authSession);
 
         BSONObj p = b.done();
 
@@ -85,7 +88,7 @@ namespace {
             BSONObjBuilder b(profileBufBuilder);
             b.appendDate("ts", jsTime());
             b.append("client", c.clientAddress() );
-            _appendUserInfo(c, b, authManager);
+            _appendUserInfo(c, b, authSession);
 
             b.append("err", "profile line too large (max is 100KB)");
             if (small.size() < 100*1024){ // should be much smaller but if not don't break anything
