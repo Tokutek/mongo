@@ -14,7 +14,7 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "mongo/db/auth/auth_external_state_d.h"
+#include "mongo/db/auth/auth_session_external_state_d.h"
 
 #include "mongo/base/status.h"
 #include "mongo/client/dbclientinterface.h"
@@ -27,18 +27,18 @@
 
 namespace mongo {
 
-    AuthExternalStateMongod::AuthExternalStateMongod() {}
-    AuthExternalStateMongod::~AuthExternalStateMongod() {}
+    AuthSessionExternalStateMongod::AuthSessionExternalStateMongod() {}
+    AuthSessionExternalStateMongod::~AuthSessionExternalStateMongod() {}
 
-    void AuthExternalStateMongod::startRequest() {
+    void AuthSessionExternalStateMongod::startRequest() {
         if (!Lock::isLocked()) {
             _checkShouldAllowLocalhost();
         }
     }
 
-    bool AuthExternalStateMongod::_findUser(const string& usersNamespace,
-                                            const BSONObj& query,
-                                            BSONObj* result) const {
+    bool AuthSessionExternalStateMongod::_findUser(const string& usersNamespace,
+                                                   const BSONObj& query,
+                                                   BSONObj* result) const {
         bool ok = false;
         try {
             Client::GodScope gs;
@@ -58,8 +58,8 @@ namespace mongo {
         return ok;
     }
 
-    bool AuthExternalStateMongod::shouldIgnoreAuthChecks() const {
-        return cc().isGod() || AuthExternalStateServerCommon::shouldIgnoreAuthChecks();
+    bool AuthSessionExternalStateMongod::shouldIgnoreAuthChecks() const {
+        return cc().isGod() || AuthSessionExternalStateServerCommon::shouldIgnoreAuthChecks();
     }
 
 } // namespace mongo

@@ -17,19 +17,19 @@
 
 #include "mongo/base/disallow_copying.h"
 #include "mongo/base/status.h"
-#include "mongo/db/auth/auth_external_state_server_common.h"
+#include "mongo/db/auth/auth_session_external_state_server_common.h"
 
 namespace mongo {
 
     /**
      * The implementation of AuthExternalState functionality for mongos.
      */
-    class AuthExternalStateMongos : public AuthExternalStateServerCommon {
-        MONGO_DISALLOW_COPYING(AuthExternalStateMongos);
+    class AuthSessionExternalStateMongos : public AuthSessionExternalStateServerCommon {
+        MONGO_DISALLOW_COPYING(AuthSessionExternalStateMongos);
 
     public:
-        AuthExternalStateMongos();
-        virtual ~AuthExternalStateMongos();
+        AuthSessionExternalStateMongos();
+        virtual ~AuthSessionExternalStateMongos();
 
         virtual void startRequest();
 

@@ -18,23 +18,23 @@
 
 #include "mongo/base/disallow_copying.h"
 #include "mongo/base/status.h"
-#include "mongo/db/auth/auth_external_state.h"
+#include "mongo/db/auth/auth_session_external_state.h"
 
 namespace mongo {
 
     /**
      * The implementation of AuthExternalState functionality common to mongod and mongos.
      */
-    class AuthExternalStateServerCommon : public AuthExternalState {
-        MONGO_DISALLOW_COPYING(AuthExternalStateServerCommon);
+    class AuthSessionExternalStateServerCommon : public AuthSessionExternalState {
+        MONGO_DISALLOW_COPYING(AuthSessionExternalStateServerCommon);
 
     public:
-        virtual ~AuthExternalStateServerCommon();
+        virtual ~AuthSessionExternalStateServerCommon();
 
         virtual bool shouldIgnoreAuthChecks() const;
 
     protected:
-        AuthExternalStateServerCommon();
+        AuthSessionExternalStateServerCommon();
 
         // Checks whether or not localhost connections should be given full access and stores the
         // result in _allowLocalhost.  Currently localhost connections are only given full access
