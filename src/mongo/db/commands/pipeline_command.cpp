@@ -35,6 +35,7 @@
 #include "mongo/db/pipeline/pipeline_d.h"
 #include "mongo/db/pipeline/pipeline.h"
 #include "mongo/db/ops/query.h"
+#include "mongo/util/assert_util.h"
 
 namespace mongo {
 
@@ -290,6 +291,7 @@ namespace mongo {
         pPipeline->stitch();
 
         if (isCursorCommand(cmdObj)) {
+            uasserted(17364, "aggregation cursor isn't yet supported");
             CursorId id;
             {
                 // Set up cursor
