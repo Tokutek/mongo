@@ -90,6 +90,18 @@ namespace mongo {
         replInfoDetails->insertObject(bb2, flags);
     }
 
+    void logHighestVotedForPrimary(uint64_t hkp) {
+        Collection* replInfoDetails = getCollection(rsVoteInfo);
+        verify(replInfoDetails);
+        BufBuilder bufbuilder(256);
+        BSONObjBuilder b(bufbuilder);
+        b.append("_id", "highestVote");
+        b.append("val", hkp);
+        BSONObj bb = b.done();
+        const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
+        replInfoDetails->insertObject(bb, flags);
+    }
+
     static void _writeEntryToOplog(BSONObj entry) {
         Collection* rsOplogDetails = getCollection(rsoplog);
         verify(rsOplogDetails);
@@ -741,7 +753,7 @@ namespace mongo {
         transaction.commit();
     }
 
-    void convertOplogToPartitionedIfNecessary(GTID gtid) {
+    void convertOplogToPartitionedIfNecessary() {
         LOCK_REASON(lockReason, "repl: maybe convert oplog to partitioned on startup");
         Client::WriteContext ctx(rsoplog, lockReason);
         Client::Transaction transaction(DB_SERIALIZABLE);

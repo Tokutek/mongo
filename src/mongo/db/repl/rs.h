@@ -163,24 +163,36 @@ namespace mongo {
 
     struct Target;
 
+    class PersistHighestVotedForPrimary {
+        boost::mutex _mutex;
+        uint64_t _lastPersistedVal;
+    public:
+        PersistHighestVotedForPrimary() : _lastPersistedVal(0) { }
+
+        void persist(uint64_t val, bool persist) {
+            boost::unique_lock<boost::mutex> lock(_mutex);
+            if (val > _lastPersistedVal) {
+                {
+                    LOCK_REASON(lockReason, "repl: force updating repl info");
+                    Client::ReadContext ctx(rsOplogRefs , lockReason);
+                    Client::Transaction transaction(DB_SERIALIZABLE);
+                    logHighestVotedForPrimary(val);
+                    transaction.commit(persist ? 0 : DB_TXN_NOSYNC); // make sure we sync transaction
+                }
+                _lastPersistedVal = val;
+            }
+        }
+    };
+    
     class Consensus {
         ReplSetImpl &rs;
-        struct LastYea {
-            LastYea() : when(0), who(0xffffffff) { }
-            time_t when;
-            unsigned who;
-        };
-        static SimpleMutex lyMutex;
-        Guarded<LastYea,lyMutex> ly;
-        unsigned yea(unsigned memberId); // throws VoteException
-        void electionFailed(unsigned meid);
+        PersistHighestVotedForPrimary persistVote;
+        unsigned yea(unsigned memberId);
         void _electSelf();
-        bool weAreFreshest(bool& allUp, int& nTies);
+        bool weAreFreshest(bool& allUp, int& nTies, uint64_t& highestKnownPrimary);
         bool sleptLast; // slept last elect() pass
     public:
-        Consensus(ReplSetImpl *t) : rs(*t) {
-            sleptLast = false;
-            steppedDown = 0;
+        Consensus(ReplSetImpl *t) : rs(*t), sleptLast(false), steppedDown(0) {
         }
 
         /* if we've stepped down, this is when we are allowed to try to elect ourself again.
@@ -192,8 +204,10 @@ namespace mongo {
         bool aMajoritySeemsToBeUp() const;
         bool shouldRelinquish() const;
         void electSelf();
+        bool mayElectCmdReceived(BSONObj& cmdObj, string& errmsg, BSONObjBuilder& result);
         void electCmdReceived(BSONObj, BSONObjBuilder*);
         void multiCommand(BSONObj cmd, list<Target>& L);
+        void newPrimaryNotificationReceived(BSONObj cmd);
     };
 
     /**
@@ -381,11 +395,26 @@ namespace mongo {
         boost::mutex _keepOplogAliveMutex;
         boost::condition_variable _keepOplogAliveCond;
 
+        // mutex protecting access to _highestKnownPrimaryAcrossReplSet
+        boost::mutex _hkpAcrossReplSetMutex;
+        // this stores the highestKnownPrimary we know of
+        // that has been communicated by any machine, through heartbeats,
+        // within the replica set. This value does NOT control what
+        // this machine can or cannot vote for in an election. That is managed
+        // by the GTIDManager. This value is used to notify partially
+        // disconnected primaries that another election with a higher value
+        // has taken place, and therefore should step down. See
+        // Consensus::shouldRelinquish
+        uint64_t _highestKnownPrimaryAcrossReplSet;
+
         bool _replBackgroundShouldRun;
         
         set<ReplSetHealthPollTask*> healthTasks;
         void endOldHealthTasks();
         void startHealthTaskFor(Member *m);
+        // implemented in heartbeat.cpp to have access to ReplSetHealthPollTask
+        // organization and file layout of these classes needs serious refactoring
+        void forceHeartbeat(const Member* m);
 
         Consensus elect;
         void relinquish(bool startReplication = true);
@@ -393,7 +422,7 @@ namespace mongo {
         bool _stepDown(int secs);
         bool _freeze(int secs);
     private:
-        bool assumePrimary();
+        bool assumePrimary(uint64_t primaryToUse);
         void loadGTIDManager();
         void changeState(MemberState s);
 
@@ -444,6 +473,8 @@ namespace mongo {
         bool iAmElectable() { lock lk(this); return _electableSet.find(_self->id()) != _electableSet.end(); }
         bool isElectable(const unsigned id) { lock lk(this); return _electableSet.find(id) != _electableSet.end(); }
         Member* getMostElectable();
+        bool handleHighestKnownPrimaryOfMember(uint64_t hkp);
+        uint64_t getHighestKnownPrimaryAcrossSet();
     protected:
         /**
          * Load a new config as the replica set's main config.
@@ -542,7 +573,9 @@ namespace mongo {
         void updateReplInfoThread();
         void oplogPartitionThread();
         friend class FeedbackThread;
+        friend class CmdReplSetFresh;
         friend class CmdReplSetElect;
+        friend class CmdReplAssumedPrimary;
         friend class Member;
         friend class Manager;
         friend class GhostSync;
@@ -725,4 +758,26 @@ namespace mongo {
         return c->ok() ? c->current().copy() : BSONObj();
     }
 
+    // meant to be run during startup
+    inline uint64_t getSavedHighestVotedForPrimary() {
+        BSONObj o;
+        LOCK_REASON(lockReason, "repl: getting highestVote");
+        Client::WriteContext lk(rsVoteInfo, lockReason);
+        Client::Transaction txn(DB_SERIALIZABLE);
+        Collection* voteInfo = getCollection(rsVoteInfo);
+        if (!voteInfo) {
+            log () << "voteInfo collection does not exist, creating it" << rsLog;
+            string err;
+            bool ret = userCreateNS(rsVoteInfo, BSONObj(), err, false);
+            verify(ret);
+        }
+
+        const bool found = Collection::findOne(rsVoteInfo, BSON("_id" << "highestVote"), o);
+        if (found) {
+            return o["val"].numberLong();
+        }
+        log () << "Could not find highestVote in replInfo, returning 0" << rsLog;
+        txn.commit();
+        return 0;
+    }
 }

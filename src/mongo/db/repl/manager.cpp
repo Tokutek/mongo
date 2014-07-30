@@ -80,16 +80,16 @@ namespace mongo {
             return;
         }
 
-        if (rs->box.getState().primary()) {
-            // vanilla mongo tries to make sure that only one will step down
-            // we will step down regardless, because we want an election
-            // to figure out who should be the rightful primary.
-            
-            log() << "we see a remote is primary, relinquishing primary" << rsLog;
-            rs->relinquish();
+        // if we noticed that we were primary and that there was a second
+        // primary, we used to automatically step down and let an
+        // election decide who the new primary should be. With the
+        // new election protocol. This is not necessary.
+        // Consensus::shouldRelinquish will notice that someone 
+        // has a higher known primary, and will cause this machine
+        // to step down. Therefore, we just ignore the second primary.
+        if (!rs->box.getState().primary()) {
+            rs->box.noteRemoteIsPrimary(m);
         }
-
-        rs->box.noteRemoteIsPrimary(m);
     }
 
     void Manager::checkElectableSet() {
@@ -225,17 +225,7 @@ namespace mongo {
                         }
 
                         if( rs->elect.shouldRelinquish() ) {
-                            log() << "can't see a majority of the set, relinquishing primary" << rsLog;
                             rs->relinquish();
-                        }
-
-                        if (GTID::cmp(theReplSet->gtidManager->getLiveState(), theReplSet->lastOtherGTID()) < 0) {
-                            // this can happen if we transiently have two primaries, which can
-                            // happen if a primary loses contact with the replica set,
-                            // triggering an election, but it connects back before it has a
-                            // chance to step down
-                            log() << "we see a secondary that is ahead, relinquishing primary" << rsLog;
-                            rs->relinquish();                            
                         }
 
                         return;

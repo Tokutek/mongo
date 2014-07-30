@@ -417,6 +417,7 @@ namespace mongo {
                 bb.append("minUnappliedGTID", minUnapplied.toString());
                 bb.append("oplogVersion", ReplSetConfig::OPLOG_VERSION);
             }
+            bb.append("highestKnownPrimaryInReplSet", theReplSet->getHighestKnownPrimaryAcrossSet());
 
             int maintenance = _maintenanceMode;
             if (maintenance) {
@@ -456,6 +457,7 @@ namespace mongo {
                 bb.append("minUnappliedGTID", m->hbinfo().minUnappliedGTID.toString());
                 bb.append("oplogVersion", m->hbinfo().oplogVersion);
             }
+            bb.append("highestKnownPrimaryInReplSet", m->hbinfo().highestKnownPrimaryInSet);
             bb.appendTimeT("lastHeartbeat", m->hbinfo().lastHeartbeat);
             bb.appendTimeT("lastHeartbeatRecv", m->getLastRecvHeartbeat());
             bb.append("pingMs", m->hbinfo().ping);

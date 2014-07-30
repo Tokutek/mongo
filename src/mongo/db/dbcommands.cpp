@@ -189,7 +189,19 @@ namespace mongo {
 
                     long long passes = 0;
                     char buf[32];
-                    GTID gtid = c.getLastOp();
+
+                    BSONElement gtide = cmdObj["wgtid"];
+                    GTID gtid;
+                    if (gtide.ok()) {
+                        if (!isValidGTID(gtide)) {
+                            errmsg = "invalid gtid";
+                            return false;
+                        }
+                        gtid = getGTIDFromBSON("wgtid",cmdObj);
+                    }
+                    else {
+                        gtid = c.getLastOp();
+                    }
 
                     if ( gtid.isInitial() ) {
                         if ( anyReplEnabled() ) {
@@ -220,31 +232,29 @@ namespace mongo {
                     }
 
                     while ( 1 ) {
+                        // if replication isn't enabled (e.g., config servers)
+                        if ( ! anyReplEnabled() ) {
+                            result.append( "err", "norepl" );
+                            return true;
+                        }
+
+                        // there are no race conditions with this, as this only serves
+                        // to help us exit early. If we happen to failover after this call
+                        // but before some call later below, that's ok.
                         if ( !_isMaster() ) {
-                            // this should be in the while loop in case we step down
                             errmsg = "not master";
                             result.append( "wnote", "no longer primary" );
                             return false;
                         }
 
                         // check this first for w=0 or w=1
-                        if ( opReplicatedEnough( gtid, e ) ) {
-                            // before breaking, let's check that we are not master
-                            // originally done outside of if-clause in vanilla by
-                            // SERVER-9417. Moved here so that we don't have
-                            // race condition machine stepping down after the check
-                            // but before the call to opReplicatedEnough
-                            if ( !_isMaster() ) {
-                                errmsg = "not master";
-                                result.append( "wnote", "no longer primary" );
-                                return false;
-                            }
+                        OP_REPL_STATUS s = opReplicatedEnough( gtid, e );
+                        if ( s == REPL_SUCCESS ) {
                             break;
                         }
-
-                        // if replication isn't enabled (e.g., config servers)
-                        if ( ! anyReplEnabled() ) {
-                            result.append( "err", "norepl" );
+                        else if ( s == REPL_FAIL ) {
+                            errmsg = "failover happened";
+                            result.append("err", "failover");
                             return true;
                         }
 

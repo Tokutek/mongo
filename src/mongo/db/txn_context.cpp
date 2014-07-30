@@ -188,11 +188,7 @@ namespace mongo {
     void TxnContext::commitRoot(int flags) {
         verify(!hasParent());
         bool gotGTID = false;
-        GTID gtid;
-        // do this in case we are writing the first entry
-        // we put something in that can be distinguished from
-        // an initialized GTID that has never been touched
-        gtid.inc_primary(); 
+        GTID gtid(1,0);
         // handle work related to logging of transaction for replication
         // this piece must be done before the _txn.commit
         try {

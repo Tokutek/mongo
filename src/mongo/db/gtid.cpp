@@ -73,8 +73,8 @@ namespace mongo {
         _GTSeqNo++;
     }
 
-    void GTID::inc_primary() {
-        _primarySeqNo++;
+    void GTID::setPrimaryTo(uint64_t newPrimary) {
+        _primarySeqNo = newPrimary;
         _GTSeqNo = 0;
     }
 
@@ -87,16 +87,18 @@ namespace mongo {
     bool GTID::isInitial() const {
         return (_primarySeqNo == 0);
     }
-
-
-
     
-    GTIDManager::GTIDManager( GTID lastGTID, uint64_t lastTime, uint64_t lastHash, uint32_t id ) {
+    uint64_t GTID::getPrimary() const {
+        return _primarySeqNo;
+    }
+    
+    GTIDManager::GTIDManager( GTID lastGTID, uint64_t lastTime, uint64_t lastHash, uint32_t id, uint64_t lastVotedForPrimary ) {
         _selfID = id;
         _lastLiveGTID = lastGTID;
         _minLiveGTID = _lastLiveGTID;
         _minLiveGTID.inc(); // comment this
-        _incPrimary = false;
+        _newPrimaryValue = 0;
+        _highestKnownPossiblePrimary = std::max(_lastLiveGTID.getPrimary(), lastVotedForPrimary);
 
         // note that _minUnappliedGTID is not set
 
@@ -120,9 +122,11 @@ namespace mongo {
 
         boost::unique_lock<boost::mutex> lock(_lock);
         dassert(GTID::cmp(_lastLiveGTID, _lastUnappliedGTID) == 0);
-        if (_incPrimary) {
-            _incPrimary = false;
-            _lastLiveGTID.inc_primary();
+        // _newPrimaryValue ought to always be greater that _lastLiveGTID.getPrimary(),
+        // so this second check is just paranoia
+        if (_newPrimaryValue > 0 && _newPrimaryValue > _lastLiveGTID.getPrimary()) {
+            _lastLiveGTID.setPrimaryTo(_newPrimaryValue);
+            _newPrimaryValue = 0;
         }
         else {
             _lastLiveGTID.inc();
@@ -138,6 +142,8 @@ namespace mongo {
         _lastTimestamp = *timestamp;
         *hash = (_lastHash* 131 + *timestamp) * 17 + _selfID;
         _lastHash = *hash;
+        
+        handleHighestKnownPrimary();
     }
     
     // notification that user of GTID has completed work
@@ -185,6 +191,8 @@ namespace mongo {
 
         _lastTimestamp = ts;
         _lastHash = lastHash;
+
+        handleHighestKnownPrimary();
 
         _minLiveCond.notify_all();
     }
@@ -255,18 +263,24 @@ namespace mongo {
         return minLive;
     }
 
-    void GTIDManager::resetManager() {
+    bool GTIDManager::resetManager(uint64_t newPrimary) {
         boost::unique_lock<boost::mutex> lock(_lock);
         dassert(_liveGTIDs.size() == 0);
+        if (_lastLiveGTID.getPrimary() >= newPrimary) {
+            log() << "attempt to resetManager failing, existing primary of _lastLiveGTID: " << \
+                _lastLiveGTID.getPrimary() << " newPrimary: " << newPrimary << endl;
+            return false;
+        }
         // tell the GTID Manager that the next GTID
-        // we get for a primary, we increment the primary
-        _incPrimary = true;
+        // should have this primary value
+        _newPrimaryValue = newPrimary;
 
         _minLiveGTID = _lastLiveGTID;
         _minLiveGTID.inc();
 
         _lastUnappliedGTID = _lastLiveGTID;
         _minUnappliedGTID = _minLiveGTID;
+        return true;
     }
     GTID GTIDManager::getLiveState() {
         boost::unique_lock<boost::mutex> lock(_lock);
@@ -335,6 +349,7 @@ namespace mongo {
 
         _lastTimestamp = lastTime;
         _lastHash = lastHash;
+        handleHighestKnownPrimary();
     }
 
     uint64_t GTIDManager::getCurrTimestamp() {
@@ -360,5 +375,59 @@ namespace mongo {
         return !((GTID::cmp(last, _lastLiveGTID) == 0) && 
                  lastTime == _lastTimestamp && 
                  lastHash == _lastHash);
+    }
+
+    // handles setting of _highestKnownPossiblePrimary whenever
+    // _lastLiveGTID changes.
+    void GTIDManager::handleHighestKnownPrimary() {
+        if (_lastLiveGTID.getPrimary() > _highestKnownPossiblePrimary) {
+            _highestKnownPossiblePrimary = _lastLiveGTID.getPrimary();
+        }
+    }
+
+    uint64_t GTIDManager::getHighestKnownPrimary() {
+        boost::unique_lock<boost::mutex> lock(_lock);
+        return _highestKnownPossiblePrimary;
+    }
+
+    // these next two functions are crucial for the election protocol
+
+    // used in elections in consensus.cpp. Given the GTID position of a potential PRIMARY and
+    // the primary gtid value it intends to use, we return true if we can vote yes for this
+    // member, false otherwise. This function assumes that all writes up to _lastLiveGTID
+    // have been acknowledged. 
+    // We vote yes under the following conditions: 
+    //  - the potential primary will not cause a rollback of any these writes.
+    //    For that to be true, remoteGTID needs to be ahead
+    //  - This member has not voted for the same newPrimaryValue in any other election.
+    //    This ensures that no two elections can successfully get a majority with the same value
+    //    for newPrimary.
+    PRIMARY_VOTE GTIDManager::acceptPossiblePrimary(uint64_t newPrimary, GTID remoteGTID) {
+        boost::unique_lock<boost::mutex> lock(_lock);
+        if (GTID::cmp(_lastLiveGTID, remoteGTID) > 0) {
+            log() << "Must veto possible primary, newPrimary " << \
+                newPrimary << " _highestKnownPossiblePrimary " << _highestKnownPossiblePrimary << \
+                "remoteGTID " << remoteGTID.toString() << " our GTID " << _lastLiveGTID.toString() << \
+                endl;
+            return VOTE_VETO;
+        }
+        if (newPrimary <= _highestKnownPossiblePrimary) {
+            log() << "Must vote no for possible primary, newPrimary " << \
+                newPrimary << " _highestKnownPossiblePrimary " << _highestKnownPossiblePrimary << \
+                "remoteGTID " << remoteGTID.toString() << " our GTID " << _lastLiveGTID.toString() << \
+                endl;
+            return VOTE_NO;
+        }
+        _highestKnownPossiblePrimary = newPrimary;
+        return VOTE_YES;
+    }
+
+    // returns true if this member, a secondary, is allowed to acknowledge a write
+    // concern for its _lastLiveGTID. BackgroundSync::produce calls this.
+    // This function controls what writes do and do not get acknowledged
+    // by a secondary.
+    bool GTIDManager::canAcknowledgeGTID() {
+        boost::unique_lock<boost::mutex> lock(_lock);
+        return _lastLiveGTID.getPrimary() >= _highestKnownPossiblePrimary;
     }
 } // namespace mongo

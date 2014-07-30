@@ -33,6 +33,7 @@ namespace mongo {
 
     void createOplog();
     void logToReplInfo(GTID minLiveGTID, GTID minUnappliedGTID);
+    void logHighestVotedForPrimary(uint64_t hkp);
 
     void logOp( const char *opstr, const char *ns, const BSONObj& obj, BSONObj *patt = 0, bool fromMigrate = false );
     // Write operations to the log (local.oplog.$main)
@@ -57,5 +58,5 @@ namespace mongo {
     void addOplogPartitions();
     void trimOplogWithTS(uint64_t tsMillis);
     void trimOplogwithGTID(GTID gtid);
-    void convertOplogToPartitionedIfNecessary(GTID gtid);
+    void convertOplogToPartitionedIfNecessary();
 }
