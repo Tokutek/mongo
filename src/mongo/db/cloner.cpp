@@ -1011,7 +1011,7 @@ namespace mongo {
 
             return retval;
         }
-    } cmdCloneCollection;
+    };
 
 
     /* Usage:
@@ -1069,7 +1069,7 @@ namespace mongo {
             result.appendElements( ret );
             return true;
         }
-    } cmdCopyDBGetNonce;
+    };
 
     /* Usage:
        admindb.$cmd.findOne( { copydb: 1, fromhost: <hostname>, fromdb: <db>, todb: <db>[, username: <username>, nonce: <nonce>, key: <key>] } );
