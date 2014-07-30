@@ -675,8 +675,6 @@ def runTest(test, testnum, result):
     if r != 0:
         raise TestExitFailure(path, r)
 
-    print ""
-
 def run_tests(tests):
     # FIXME: some suites of tests start their own mongod, so don't
     # need this.  (So long as there are no conflicts with port,
