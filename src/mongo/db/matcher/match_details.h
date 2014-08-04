@@ -1,9 +1,7 @@
-// matcher.h
-
-/* Matcher is our boolean expression evaluator for "where" clauses */
+// match_details.h
 
 /**
-*    Copyright (C) 2008 10gen Inc.
+*    Copyright (C) 2013 10gen Inc.
 *
 *    This program is free software: you can redistribute it and/or  modify
 *    it under the terms of the GNU Affero General Public License, version 3,
@@ -32,29 +30,45 @@
 
 #pragma once
 
-#include "mongo/db/jsobj.h"
+#include <boost/scoped_ptr.hpp>
+
+#include <string>
 
 namespace mongo {
 
-    class Cursor;
-    class FieldRangeVector;
+    /** Reports information about a match request. */
+    class MatchDetails {
+    public:
+        MatchDetails();
 
-    struct element_lt {
-        bool operator()(const BSONElement& l, const BSONElement& r) const {
-            int x = (int) l.canonicalType() - (int) r.canonicalType();
-            if ( x < 0 ) return true;
-            else if ( x > 0 ) return false;
-            return compareElementValues(l,r) < 0;
-        }
+        void resetOutput();
+
+        // for debugging only
+        std::string toString() const;
+
+        // relating to whether or not we had to load the full record
+
+        void setLoadedRecord( bool loadedRecord ) { _loadedRecord = loadedRecord; }
+
+        bool hasLoadedRecord() const { return _loadedRecord; }
+
+        // this name is wrong
+
+        bool needRecord() const { return _elemMatchKeyRequested; }
+
+        // if we need to store the offset into an array where we found the match
+
+        /** Request that an elemMatchKey be recorded. */
+        void requestElemMatchKey() { _elemMatchKeyRequested = true; }
+
+        bool hasElemMatchKey() const;
+        std::string elemMatchKey() const;
+
+        void setElemMatchKey( const std::string &elemMatchKey );
+
+    private:
+        bool _loadedRecord;
+        bool _elemMatchKeyRequested;
+        boost::scoped_ptr<std::string> _elemMatchKey;
     };
 }
-
-#include "mongo/db/matcher/matcher.h"
-
-namespace mongo {
-
-    //typedef MatcherOld Matcher;
-    typedef Matcher2 Matcher;
-}
-
-

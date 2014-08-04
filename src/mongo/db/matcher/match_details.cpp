@@ -1,9 +1,7 @@
-// matcher.h
-
-/* Matcher is our boolean expression evaluator for "where" clauses */
+// match_details.cpp
 
 /**
-*    Copyright (C) 2008 10gen Inc.
+*    Copyright (C) 2013 10gen Inc.
 *
 *    This program is free software: you can redistribute it and/or  modify
 *    it under the terms of the GNU Affero General Public License, version 3,
@@ -30,31 +28,45 @@
 *    it in the license file.
 */
 
-#pragma once
+#include "mongo/db/matcher/match_details.h"
 
-#include "mongo/db/jsobj.h"
+#include <sstream>
+
+#include "mongo/util/assert_util.h"
 
 namespace mongo {
 
-    class Cursor;
-    class FieldRangeVector;
+    MatchDetails::MatchDetails() :
+        _elemMatchKeyRequested() {
+        resetOutput();
+    }
 
-    struct element_lt {
-        bool operator()(const BSONElement& l, const BSONElement& r) const {
-            int x = (int) l.canonicalType() - (int) r.canonicalType();
-            if ( x < 0 ) return true;
-            else if ( x > 0 ) return false;
-            return compareElementValues(l,r) < 0;
+    void MatchDetails::resetOutput() {
+        _loadedRecord = false;
+        _elemMatchKey.reset();
+    }
+
+    bool MatchDetails::hasElemMatchKey() const {
+        return _elemMatchKey.get();
+    }
+
+    std::string MatchDetails::elemMatchKey() const {
+        verify( hasElemMatchKey() );
+        return *(_elemMatchKey.get());
+    }
+
+    void MatchDetails::setElemMatchKey( const std::string &elemMatchKey ) {
+        if ( _elemMatchKeyRequested ) {
+            _elemMatchKey.reset( new std::string( elemMatchKey ) );
         }
-    };
+    }
+
+    string MatchDetails::toString() const {
+        std::stringstream ss;
+        ss << "loadedRecord: " << _loadedRecord << " ";
+        ss << "elemMatchKeyRequested: " << _elemMatchKeyRequested << " ";
+        ss << "elemMatchKey: " << ( _elemMatchKey ? _elemMatchKey->c_str() : "NONE" ) << " ";
+        return ss.str();
+    }
+
 }
-
-#include "mongo/db/matcher/matcher.h"
-
-namespace mongo {
-
-    //typedef MatcherOld Matcher;
-    typedef Matcher2 Matcher;
-}
-
-

@@ -1,9 +1,7 @@
-// matcher.h
-
-/* Matcher is our boolean expression evaluator for "where" clauses */
+// matcher.cpp
 
 /**
-*    Copyright (C) 2008 10gen Inc.
+*    Copyright (C) 2013 10gen Inc.
 *
 *    This program is free software: you can redistribute it and/or  modify
 *    it under the terms of the GNU Affero General Public License, version 3,
@@ -30,31 +28,35 @@
 *    it in the license file.
 */
 
-#pragma once
+#include "mongo/pch.h"
 
+#include "mongo/base/init.h"
 #include "mongo/db/jsobj.h"
-
-namespace mongo {
-
-    class Cursor;
-    class FieldRangeVector;
-
-    struct element_lt {
-        bool operator()(const BSONElement& l, const BSONElement& r) const {
-            int x = (int) l.canonicalType() - (int) r.canonicalType();
-            if ( x < 0 ) return true;
-            else if ( x > 0 ) return false;
-            return compareElementValues(l,r) < 0;
-        }
-    };
-}
-
+#include "mongo/db/matcher/expression_parser.h"
 #include "mongo/db/matcher/matcher.h"
+#include "mongo/db/matcher/path.h"
+#include "mongo/db/exec/working_set.h"
+#include "mongo/util/mongoutils/str.h"
+#include "mongo/util/stacktrace.h"
 
 namespace mongo {
 
-    //typedef MatcherOld Matcher;
-    typedef Matcher2 Matcher;
-}
+    Matcher2::Matcher2( const BSONObj& pattern, bool nested )
+        : _pattern( pattern ) {
 
+        StatusWithMatchExpression result = MatchExpressionParser::parse( pattern );
+        uassert( 16810,
+                 mongoutils::str::stream() << "bad query: " << result.toString(),
+                 result.isOK() );
 
+        _expression.reset( result.getValue() );
+    }
+
+    bool Matcher2::matches(const BSONObj& doc, MatchDetails* details ) const {
+        if ( !_expression )
+            return true;
+
+        return _expression->matchesBSON( doc, details );
+    }
+
+}  // namespace mongo

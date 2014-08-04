@@ -1,9 +1,7 @@
 // matcher.h
 
-/* Matcher is our boolean expression evaluator for "where" clauses */
-
 /**
-*    Copyright (C) 2008 10gen Inc.
+*    Copyright (C) 2013 10gen Inc.
 *
 *    This program is free software: you can redistribute it and/or  modify
 *    it under the terms of the GNU Affero General Public License, version 3,
@@ -32,29 +30,35 @@
 
 #pragma once
 
-#include "mongo/db/jsobj.h"
+#include <boost/scoped_ptr.hpp>
+
+#include "mongo/base/disallow_copying.h"
+#include "mongo/base/status.h"
+#include "mongo/bson/bsonobj.h"
+#include "mongo/db/matcher/expression.h"
+#include "mongo/db/matcher/match_details.h"
 
 namespace mongo {
 
-    class Cursor;
-    class FieldRangeVector;
+    /**
+     * Matcher is a simple wrapper around a BSONObj and the MatchExpression created from it.
+     */
+    class Matcher2 {
+        MONGO_DISALLOW_COPYING( Matcher2 );
 
-    struct element_lt {
-        bool operator()(const BSONElement& l, const BSONElement& r) const {
-            int x = (int) l.canonicalType() - (int) r.canonicalType();
-            if ( x < 0 ) return true;
-            else if ( x > 0 ) return false;
-            return compareElementValues(l,r) < 0;
-        }
+    public:
+        explicit Matcher2( const BSONObj& pattern, bool nested=false /* do not use */ );
+
+        bool matches(const BSONObj& doc, MatchDetails* details = NULL ) const;
+
+        const BSONObj* getQuery() const { return &_pattern; };
+
+        std::string toString() const { return _pattern.toString(); }
+
+    private:
+        BSONObj _pattern;
+
+        boost::scoped_ptr<MatchExpression> _expression;
     };
-}
 
-#include "mongo/db/matcher/matcher.h"
-
-namespace mongo {
-
-    //typedef MatcherOld Matcher;
-    typedef Matcher2 Matcher;
-}
-
-
+}  // namespace mongo
