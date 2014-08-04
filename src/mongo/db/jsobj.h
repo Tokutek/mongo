@@ -29,7 +29,9 @@
 #pragma once
 
 #include "mongo/pch.h"
+
 #include "mongo/bson/util/builder.h"
+#include "mongo/bson/optime.h"
 #include "mongo/bson/bsontypes.h"
 #include "mongo/bson/oid.h"
 #include "mongo/bson/bsonelement.h"
@@ -41,3 +43,4 @@
 #include "mongo/bson/ordering.h"
 #include "mongo/base/string_data.h"
 #include "mongo/bson/bson_db.h"
+
