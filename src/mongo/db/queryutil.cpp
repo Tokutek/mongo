@@ -14,13 +14,13 @@
  *    limitations under the License.
  */
 
-#include "pch.h"
+#include "mongo/pch.h"
 
-#include "mongo/db/collection.h"
-#include "mongo/db/querypattern.h"
-#include "mongo/db/matcher.h"
 #include "mongo/db/queryutil.h"
-#include "mongo/util/startup_test.h"
+
+#include "mongo/db/index_names.h"
+#include "mongo/db/matcher.h"
+#include "mongo/db/collection.h"
 #include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
@@ -440,14 +440,15 @@ namespace mongo {
             break;
         }
         case BSONObj::opWITHIN:
-            _special.add("2d", SpecialIndices::NO_INDEX_REQUIRED);
+            _special.add(IndexNames::GEO_2D, SpecialIndices::NO_INDEX_REQUIRED);
+            _special.add(IndexNames::GEO_2DSPHERE, SpecialIndices::NO_INDEX_REQUIRED);
             break;
         case BSONObj::opNEAR:
-            _special.add("2d", SpecialIndices::INDEX_REQUIRED);
-            _special.add("2dsphere", SpecialIndices::INDEX_REQUIRED);
+            _special.add(IndexNames::GEO_2D, SpecialIndices::INDEX_REQUIRED);
+            _special.add(IndexNames::GEO_2DSPHERE, SpecialIndices::INDEX_REQUIRED);
             break;
         case BSONObj::opGEO_INTERSECTS:
-            _special.add("2dsphere", SpecialIndices::INDEX_REQUIRED);
+            _special.add(IndexNames::GEO_2DSPHERE, SpecialIndices::NO_INDEX_REQUIRED);
             break;
         case BSONObj::opEXISTS: {
             if ( !existsSpec ) {
@@ -502,9 +503,8 @@ namespace mongo {
         _intervals = newIntervals;
         for( vector<BSONObj>::const_iterator i = other._objData.begin(); i != other._objData.end(); ++i )
             _objData.push_back( *i );
-        if (_special.empty() && !other._special.empty()) {
+        if (_special.empty() && !other._special.empty())
             _special = other._special;
-        }
         _exactMatchRepresentation = exactMatchRepresentation;
         // A manipulated FieldRange may no longer be valid within a parent context.
         _elemMatchContext = BSONElement();
@@ -1054,15 +1054,8 @@ namespace mongo {
                 return;
             }
 
-            // TokuMX does not support the $atomic clause (all operations are atomic
-            // by virtue of running in their own transaction), but we need to keep
-            // this early-return for compatibility reasons. Consider the following
-            // statement:
-            //    db.foo.remove({'$atomic:true'})
-            // This means remove '{}' with options '{$atomic:true}' and without this
-            // early return, we would interpet it as remove '{$atomic:true}' with
-            // options {}, which is incorrect.
-            if ( str::equals( matchFieldName, "$atomic" ) ) {
+            if ( str::equals( matchFieldName, "$atomic" ) ||
+                 str::equals( matchFieldName, "$isolated" ) ) {
                 return;
             }
         }
@@ -1169,24 +1162,25 @@ namespace mongo {
         return true;
     }
 
-
     FieldRangeVector::FieldRangeVector( const FieldRangeSet &frs, const BSONObj &keyPattern,
                                         int direction ) :
-        _keyPattern( keyPattern ),
+        _keyPattern(keyPattern),
         _direction( direction >= 0 ? 1 : -1 ),
         _hasAllIndexedRanges( true ) {
-        verify(  frs.matchPossibleForIndex( _keyPattern ) );
+        verify( frs.matchPossibleForIndex( keyPattern));
         _queries = frs._queries;
 
         // For key generation
-        for (BSONObjIterator it(_keyPattern); it.more(); ) {
-            const BSONElement &e = it.next();
-            _fieldNames.push_back(e.fieldName());
-        }    
+        BSONObjIterator it(_keyPattern);
+        while (it.more()) {
+            BSONElement elt = it.next();
+            _fieldNames.push_back(elt.fieldName());
+        }
+
         _keyGenerator.reset(new KeyGenerator(_fieldNames, false));
 
-        BSONObjIterator i( _keyPattern );
         map<string,BSONElement> topFieldElemMatchContexts;
+        BSONObjIterator i(keyPattern);
         while( i.more() ) {
             BSONElement e = i.next();
             const FieldRange *range = &frs.range( e.fieldName() );
@@ -1280,7 +1274,7 @@ namespace mongo {
 
     BSONObj FieldRangeVector::startKey() const {
         BSONObjBuilder b;
-        BSONObjIterator keys( _keyPattern );
+        BSONObjIterator keys(_keyPattern);
         vector<FieldRange>::const_iterator i = _ranges.begin();
         for( ; i != _ranges.end(); ++i, ++keys ) {
             // Append lower bounds until an exclusive bound is found.
@@ -1318,7 +1312,7 @@ namespace mongo {
 
     BSONObj FieldRangeVector::endKey() const {
         BSONObjBuilder b;
-        BSONObjIterator keys( _keyPattern );
+        BSONObjIterator keys(_keyPattern);
         vector<FieldRange>::const_iterator i = _ranges.begin();
         for( ; i != _ranges.end(); ++i, ++keys ) {
             // Append upper bounds until an exclusive bound is found.
@@ -1356,12 +1350,12 @@ namespace mongo {
 
     BSONObj FieldRangeVector::obj() const {
         BSONObjBuilder b;
-        BSONObjIterator k( _keyPattern );
+        BSONObjIterator k(_keyPattern);
         for( int i = 0; i < (int)_ranges.size(); ++i ) {
             BSONArrayBuilder a( b.subarrayStart( k.next().fieldName() ) );
             for( vector<FieldInterval>::const_iterator j = _ranges[ i ].intervals().begin();
                 j != _ranges[ i ].intervals().end(); ++j ) {
-                a << BSONArray( BSON_ARRAY(j->_lower._bound << j->_upper._bound).clientReadable() );
+                a << BSONArray( BSON_ARRAY( j->_lower._bound << j->_upper._bound ).clientReadable() );
             }
             a.done();
         }
@@ -1403,10 +1397,6 @@ namespace mongo {
             }
         }
         return true;
-    }
-
-    QueryPattern FieldRangeSet::pattern( const BSONObj &sort ) const {
-        return QueryPattern( *this, sort );
     }
 
     int FieldRangeSet::numNonUniversalRanges() const {
@@ -1472,11 +1462,13 @@ namespace mongo {
                     "multiKey" << _multiKey.toString()
                     ).jsonString();
     }
-    
+
     void FieldRangeSetPair::assertValidIndex( const Collection *cl, int idxNo ) const {
-        massert( 14048, "FieldRangeSetPair invalid index specified", idxNo >= 0 && idxNo < cl->nIndexes() );   
+        massert( 14048,
+                 "FieldRangeSetPair invalid index specified",
+                 idxNo >= 0 && idxNo < cl->nIndexes() );   
     }
-        
+
     const FieldRangeSet &FieldRangeSetPair::frsForIndex( const Collection *cl, int idxNo ) const {
         assertValidIndexOrNoIndex( cl, idxNo );
         if ( idxNo < 0 ) {
@@ -1484,8 +1476,8 @@ namespace mongo {
             return _multiKey;
         }
         return cl->isMultikey( idxNo ) ? _multiKey : _singleKey;
-    }    
-        
+    }
+
     bool FieldRangeVector::matchesElement( const BSONElement &e, int i, bool forward ) const {
         bool eq;
         int l = matchingLowElement( e, i, forward, eq );
@@ -1542,7 +1534,7 @@ namespace mongo {
 
     bool FieldRangeVector::matchesKey( const BSONObj &key ) const {
         BSONObjIterator j( key );
-        BSONObjIterator k( _keyPattern );
+        BSONObjIterator k(_keyPattern);
         for( int l = 0; l < (int)_ranges.size(); ++l ) {
             int number = (int) k.next().number();
             bool forward = ( number >= 0 ? 1 : -1 ) * ( _direction >= 0 ? 1 : -1 ) > 0;
@@ -1579,8 +1571,9 @@ namespace mongo {
     BSONObj FieldRangeVector::firstMatch( const BSONObj &obj ) const {
         // NOTE Only works in forward direction.
         verify( _direction >= 0 );
-        BSONObjCmp cmp( _keyPattern );
-        BSONObjSet keys( cmp );
+        BSONObjCmp oc(_keyPattern);
+        BSONObjSet keys(oc);
+        // See FieldRangeVector::matches for comment on key generation.
         _keyGenerator->getKeys(obj, keys);
         for( BSONObjSet::const_iterator i = keys.begin(); i != keys.end(); ++i ) {
             if ( matchesKey( *i ) ) {
@@ -1592,7 +1585,7 @@ namespace mongo {
     
     string FieldRangeVector::toString() const {
         BSONObjBuilder bob;
-        BSONObjIterator i( _keyPattern );
+        BSONObjIterator i(_keyPattern);
         for( vector<FieldRange>::const_iterator r = _ranges.begin();
             r != _ranges.end() && i.more(); ++r ) {
             BSONElement e = i.next();
@@ -1614,7 +1607,7 @@ namespace mongo {
     // TODO optimize more SERVER-5450.
     int FieldRangeVectorIterator::advance( const BSONObj &curr ) {
         BSONObjIterator j( curr );
-        BSONObjIterator o( _v._keyPattern );
+        BSONObjIterator o( _v._keyPattern);
         // track first field for which we are not at the end of the valid values,
         // since we may need to advance from the key prefix ending with this field
         int latestNonEndpoint = -1;
@@ -1886,74 +1879,53 @@ namespace mongo {
         _orSets.pop_front();
         _originalOrSets.pop_front();
     }
-    
-    struct SimpleRegexUnitTest : StartupTest {
-        void run() {
-            {
-                BSONObjBuilder b;
-                b.appendRegex("r", "^foo");
-                BSONObj o = b.done();
-                verify( simpleRegex(o.firstElement()) == "foo" );
+
+    long long applySkipLimit( long long num , const BSONObj& cmd ) {
+        BSONElement s = cmd["skip"];
+        BSONElement l = cmd["limit"];
+
+        if ( s.isNumber() ) {
+            num = num - s.numberLong();
+            if ( num < 0 ) {
+                num = 0;
             }
-            {
-                BSONObjBuilder b;
-                b.appendRegex("r", "^f?oo");
-                BSONObj o = b.done();
-                verify( simpleRegex(o.firstElement()) == "" );
-            }
-            {
-                BSONObjBuilder b;
-                b.appendRegex("r", "^fz?oo");
-                BSONObj o = b.done();
-                verify( simpleRegex(o.firstElement()) == "f" );
-            }
-            {
-                BSONObjBuilder b;
-                b.appendRegex("r", "^f", "");
-                BSONObj o = b.done();
-                verify( simpleRegex(o.firstElement()) == "f" );
-            }
-            {
-                BSONObjBuilder b;
-                b.appendRegex("r", "\\Af", "");
-                BSONObj o = b.done();
-                verify( simpleRegex(o.firstElement()) == "f" );
-            }
-            {
-                BSONObjBuilder b;
-                b.appendRegex("r", "^f", "m");
-                BSONObj o = b.done();
-                verify( simpleRegex(o.firstElement()) == "" );
-            }
-            {
-                BSONObjBuilder b;
-                b.appendRegex("r", "\\Af", "m");
-                BSONObj o = b.done();
-                verify( simpleRegex(o.firstElement()) == "f" );
-            }
-            {
-                BSONObjBuilder b;
-                b.appendRegex("r", "\\Af", "mi");
-                BSONObj o = b.done();
-                verify( simpleRegex(o.firstElement()) == "" );
-            }
-            {
-                BSONObjBuilder b;
-                b.appendRegex("r", "\\Af \t\vo\n\ro  \\ \\# #comment", "mx");
-                BSONObj o = b.done();
-                verify( simpleRegex(o.firstElement()) == "foo #" );
-            }
-            {
-                verify( simpleRegex("^\\Qasdf\\E", "", NULL) == "asdf" );
-                verify( simpleRegex("^\\Qasdf\\E.*", "", NULL) == "asdf" );
-                verify( simpleRegex("^\\Qasdf", "", NULL) == "asdf" ); // PCRE supports this
-                verify( simpleRegex("^\\Qasdf\\\\E", "", NULL) == "asdf\\" );
-                verify( simpleRegex("^\\Qas.*df\\E", "", NULL) == "as.*df" );
-                verify( simpleRegex("^\\Qas\\Q[df\\E", "", NULL) == "as\\Q[df" );
-                verify( simpleRegex("^\\Qas\\E\\\\E\\Q$df\\E", "", NULL) == "as\\E$df" ); // quoted string containing \E
+        }
+
+        if ( l.isNumber() ) {
+            long long limit = l.numberLong();
+            if( limit < 0 ){
+                limit = -limit;
             }
 
+            if ( limit < num && limit != 0 ) { // 0 limit means no limit
+                num = limit;
+            }
         }
-    } simple_regex_unittest;
+
+        return num;
+    }
+
+    bool isSimpleIdQuery( const BSONObj& query ) {
+        BSONObjIterator i(query);
+        
+        if( !i.more() ) 
+            return false;
+        
+        BSONElement e = i.next();
+        
+        if( i.more() ) 
+            return false;
+        
+        if( strcmp("_id", e.fieldName()) != 0 ) 
+            return false;
+        
+        if ( e.isSimpleType() ) // e.g. not something like { _id : { $gt : ... } }
+            return true;
+        
+        if ( e.type() == Object )
+            return e.Obj().firstElementFieldName()[0] != '$';
+        
+        return false;
+    }
 
 } // namespace mongo

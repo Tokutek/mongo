@@ -21,7 +21,7 @@
 #include "mongo/db/projection.h"
 
 namespace mongo {
-    
+
     //maximum number of intervals produced by $in queries.
     static const unsigned MAX_IN_COMBINATIONS = 4000000;
 
@@ -67,12 +67,12 @@ namespace mongo {
             _indexRequired[name] = _indexRequired[name] || (req == INDEX_REQUIRED);
         }
 
-        bool anyRequireIndex() const {
+        bool allRequireIndex() const {
             for (map<string, bool>::const_iterator it = _indexRequired.begin();
                  it != _indexRequired.end(); ++it) {
-                if (it->second) { return true; }
+                if (!it->second) { return false; }
             }
-            return false;
+            return true;
         }
 
         bool empty() const { return _indexRequired.empty(); }
@@ -214,8 +214,6 @@ namespace mongo {
                                        // element having field name '$elemMatch'.
     };
 
-    class QueryPattern;
-    
     /**
      * A set of FieldRanges determined from constraints on the fields of a query,
      * that may be used to determine index bounds.
@@ -281,7 +279,6 @@ namespace mongo {
 
         const char *ns() const { return _ns.c_str(); }
         
-        QueryPattern pattern( const BSONObj &sort = BSONObj() ) const;
         SpecialIndices getSpecial() const;
 
         /**
@@ -435,18 +432,15 @@ namespace mongo {
          * @param keyPattern The index key pattern
          * @param direction The direction of index traversal
          */
-        FieldRangeVector( const FieldRangeSet &frs, const BSONObj &keyPattern, int direction );
-
-        /** @return the number of index ranges represented by 'this' */
-        unsigned size();
+        FieldRangeVector( const FieldRangeSet &frs, BSONObj keyPattern, int direction );
 
         /**
-         * Methods for identifying compound start and end btree bounds describing this field range
+         * Methods for identifying compound start and end index bounds describing this field range
          * vector.
          *
          * A FieldRangeVector contains the FieldRange bounds for every field of an index.  A
-         * FieldRangeVectorIterator may be used to efficiently search for btree keys within these
-         * bounds.  Alternatively, a single compound field interval of the btree may be scanned,
+         * FieldRangeVectorIterator may be used to efficiently search for index keys within these
+         * bounds.  Alternatively, a single compound field interval of the index may be scanned,
          * between a compound field start point and end point.  If isSingleInterval() is true then
          * the interval between the start and end points will be an exact description of this
          * FieldRangeVector, otherwise the start/end interval will be a superset of this
@@ -475,22 +469,31 @@ namespace mongo {
          */
 
         /**
-         * @return true if this FieldRangeVector represents a single interval within a btree,
+         * @return true if this FieldRangeVector represents a single interval within an index,
          * comprised of all keys between a single start point and a single end point.
          */
         bool isSingleInterval() const;
 
-        /** @return starting point for an index traversal. */
+        /**
+         * @return a starting point for an index traversal, a lower bound on the ranges represented
+         * by this FieldRangeVector according to the index's native ordering.
+         */
         BSONObj startKey() const;
 
         /** @return true if the startKey() bound is inclusive. */
         bool startKeyInclusive() const;
 
-        /** @return end point for an index traversal. */
+        /**
+         * @return an end point for an index traversal, an upper bound on the ranges represented
+         * by this FieldRangeVector according to the index's native ordering.
+         */
         BSONObj endKey() const;
 
         /** @return true if the endKey() bound is inclusive. */
         bool endKeyInclusive() const;
+
+        /** @return the number of index ranges represented by 'this' */
+        unsigned size() const;
 
         /** @return a client readable representation of 'this' */
         BSONObj obj() const;
@@ -540,13 +543,14 @@ namespace mongo {
         int matchingLowElement( const BSONElement &e, int i, bool direction, bool &lowEquality ) const;
         bool matchesElement( const BSONElement &e, int i, bool direction ) const;
         vector<FieldRange> _ranges;
-        const BSONObj _keyPattern;
+        BSONObj _keyPattern;
         int _direction;
         vector<BSONObj> _queries; // make sure mem owned
         bool _hasAllIndexedRanges;
         friend class FieldRangeVectorIterator;
 
-        vector<const char *> _fieldNames;
+        vector<const char*> _fieldNames;
+        // See FieldRangeVector::matches for comment on key generation.
         scoped_ptr<KeyGenerator> _keyGenerator;
     };
     
@@ -733,176 +737,10 @@ namespace mongo {
     /** returns the upper bound of a query that matches prefix */
     string simpleRegexEnd( string prefix );
 
-    inline long long applySkipLimit( long long num , const BSONObj& cmd ) {
-        BSONElement s = cmd["skip"];
-        BSONElement l = cmd["limit"];
-
-        if ( s.isNumber() ) {
-            num = num - s.numberLong();
-            if ( num < 0 ) {
-                num = 0;
-            }
-        }
-
-        if ( l.isNumber() ) {
-            long long limit = l.numberLong();
-            if( limit < 0 ){
-                limit = -limit;
-            }
-
-            if ( limit < num && limit != 0 ) { // 0 limit means no limit
-                num = limit;
-            }
-        }
-
-        return num;
-    }
-
-    inline bool isSimpleIdQuery( const BSONObj& query ) {
-        BSONObjIterator i(query);
-        
-        if( !i.more() ) 
-            return false;
-        
-        BSONElement e = i.next();
-        
-        if( i.more() ) 
-            return false;
-        
-        if( strcmp("_id", e.fieldName()) != 0 ) 
-            return false;
-        
-        if ( e.isSimpleType() ) // e.g. not something like { _id : { $gt : ... } }
-            return true;
-        
-        if ( e.type() == Object )
-            return e.Obj().firstElementFieldName()[0] != '$';
-        
-        return false;
-    }
-
-    inline bool FieldInterval::equality() const {
-        if ( _cachedEquality == -1 ) {
-            _cachedEquality = ( _lower._inclusive && _upper._inclusive && _lower._bound.woCompare( _upper._bound, false ) == 0 );
-        }
-        return _cachedEquality != 0;
-    }
-
-    inline bool FieldRange::equality() const {
-        return
-            !empty() &&
-            min().woCompare( max(), false ) == 0 &&
-            maxInclusive() &&
-            minInclusive();
-    }
-
-    inline const FieldRange &FieldRangeSet::range( const char *fieldName ) const {
-        map<string,FieldRange>::const_iterator f = _ranges.find( fieldName );
-        if ( f == _ranges.end() )
-            return universalRange();
-        return f->second;
-    }
-
-    inline FieldRange &FieldRangeSet::range( const char *fieldName ) {
-        map<string,FieldRange>::iterator f = _ranges.find( fieldName );
-        if ( f == _ranges.end() ) {
-            _ranges.insert( make_pair( string( fieldName ), universalRange() ) );
-            return _ranges.find( fieldName )->second;
-        }
-        return f->second;
-    }
-
-    inline bool FieldRangeSet::matchPossible() const {
-        for( map<string,FieldRange>::const_iterator i = _ranges.begin(); i != _ranges.end(); ++i ) {
-            if ( i->second.empty() ) {
-                return false;
-            }
-        }
-        return true;
-    }
+    long long applySkipLimit( long long num , const BSONObj& cmd );
     
-    inline bool FieldRangeSet::matchPossibleForIndex( const BSONObj &keyPattern ) const {
-        if ( !_singleKey ) {
-            return matchPossible();   
-        }
-        BSONObjIterator i( keyPattern );
-        while( i.more() ) {
-            BSONElement e = i.next();
-            if ( e.fieldName() == string( "$natural" ) ) {
-                return true;
-            }
-            if ( range( e.fieldName() ).empty() ) {
-                return false;
-            }
-        }
-        return true;
-    }
+    bool isSimpleIdQuery( const BSONObj& query );
 
-    inline unsigned FieldRangeVector::size() {
-        unsigned ret = 1;
-        for( vector<FieldRange>::const_iterator i = _ranges.begin(); i != _ranges.end(); ++i ) {
-            unsigned long long product =
-                    (unsigned long long)ret * (unsigned long long)i->intervals().size();
-            // Check for overflow SERVER-5415.
-            verify( ( product >> 32 ) == 0 );
-            ret = static_cast<unsigned>( product );
-        }
-        return ret;
-    }
-    
-    inline void FieldRangeVectorIterator::CompoundRangeCounter::set( int i, int newVal ) {
-        resetIntervalCount();
-        _i[ i ] = newVal;
-    }
-    
-    inline void FieldRangeVectorIterator::CompoundRangeCounter::inc( int i ) {
-        resetIntervalCount();
-        ++_i[ i ];
-    }
-    
-    inline void FieldRangeVectorIterator::CompoundRangeCounter::setZeroes( int i ) {
-        resetIntervalCount();
-        for( int j = i; j < (int)_i.size(); ++j ) _i[ j ] = 0;
-    }
-    
-    inline void FieldRangeVectorIterator::CompoundRangeCounter::setUnknowns( int i ) {
-        resetIntervalCount();
-        for( int j = i; j < (int)_i.size(); ++j ) _i[ j ] = -1;
-    }
-
-    inline FieldRangeSetPair *OrRangeGenerator::topFrsp() const {
-        FieldRangeSetPair *ret = new FieldRangeSetPair( _baseSet );
-        if (_orSets.size()) {
-            *ret &= _orSets.front();
-        }
-        return ret;
-    }
-
-    inline FieldRangeSetPair *OrRangeGenerator::topFrspOriginal() const {
-        FieldRangeSetPair *ret = new FieldRangeSetPair( _baseSet );
-        if (_originalOrSets.size()) {
-            *ret &= _originalOrSets.front();
-        }
-        return ret;
-    }
-    
-    inline bool FieldRangeSetPair::matchPossibleForIndex( Collection *cl, int idxNo, const BSONObj &keyPattern ) const {
-        assertValidIndexOrNoIndex( cl, idxNo );
-        if ( !matchPossible() ) {
-            return false;
-        }
-        if ( idxNo < 0 ) {
-            // multi key matchPossible() is true, so return true.
-            return true;   
-        }
-        return frsForIndex( cl, idxNo ).matchPossibleForIndex( keyPattern );
-    }
-
-    inline void FieldRangeSetPair::assertValidIndexOrNoIndex( const Collection *cl, int idxNo ) const {
-        massert( 14049, "FieldRangeSetPair invalid index specified", idxNo >= -1 );
-        if ( idxNo >= 0 ) {
-            assertValidIndex( cl, idxNo );   
-        }
-    }        
-    
 } // namespace mongo
+
+#include "queryutil-inl.h"
