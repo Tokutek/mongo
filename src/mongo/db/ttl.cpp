@@ -15,13 +15,28 @@
 *
 *    You should have received a copy of the GNU Affero General Public License
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*
+*    As a special exception, the copyright holders give permission to link the
+*    code of portions of this program with the OpenSSL library under certain
+*    conditions as described in each individual source file and distribute
+*    linked combinations including the program with the OpenSSL library. You
+*    must comply with the GNU Affero General Public License in all respects for
+*    all of the code used other than as permitted herein. If you modify file(s)
+*    with this exception, you may extend this exception to your version of the
+*    file(s), but you are not obligated to do so. If you do not wish to do so,
+*    delete this exception statement from your version. If you delete this
+*    exception statement from all source files in the program, then also delete
+*    it in the license file.
 */
 
-#include "pch.h"
+#include "mongo/pch.h"
 
 #include "mongo/db/ttl.h"
 
 #include "mongo/base/counter.h"
+#include "mongo/db/auth/authorization_session.h"
+#include "mongo/db/auth/user_name.h"
+#include "mongo/db/client.h"
 #include "mongo/db/commands/fsync.h"
 #include "mongo/db/commands/server_status.h"
 #include "mongo/db/databaseholder.h"
@@ -52,7 +67,6 @@ namespace mongo {
         
         void doTTLForDB( const string& dbName ) {
 
-            //check isMaster before becoming god
             bool isMaster = isMasterNs( dbName.c_str() );
 
             Client::GodScope god;
@@ -75,6 +89,8 @@ namespace mongo {
             
             for ( unsigned i=0; i<indexes.size(); i++ ) {
                 BSONObj idx = indexes[i];
+                
+
                 BSONObj key = idx["key"].Obj();
                 if ( key.nFields() != 1 ) {
                     error() << "key for ttl index can only have 1 field" << endl;
@@ -93,9 +109,9 @@ namespace mongo {
                     b.appendDate( "$lt" , curTimeMillis64() - ( 1000 * idx[secondsExpireField].numberLong() ) );
                     query = BSON( key.firstElement().fieldName() << b.obj() );
                 }
-                
+
                 LOG(1) << "TTL: " << key << " \t " << query << endl;
-                
+
                 long long n = 0;
                 {
                     string ns = idx["ns"].String();
@@ -122,21 +138,24 @@ namespace mongo {
 
                 LOG(1) << "\tTTL deleted: " << n << endl;
             }
+
+            
         }
 
         virtual void run() {
             Client::initThread( name().c_str() );
+            cc().getAuthorizationSession()->grantInternalAuthorization();
 
             while ( ! inShutdown() ) {
                 sleepsecs( 60 );
-
+                
                 LOG(3) << "TTLMonitor thread awake" << endl;
 
                 if ( !ttlMonitorEnabled || cmdLine.gdb ) {
-                    LOG(1) << "TTLMonitor is disabled" << endl;
-                    continue;
+                   LOG(1) << "TTLMonitor is disabled" << endl;
+                   continue;
                 }
-                
+
                 // if part of replSet but not in a readable state (e.g. during initial sync), skip.
                 if ( theReplSet && !theReplSet->state().readable() )
                     continue;
