@@ -34,6 +34,7 @@ Next, add symlinks in `src/third_party`, and make a directory in which you would
     $ ln -snf ../../../ft-index src/third_party/ft-index
     $ ln -snf ../../../backup-community/backup src/third_party/backup
     $ mkdir build
+    $ cd build
 
 Next, configure the build directory _either_ for a release build:
 
