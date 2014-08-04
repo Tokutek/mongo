@@ -1,7 +1,6 @@
 // lasterror.h
 
 /*    Copyright 2009 10gen Inc.
- *    Copyright (C) 2013 Tokutek Inc.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -18,24 +17,35 @@
 
 #pragma once
 
+#include <boost/thread/tss.hpp>
+#include <string>
+
+#include "mongo/db/jsobj.h"
 #include "mongo/bson/oid.h"
+#include "mongo/util/log.h"
 
 namespace mongo {
     class BSONObjBuilder;
     class Message;
 
+    static const char kUpsertedFieldName[] = "upserted";
+    static const char kGLEStatsFieldName[] = "$gleStats";
+    static const char kGLEStatsLastOpTimeFieldName[] = "lastOpTime";
+    static const char kGLEStatsElectionIdFieldName[] = "electionId";
+
     struct LastError {
         int code;
-        string msg;
+        std::string msg;
         enum UpdatedExistingType { NotUpdate, True, False } updatedExisting;
-        OID upsertedId;
+        // _id field value from inserted doc, returned as kUpsertedFieldName (above)
+        BSONObj upsertedId;
         OID writebackId; // this shouldn't get reset so that old GLE are handled
         int writebackSince;
         long long nObjects;
         int nPrev;
         bool valid;
         bool disabled;
-        void writeback( OID& oid ) {
+        void writeback(const OID& oid) {
             reset( true );
             writebackId = oid;
             writebackSince = 0;
@@ -45,11 +55,11 @@ namespace mongo {
             code = _code;
             msg = _msg;
         }
-        void recordUpdate( bool _updateObjects , long long _nObjects , OID _upsertedId ) {
+        void recordUpdate( bool _updateObjects , long long _nObjects , BSONObj _upsertedId ) {
             reset( true );
             nObjects = _nObjects;
             updatedExisting = _updateObjects ? True : False;
-            if ( _upsertedId.isSet() )
+            if ( _upsertedId.valid() && _upsertedId.hasField(kUpsertedFieldName) )
                 upsertedId = _upsertedId;
 
         }
@@ -67,10 +77,9 @@ namespace mongo {
             updatedExisting = NotUpdate;
             nObjects = 0;
             nPrev = 1;
-            writebackSince++;
             valid = _valid;
             disabled = false;
-            upsertedId.clear();
+            upsertedId = BSONObj();
         }
 
         /**

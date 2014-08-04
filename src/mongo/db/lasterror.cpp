@@ -1,7 +1,6 @@
 // lasterror.cpp
 
 /*    Copyright 2009 10gen Inc.
- *    Copyright (C) 2013 Tokutek Inc.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -16,12 +15,12 @@
  *    limitations under the License.
  */
 
-#include "pch.h"
+#include "mongo/pch.h"
 
+#include "mongo/db/lasterror.h"
+
+#include "mongo/db/jsobj.h"
 #include "mongo/util/net/message.h"
-
-#include "lasterror.h"
-#include "jsobj.h"
 
 namespace mongo {
 
@@ -78,9 +77,9 @@ namespace mongo {
             b.append( "code" , code );
         if ( updatedExisting != NotUpdate )
             b.appendBool( "updatedExisting", updatedExisting == True );
-        if ( upsertedId.isSet() )
-            b.append( "upserted" , upsertedId );
-
+        if ( !upsertedId.isEmpty() ) {
+            b.append( upsertedId[kUpsertedFieldName] );
+        }
         b.appendNumber( "n", nObjects );
 
         return ! msg.empty();
