@@ -15,6 +15,18 @@
 *
 *    You should have received a copy of the GNU Affero General Public License
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*
+*    As a special exception, the copyright holders give permission to link the
+*    code of portions of this program with the OpenSSL library under certain
+*    conditions as described in each individual source file and distribute
+*    linked combinations including the program with the OpenSSL library. You
+*    must comply with the GNU Affero General Public License in all respects for
+*    all of the code used other than as permitted herein. If you modify file(s)
+*    with this exception, you may extend this exception to your version of the
+*    file(s), but you are not obligated to do so. If you do not wish to do so,
+*    delete this exception statement from your version. If you delete this
+*    exception statement from all source files in the program, then also delete
+*    it in the license file.
 */
 
 /* Client represents a connection to the database (the server-side) and corresponds
@@ -29,40 +41,38 @@
 #include <vector>
 
 #include "mongo/base/status.h"
+#include "mongo/bson/mutable/document.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
-#include "mongo/db/auth/authorization_manager.h"
-#include "mongo/db/auth/auth_external_state_d.h"
+#include "mongo/db/auth/authorization_manager_global.h"
+#include "mongo/db/auth/authorization_session.h"
+#include "mongo/db/auth/authz_session_external_state_d.h"
 #include "mongo/db/auth/privilege.h"
+#include "mongo/db/commands.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/database.h"
 #include "mongo/db/databaseholder.h"
 #include "mongo/db/json.h"
 #include "mongo/db/kill_current_op.h"
-#include "mongo/db/commands.h"
-#include "mongo/db/instance.h"
 #include "mongo/db/dbwebserver.h"
+#include "mongo/db/instance.h"
 #include "mongo/db/json.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/repl/rs.h"
-#include "mongo/db/server_parameters.h"
+#include "mongo/db/storage_options.h"
 #include "mongo/s/chunk_version.h"
 #include "mongo/s/d_logic.h"
 #include "mongo/s/stale_exception.h" // for SendStaleConfigException
 #include "mongo/scripting/engine.h"
-#include "mongo/util/mongoutils/html.h"
+#include "mongo/util/concurrency/thread_name.h"
+#include "mongo/util/mongoutils/checksum.h"
 #include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
-  
-    mongo::mutex& Client::clientsMutex = *(new mutex("clientsMutex"));
-    set<Client*>& Client::clients = *(new set<Client*>); // always be in clientsMutex when manipulating this
 
     RWLockRecursive operationLock("operationLock");
 
     MONGO_EXPORT_SERVER_PARAMETER(forceWriteLocks, bool, false);
-
-    TSP_DEFINE(Client, currentClient)
 
     Client::CreatingSystemUsersScope::CreatingSystemUsersScope()
             : _prev(cc()._creatingSystemUsers) {
@@ -85,6 +95,7 @@ namespace mongo {
     Client::UpgradingSystemUsersScope::UpgradingSystemUsersScope() {
         cc()._upgradingSystemUsers = true;
     }
+
     Client::UpgradingSystemUsersScope::~UpgradingSystemUsersScope() {
         cc()._upgradingSystemUsers = false;
     }
@@ -92,29 +103,44 @@ namespace mongo {
     Client::UpgradingDiskFormatVersionScope::UpgradingDiskFormatVersionScope() {
         cc()._upgradingDiskFormatVersion = true;
     }
+
     Client::UpgradingDiskFormatVersionScope::~UpgradingDiskFormatVersionScope() {
         cc()._upgradingDiskFormatVersion = false;
     }
 
+    mongo::mutex& Client::clientsMutex = *(new mutex("clientsMutex"));
+    set<Client*>& Client::clients = *(new set<Client*>); // always be in clientsMutex when manipulating this
+
+    TSP_DEFINE(Client, currentClient)
     /* each thread which does db operations has a Client object in TLS.
        call this when your thread starts.
     */
     Client& Client::initThread(const char *desc, AbstractMessagingPort *mp) {
         verify( currentClient.get() == 0 );
-        Client *c = new Client(desc, mp);
+
+        string fullDesc = desc;
+        if ( str::equals( "conn" , desc ) && mp != NULL )
+            fullDesc = str::stream() << desc << mp->connectionId();
+
+        setThreadName( fullDesc.c_str() );
+
+        // Create the client obj, attach to thread
+        Client *c = new Client( fullDesc, mp );
         currentClient.reset(c);
         mongo::lastError.initThread();
-        c->setAuthorizationManager(new AuthorizationManager(new AuthExternalStateMongod()));
+        c->setAuthorizationSession(new AuthorizationSession(new AuthzSessionExternalStateMongod(
+                getGlobalAuthorizationManager())));
         return *c;
     }
 
-    Client::Client(const char *desc, AbstractMessagingPort *p) :
+    Client::Client(const string& desc, AbstractMessagingPort *p) :
         ClientBasic(p),
         _context(0),
         _rootTransactionId(0),
         _shutdown(false),
         _desc(desc),
         _god(0),
+        _lastOp(0),
         _creatingSystemUsers(""),
         _upgradingSystemUsers(false),
         _upgradingDiskFormatVersion(false),
@@ -123,10 +149,6 @@ namespace mongo {
         _lockTimeout(cmdLine.lockTimeout)
     {
         _connectionId = p ? p->connectionId() : 0;
-        
-        if ( str::equals( "conn" , desc ) && _connectionId > 0 )
-            _desc = str::stream() << desc << _connectionId;
-        setThreadName(_desc.c_str());
         _curOp = new CurOp( this );
 #ifndef _WIN32
         stringstream temp;
@@ -140,6 +162,22 @@ namespace mongo {
     Client::~Client() {
         _god = 0;
 
+        // Because both Client object pointers and logging infrastructure are stored in Thread
+        // Specific Pointers and because we do not explicitly control the order in which TSPs are
+        // deleted, it is possible for the logging infrastructure to have been deleted before
+        // this code runs.  This leads to segfaults (access violations) if this code attempts
+        // to log anything.  Therefore, disable logging from this destructor until this is fixed.
+        // TODO(tad) Force the logging infrastructure to be the last TSP to be deleted for each
+        // thread and reenable this code once that is done.
+#if 0
+        if ( _context )
+            error() << "Client::~Client _context should be null but is not; client:" << _desc << endl;
+
+        if ( ! _shutdown ) {
+            error() << "Client::shutdown not called: " << _desc << endl;
+        }
+#endif
+
         // client is being destroyed, if there are any transactions on our stack,
         // abort them, starting with the one in the loadInfo object if it exists.
         _loadInfo.reset();
@@ -149,37 +187,26 @@ namespace mongo {
             }
         }
 
-        if ( _context )
-            error() << "Client::~Client _context should be null but is not; client:" << _desc << endl;
-
-        if ( ! _shutdown ) {
-            error() << "Client::shutdown not called: " << _desc << endl;
-        }
-
         if ( ! inShutdown() ) {
             // we can't clean up safely once we're in shutdown
-            scoped_lock bl(clientsMutex);
-            if ( ! _shutdown )
-                clients.erase(this);
-            delete _curOp;
-        }
-    }
-
-    // called when we transition from primary to secondary
-    // a global write lock is held while this is happening
-    void Client::abortLiveTransactions() {
-        verify(Lock::isW());
-        scoped_lock bl(Client::clientsMutex);
-        for( set<Client*>::iterator i = Client::clients.begin(); i != Client::clients.end(); i++ ) {
-            Client *c = *i;
-            while (c->hasTxn()) {
-                c->abortTopTxn();
+            {
+                scoped_lock bl(clientsMutex);
+                if ( ! _shutdown )
+                    clients.erase(this);
             }
+
+            CurOp* last;
+            do {
+                last = _curOp;
+                delete _curOp;
+                // _curOp may have been reset to _curOp->_wrapped
+            } while (_curOp != last);
         }
     }
 
     bool Client::shutdown() {
         _shutdown = true;
+
         // client is being destroyed, if there are any transactions on our stack,
         // abort them, starting with the one in the loadInfo object if it exists.
         _loadInfo.reset();
@@ -198,11 +225,12 @@ namespace mongo {
         return false;
     }
 
-    BSONObj CachedBSONObj::_tooBig = fromjson("{\"$msg\":\"query not recording (too large)\"}");
+    BSONObj CachedBSONObjBase::_tooBig = fromjson("{\"$msg\":\"query not recording (too large)\"}");
     Client::Context::Context(const StringData& ns , Database * db) :
         _client( currentClient.get() ), 
         _oldContext( _client->_context ),
-        _path( mongo::dbpath ), // is this right? could be a different db? may need a dassert for this
+        _path(storageGlobalParams.dbpath), // is this right? could be a different db?
+                                               // may need a dassert for this
         _doVersion( true ),
         _ns( ns.toString() ),
         _db(db)
@@ -230,6 +258,7 @@ namespace mongo {
         : _lk(ns, context) ,
           _c(ns, dbpath) {
     }
+
 
     void Client::Context::checkNotStale() const { 
         switch ( _client->_curOp->getOp() ) {
@@ -274,7 +303,7 @@ namespace mongo {
         if ( db == _ns )
             return true;
 
-        size_t idx = _ns.find( db.toString() );
+        string::size_type idx = _ns.find( db );
         if ( idx != 0 )
             return false;
 
@@ -308,8 +337,7 @@ namespace mongo {
         return c->toString();
     }
 
-    // used to establish a slave for 'w' write concern
-    void Client::gotHandshake( const BSONObj& o ) {
+    bool Client::gotHandshake( const BSONObj& o ) {
         BSONObjIterator i(o);
 
         {
@@ -326,9 +354,11 @@ namespace mongo {
 
         _handshake = b.obj();
 
-        if (theReplSet && o.hasField("member")) {
-            theReplSet->registerSlave(_remoteId, o["member"].Int());
+        if (!theReplSet || !o.hasField("member")) {
+            return false;
         }
+
+        return theReplSet->registerSlave(_remoteId, o["member"].Int());
     }
 
     bool ClientBasic::hasCurrent() {
@@ -340,7 +370,7 @@ namespace mongo {
     }
 
     class HandshakeCmd : public InformationCommand {
-      public:
+    public:
         void help(stringstream& h) const { h << "internal"; }
         HandshakeCmd() : InformationCommand("handshake") {}
         virtual bool adminOnly() const { return false; }
@@ -348,14 +378,15 @@ namespace mongo {
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {
             ActionSet actions;
-            actions.addAction(ActionType::handshake);
-            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+            actions.addAction(ActionType::internal);
+            out->push_back(Privilege(ResourcePattern::forClusterResource(), actions));
         }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             Client& c = cc();
             c.gotHandshake( cmdObj );
-            return true;
+            return 1;
         }
+
     } handshakeCmd;
 
     class ClientListPlugin : public WebStatusPlugin {
@@ -474,14 +505,19 @@ namespace mongo {
         exhaust = false;
 
         nscanned = -1;
+        nscannedObjects = -1;
         idhack = false;
         scanAndOrder = false;
-        nupdated = -1;
+        nMatched = -1;
+        nModified = -1;
         ninserted = -1;
         ndeleted = -1;
+        fastmod = false;
         fastmodinsert = false;
         upsert = false;
         keyUpdates = 0;  // unsigned, so -1 not possible
+        planSummary = "";
+        execStats.reset();
         
         exceptionInfo.reset();
         lockNotGrantedInfo = BSONObj();
@@ -516,11 +552,29 @@ namespace mongo {
         s << ns;
 
         if ( ! query.isEmpty() ) {
-            if ( iscommand )
+            if ( iscommand ) {
                 s << " command: ";
-            else
+                
+                Command* curCommand = curop.getCommand();
+                if (curCommand) {
+                    mutablebson::Document cmdToLog(curop.query(), 
+                            mutablebson::Document::kInPlaceDisabled);
+                    curCommand->redactForLogging(&cmdToLog);
+                    s << curCommand->name << " ";
+                    s << cmdToLog.toString();
+                } 
+                else { // Should not happen but we need to handle curCommand == NULL gracefully
+                    s << query.toString();
+                }
+            }
+            else {
                 s << " query: ";
-            s << query.toString(false, true);
+                s << query.toString();
+            }
+        }
+
+        if (!planSummary.empty()) {
+            s << " planSummary: " << planSummary.toString();
         }
         
         if ( ! updateobj.isEmpty() ) {
@@ -534,11 +588,14 @@ namespace mongo {
         OPDEBUG_TOSTRING_HELP_BOOL( exhaust );
 
         OPDEBUG_TOSTRING_HELP( nscanned );
+        OPDEBUG_TOSTRING_HELP( nscannedObjects );
         OPDEBUG_TOSTRING_HELP_BOOL( idhack );
         OPDEBUG_TOSTRING_HELP_BOOL( scanAndOrder );
-        OPDEBUG_TOSTRING_HELP( nupdated );
+        OPDEBUG_TOSTRING_HELP( nMatched );
+        OPDEBUG_TOSTRING_HELP( nModified );
         OPDEBUG_TOSTRING_HELP( ninserted );
         OPDEBUG_TOSTRING_HELP( ndeleted );
+        OPDEBUG_TOSTRING_HELP_BOOL( fastmod );
         OPDEBUG_TOSTRING_HELP_BOOL( fastmodinsert );
         OPDEBUG_TOSTRING_HELP_BOOL( upsert );
         OPDEBUG_TOSTRING_HELP( keyUpdates );
@@ -588,13 +645,49 @@ namespace mongo {
     void OpDebug::append( const CurOp& curop, BSONObjBuilder& b ) const {
         b.append( "op" , iscommand ? "command" : opToString( op ) );
         b.append( "ns" , ns );
-        if ( ! query.isEmpty() )
-            b.append( iscommand ? "command" : "query" , query );
-        else if ( ! iscommand && curop.haveQuery() )
-            curop.appendQuery( b , "query" );
+        
+        int queryUpdateObjSize = 0;
+        if (!query.isEmpty()) {
+            queryUpdateObjSize += query.objsize();
+        }
+        else if (!iscommand && curop.haveQuery()) {
+            queryUpdateObjSize += curop.query()["query"].size();
+        }
 
-        if ( ! updateobj.isEmpty() )
+        if (!updateobj.isEmpty()) {
+            queryUpdateObjSize += updateobj.objsize();
+        }
+
+        if (static_cast<size_t>(queryUpdateObjSize) > maxSize) {
+            if (!query.isEmpty()) {
+                // Use 60 since BSONObj::toString can truncate strings into 150 chars
+                // and we want to have enough room for both query and updateobj when
+                // the entire document is going to be serialized into a string
+                const string abbreviated(query.toString(false, false), 0, 60);
+                b.append(iscommand ? "command" : "query", abbreviated + "...");
+            }
+            else if (!iscommand && curop.haveQuery()) {
+                const string abbreviated(curop.query()["query"].toString(false, false), 0, 60);
+                b.append("query", abbreviated + "...");
+            }
+
+            if (!updateobj.isEmpty()) {
+                const string abbreviated(updateobj.toString(false, false), 0, 60);
+                b.append("updateobj", abbreviated + "...");
+            }
+
+            return false;
+        }
+
+        if (!query.isEmpty()) {
+            b.append(iscommand ? "command" : "query", query);
+        }
+        else if (!iscommand && curop.haveQuery()) {
+            curop.appendQuery(b, "query");
+        }
+        if (!updateobj.isEmpty()) {
             b.append( "updateobj" , updateobj );
+        }
         
         OPDEBUG_APPEND_NUMBER( cursorid );
         OPDEBUG_APPEND_NUMBER( ntoreturn );
@@ -602,24 +695,48 @@ namespace mongo {
         OPDEBUG_APPEND_BOOL( exhaust );
 
         OPDEBUG_APPEND_NUMBER( nscanned );
+        OPDEBUG_APPEND_NUMBER( nscannedObjects );
         OPDEBUG_APPEND_BOOL( idhack );
         OPDEBUG_APPEND_BOOL( scanAndOrder );
         OPDEBUG_APPEND_NUMBER( nupdated );
+        OPDEBUG_APPEND_NUMBER( nMatched );
+        OPDEBUG_APPEND_NUMBER( nModified );
         OPDEBUG_APPEND_NUMBER( ninserted );
         OPDEBUG_APPEND_NUMBER( ndeleted );
+        OPDEBUG_APPEND_BOOL( fastmod );
         OPDEBUG_APPEND_BOOL( fastmodinsert );
         OPDEBUG_APPEND_BOOL( upsert );
         OPDEBUG_APPEND_NUMBER( keyUpdates );
 
         b.append( "lockStats" , curop.lockStat().report() );
-        
-        if ( ! exceptionInfo.empty() ) 
+
+        if ( ! exceptionInfo.empty() )
             exceptionInfo.append( b , "exception" , "exceptionCode" );
-        
+
         OPDEBUG_APPEND_NUMBER( nreturned );
         OPDEBUG_APPEND_NUMBER( responseLength );
         b.append( "millis" , executionTime );
-        
+
+        execStats.append(b, "execStats");
+
+        return true;
     }
 
+    void saveGLEStats(const BSONObj& result, const std::string& conn) {
+        // This can be called in mongod, which is unfortunate.  To fix this,
+        // we can redesign how connection pooling works on mongod for sharded operations.
+    }
+
+    // called when we transition from primary to secondary
+    // a global write lock is held while this is happening
+    void Client::abortLiveTransactions() {
+        verify(Lock::isW());
+        scoped_lock bl(Client::clientsMutex);
+        for( set<Client*>::iterator i = Client::clients.begin(); i != Client::clients.end(); i++ ) {
+            Client *c = *i;
+            while (c->hasTxn()) {
+                c->abortTopTxn();
+            }
+        }
+    }
 }

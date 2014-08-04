@@ -21,6 +21,18 @@
 *
 *    You should have received a copy of the GNU Affero General Public License
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*
+*    As a special exception, the copyright holders give permission to link the
+*    code of portions of this program with the OpenSSL library under certain
+*    conditions as described in each individual source file and distribute
+*    linked combinations including the program with the OpenSSL library. You
+*    must comply with the GNU Affero General Public License in all respects for
+*    all of the code used other than as permitted herein. If you modify file(s)
+*    with this exception, you may extend this exception to your version of the
+*    file(s), but you are not obligated to do so. If you do not wish to do so,
+*    delete this exception statement from your version. If you delete this
+*    exception statement from all source files in the program, then also delete
+*    it in the license file.
 */
 
 #pragma once
@@ -29,21 +41,23 @@
 
 #include <stack>
 
-#include "mongo/db/lasterror.h"
-#include "mongo/db/stats/top.h"
 #include "mongo/db/client_basic.h"
 #include "mongo/db/d_concurrency.h"
+#include "mongo/db/lasterror.h"
 #include "mongo/db/lockstate.h"
+#include "mongo/db/stats/top.h"
 #include "mongo/db/gtid.h"
 #include "mongo/db/txn_context.h"
 #include "mongo/db/opsettings.h"
 #include "mongo/s/d_logic.h"
-#include "mongo/util/paths.h"
-#include "mongo/util/concurrency/threadlocal.h"
 #include "mongo/util/concurrency/rwlock.h"
+#include "mongo/util/concurrency/threadlocal.h"
+#include "mongo/util/paths.h"
 
 namespace mongo {
 
+    class ReplSet;
+    extern class ReplSet *theReplSet;
     class AuthenticationInfo;
     class Database;
     class CurOp;
@@ -51,11 +65,9 @@ namespace mongo {
     class Client;
     class AbstractMessagingPort;
     class LockCollectionForReading;
-    class DBClientConnection;
-    class ReplSet;
-    class TxnContext;
 
-    extern ReplSet *theReplSet;
+    class DBClientConnection;
+    class TxnContext;
     extern RWLockRecursive operationLock;
 
     TSP_DECLARE(Client, currentClient)
@@ -95,8 +107,7 @@ namespace mongo {
         Context* getContext() const { return _context; }
         Database* database() const {  return _context ? _context->db() : 0; }
         const char *ns() const { return _context->ns(); }
-        const std::string desc() const { return _desc; }
-
+        const StringData desc() const { return _desc; }
         // these function for threads that do writes to report to the client
         // what the last GTID completed was. When a transaction commits,
         // this value is set. Subsequently, when getLastError is called,
@@ -113,29 +124,12 @@ namespace mongo {
 
         bool isGod() const { return _god; } /* this is for map/reduce writes */
         string toString() const;
-        void gotHandshake( const BSONObj& o );
+        bool gotHandshake( const BSONObj& o );
         BSONObj getRemoteID() const { return _remoteId; }
         BSONObj getHandshake() const { return _handshake; }
         ConnectionId getConnectionId() const { return _connectionId; }
 
         LockState& lockState() { return _ls; }
-
-        class QuerySettings {
-        public:
-            QuerySettings(BSONObj query = BSONObj(), bool sortRequired = true) : 
-                _query(query.getOwned()), _sortRequired(sortRequired)
-            {
-            }
-            const BSONObj& getQuery() const {
-                return _query;
-            }
-            const bool& sortRequired() const {
-                return _sortRequired;
-            }
-        private:
-            BSONObj _query;
-            bool _sortRequired;
-        };
 
         /**
          * Creates a scope for the current thread inside of which it is possible to check whether a
@@ -321,6 +315,22 @@ namespace mongo {
             }
         };
 
+        class QuerySettings {
+        public:
+            QuerySettings(BSONObj query = BSONObj(), bool sortRequired = true) : 
+                _query(query.getOwned()), _sortRequired(sortRequired) {
+            }
+            const BSONObj& getQuery() const {
+                return _query;
+            }
+            const bool& sortRequired() const {
+                return _sortRequired;
+            }
+        private:
+            BSONObj _query;
+            bool _sortRequired;
+        };
+
         QuerySettings querySettings() const {
             return _querySettings;
         }
@@ -407,7 +417,7 @@ namespace mongo {
         void setLockTimeout(uint64_t val) { _lockTimeout = val; }
 
     private:
-        Client(const char *desc, AbstractMessagingPort *p = 0);
+        Client(const std::string& desc, AbstractMessagingPort *p = 0);
         friend class CurOp;
         ConnectionId _connectionId; // > 0 for things "conn", 0 otherwise
         string _threadId; // "" on non support systems
@@ -441,6 +451,17 @@ namespace mongo {
         LockState _ls;
         
     public:
+
+        /** "read lock, and set my context, all in one operation" 
+         */
+        class ReadContext : boost::noncopyable { 
+        public:
+            ReadContext(const StringData &ns, const string &context);
+            Context& ctx() { return _c; }
+        private:
+            Lock::DBRead _lk;
+            Client::Context _c;
+        };
 
         /* declare that we're creating system.users for some db
            therefore we should not care about authing for ensureIndex on system colls */
@@ -485,7 +506,8 @@ namespace mongo {
         class Context : boost::noncopyable {
         public:
             /** this is probably what you want */
-            Context(const StringData &ns, const StringData &path=dbpath, bool doVersion=true);
+            Context(const StringData &ns, const StringData &path=storageGlobalParams.dbpath,
+                    bool doVersion=true);
 
             /** note: this does not call finishInit -- i.e., does not call 
                       shardVersionOk() for example. 
@@ -497,10 +519,11 @@ namespace mongo {
             Client* getClient() const { return _client; }
             Database* db() const { return _db; }
             const char * ns() const { return _ns.c_str(); }
-            bool equals( const StringData &ns , const StringData &path=dbpath ) const { return _ns == ns && _path == path; }
-
+            bool equals( const StringData &ns , const StringData &path=storageGlobalParams.dbpath ) const {
+                return _ns == ns && _path == path;
+            }
             /** @return true iff the current Context is using db/path */
-            bool inDB( const StringData& db , const StringData& path=dbpath ) const;
+            bool inDB( const StringData& db , const StringData& path=storageGlobalParams.dbpath ) const;
 
             void _clear() { // this is sort of an "early destruct" indication, _ns can never be uncleared
                 const_cast<string&>(_ns).clear();
@@ -531,17 +554,6 @@ namespace mongo {
             Timer _timer;
         }; // class Client::Context
 
-        /** "read lock, and set my context, all in one operation" 
-         */
-        class ReadContext : boost::noncopyable { 
-        public:
-            ReadContext(const StringData &ns, const string &context);
-            Context& ctx() { return _c; }
-        private:
-            Lock::DBRead _lk;
-            Client::Context _c;
-        };
-
         class WriteContext : boost::noncopyable {
         public:
             WriteContext(const StringData &ns, const string &context);
@@ -551,7 +563,9 @@ namespace mongo {
             Context _c;
         };
 
+
     }; // class Client
+
 
     /** get the Client object for this thread. */
     inline Client& cc() {
@@ -559,6 +573,8 @@ namespace mongo {
         verify( c );
         return *c;
     }
+
+    inline bool haveClient() { return currentClient.get() > 0; }
 
     inline Client::ShardedOperationScope::ShardedOperationScope() : _c(cc()), _recursive(false) {
         if (_c._scp) {
@@ -597,8 +613,6 @@ namespace mongo {
     }
 
     inline Client::GodScope::~GodScope() { cc()._god = _prev; }
-
-    inline bool haveClient() { return currentClient.get() > 0; }
 
     struct QuerySettingsHolder {
         QuerySettingsHolder(BSONObj query, BSONObj sort) {
