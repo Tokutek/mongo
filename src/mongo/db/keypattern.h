@@ -15,6 +15,18 @@
 *
 *    You should have received a copy of the GNU Affero General Public License
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*
+*    As a special exception, the copyright holders give permission to link the
+*    code of portions of this program with the OpenSSL library under certain
+*    conditions as described in each individual source file and distribute
+*    linked combinations including the program with the OpenSSL library. You
+*    must comply with the GNU Affero General Public License in all respects for
+*    all of the code used other than as permitted herein. If you modify file(s)
+*    with this exception, you may extend this exception to your version of the
+*    file(s), but you are not obligated to do so. If you do not wish to do so,
+*    delete this exception statement from your version. If you delete this
+*    exception statement from all source files in the program, then also delete
+*    it in the license file.
 */
 
 #pragma once
@@ -90,13 +102,11 @@ namespace mongo {
          */
         BSONElement getField( const char* fieldname ) const { return _pattern[ fieldname ]; }
 
-        /*
-         * Returns true if the key described by this KeyPattern is a prefix of
-         * the (potentially) compound key described by 'other'
+        /**
+         * Is the provided key pattern the index over the ID field?
+         * The always required ID index is always {_id: 1} or {_id: -1}.
          */
-        bool isPrefixOf( const KeyPattern& other ) const {
-            return _pattern.isPrefixOf( other.toBSON() );
-        }
+        static bool isIdKeyPattern(const BSONObj& pattern);
 
         /* Takes a BSONObj whose field names are a prefix of the fields in this keyPattern, and
          * outputs a new bound with MinKey values appended to match the fields in this keyPattern
@@ -154,22 +164,6 @@ namespace mongo {
          *   { a: 1 } --> returns { a : NumberLong("5902408780260971510")  }
          */
         BSONObj extractSingleKey( const BSONObj& doc ) const;
-
-        /* Given a key without field names, extractSingleKey extracts the prefix of that key this
-         * KeyPattern cares about, and adds back the field names.  Useful for sharding, which uses
-         * prefixes of keys.
-         *
-         * Examples:
-         *  If 'this' KeyPattern is {a:1, b:1}
-         *   {"": "hi", "": 4} --> returns {a: "hi", b: 4}
-         *   {"": 4, "": 2} --> returns {a: 4, b: 2}
-         *   {"": 1, "": 2, "": 3} --> returns {a: 1, b: 2}
-         *
-         * In short, don't call this unless you know the schema is what you expect.  If 'this'
-         * KeyPattern is {a: "hashed"}, we DO NOT perform the hash on the key, because we expect it
-         * is a key coming out of the db, so it has already been hashed.
-         */
-        BSONObj prettyKey(const BSONObj &key) const;
 
         /**@param queryConstraints a FieldRangeSet, usually formed from parsing a query
          * @return an ordered list of bounds generated using this KeyPattern and the

@@ -15,6 +15,18 @@
 *
 *    You should have received a copy of the GNU Affero General Public License
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*
+*    As a special exception, the copyright holders give permission to link the
+*    code of portions of this program with the OpenSSL library under certain
+*    conditions as described in each individual source file and distribute
+*    linked combinations including the program with the OpenSSL library. You
+*    must comply with the GNU Affero General Public License in all respects for
+*    all of the code used other than as permitted herein. If you modify file(s)
+*    with this exception, you may extend this exception to your version of the
+*    file(s), but you are not obligated to do so. If you do not wish to do so,
+*    delete this exception statement from your version. If you delete this
+*    exception statement from all source files in the program, then also delete
+*    it in the license file.
 */
 
 #include "mongo/db/keypattern.h"
@@ -57,6 +69,17 @@ namespace mongo {
         }
     }
 
+    bool KeyPattern::isIdKeyPattern(const BSONObj& pattern) {
+        BSONObjIterator i(pattern);
+        BSONElement e = i.next();
+        // _id index must have form exactly {_id : 1} or {_id : -1}.
+        // Allows an index of form {_id : "hashed"} to exist but
+        // do not consider it to be the primary _id index
+        return (0 == strcmp(e.fieldName(), "_id"))
+               && (e.numberInt() == 1 || e.numberInt() == -1)
+               && i.next().eoo();
+    }
+
     BSONObj KeyPattern::extractSingleKey(const BSONObj& doc ) const {
         if ( _pattern.isEmpty() )
             return BSONObj();
@@ -69,22 +92,6 @@ namespace mongo {
         }
 
         return doc.extractFields( _pattern );
-    }
-
-    BSONObj KeyPattern::prettyKey(const BSONObj &key) const {
-        if (_pattern.isEmpty()) {
-            return BSONObj();
-        }
-        BSONObjBuilder b;
-        BSONObjIterator keyIter(key);
-        BSONObjIterator patIter(_pattern);
-        while (patIter.more()) {
-            massert(16800, "key is shorter than expected key pattern", keyIter.more());
-            BSONElement k = keyIter.next();
-            BSONElement p = patIter.next();
-            b.appendAs(k, p.fieldName());
-        }
-        return b.obj();
     }
 
     bool KeyPattern::isSpecial() const {
