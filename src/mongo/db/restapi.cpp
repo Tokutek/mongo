@@ -16,23 +16,38 @@
 *
 *    You should have received a copy of the GNU Affero General Public License
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*
+*    As a special exception, the copyright holders give permission to link the
+*    code of portions of this program with the OpenSSL library under certain
+*    conditions as described in each individual source file and distribute
+*    linked combinations including the program with the OpenSSL library. You
+*    must comply with the GNU Affero General Public License in all respects for
+*    all of the code used other than as permitted herein. If you modify file(s)
+*    with this exception, you may extend this exception to your version of the
+*    file(s), but you are not obligated to do so. If you do not wish to do so,
+*    delete this exception statement from your version. If you delete this
+*    exception statement from all source files in the program, then also delete
+*    it in the license file.
 */
 
 #include "mongo/pch.h"
 
-#include <db.h>
+#include "mongo/db/restapi.h"
 
-#include "mongo/util/net/miniwebserver.h"
-#include "mongo/util/mongoutils/html.h"
-#include "mongo/util/md5.hpp"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_session.h"
+#include "mongo/db/auth/user_name.h"
 #include "mongo/db/client.h"
-#include "mongo/db/instance.h"
-#include "mongo/db/dbwebserver.h"
-#include "mongo/db/repl.h"
-#include "mongo/db/replutil.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/databaseholder.h"
-#include "mongo/db/restapi.h"
+#include "mongo/db/dbwebserver.h"
+
+#include "mongo/db/instance.h"
+#include "mongo/db/repl.h"
+#include "mongo/db/replutil.h"
+#include "mongo/util/md5.hpp"
+#include "mongo/util/mongoutils/html.h"
+#include "mongo/util/net/miniwebserver.h"
 
 namespace mongo {
 
@@ -247,32 +262,8 @@ namespace mongo {
     } restHandler;
 
     bool RestAdminAccess::haveAdminUsers() const {
-        LOCK_REASON(lockReason, "restapi: getting admin auth credentials");
-        readlocktry rl(10000, lockReason);
-        uassert( 16173 , "couldn't get read lock to get admin auth credentials" , rl.got() );
-        Client::Context cx("admin.system.users", dbpath);
-        Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
-
-        BSONObj o;
-        const bool ok = Collection::findOne("admin.system.users", BSONObj(), o);
-        txn.commit();
-        return ok;
-    }
-
-    BSONObj RestAdminAccess::getAdminUser( const string& username ) const {
-        Client::GodScope gs;
-        LOCK_REASON(lockReason, "restapi: checking admin user");
-        readlocktry rl(10000, lockReason);
-        uassert( 16174 , "couldn't get read lock to check admin user" , rl.got() );
-        Client::Context cx( "admin.system.users" );
-        Client::Transaction txn(DB_TXN_READ_ONLY | DB_TXN_SNAPSHOT);
-
-        BSONObj user;
-        if (Collection::findOne("admin.system.users", BSON("user" << username), user)) {
-            txn.commit();
-            return user.getOwned();
-        }
-        return BSONObj();
+        AuthorizationSession* authzSession = cc().getAuthorizationSession();
+        return authzSession->getAuthorizationManager().hasAnyPrivilegeDocuments();
     }
 
     class LowLevelMongodStatus : public WebStatusPlugin {
@@ -285,16 +276,15 @@ namespace mongo {
             ss << "<pre>\n";
             ss << "time to get readlock: " << millis << "ms\n";
             ss << "# databases: " << dbHolder().sizeInfo() << '\n';
-            ss << "# Cursors: " << ClientCursor::numCursors() << '\n';
+            ss << "# Cursors: " << ClientCursor::totalOpen() << '\n';
             ss << "replication: ";
             if( *replInfo )
                 ss << "\nreplInfo:  " << replInfo << "\n\n";
             if( replSet ) {
-                ss << a("", "see replSetGetStatus link top of page") << "--replSet </a>" << cmdLine._replSet;
+                ss << a("", "see replSetGetStatus link top of page") << "--replSet </a>" << replSettings.replSet;
             }
-            if ( replAllDead ) {
+            if ( replAllDead )
                 ss << "\n<b>replication replAllDead=" << replAllDead << "</b>\n";
-            }
             ss << "</pre>\n";
         }
 
