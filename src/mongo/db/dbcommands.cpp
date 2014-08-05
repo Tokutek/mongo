@@ -387,7 +387,7 @@ namespace mongo {
         virtual void help( stringstream& help ) const {
             help << "drop (delete) this database";
         }
-
+        virtual void handleRollbackForward(const string& db, const BSONObj& cmdObj, RollbackDocsMap* docsMap) const { }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {
@@ -689,6 +689,7 @@ namespace mongo {
     public:
         CmdDrop() : FileopsCommand("drop") { }
         virtual bool logTheOp() { return true; }
+        virtual void handleRollbackForward(const string& db, const BSONObj& cmdObj, RollbackDocsMap* docsMap) const { }
         virtual bool adminOnly() const { return false; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
@@ -777,6 +778,14 @@ namespace mongo {
             help << "create a collection explicitly\n"
                 "{ create: <ns>[, capped: <bool>, size: <collSizeInBytes>, max: <nDocs>] }";
         }
+        virtual void handleRollbackForward(const string& db, const BSONObj& cmdObj, RollbackDocsMap* docsMap) const { 
+            string ns = db + '.' + cmdObj.firstElement().valuestr();
+            LOG(2) << "checking if doc exists for " << ns << endl;
+            if (docsMap->docsForNSExists(ns.c_str())) {
+                throw RollbackOplogException ("creating a collection that has documents in docsMap, cannot continue rollback");
+            }
+        }
+
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {
@@ -813,6 +822,7 @@ namespace mongo {
             actions.addAction(ActionType::dropIndexes);
             out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
         }
+        virtual void handleRollbackForward(const string& db, const BSONObj& cmdObj, RollbackDocsMap* docsMap) const { }
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& anObjBuilder, bool /*fromRepl*/) {
             BSONElement e = jsobj.firstElement();
             string toDeleteNs = dbname + '.' + e.valuestr();
@@ -1822,6 +1832,7 @@ namespace mongo {
                 "optionally provide pivot for last current partition\n." <<
                 "Example: {addPartition : \"foo\"} or {addPartition: \"foo\", newMax: {_id: 1000}}";
         }
+        virtual void handleRollbackForward(const string& db, const BSONObj& cmdObj, RollbackDocsMap* docsMap) const { }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {
@@ -1900,6 +1911,7 @@ namespace mongo {
         virtual void help( stringstream& help ) const {
             help << "Internal.\n";
         }
+        virtual void handleRollbackForward(const string& db, const BSONObj& cmdObj, RollbackDocsMap* docsMap) const { }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {
@@ -2243,6 +2255,27 @@ namespace mongo {
 
         appendCommandStatus(result, retval, errmsg);
         return;
+    }
+
+    // derived from _runCommands below
+    Command* getCommand(const BSONObj &cmdobj) {
+        BSONObj jsobj;
+        {
+            BSONElement e = cmdobj.firstElement();
+            if ( e.type() == Object && (e.fieldName()[0] == '$'
+                                         ? str::equals("query", e.fieldName()+1)
+                                         : str::equals("query", e.fieldName())))
+            {
+                jsobj = e.embeddedObject();
+            }
+            else {
+                jsobj = cmdobj;
+            }
+        }
+
+        // Treat the command the same as if it has slaveOk bit on if it has a read
+        BSONElement e = jsobj.firstElement();
+        return e.type() ? Command::findCommand( e.fieldName() ) : 0;
     }
 
 

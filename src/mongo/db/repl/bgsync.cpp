@@ -372,7 +372,7 @@ namespace mongo {
         }
         catch (RollbackOplogException& re){
             // we attempted a rollback and failed, we must go fatal.
-            log() << "Caught a RollbackOplogException during rollback, going fatal" << rsLog;
+            log() << "Caught a RollbackOplogException during rollback, going fatal:  " << re.what() << rsLog;
             theReplSet->fatal();
             return 2; // 2 is arbitrary, if we are going fatal, we are done
         }

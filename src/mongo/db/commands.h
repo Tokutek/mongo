@@ -30,6 +30,8 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/db/opsettings.h"
 #include "mongo/util/mongoutils/str.h"
+#include "mongo/db/oplog_helpers.h"
+#include "mongo/db/repl/rs_exception.h"
 
 namespace mongo {
 
@@ -161,6 +163,11 @@ namespace mongo {
            (unreadable) state.
          */
         virtual bool maintenanceOk() const { return true; /* assumed true prior to commit */ }
+
+        // called if we encounter this command during rollback when running forward
+        virtual void handleRollbackForward(const string& db, const BSONObj& cmdObj, RollbackDocsMap* docsMap) const {
+            throw RollbackOplogException(str::stream() << "Cannot apply command during rollback op: " << cmdObj);
+        }
 
         /** @param webUI expose the command in the web ui as localhost:28017/<name>
             @param oldName an optional old, deprecated name for the command
@@ -337,5 +344,6 @@ namespace mongo {
     };
 
     bool _runCommands(const char *ns, const BSONObj &cmdObj, BufBuilder &b, BSONObjBuilder& anObjBuilder, bool fromRepl, int queryOptions);
+    Command* getCommand(const BSONObj &cmdobj);
 
 } // namespace mongo

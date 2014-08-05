@@ -587,7 +587,7 @@ namespace mongo {
             }
         }
 
-        static void runCommandFromOplog(const char *ns, const BSONObj &op) {
+        static void runCommandFromOplog(const char *ns, const BSONObj &op, RollbackDocsMap* docsMap) {
             BufBuilder bb;
             BSONObjBuilder ob;
 
@@ -595,6 +595,18 @@ namespace mongo {
             const BSONObj command = op[KEY_STR_ROW].embeddedObject();
             bool ret = _runCommands(ns, command, bb, ob, true, 0);
             massert(17220, str::stream() << "Command " << op.str() << " failed under runCommandFromOplog: " << ob.done(), ret);
+
+            // for now, every command should thrown an exception if run during
+            // rollback. Soon, we will make this finer grained. For example, dropping
+            // an index should not be an issue, whereas dropping or creating a
+            // collection should remove all instances in docsMap for the associated
+            // collection.
+            if (docsMap != NULL) {
+                Command* c = getCommand(command);
+                massert(0, "Could not get command", c);
+                std::string dbname = nsToDatabase(ns);
+                c->handleRollbackForward(dbname, command, docsMap);
+            }
         }
 
         // apply an operation that comes from the oplog
@@ -644,16 +656,8 @@ namespace mongo {
                 runCappedDeleteFromOplog(ns, op, docsMap);
             }
             else if (strcmp(opType, OP_STR_COMMAND) == 0) {
-                // for now, every command should thrown an exception if run during
-                // rollback. Soon, we will make this finer grained. For example, dropping
-                // an index should not be an issue, whereas dropping or creating a
-                // collection should remove all instances in docsMap for the associated
-                // collection.
-                if (docsMap != NULL) {
-                    throw RollbackOplogException(str::stream() << "Cannot apply command during rollback op: " << op);
-                }
                 opCounters->gotCommand();
-                runCommandFromOplog(ns, op);
+                runCommandFromOplog(ns, op, docsMap);
             }
             else if (strcmp(opType, OP_STR_COMMENT) == 0) {
                 // no-op
@@ -836,7 +840,26 @@ namespace mongo {
         return ret;
 
     }
-    
+
+    bool RollbackDocsMap::docsForNSExists(const char* ns) const {
+        LOCK_REASON(lockReason, "repl rollback: RollbackDocsMap::docsForNSExists");
+        Client::ReadContext ctx(rsRollbackDocs, lockReason);
+        BSONObjBuilder nsBuilder;
+        nsBuilder.append("ns" , ns);
+        BSONObjBuilder gteBuilder;
+        gteBuilder.append("$gte", nsBuilder.obj());
+        BSONObjBuilder query;
+        query.append("_id", gteBuilder.obj());
+        // now we have our query: {_id : {$gte : { ns : ns  }}}
+        BSONObj result;
+        bool found = Collection::findOne(rsRollbackDocs, query.done(), result, true);
+        if (!found) {
+            return false;
+        }
+        BSONObj id = result["_id"].Obj();
+        return strcmp(ns, id["ns"].String().c_str()) == 0;
+    }
+
     void RollbackDocsMap::addDoc(const char* ns, const BSONObj pk) {
         // this function should be called from repl with a transaction already created
         LOCK_REASON(lockReason, "repl rollback: RollbackDocsMap::addDoc");

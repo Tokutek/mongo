@@ -47,6 +47,7 @@ namespace mongo {
         void initialize();
         static void dropDocsMap();
         bool docExists(const char* ns, const BSONObj pk) const;
+        bool docsForNSExists(const char* ns) const;
         void addDoc(const char* ns, const BSONObj pk);
         long long size();
 

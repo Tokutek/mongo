@@ -32,10 +32,44 @@ doRenameForwardPhase = function(conn) {
     doRename(conn);
 };
 
+doDropIndexForwardPhase = function(conn) {
+    preloadMoreData(conn);
+    conn.getDB("test").foo.ensureIndex({a:1});
+    assert.commandWorked(conn.getDB("test").foo.dropIndex({a:1}));
+}
+
+doDropForwardPhase = function(conn) {
+    preloadMoreData(conn);
+    conn.getDB("test").foo.ensureIndex({a:1});
+    assert.commandWorked(conn.getDB("test").foo.dropIndex({a:1}));
+    assert(conn.getDB("test").foo.drop());
+}
+
+doCreateForwardPhase = function(conn) {
+    preloadMoreData(conn);
+    conn.getDB("test").foo.ensureIndex({a:1});
+    assert.commandWorked(conn.getDB("test").foo.dropIndex({a:1}));
+    assert(conn.getDB("test").foo.drop());
+    assert.commandWorked(conn.getDB("test").createCollection("foo"));
+}
+
+doCreateForwardPhase2 = function(conn) {
+    preloadMoreData(conn);
+    conn.getDB("test").foo.ensureIndex({a:1});
+    assert.commandWorked(conn.getDB("test").foo.dropIndex({a:1}));
+    assert(conn.getDB("test").foo.drop());
+    assert.commandWorked(conn.getDB("test").createCollection("bar"));
+    assert.commandWorked(conn.getDB("test").createCollection("zzz"));
+}
+
 doSimpleUpdate = function(conn) {
     conn.getDB("test").foo.update({_id : 5}, {$set : {state : "Shall go fatal!"}});
 };
 
 doRollbackTest( 15, 1000000, 31000, preloadData, preloadMoreData, doRename, true );
 doRollbackTest( 15, 1000000, 31000, preloadData, doRenameForwardPhase, doSimpleUpdate, true );
+doRollbackTest( 15, 1000000, 31000, preloadData, doDropIndexForwardPhase, doSimpleUpdate, false );
+doRollbackTest( 15, 1000000, 31000, preloadData, doDropForwardPhase, doSimpleUpdate, false );
+doRollbackTest( 15, 1000000, 31000, preloadData, doCreateForwardPhase, doSimpleUpdate, true );
+doRollbackTest( 15, 1000000, 31000, preloadData, doCreateForwardPhase2, doSimpleUpdate, false );
 
