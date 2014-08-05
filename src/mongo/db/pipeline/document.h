@@ -1,6 +1,5 @@
 /**
  * Copyright 2011 (c) 10gen Inc.
- * Copyright (C) 2013 Tokutek Inc.
  *
  * This program is free software: you can redistribute it and/or  modify
  * it under the terms of the GNU Affero General Public License, version 3,
@@ -13,6 +12,18 @@
  *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * As a special exception, the copyright holders give permission to link the
+ * code of portions of this program with the OpenSSL library under certain
+ * conditions as described in each individual source file and distribute
+ * linked combinations including the program with the OpenSSL library. You
+ * must comply with the GNU Affero General Public License in all respects for
+ * all of the code used other than as permitted herein. If you modify file(s)
+ * with this exception, you may extend this exception to your version of the
+ * file(s), but you are not obligated to do so. If you do not wish to do so,
+ * delete this exception statement from your version. If you delete this
+ * exception statement from all source files in the program, then also delete
+ * it in the license file.
  */
 
 #pragma once
@@ -104,6 +115,8 @@ namespace mongo {
          *  as strings are compared, but comparing one field at a time instead
          *  of one character at a time.
          *
+         *  Note: This does not consider metadata when comparing documents.
+         *
          *  @returns an integer less than zero, zero, or an integer greater than
          *           zero, depending on whether lhs < rhs, lhs == rhs, or lhs > rhs
          *  Warning: may return values other than -1, 0, or 1
@@ -122,8 +135,25 @@ namespace mongo {
          */
         void hash_combine(size_t &seed) const;
 
-        /// Add this document to the BSONObj under construction with the given BSONObjBuilder.
+        /**
+         * Add this document to the BSONObj under construction with the given BSONObjBuilder.
+         * Does not include metadata.
+         */
         void toBson(BSONObjBuilder *pBsonObjBuilder) const;
+        BSONObj toBson() const;
+
+        /**
+         * Like toBson, but includes metadata at the top-level.
+         * Output is parseable by fromBsonWithMetaData
+         */
+        BSONObj toBsonWithMetaData() const;
+
+        /**
+         * Like Document(BSONObj) but treats top-level fields with special names as metadata.
+         * Special field names are available as static constants on this class with names starting
+         * with metaField.
+         */
+        static Document fromBsonWithMetaData(const BSONObj& bson);
 
         // Support BSONObjBuilder and BSONArrayBuilder "stream" API
         friend BSONObjBuilder& operator << (BSONObjBuilderValueStream& builder, const Document& d);
@@ -143,21 +173,19 @@ namespace mongo {
          */
         Document clone() const { return Document(storage().clone().get()); }
 
-        // TEMP for compatibility with legacy intrusive_ptr<Document>
-              Document& operator*()       { return *this; }
-        const Document& operator*() const { return *this; }
-              Document* operator->()       { return this; }
-        const Document* operator->() const { return this; }
+        static const StringData metaFieldTextScore; // "$textScore"
+        bool hasTextScore() const { return storage().hasTextScore(); }
+        double getTextScore() const { return storage().getTextScore(); }
+
+        /// members for Sorter
+        struct SorterDeserializeSettings {}; // unused
+        void serializeForSorter(BufBuilder& buf) const;
+        static Document deserializeForSorter(BufReader& buf, const SorterDeserializeSettings&);
+        int memUsageForSorter() const { return getApproximateSize(); }
+        Document getOwned() const { return *this; }
+
+        /// only for testing
         const void* getPtr() const { return _storage.get(); }
-        void reset() { return _storage.reset(); }
-        static Document createFromBsonObj(BSONObj* pBsonObj) { return Document(*pBsonObj); }
-        size_t getFieldCount() const { return size(); }
-        Value getValue(StringData fieldName) const { return getField(fieldName); }
-
-        // TODO: replace with logical equality once all current usages are fixed
-        bool operator== (const Document& lhs) const { return _storage == lhs._storage; }
-
-        explicit Document(const DocumentStorage* ptr) : _storage(ptr) {};
 
     private:
         friend class FieldIterator;
@@ -165,11 +193,33 @@ namespace mongo {
         friend class MutableDocument;
         friend class MutableValue;
 
+        explicit Document(const DocumentStorage* ptr) : _storage(ptr) {};
+
         const DocumentStorage& storage() const {
             return (_storage ? *_storage : DocumentStorage::emptyDoc());
         }
         intrusive_ptr<const DocumentStorage> _storage;
     };
+
+    inline bool operator== (const Document& l, const Document& r) {
+        return Document::compare(l, r) == 0;
+    }
+    inline bool operator!= (const Document& l, const Document& r) {
+        return Document::compare(l, r) != 0;
+    }
+    inline bool operator<  (const Document& l, const Document& r) {
+        return Document::compare(l, r) <  0;
+    }
+    inline bool operator<= (const Document& l, const Document& r) {
+        return Document::compare(l, r) <= 0;
+    }
+    inline bool operator>  (const Document& l, const Document& r) {
+        return Document::compare(l, r) >  0;
+    }
+    inline bool operator>= (const Document& l, const Document& r) {
+        return Document::compare(l, r) >= 0;
+    }
+
 
     /** This class is returned by MutableDocument to allow you to modify its values.
      *  You are not allowed to hold variables of this type (enforced by the type system).
@@ -311,6 +361,16 @@ namespace mongo {
             getNestedField(positions) = val;
         }
 
+        /**
+         * Copies all metadata from source if it has any.
+         * Note: does not clear metadata from this.
+         */
+        void copyMetaDataFrom(const Document& source) {
+            storage().copyMetaDataFrom(source.storage());
+        }
+
+        void setTextScore(double score) { storage().setTextScore(score); }
+
         /** Convert to a read-only document and release reference.
          *
          *  Call this to indicate that you are done with this Document and will
@@ -325,6 +385,11 @@ namespace mongo {
             temp.swap(ret._storage);
             _storage = NULL;
             return ret;
+        }
+
+        /// Used to simplify the common pattern of creating a value of the document.
+        Value freezeToValue() {
+            return Value(freeze());
         }
 
         /** Borrow a readable reference to this Document.
@@ -411,6 +476,74 @@ namespace mongo {
         Document _doc;
         DocumentStorageIterator _it;
     };
+
+    /// Macro to create Document literals. Syntax is the same as the BSON("name" << 123) macro.
+#define DOC(fields) ((DocumentStream() << fields).done())
+
+    /** Macro to create Array-typed Value literals.
+     *  Syntax is the same as the BSON_ARRAY(123 << "foo") macro.
+     */
+#define DOC_ARRAY(fields) ((ValueArrayStream() << fields).done())
+
+
+    // These classes are only for the implementation of the DOC and DOC_ARRAY macros.
+    // They should not be used for any other reason.
+    class DocumentStream {
+        // The stream alternates between DocumentStream taking a fieldname
+        // and ValueStream taking a Value.
+        class ValueStream {
+        public:
+            ValueStream(DocumentStream& builder) :builder(builder) {}
+
+            DocumentStream& operator << (const Value& val) {
+                builder._md[name] = val;
+                return builder;
+            }
+
+            /// support anything directly supported by a value constructor
+            template <typename T>
+            DocumentStream& operator << (const T& val) {
+                return *this << Value(val);
+            }
+
+            StringData name;
+            DocumentStream& builder;
+        };
+
+    public:
+        DocumentStream() :_stream(*this) {}
+
+        ValueStream& operator << (const StringData& name) {
+            _stream.name = name;
+            return _stream;
+        }
+
+        Document done() { return _md.freeze(); }
+
+    private:
+        ValueStream _stream;
+        MutableDocument _md;
+    };
+
+    class ValueArrayStream {
+    public:
+        ValueArrayStream& operator << (const Value& val) {
+            _array.push_back(val);
+            return *this;
+        }
+
+        /// support anything directly supported by a value constructor
+        template <typename T>
+        ValueArrayStream& operator << (const T& val) {
+            return *this << Value(val);
+        }
+
+        Value done() { return Value::consume(_array); }
+
+    private:
+        vector<Value> _array;
+    };
+
 }
 
 namespace std {

@@ -1,6 +1,5 @@
 /**
  * Copyright (c) 2011 10gen Inc.
- * Copyright (C) 2013 Tokutek Inc.
  *
  * This program is free software: you can redistribute it and/or  modify
  * it under the terms of the GNU Affero General Public License, version 3,
@@ -13,6 +12,18 @@
  *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * As a special exception, the copyright holders give permission to link the
+ * code of portions of this program with the OpenSSL library under certain
+ * conditions as described in each individual source file and distribute
+ * linked combinations including the program with the OpenSSL library. You
+ * must comply with the GNU Affero General Public License in all respects for
+ * all of the code used other than as permitted herein. If you modify file(s)
+ * with this exception, you may extend this exception to your version of the
+ * file(s), but you are not obligated to do so. If you do not wish to do so,
+ * delete this exception statement from your version. If you delete this
+ * exception statement from all source files in the program, then also delete
+ * it in the license file.
  */
 
 #pragma once
@@ -20,235 +31,160 @@
 #include "mongo/pch.h"
 
 #include <boost/unordered_set.hpp>
-#include "db/pipeline/value.h"
-#include "db/pipeline/expression.h"
-#include "bson/bsontypes.h"
+
+#include "mongo/bson/bsontypes.h"
+#include "mongo/db/pipeline/value.h"
 
 namespace mongo {
-    class ExpressionContext;
-
-    class Accumulator :
-        public ExpressionNary {
+    class Accumulator : public RefCountable {
     public:
-        // virtuals from ExpressionNary
-        virtual void addOperand(const intrusive_ptr<Expression> &pExpression);
-        virtual void addToBsonObj(BSONObjBuilder *pBuilder,
-                                  StringData fieldName,
-                                  bool requireExpression) const;
-        virtual void addToBsonArray(BSONArrayBuilder *pBuilder) const;
-
-        /*
-          Get the accumulated value.
-
-          @returns the accumulated value
+        /** Process input and update internal state.
+         *  merging should be true when processing outputs from getValue(true).
          */
-        virtual Value getValue() const = 0;
+        void process(const Value& input, bool merging) {
+            processInternal(input, merging);
+        }
+
+        /** Marks the end of the evaluate() phase and return accumulated result.
+         *  toBeMerged should be true when the outputs will be merged by process().
+         */
+        virtual Value getValue(bool toBeMerged) const = 0;
+
+        /// The name of the op as used in a serialization of the pipeline.
+        virtual const char* getOpName() const = 0;
+
+        int memUsageForSorter() const {
+            dassert(_memUsageBytes != 0); // This would mean subclass didn't set it
+            return _memUsageBytes;
+        }
+
+        /// Reset this accumulator to a fresh state ready to receive input.
+        virtual void reset() = 0;
 
     protected:
-        Accumulator();
+        Accumulator() : _memUsageBytes(0) {}
 
-        /*
-          Convenience method for doing this for accumulators.  The pattern
-          is always the same, so a common implementation works, but requires
-          knowing the operator name.
+        /// Update subclass's internal state based on input
+        virtual void processInternal(const Value& input, bool merging) = 0;
 
-          @param pBuilder the builder to add to
-          @param fieldName the projected name
-          @param opName the operator name
-         */
-        void opToBson(BSONObjBuilder *pBuilder, StringData opName,
-                      StringData fieldName, bool requireExpression) const;
+        /// subclasses are expected to update this as necessary
+        int _memUsageBytes;
     };
 
 
-    class AccumulatorAddToSet :
-        public Accumulator {
+    class AccumulatorAddToSet : public Accumulator {
     public:
-        // virtuals from Expression
-        virtual Value evaluate(const Document& pDocument) const;
-        virtual Value getValue() const;
-        virtual const char *getOpName() const;
+        virtual void processInternal(const Value& input, bool merging);
+        virtual Value getValue(bool toBeMerged) const;
+        virtual const char* getOpName() const;
+        virtual void reset();
 
-        /*
-          Create an appending accumulator.
-
-          @param pCtx the expression context
-          @returns the created accumulator
-         */
-        static intrusive_ptr<Accumulator> create(
-            const intrusive_ptr<ExpressionContext> &pCtx);
+        static intrusive_ptr<Accumulator> create();
 
     private:
-        AccumulatorAddToSet(const intrusive_ptr<ExpressionContext> &pTheCtx);
-        typedef boost::unordered_set<Value, Value::Hash > SetType;
-        mutable SetType set;
-        mutable SetType::iterator itr; 
-        intrusive_ptr<ExpressionContext> pCtx;
+        AccumulatorAddToSet();
+        typedef boost::unordered_set<Value, Value::Hash> SetType;
+        SetType set;
     };
 
 
-    /*
-      This isn't a finished accumulator, but rather a convenient base class
-      for others such as $first, $last, $max, $min, and similar.  It just
-      provides a holder for a single Value, and the getter for that.  The
-      holder is protected so derived classes can manipulate it.
-     */
-    class AccumulatorSingleValue :
-        public Accumulator {
+    class AccumulatorFirst : public Accumulator {
     public:
-        // virtuals from Expression
-        virtual Value getValue() const;
+        virtual void processInternal(const Value& input, bool merging);
+        virtual Value getValue(bool toBeMerged) const;
+        virtual const char* getOpName() const;
+        virtual void reset();
 
-    protected:
-        AccumulatorSingleValue();
-
-        mutable Value pValue; /* current min/max */
-    };
-
-
-    class AccumulatorFirst :
-        public AccumulatorSingleValue {
-    public:
-        // virtuals from Expression
-        virtual Value evaluate(const Document& pDocument) const;
-        virtual const char *getOpName() const;
-
-        /*
-          Create the accumulator.
-
-          @returns the created accumulator
-         */
-        static intrusive_ptr<Accumulator> create(
-            const intrusive_ptr<ExpressionContext> &pCtx);
+        static intrusive_ptr<Accumulator> create();
 
     private:
-        mutable bool _haveFirst;
         AccumulatorFirst();
+
+        bool _haveFirst;
+        Value _first;
     };
 
 
-    class AccumulatorLast :
-        public AccumulatorSingleValue {
+    class AccumulatorLast : public Accumulator {
     public:
-        // virtuals from Expression
-        virtual Value evaluate(const Document& pDocument) const;
-        virtual const char *getOpName() const;
+        virtual void processInternal(const Value& input, bool merging);
+        virtual Value getValue(bool toBeMerged) const;
+        virtual const char* getOpName() const;
+        virtual void reset();
 
-        /*
-          Create the accumulator.
-
-          @returns the created accumulator
-         */
-        static intrusive_ptr<Accumulator> create(
-            const intrusive_ptr<ExpressionContext> &pCtx);
+        static intrusive_ptr<Accumulator> create();
 
     private:
         AccumulatorLast();
+        Value _last;
     };
 
 
-    class AccumulatorSum :
-        public Accumulator {
+    class AccumulatorSum : public Accumulator {
     public:
-        // virtuals from Accumulator
-        virtual Value evaluate(const Document& pDocument) const;
-        virtual Value getValue() const;
-        virtual const char *getOpName() const;
+        virtual void processInternal(const Value& input, bool merging);
+        virtual Value getValue(bool toBeMerged) const;
+        virtual const char* getOpName() const;
+        virtual void reset();
 
-        /*
-          Create a summing accumulator.
+        static intrusive_ptr<Accumulator> create();
 
-          @param pCtx the expression context
-          @returns the created accumulator
-         */
-        static intrusive_ptr<Accumulator> create(
-            const intrusive_ptr<ExpressionContext> &pCtx);
-
-    protected: /* reused by AccumulatorAvg */
+    private:
         AccumulatorSum();
 
-        mutable BSONType totalType;
-        mutable long long longTotal;
-        mutable double doubleTotal;
-        // count is only used by AccumulatorAvg, but lives here to avoid counting non-numeric values
-        mutable long long count;
+        BSONType totalType;
+        long long longTotal;
+        double doubleTotal;
     };
 
 
-    class AccumulatorMinMax :
-        public AccumulatorSingleValue {
+    class AccumulatorMinMax : public Accumulator {
     public:
-        // virtuals from Expression
-        virtual Value evaluate(const Document& pDocument) const;
-        virtual const char *getOpName() const;
+        virtual void processInternal(const Value& input, bool merging);
+        virtual Value getValue(bool toBeMerged) const;
+        virtual const char* getOpName() const;
+        virtual void reset();
 
-        /*
-          Create either the max or min accumulator.
-
-          @returns the created accumulator
-         */
-        static intrusive_ptr<Accumulator> createMin(
-            const intrusive_ptr<ExpressionContext> &pCtx);
-        static intrusive_ptr<Accumulator> createMax(
-            const intrusive_ptr<ExpressionContext> &pCtx);
+        static intrusive_ptr<Accumulator> createMin();
+        static intrusive_ptr<Accumulator> createMax();
 
     private:
         AccumulatorMinMax(int theSense);
 
-        int sense; /* 1 for min, -1 for max; used to "scale" comparison */
+        Value _val;
+        const int _sense; /* 1 for min, -1 for max; used to "scale" comparison */
     };
 
 
-    class AccumulatorPush :
-        public Accumulator {
+    class AccumulatorPush : public Accumulator {
     public:
-        // virtuals from Expression
-        virtual Value evaluate(const Document& pDocument) const;
-        virtual Value getValue() const;
-        virtual const char *getOpName() const;
+        virtual void processInternal(const Value& input, bool merging);
+        virtual Value getValue(bool toBeMerged) const;
+        virtual const char* getOpName() const;
+        virtual void reset();
 
-        /*
-          Create an appending accumulator.
-
-          @param pCtx the expression context
-          @returns the created accumulator
-         */
-        static intrusive_ptr<Accumulator> create(
-            const intrusive_ptr<ExpressionContext> &pCtx);
+        static intrusive_ptr<Accumulator> create();
 
     private:
-        AccumulatorPush(const intrusive_ptr<ExpressionContext> &pTheCtx);
+        AccumulatorPush();
 
-        mutable vector<Value> vpValue;
-        intrusive_ptr<ExpressionContext> pCtx;
+        vector<Value> vpValue;
     };
 
 
-    class AccumulatorAvg :
-        public AccumulatorSum {
-        typedef AccumulatorSum Super;
+    class AccumulatorAvg : public Accumulator {
     public:
-        // virtuals from Accumulator
-        virtual Value evaluate(const Document& pDocument) const;
-        virtual Value getValue() const;
-        virtual const char *getOpName() const;
+        virtual void processInternal(const Value& input, bool merging);
+        virtual Value getValue(bool toBeMerged) const;
+        virtual const char* getOpName() const;
+        virtual void reset();
 
-        /*
-          Create an averaging accumulator.
-
-          @param pCtx the expression context
-          @returns the created accumulator
-         */
-        static intrusive_ptr<Accumulator> create(
-            const intrusive_ptr<ExpressionContext> &pCtx);
+        static intrusive_ptr<Accumulator> create();
 
     private:
-        static const char subTotalName[];
-        static const char countName[];
+        AccumulatorAvg();
 
-        AccumulatorAvg(const intrusive_ptr<ExpressionContext> &pCtx);
-
-        intrusive_ptr<ExpressionContext> pCtx;
+        double _total;
+        long long _count;
     };
-
 }

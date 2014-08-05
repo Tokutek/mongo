@@ -1,6 +1,5 @@
 /**
  * Copyright (c) 2011 10gen Inc.
- * Copyright (C) 2013 Tokutek Inc.
  *
  * This program is free software: you can redistribute it and/or  modify
  * it under the terms of the GNU Affero General Public License, version 3,
@@ -13,9 +12,21 @@
  *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * As a special exception, the copyright holders give permission to link the
+ * code of portions of this program with the OpenSSL library under certain
+ * conditions as described in each individual source file and distribute
+ * linked combinations including the program with the OpenSSL library. You
+ * must comply with the GNU Affero General Public License in all respects for
+ * all of the code used other than as permitted herein. If you modify file(s)
+ * with this exception, you may extend this exception to your version of the
+ * file(s), but you are not obligated to do so. If you do not wish to do so,
+ * delete this exception statement from your version. If you delete this
+ * exception statement from all source files in the program, then also delete
+ * it in the license file.
  */
 
-#include "pch.h"
+#include "mongo/pch.h"
 
 #include "mongo/db/pipeline/document.h"
 
@@ -184,6 +195,8 @@ namespace mongo {
         out->_usedBytes = _usedBytes;
         out->_numFields = _numFields;
         out->_hashTabMask = _hashTabMask;
+        out->_hasTextScore = _hasTextScore;
+        out->_textScore = _textScore;
 
         // Tell values that they have been memcpyed (updates ref counts)
         for (DocumentStorageIterator it = out->iteratorAll(); !it.atEnd(); it.advance()) {
@@ -207,7 +220,7 @@ namespace mongo {
         BSONObjIterator it(bson);
         while(it.more()) {
             BSONElement bsonElement(it.next());
-            md.addField(bsonElement.fieldName(), Value(bsonElement));
+            md.addField(bsonElement.fieldNameStringData(), Value(bsonElement));
         }
 
         *this = md.freeze();
@@ -224,6 +237,42 @@ namespace mongo {
         for (DocumentStorageIterator it = storage().iterator(); !it.atEnd(); it.advance()) {
             *pBuilder << it->nameSD() << it->val;
         }
+    }
+
+    BSONObj Document::toBson() const {
+        BSONObjBuilder bb;
+        toBson(&bb);
+        return bb.obj();
+    }
+
+    const StringData Document::metaFieldTextScore("$textScore", StringData::LiteralTag());
+
+    BSONObj Document::toBsonWithMetaData() const {
+        BSONObjBuilder bb;
+        toBson(&bb);
+        if (hasTextScore())
+            bb.append(metaFieldTextScore, getTextScore());
+        return bb.obj();
+    }
+
+    Document Document::fromBsonWithMetaData(const BSONObj& bson) {
+        MutableDocument md;
+
+        BSONObjIterator it(bson);
+        while(it.more()) {
+            BSONElement elem(it.next());
+            if (elem.fieldName()[0] == '$') {
+                if (elem.fieldNameStringData() == metaFieldTextScore) {
+                    md.setTextScore(elem.Double());
+                    continue;
+                }
+            }
+
+            // Note: this will not parse out metadata in embedded documents.
+            md.addField(elem.fieldNameStringData(), Value(elem));
+        }
+
+        return md.freeze();
     }
 
     MutableDocument::MutableDocument(size_t expectedFields)
@@ -365,5 +414,38 @@ namespace mongo {
         out << '}';
 
         return out.str();
+    }
+
+    void Document::serializeForSorter(BufBuilder& buf) const {
+        const int numElems = size();
+        buf.appendNum(numElems);
+
+        for (DocumentStorageIterator it = storage().iterator(); !it.atEnd(); it.advance()) {
+            buf.appendStr(it->nameSD(), /*NUL byte*/ true);
+            it->val.serializeForSorter(buf);
+        }
+
+        if (hasTextScore()) {
+            buf.appendNum(char(1));
+            buf.appendNum(getTextScore());
+        }
+        else {
+            buf.appendNum(char(0));
+        }
+    }
+
+    Document Document::deserializeForSorter(BufReader& buf, const SorterDeserializeSettings&) {
+        const int numElems = buf.read<int>();
+        MutableDocument doc(numElems);
+        for (int i = 0; i < numElems; i++) {
+            StringData name = buf.readCStr();
+            doc.addField(name, Value::deserializeForSorter(buf,
+                                                           Value::SorterDeserializeSettings()));
+        }
+
+        if (buf.read<char>()) // hasTextScore
+            doc.setTextScore(buf.read<double>());
+
+        return doc.freeze();
     }
 }

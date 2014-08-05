@@ -1,6 +1,5 @@
 /**
  * Copyright (c) 2011 10gen Inc.
- * Copyright (C) 2013 Tokutek Inc.
  *
  * This program is free software: you can redistribute it and/or  modify
  * it under the terms of the GNU Affero General Public License, version 3,
@@ -13,15 +12,27 @@
  *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * As a special exception, the copyright holders give permission to link the
+ * code of portions of this program with the OpenSSL library under certain
+ * conditions as described in each individual source file and distribute
+ * linked combinations including the program with the OpenSSL library. You
+ * must comply with the GNU Affero General Public License in all respects for
+ * all of the code used other than as permitted herein. If you modify file(s)
+ * with this exception, you may extend this exception to your version of the
+ * file(s), but you are not obligated to do so. If you do not wish to do so,
+ * delete this exception statement from your version. If you delete this
+ * exception statement from all source files in the program, then also delete
+ * it in the license file.
  */
 
 #pragma once
 
 #include "mongo/db/pipeline/value_internal.h"
+#include "mongo/platform/unordered_set.h"
 
 namespace mongo {
     class BSONElement;
-    class Builder;
 
     /** A variant type that can hold any type of data representable in BSON
      *
@@ -65,7 +76,8 @@ namespace mongo {
         explicit Value(const string& value)       : _storage(String, StringData(value)) {}
         explicit Value(const char* value)         : _storage(String, StringData(value)) {}
         explicit Value(const Document& doc)       : _storage(Object, doc) {}
-        explicit Value(const BSONObj& obj);//     : _storage(Object, Document(obj)) {} // in cpp
+        explicit Value(const BSONObj& obj);
+        explicit Value(const BSONArray& arr);
         explicit Value(const vector<Value>& vec)  : _storage(Array, new RCVector(vec)) {}
         explicit Value(const BSONBinData& bd)     : _storage(BinData, bd) {}
         explicit Value(const BSONRegEx& re)       : _storage(RegEx, re) {}
@@ -81,11 +93,6 @@ namespace mongo {
             : _storage(Date, static_cast<long long>(date.millis)) // millis really signed
         {}
 
-        /** Creates an empty or zero value of specified type.
-         *  This is currently the only way to create Undefined or Null Values.
-         */
-        explicit Value(BSONType type);
-
         // TODO: add an unsafe version that can share storage with the BSONElement
         /// Deep-convert from BSONElement to Value
         explicit Value(const BSONElement& elem);
@@ -97,6 +104,16 @@ namespace mongo {
          *  will be an int if value fits, otherwise it will be a long.
         */
         static Value createIntOrLong(long long value);
+
+        /** Construct an Array-typed Value from consumed without copying the vector.
+         *  consumed is replaced with an empty vector.
+         *  In C++11 this would be spelled Value(std::move(consumed)).
+         */
+        static Value consume(vector<Value>& consumed) {
+            RCVector* vec = new RCVector();
+            std::swap(vec->vec, consumed);
+            return Value(ValueStorage(Array, vec));
+        }
 
         /** A "missing" value indicates the lack of a Value.
          *  This is similar to undefined/null but should not appear in output to BSON.
@@ -191,6 +208,14 @@ namespace mongo {
             }
             return (Value::compare(v1, v2) == 0);
         }
+        
+        friend bool operator!=(const Value& v1, const Value& v2) {
+            return !(v1 == v2);
+        }
+
+        friend bool operator<(const Value& lhs, const Value& rhs) {
+            return (Value::compare(lhs, rhs) < 0);
+        }
 
         /// This is for debugging, logging, etc. See getString() for how to extract a string.
         string toString() const;
@@ -225,16 +250,12 @@ namespace mongo {
         /// Call this after memcpying to update ref counts if needed
         void memcpyed() const { _storage.memcpyed(); }
 
-        // LEGACY creation functions
-        static Value createFromBsonElement(const BSONElement* pBsonElement);
-        static Value createInt(int value) { return Value(value); }
-        static Value createLong(long long value) { return Value(value); }
-        static Value createDouble(double value) { return Value(value); }
-        static Value createTimestamp(const OpTime& value) { return Value(value); }
-        static Value createString(const string& value) { return Value(value); }
-        static Value createDocument(const Document& doc) { return Value(doc); }
-        static Value createArray(const vector<Value>& vec) { return Value(vec); }
-        static Value createDate(const long long value);
+        /// members for Sorter
+        struct SorterDeserializeSettings {}; // unused
+        void serializeForSorter(BufBuilder& buf) const;
+        static Value deserializeForSorter(BufReader& buf, const SorterDeserializeSettings&);
+        int memUsageForSorter() const { return getApproximateSize(); }
+        Value getOwned() const { return *this; }
 
     private:
         /** This is a "honeypot" to prevent unexpected implicit conversions to the accepted argument
@@ -245,6 +266,8 @@ namespace mongo {
         template <typename InvalidArgumentType>
         explicit Value(const InvalidArgumentType& invalidArgument);
 
+        explicit Value(const ValueStorage& storage) :_storage(storage) {}
+
         // does no type checking
         StringData getStringData() const; // May contain embedded NUL bytes
 
@@ -252,6 +275,8 @@ namespace mongo {
         friend class MutableValue; // gets and sets _storage.genericRCPtr
     };
     BOOST_STATIC_ASSERT(sizeof(Value) == 16);
+
+    typedef unordered_set<Value, Value::Hash> ValueSet;
 }
 
 namespace std {

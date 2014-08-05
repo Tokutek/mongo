@@ -12,48 +12,53 @@
  *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * As a special exception, the copyright holders give permission to link the
+ * code of portions of this program with the OpenSSL library under certain
+ * conditions as described in each individual source file and distribute
+ * linked combinations including the program with the OpenSSL library. You
+ * must comply with the GNU Affero General Public License in all respects for
+ * all of the code used other than as permitted herein. If you modify file(s)
+ * with this exception, you may extend this exception to your version of the
+ * file(s), but you are not obligated to do so. If you do not wish to do so,
+ * delete this exception statement from your version. If you delete this
+ * exception statement from all source files in the program, then also delete
+ * it in the license file.
  */
 
-#include "pch.h"
-#include "db/pipeline/document_source.h"
+#include "mongo/pch.h"
 
-#include "db/jsobj.h"
-#include "db/pipeline/document.h"
-#include "db/pipeline/expression.h"
-#include "db/pipeline/value.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/pipeline/document.h"
+#include "mongo/db/pipeline/document_source.h"
+#include "mongo/db/pipeline/expression.h"
+#include "mongo/db/pipeline/value.h"
 
 namespace mongo {
 
     const char DocumentSourceProject::projectName[] = "$project";
 
-    DocumentSourceProject::~DocumentSourceProject() {
-    }
-
-    DocumentSourceProject::DocumentSourceProject(const intrusive_ptr<ExpressionContext> &pExpCtx)
+    DocumentSourceProject::DocumentSourceProject(const intrusive_ptr<ExpressionContext>& pExpCtx,
+                                                 const intrusive_ptr<ExpressionObject>& exprObj)
         : DocumentSource(pExpCtx)
-        , pEO(ExpressionObject::create())
+        , pEO(exprObj)
     { }
 
     const char *DocumentSourceProject::getSourceName() const {
         return projectName;
     }
 
-    bool DocumentSourceProject::eof() {
-        return pSource->eof();
-    }
+    boost::optional<Document> DocumentSourceProject::getNext() {
+        pExpCtx->checkForInterrupt();
 
-    bool DocumentSourceProject::advance() {
-        DocumentSource::advance(); // check for interrupts
-
-        return pSource->advance();
-    }
-
-    Document DocumentSourceProject::getCurrent() {
-        Document pInDocument(pSource->getCurrent());
+        boost::optional<Document> input = pSource->getNext();
+        if (!input)
+            return boost::none;
 
         /* create the result document */
         const size_t sizeHint = pEO->getSizeHint();
         MutableDocument out (sizeHint);
+        out.copyMetaDataFrom(*input);
 
         /*
           Use the ExpressionObject to create the base result.
@@ -61,26 +66,23 @@ namespace mongo {
           If we're excluding fields at the top level, leave out the _id if
           it is found, because we took care of it above.
         */
-        pEO->addToDocument(out, pInDocument, /*root=*/pInDocument);
+        _variables->setRoot(*input);
+        pEO->addToDocument(out, *input, _variables.get());
+        _variables->clearRoot();
 
 #if defined(_DEBUG)
         if (!_simpleProjection.getSpec().isEmpty()) {
             // Make sure we return the same results as Projection class
 
-            BSONObjBuilder inputBuilder;
-            pSource->getCurrent()->toBson(&inputBuilder);
-            BSONObj input = inputBuilder.done();
+            BSONObj inputBson = input->toBson();
+            BSONObj outputBson = out.peek().toBson();
 
-            BSONObjBuilder outputBuilder;
-            out.peek().toBson(&outputBuilder);
-            BSONObj output = outputBuilder.done();
+            BSONObj projected = _simpleProjection.transform(inputBson);
 
-            BSONObj projected = _simpleProjection.transform(input);
-
-            if (projected != output) {
+            if (projected != outputBson) {
                 log() << "$project applied incorrectly: " << getRaw() << endl;
-                log() << "input:  " << input << endl;
-                log() << "out: " << output << endl;
+                log() << "input:  " << inputBson << endl;
+                log() << "out: " << outputBson << endl;
                 log() << "projected: " << projected << endl;
                 verify(false); // exits in _DEBUG builds
             }
@@ -95,25 +97,18 @@ namespace mongo {
         pEO = dynamic_pointer_cast<ExpressionObject>(pE);
     }
 
-    void DocumentSourceProject::sourceToBson(
-        BSONObjBuilder *pBuilder, bool explain) const {
-        BSONObjBuilder insides;
-        pEO->documentToBson(&insides, true);
-        pBuilder->append(projectName, insides.done());
+    Value DocumentSourceProject::serialize(bool explain) const {
+        return Value(DOC(getSourceName() << pEO->serialize(explain)));
     }
 
     intrusive_ptr<DocumentSource> DocumentSourceProject::createFromBson(
-        BSONElement *pBsonElement,
-        const intrusive_ptr<ExpressionContext> &pExpCtx) {
+            BSONElement elem,
+            const intrusive_ptr<ExpressionContext> &pExpCtx) {
+
         /* validate */
         uassert(15969, str::stream() << projectName <<
                 " specification must be an object",
-                pBsonElement->type() == Object);
-
-        intrusive_ptr<DocumentSourceProject> pProject(new DocumentSourceProject(pExpCtx));
-
-        BSONObj projectObj(pBsonElement->Obj());
-        pProject->_raw = projectObj.getOwned(); // probably not necessary, but better to be safe
+                elem.type() == Object);
 
         Expression::ObjectCtx objectCtx(
               Expression::ObjectCtx::DOCUMENT_OK
@@ -121,28 +116,34 @@ namespace mongo {
             | Expression::ObjectCtx::INCLUSION_OK
             );
 
-        intrusive_ptr<Expression> parsed = Expression::parseObject(pBsonElement, &objectCtx);
+        VariablesIdGenerator idGenerator;
+        VariablesParseState vps(&idGenerator);
+        intrusive_ptr<Expression> parsed = Expression::parseObject(elem.Obj(), &objectCtx, vps);
         ExpressionObject* exprObj = dynamic_cast<ExpressionObject*>(parsed.get());
         massert(16402, "parseObject() returned wrong type of Expression", exprObj);
         uassert(16403, "$projection requires at least one output field", exprObj->getFieldCount());
 
-        pProject->pEO = exprObj;
+        intrusive_ptr<DocumentSourceProject> pProject(new DocumentSourceProject(pExpCtx, exprObj));
+        pProject->_variables.reset(new Variables(idGenerator.getIdCount()));
+
+        BSONObj projectObj = elem.Obj();
+        pProject->_raw = projectObj.getOwned();
 
 #if defined(_DEBUG)
         if (exprObj->isSimple()) {
-            set<string> deps;
+            DepsTracker deps;
             vector<string> path;
-            exprObj->addDependencies(deps, &path);
-            pProject->_simpleProjection.init(depsToProjection(deps));
+            exprObj->addDependencies(&deps, &path);
+            pProject->_simpleProjection.init(deps.toProjection());
         }
 #endif
 
         return pProject;
     }
 
-    DocumentSource::GetDepsReturn DocumentSourceProject::getDependencies(set<string>& deps) const {
+    DocumentSource::GetDepsReturn DocumentSourceProject::getDependencies(DepsTracker* deps) const {
         vector<string> path; // empty == top-level
         pEO->addDependencies(deps, &path);
-        return EXHAUSTIVE;
+        return EXHAUSTIVE_FIELDS;
     }
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2011 10gen Inc.
+ * Copyright (c) 2014 MongoDB Inc.
  *
  * This program is free software: you can redistribute it and/or  modify
  * it under the terms of the GNU Affero General Public License, version 3,
@@ -26,37 +26,52 @@
  * it in the license file.
  */
 
-#include "mongo/pch.h"
+#pragma once
 
-#include "mongo/db/pipeline/accumulator.h"
-#include "mongo/db/pipeline/value.h"
+#include <boost/optional.hpp>
+#include <set>
+#include <string>
+
+#include "mongo/db/pipeline/document.h"
 
 namespace mongo {
+    class ParsedDeps;
 
-    void AccumulatorLast::processInternal(const Value& input, bool merging) {
-        /* always remember the last value seen */
-        _last = input;
-        _memUsageBytes = sizeof(*this) + _last.getApproximateSize() - sizeof(Value);
-    }
+    /**
+     * This struct allows components in an agg pipeline to report what they need from their input.
+     */
+    struct DepsTracker {
+        DepsTracker()
+            : needWholeDocument(false)
+            , needTextScore(false)
+        {}
 
-    Value AccumulatorLast::getValue(bool toBeMerged) const {
-        return _last;
-    }
+        /**
+         * Returns a projection object covering the dependencies tracked by this class.
+         */
+        BSONObj toProjection() const;
 
-    AccumulatorLast::AccumulatorLast() {
-        _memUsageBytes = sizeof(*this);
-    }
+        boost::optional<ParsedDeps> toParsedDeps() const;
 
-    void AccumulatorLast::reset() {
-        _memUsageBytes = sizeof(*this);
-        _last = Value();
-    }
+        std::set<std::string> fields; // names of needed fields in dotted notation
+        bool needWholeDocument; // if true, ignore fields and assume the whole document is needed
+        bool needTextScore;
+    };
 
-    intrusive_ptr<Accumulator> AccumulatorLast::create() {
-        return new AccumulatorLast();
-    }
+    /**
+     * This class is designed to quickly extract the needed fields from a BSONObj into a Document.
+     * It should only be created by a call to DepsTracker::ParsedDeps
+     */
+    class ParsedDeps {
+    public:
+        Document extractFields(const BSONObj& input) const;
 
-    const char *AccumulatorLast::getOpName() const {
-        return "$last";
-    }
+    private:
+        friend struct DepsTracker; // so it can call constructor
+        explicit ParsedDeps(const Document& fields)
+            : _fields(fields)
+        {}
+
+        Document _fields;
+    };
 }

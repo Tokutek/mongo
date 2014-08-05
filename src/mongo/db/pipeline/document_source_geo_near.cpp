@@ -12,6 +12,18 @@
  *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * As a special exception, the copyright holders give permission to link the
+ * code of portions of this program with the OpenSSL library under certain
+ * conditions as described in each individual source file and distribute
+ * linked combinations including the program with the OpenSSL library. You
+ * must comply with the GNU Affero General Public License in all respects for
+ * all of the code used other than as permitted herein. If you modify file(s)
+ * with this exception, you may extend this exception to your version of the
+ * file(s), but you are not obligated to do so. If you do not wish to do so,
+ * delete this exception statement from your version. If you delete this
+ * exception statement from all source files in the program, then also delete
+ * it in the license file.
  */
 
 #include "mongo/pch.h"
@@ -23,39 +35,25 @@ namespace mongo {
     char DocumentSourceGeoNear::geoNearName[] = "$geoNear";
     const char *DocumentSourceGeoNear::getSourceName() const { return geoNearName; }
 
-    DocumentSourceGeoNear::~DocumentSourceGeoNear() {}
+    boost::optional<Document> DocumentSourceGeoNear::getNext() {
+        pExpCtx->checkForInterrupt();
 
-    bool DocumentSourceGeoNear::eof() {
         if (!resultsIterator)
             runCommand();
 
-        return !hasCurrent;
-    }
+        if (!resultsIterator->more())
+            return boost::none;
 
-    bool DocumentSourceGeoNear::advance() {
-        if (!resultsIterator)
-            runCommand();
+        // each result from the geoNear command is wrapped in a wrapper object with "obj",
+        // "dis" and maybe "loc" fields. We want to take the object from "obj" and inject the
+        // other fields into it.
+        Document result (resultsIterator->next().embeddedObject());
+        MutableDocument output (result["obj"].getDocument());
+        output.setNestedField(*distanceField, result["dis"]);
+        if (includeLocs)
+            output.setNestedField(*includeLocs, result["loc"]);
 
-        hasCurrent = resultsIterator->more();
-        if (hasCurrent) {
-            // each result from the geoNear command is wrapped in a wrapper object with "obj",
-            // "dis" and maybe "loc" fields. We want to take the object from "obj" and inject the
-            // other fields into it.
-
-            Document result (resultsIterator->next().embeddedObject());
-            MutableDocument output (result["obj"].getDocument());
-            output.setNestedField(*distanceField, result["dis"]);
-            if (includeLocs)
-                output.setNestedField(*includeLocs, result["loc"]);
-
-            currentDoc = output.freeze();
-        }
-        return hasCurrent;
-    }
-
-    Document DocumentSourceGeoNear::getCurrent() {
-        verify(hasCurrent);
-        return currentDoc;
+        return output.freeze();
     }
 
     void DocumentSourceGeoNear::setSource(DocumentSource*) {
@@ -75,47 +73,49 @@ namespace mongo {
     // This command is sent as-is to the shards.
     // On router this becomes a sort by distance (nearest-first) with limit.
     intrusive_ptr<DocumentSource> DocumentSourceGeoNear::getShardSource() { return this; }
-    intrusive_ptr<DocumentSource> DocumentSourceGeoNear::getRouterSource() {
+    intrusive_ptr<DocumentSource> DocumentSourceGeoNear::getMergeSource() {
         return DocumentSourceSort::create(pExpCtx,
                                           BSON(distanceField->getPath(false) << 1),
                                           limit);
     }
 
-    void DocumentSourceGeoNear::sourceToBson(BSONObjBuilder *pBuilder, bool explain) const {
-        BSONObjBuilder geoNear (pBuilder->subobjStart("$geoNear"));
+    Value DocumentSourceGeoNear::serialize(bool explain) const {
+        MutableDocument result;
 
         if (coordsIsArray) {
-            geoNear.appendArray("near", coords);
+            result.setField("near", Value(BSONArray(coords)));
         }
         else {
-            geoNear.append("near", coords);
+            result.setField("near", Value(coords));
         }
 
-        geoNear.append("distanceField", distanceField->getPath(false)); // not in buildGeoNearCmd
-        geoNear.append("limit", limit);
+        // not in buildGeoNearCmd
+        result.setField("distanceField", Value(distanceField->getPath(false)));
+
+        result.setField("limit", Value(limit));
 
         if (maxDistance > 0)
-            geoNear.append("maxDistance", maxDistance);
+            result.setField("maxDistance", Value(maxDistance));
 
-        geoNear.append("query", query);
-        geoNear.append("spherical", spherical);
-        geoNear.append("distanceMultiplier", distanceMultiplier);
+        result.setField("query", Value(query));
+        result.setField("spherical", Value(spherical));
+        result.setField("distanceMultiplier", Value(distanceMultiplier));
 
         if (includeLocs)
-            geoNear.append("includeLocs", includeLocs->getPath(false));
+            result.setField("includeLocs", Value(includeLocs->getPath(false)));
 
-        geoNear.append("uniqueDocs", uniqueDocs);
+        result.setField("uniqueDocs", Value(uniqueDocs));
 
-        geoNear.doneFast();
+        return Value(DOC(getSourceName() << result.freeze()));
     }
 
-    BSONObj DocumentSourceGeoNear::buildGeoNearCmd(const StringData& collection) const {
+    BSONObj DocumentSourceGeoNear::buildGeoNearCmd() const {
         // this is very similar to sourceToBson, but slightly different.
         // differences will be noted.
 
         BSONObjBuilder geoNear; // not building a subField
 
-        geoNear.append("geoNear", collection); // not in toBson
+        geoNear.append("geoNear", pExpCtx->ns.coll()); // not in toBson
 
         if (coordsIsArray) {
             geoNear.appendArray("near", coords);
@@ -145,12 +145,13 @@ namespace mongo {
         massert(16603, "Already ran geoNearCommand",
                 !resultsIterator);
 
-        bool ok = client->runCommand(db, buildGeoNearCmd(collection), cmdOutput);
+        bool ok = _mongod->directClient()->runCommand(pExpCtx->ns.db().toString(),
+                                                      buildGeoNearCmd(),
+                                                      cmdOutput);
         uassert(16604, "geoNear command failed: " + cmdOutput.toString(),
                 ok);
 
         resultsIterator.reset(new BSONObjIterator(cmdOutput["results"].embeddedObject()));
-        advance(); // consumes first result into currentDoc
     }
 
     intrusive_ptr<DocumentSourceGeoNear> DocumentSourceGeoNear::create(
@@ -159,10 +160,10 @@ namespace mongo {
     }
 
     intrusive_ptr<DocumentSource> DocumentSourceGeoNear::createFromBson(
-            BSONElement *pBsonElement,
+            BSONElement elem,
             const intrusive_ptr<ExpressionContext> &pCtx) {
         intrusive_ptr<DocumentSourceGeoNear> out = new DocumentSourceGeoNear(pCtx);
-        out->parseOptions(pBsonElement->embeddedObjectUserCheck());
+        out->parseOptions(elem.embeddedObjectUserCheck());
         return out;
     }
 
@@ -207,13 +208,12 @@ namespace mongo {
     }
 
     DocumentSourceGeoNear::DocumentSourceGeoNear(const intrusive_ptr<ExpressionContext> &pExpCtx)
-        : SplittableDocumentSource(pExpCtx)
+        : DocumentSource(pExpCtx)
         , coordsIsArray(false)
         , limit(100)
         , maxDistance(-1.0)
         , spherical(false)
         , distanceMultiplier(1.0)
         , uniqueDocs(true)
-        , hasCurrent(false)
     {}
 }

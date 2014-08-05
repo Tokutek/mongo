@@ -1,6 +1,5 @@
 /**
 *    Copyright (C) 2011 10gen Inc.
-*    Copyright (C) 2013 Tokutek Inc.
 *
 *    This program is free software: you can redistribute it and/or  modify
 *    it under the terms of the GNU Affero General Public License, version 3,
@@ -13,29 +12,37 @@
 *
 *    You should have received a copy of the GNU Affero General Public License
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*
+*    As a special exception, the copyright holders give permission to link the
+*    code of portions of this program with the OpenSSL library under certain
+*    conditions as described in each individual source file and distribute
+*    linked combinations including the program with the OpenSSL library. You
+*    must comply with the GNU Affero General Public License in all respects for
+*    all of the code used other than as permitted herein. If you modify file(s)
+*    with this exception, you may extend this exception to your version of the
+*    file(s), but you are not obligated to do so. If you do not wish to do so,
+*    delete this exception statement from your version. If you delete this
+*    exception statement from all source files in the program, then also delete
+*    it in the license file.
 */
 
-#include "pch.h"
+#include "mongo/pch.h"
 
-#include "db/pipeline/document_source.h"
-
-#include "db/jsobj.h"
-#include "db/pipeline/document.h"
-#include "db/pipeline/expression.h"
-#include "db/pipeline/expression_context.h"
-#include "db/pipeline/value.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/pipeline/document.h"
+#include "mongo/db/pipeline/document_source.h"
+#include "mongo/db/pipeline/expression.h"
+#include "mongo/db/pipeline/expression_context.h"
+#include "mongo/db/pipeline/value.h"
 
 namespace mongo {
 
     const char DocumentSourceSkip::skipName[] = "$skip";
 
     DocumentSourceSkip::DocumentSourceSkip(const intrusive_ptr<ExpressionContext> &pExpCtx):
-        SplittableDocumentSource(pExpCtx),
-        skip(0),
-        count(0) {
-    }
-
-    DocumentSourceSkip::~DocumentSourceSkip() {
+        DocumentSource(pExpCtx),
+        _skip(0),
+        _needToSkip(true) {
     }
 
     const char *DocumentSourceSkip::getSourceName() const {
@@ -52,50 +59,26 @@ namespace mongo {
             return false;
 
         /* we need to skip over the sum of the two consecutive $skips */
-        skip += pSkip->skip;
+        _skip += pSkip->_skip;
         return true;
     }
 
-    void DocumentSourceSkip::skipper() {
-        if (count == 0) {
-            while (!pSource->eof() && count++ < skip) {
-                pSource->advance();
+    boost::optional<Document> DocumentSourceSkip::getNext() {
+        pExpCtx->checkForInterrupt();
+
+        if (_needToSkip) {
+            _needToSkip = false;
+            for (long long i=0; i < _skip; i++) {
+                if (!pSource->getNext())
+                    return boost::none;
             }
         }
 
-        if (pSource->eof()) {
-            pCurrent.reset();
-            return;
-        }
-
-        pCurrent = pSource->getCurrent();
+        return pSource->getNext();
     }
 
-    bool DocumentSourceSkip::eof() {
-        skipper();
-        return pSource->eof();
-    }
-
-    bool DocumentSourceSkip::advance() {
-        DocumentSource::advance(); // check for interrupts
-
-        if (eof()) {
-            pCurrent.reset();
-            return false;
-        }
-
-        pCurrent = pSource->getCurrent();
-        return pSource->advance();
-    }
-
-    Document DocumentSourceSkip::getCurrent() {
-        skipper();
-        return pCurrent;
-    }
-
-    void DocumentSourceSkip::sourceToBson(
-        BSONObjBuilder *pBuilder, bool explain) const {
-        pBuilder->append("$skip", skip);
+    Value DocumentSourceSkip::serialize(bool explain) const {
+        return Value(DOC(getSourceName() << _skip));
     }
 
     intrusive_ptr<DocumentSourceSkip> DocumentSourceSkip::create(
@@ -106,19 +89,19 @@ namespace mongo {
     }
 
     intrusive_ptr<DocumentSource> DocumentSourceSkip::createFromBson(
-        BSONElement *pBsonElement,
-        const intrusive_ptr<ExpressionContext> &pExpCtx) {
+            BSONElement elem,
+            const intrusive_ptr<ExpressionContext> &pExpCtx) {
         uassert(15972, str::stream() << DocumentSourceSkip::skipName <<
                 ":  the value to skip must be a number",
-                pBsonElement->isNumber());
+                elem.isNumber());
 
         intrusive_ptr<DocumentSourceSkip> pSkip(
             DocumentSourceSkip::create(pExpCtx));
 
-        pSkip->skip = pBsonElement->numberLong();
+        pSkip->_skip = elem.numberLong();
         uassert(15956, str::stream() << DocumentSourceSkip::skipName <<
                 ":  the number to skip cannot be negative",
-                pSkip->skip >= 0);
+                pSkip->_skip >= 0);
 
         return pSkip;
     }

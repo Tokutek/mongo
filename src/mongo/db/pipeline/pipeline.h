@@ -1,6 +1,5 @@
 /**
  * Copyright 2011 (c) 10gen Inc.
- * Copyright (C) 2013 Tokutek Inc.
  *
  * This program is free software: you can redistribute it and/or  modify
  * it under the terms of the GNU Affero General Public License, version 3,
@@ -13,25 +12,36 @@
  *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * As a special exception, the copyright holders give permission to link the
+ * code of portions of this program with the OpenSSL library under certain
+ * conditions as described in each individual source file and distribute
+ * linked combinations including the program with the OpenSSL library. You
+ * must comply with the GNU Affero General Public License in all respects for
+ * all of the code used other than as permitted herein. If you modify file(s)
+ * with this exception, you may extend this exception to your version of the
+ * file(s), but you are not obligated to do so. If you do not wish to do so,
+ * delete this exception statement from your version. If you delete this
+ * exception statement from all source files in the program, then also delete
+ * it in the license file.
  */
 
 #pragma once
 
-#include "mongo/pch.h"
+#include <deque>
 
-#include "util/intrusive_counter.h"
-#include "util/timer.h"
+#include "mongo/db/pipeline/value.h"
+#include "mongo/util/intrusive_counter.h"
+#include "mongo/util/timer.h"
 
 namespace mongo {
     class BSONObj;
     class BSONObjBuilder;
-    class BSONArrayBuilder;
+    class Command;
+    struct DepsTracker;
     class DocumentSource;
-    class DocumentSourceProject;
-    class Expression;
-    class ExpressionContext;
-    class ExpressionNary;
-    struct OpDesc; // local private struct
+    struct ExpressionContext;
+    class Privilege;
 
     /** mongodb "commands" (sent via db.$cmd.findOne(...))
         subclass to make a command.  define a singleton object for it.
@@ -39,25 +49,25 @@ namespace mongo {
     class Pipeline :
         public IntrusiveCounterUnsigned {
     public:
-        virtual ~Pipeline();
-
         /**
-          Create a pipeline from the command.
-
-          @param errmsg where to write errors, if there are any
-          @param cmdObj the command object sent from the client
-          @returns the pipeline, if created, otherwise a NULL reference
+         * Create a pipeline from the command.
+         *
+         * @param errmsg where to write errors, if there are any
+         * @param cmdObj the command object sent from the client
+         * @returns the pipeline, if created, otherwise a NULL reference
          */
         static intrusive_ptr<Pipeline> parseCommand(
-            string &errmsg, BSONObj &cmdObj,
-            const intrusive_ptr<ExpressionContext> &pCtx);
+            string& errmsg,
+            const BSONObj& cmdObj,
+            const intrusive_ptr<ExpressionContext>& pCtx);
 
-        /**
-          Get the collection name from the command.
+        /// Helper to implement Command::addRequiredPrivileges
+        static void addRequiredPrivileges(Command* commandTemplate,
+                                          const string& dbname,
+                                          BSONObj cmdObj,
+                                          vector<Privilege>* out);
 
-          @returns the collection name
-        */
-        string getCollectionName() const;
+        intrusive_ptr<ExpressionContext> getContext() const { return pCtx; }
 
         /**
           Split the current Pipeline into a Pipeline for each shard, and
@@ -70,15 +80,10 @@ namespace mongo {
         */
         intrusive_ptr<Pipeline> splitForSharded();
 
-        /**
-           If the pipeline starts with a $match, dump its BSON predicate
-           specification to the supplied builder and return true.
-
-           @param pQueryBuilder the builder to put the match BSON into
-           @returns true if a match was found and dumped to pQueryBuilder,
-             false otherwise
+        /** If the pipeline starts with a $match, return its BSON predicate.
+         *  Returns empty BSON if the first stage isn't $match.
          */
-        bool getInitialQuery(BSONObjBuilder *pQueryBuilder) const;
+        BSONObj getInitialQuery() const;
 
         /**
           Write the Pipeline as a BSONObj command.  This should be the
@@ -91,7 +96,7 @@ namespace mongo {
 
           @param the builder to write the command to
         */
-        void toBson(BSONObjBuilder *pBuilder) const;
+        Document serialize() const;
 
         /** Stitch together the source pointers (by calling setSource) for each source in sources.
          *  Must be called after optimize and addInitialSource but before trying to get results.
@@ -105,31 +110,30 @@ namespace mongo {
         */
         void run(BSONObjBuilder& result);
 
-        /**
-          Debugging:  should the processing pipeline be split within
-          mongod, simulating the real mongos/mongod split?  This is determined
-          by setting the splitMongodPipeline field in an "aggregate"
-          command.
-
-          The split itself is handled by the caller, which is currently
-          pipeline_command.cpp.
-
-          @returns true if the pipeline is to be split
-         */
-        bool getSplitMongodPipeline() const;
-
-        /**
-           Ask if this is for an explain request.
-
-           @returns true if this is an explain
-         */
-        bool isExplain() const;
+        bool isExplain() const { return explain; }
 
         /// The initial source is special since it varies between mongos and mongod.
         void addInitialSource(intrusive_ptr<DocumentSource> source);
 
         /// The source that represents the output. Returns a non-owning pointer.
-        DocumentSource* output() { return sources.back().get(); }
+        DocumentSource* output() { invariant( !sources.empty() ); return sources.back().get(); }
+
+        /// Returns true if this pipeline only uses features that work in mongos.
+        bool canRunInMongos() const;
+
+        /**
+         * Write the pipeline's operators to a vector<Value>, with the
+         * explain flag true (for DocumentSource::serializeToArray()).
+         */
+        vector<Value> writeExplainOps() const;
+        
+        /**
+         * Returns the dependencies needed by this pipeline.
+         *
+         * initialQuery is used as a fallback for metadata dependency detection. The assumption is
+         * that any metadata produced by the query is needed unless we can prove it isn't.
+         */
+        DepsTracker getDependencies(const BSONObj& initialQuery) const;
 
         /**
           The aggregation command name.
@@ -148,81 +152,30 @@ namespace mongo {
         friend class PipelineD;
 
     private:
+        class Optimizations {
+        public:
+            // These contain static functions that optimize pipelines in various ways.
+            // They are classes rather than namespaces so that they can be friends of Pipeline.
+            // Classes are defined in pipeline_optimizations.h.
+            class Local;
+            class Sharded;
+        };
+
+        friend class Optimizations::Local;
+        friend class Optimizations::Sharded;
+
         static const char pipelineName[];
         static const char explainName[];
         static const char fromRouterName[];
-        static const char splitMongodPipelineName[];
         static const char serverPipelineName[];
         static const char mongosPipelineName[];
 
         Pipeline(const intrusive_ptr<ExpressionContext> &pCtx);
 
-        /*
-          Write the pipeline's operators to the given array, with the
-          explain flag true (for DocumentSource::addToBsonArray()).
-
-          @param pArrayBuilder where to write the ops to
-         */
-        void writeExplainOps(BSONArrayBuilder *pArrayBuilder) const;
-
-        /*
-          Write the pipeline's operators to the given result document,
-          for a shard server (or regular server, in an unsharded setup).
-
-          This uses writeExplainOps() and adds that array to the result
-          with the serverPipelineName.  That will be preceded by explain
-          information for the input source.
-
-          @param result the object to add the explain information to
-         */
-        void writeExplainShard(BSONObjBuilder &result) const;
-
-        /*
-          Write the pipeline's operators to the given result document,
-          for a mongos instance.
-
-          This first adds the serverPipeline obtained from the input
-          source.
-
-          Then this uses writeExplainOps() and adds that array to the result
-          with the serverPipelineName.  That will be preceded by explain
-          information for the input source.
-
-          @param result the object to add the explain information to
-         */
-        void writeExplainMongos(BSONObjBuilder &result) const;
-
-        string collectionName;
-        typedef deque<intrusive_ptr<DocumentSource> > SourceContainer;
+        typedef std::deque<boost::intrusive_ptr<DocumentSource> > SourceContainer;
         SourceContainer sources;
         bool explain;
 
-        bool splitMongodPipeline;
-        intrusive_ptr<ExpressionContext> pCtx;
+        boost::intrusive_ptr<ExpressionContext> pCtx;
     };
-
 } // namespace mongo
-
-
-/* ======================= INLINED IMPLEMENTATIONS ========================== */
-
-namespace mongo {
-
-    inline string Pipeline::getCollectionName() const {
-        return collectionName;
-    }
-
-    inline bool Pipeline::getSplitMongodPipeline() const {
-        if (!DEBUG_BUILD)
-            return false;
-
-        return splitMongodPipeline;
-    }
-
-    inline bool  Pipeline::isExplain() const {
-        return explain;
-    }
-
-} // namespace mongo
-
-

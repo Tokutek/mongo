@@ -1,6 +1,5 @@
 /**
  * Copyright (c) 2011 10gen Inc.
- * Copyright (C) 2013 Tokutek Inc.
  *
  * This program is free software: you can redistribute it and/or  modify
  * it under the terms of the GNU Affero General Public License, version 3,
@@ -13,18 +12,36 @@
  *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * As a special exception, the copyright holders give permission to link the
+ * code of portions of this program with the OpenSSL library under certain
+ * conditions as described in each individual source file and distribute
+ * linked combinations including the program with the OpenSSL library. You
+ * must comply with the GNU Affero General Public License in all respects for
+ * all of the code used other than as permitted herein. If you modify file(s)
+ * with this exception, you may extend this exception to your version of the
+ * file(s), but you are not obligated to do so. If you do not wish to do so,
+ * delete this exception statement from your version. If you delete this
+ * exception statement from all source files in the program, then also delete
+ * it in the license file.
  */
 
-#include "pch.h"
-#include "db/pipeline/pipeline.h"
+#include "mongo/pch.h"
 
-#include "db/jsobj.h"
-#include "db/pipeline/accumulator.h"
-#include "db/pipeline/document.h"
-#include "db/pipeline/document_source.h"
-#include "db/pipeline/expression.h"
-#include "db/pipeline/expression_context.h"
-#include "util/mongoutils/str.h"
+// This file defines functions from both of these headers
+#include "mongo/db/pipeline/pipeline.h"
+#include "mongo/db/pipeline/pipeline_optimizations.h"
+
+#include "mongo/db/auth/action_set.h"
+#include "mongo/db/auth/privilege.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/pipeline/accumulator.h"
+#include "mongo/db/pipeline/document.h"
+#include "mongo/db/pipeline/document_source.h"
+#include "mongo/db/pipeline/expression.h"
+#include "mongo/db/pipeline/expression_context.h"
+#include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
 
@@ -32,17 +49,11 @@ namespace mongo {
     const char Pipeline::pipelineName[] = "pipeline";
     const char Pipeline::explainName[] = "explain";
     const char Pipeline::fromRouterName[] = "fromRouter";
-    const char Pipeline::splitMongodPipelineName[] = "splitMongodPipeline";
     const char Pipeline::serverPipelineName[] = "serverPipeline";
     const char Pipeline::mongosPipelineName[] = "mongosPipeline";
 
-    Pipeline::~Pipeline() {
-    }
-
     Pipeline::Pipeline(const intrusive_ptr<ExpressionContext> &pTheCtx):
-        collectionName(),
         explain(false),
-        splitMongodPipeline(false),
         pCtx(pTheCtx) {
     }
 
@@ -51,7 +62,7 @@ namespace mongo {
     struct StageDesc {
         const char *pName;
         intrusive_ptr<DocumentSource> (*pFactory)(
-            BSONElement *, const intrusive_ptr<ExpressionContext> &);
+            BSONElement, const intrusive_ptr<ExpressionContext> &);
     };
 
     /* this table must be in alphabetical order by name for bsearch() */
@@ -64,12 +75,14 @@ namespace mongo {
          DocumentSourceLimit::createFromBson},
         {DocumentSourceMatch::matchName,
          DocumentSourceMatch::createFromBson},
-#ifdef LATER // https://jira.mongodb.org/browse/SERVER-3253 
+        {DocumentSourceMergeCursors::name,
+         DocumentSourceMergeCursors::createFromBson},
         {DocumentSourceOut::outName,
          DocumentSourceOut::createFromBson},
-#endif
         {DocumentSourceProject::projectName,
          DocumentSourceProject::createFromBson},
+        {DocumentSourceRedact::redactName,
+         DocumentSourceRedact::createFromBson},
         {DocumentSourceSkip::skipName,
          DocumentSourceSkip::createFromBson},
         {DocumentSourceSort::sortName,
@@ -84,9 +97,9 @@ namespace mongo {
                       ((const StageDesc *)pR)->pName);
     }
 
-    intrusive_ptr<Pipeline> Pipeline::parseCommand(
-        string &errmsg, BSONObj &cmdObj,
-        const intrusive_ptr<ExpressionContext> &pCtx) {
+    intrusive_ptr<Pipeline> Pipeline::parseCommand(string& errmsg,
+                                                   const BSONObj& cmdObj,
+                                                   const intrusive_ptr<ExpressionContext>& pCtx) {
         intrusive_ptr<Pipeline> pPipeline(new Pipeline(pCtx));
         vector<BSONElement> pipeline;
 
@@ -101,6 +114,11 @@ namespace mongo {
                 continue;
             }
 
+            // maxTimeMS is also for the command processor.
+            if (pFieldName == LiteParsedQuery::cmdOptionMaxTimeMS) {
+                continue;
+            }
+
             // ignore cursor options since they are handled externally.
             if (str::equals(pFieldName, "cursor")) {
                 continue;
@@ -108,7 +126,6 @@ namespace mongo {
 
             /* look for the aggregation command */
             if (!strcmp(pFieldName, commandName)) {
-                pPipeline->collectionName = cmdElement.String();
                 continue;
             }
 
@@ -126,21 +143,22 @@ namespace mongo {
 
             /* if the request came from the router, we're in a shard */
             if (!strcmp(pFieldName, fromRouterName)) {
-                pCtx->setInShard(cmdElement.Bool());
+                pCtx->inShard = cmdElement.Bool();
                 continue;
             }
 
-            /* check for debug options */
-            if (!strcmp(pFieldName, splitMongodPipelineName)) {
-                pPipeline->splitMongodPipeline = true;
+            if (str::equals(pFieldName, "allowDiskUse")) {
+                uassert(16949,
+                        str::stream() << "allowDiskUse must be a bool, not a "
+                                      << typeName(cmdElement.type()),
+                        cmdElement.type() == Bool);
+                pCtx->extSortAllowed = cmdElement.Bool();
                 continue;
             }
 
             /* we didn't recognize a field in the command */
             ostringstream sb;
-            sb <<
-               "unrecognized field \"" <<
-               cmdElement.fieldName();
+            sb << "unrecognized field '" << cmdElement.fieldName() << "'";
             errmsg = sb.str();
             return intrusive_ptr<Pipeline>();
         }
@@ -178,34 +196,38 @@ namespace mongo {
             uassert(16436,
                     str::stream() << "Unrecognized pipeline stage name: '" << stageName << "'",
                     pDesc);
-            intrusive_ptr<DocumentSource> stage = (*pDesc->pFactory)(&stageSpec, pCtx);
+            intrusive_ptr<DocumentSource> stage = pDesc->pFactory(stageSpec, pCtx);
             verify(stage);
-            stage->setPipelineStep(iStep);
             sources.push_back(stage);
+
+            // TODO find a good general way to check stages that must be first syntactically
+
+            if (dynamic_cast<DocumentSourceOut*>(stage.get())) {
+                uassert(16991, "$out can only be the final stage in the pipeline",
+                        iStep == nSteps - 1);
+            }
         }
 
-        /* if there aren't any pipeline stages, there's nothing more to do */
-        if (sources.empty())
-            return pPipeline;
+        // The order in which optimizations are applied can have significant impact on the
+        // efficiency of the final pipeline. Be Careful!
+        Optimizations::Local::moveMatchBeforeSort(pPipeline.get());
+        Optimizations::Local::moveLimitBeforeSkip(pPipeline.get());
+        Optimizations::Local::coalesceAdjacent(pPipeline.get());
+        Optimizations::Local::optimizeEachDocumentSource(pPipeline.get());
+        Optimizations::Local::duplicateMatchBeforeInitalRedact(pPipeline.get());
 
-        /*
-          Move filters up where possible.
+        return pPipeline;
+    }
 
-          CW TODO -- move filter past projections where possible, and noting
-          corresponding field renaming.
-        */
-
-        /*
-          Wherever there is a match immediately following a sort, swap them.
-          This means we sort fewer items.  Neither changes the documents in
-          the stream, so this transformation shouldn't affect the result.
-
-          We do this first, because then when we coalesce operators below,
-          any adjacent matches will be combined.
-         */
+    void Pipeline::Optimizations::Local::moveMatchBeforeSort(Pipeline* pipeline) {
+        // TODO Keep moving matches across multiple sorts as moveLimitBeforeSkip does below.
+        // TODO Check sort for limit. Not an issue currently due to order optimizations are applied,
+        // but should be fixed.
+        SourceContainer& sources = pipeline->sources;
         for (size_t srcn = sources.size(), srci = 1; srci < srcn; ++srci) {
             intrusive_ptr<DocumentSource> &pSource = sources[srci];
-            if (dynamic_cast<DocumentSourceMatch *>(pSource.get())) {
+            DocumentSourceMatch* match = dynamic_cast<DocumentSourceMatch *>(pSource.get());
+            if (match && !match->isTextQuery()) {
                 intrusive_ptr<DocumentSource> &pPrevious = sources[srci - 1];
                 if (dynamic_cast<DocumentSourceSort *>(pPrevious.get())) {
                     /* swap this item with the previous */
@@ -215,11 +237,13 @@ namespace mongo {
                 }
             }
         }
+    }
 
-        /* Move limits in front of skips. This is more optimal for sharding
-         * since currently, we can only split the pipeline at a single source
-         * and it is better to limit the results coming from each shard
-         */
+    void Pipeline::Optimizations::Local::moveLimitBeforeSkip(Pipeline* pipeline) {
+        SourceContainer& sources = pipeline->sources;
+        if (sources.empty())
+            return;
+
         for(int i = sources.size() - 1; i >= 1 /* not looking at 0 */; i--) {
             DocumentSourceLimit* limit =
                 dynamic_cast<DocumentSourceLimit*>(sources[i].get());
@@ -244,141 +268,210 @@ namespace mongo {
                 i = sources.size(); // decremented before next pass
             }
         }
+    }
 
-        /*
-          Coalesce adjacent filters where possible.  Two adjacent filters
-          are equivalent to one filter whose predicate is the conjunction of
-          the two original filters' predicates.  For now, capture this by
-          giving any DocumentSource the option to absorb it's successor; this
-          will also allow adjacent projections to coalesce when possible.
+    void Pipeline::Optimizations::Local::coalesceAdjacent(Pipeline* pipeline) {
+        SourceContainer& sources = pipeline->sources;
+        if (sources.empty())
+            return;
 
-          Run through the DocumentSources, and give each one the opportunity
-          to coalesce with its successor.  If successful, remove the
-          successor.
-
-          Move all document sources to a temporary list.
-        */
+        // move all sources to a temporary list
         SourceContainer tempSources;
         sources.swap(tempSources);
 
-        /* move the first one to the final list */
+        // move the first one to the final list
         sources.push_back(tempSources[0]);
 
-        /* run through the sources, coalescing them or keeping them */
+        // run through the sources, coalescing them or keeping them
         for (size_t tempn = tempSources.size(), tempi = 1; tempi < tempn; ++tempi) {
-            /*
-              If we can't coalesce the source with the last, then move it
-              to the final list, and make it the new last.  (If we succeeded,
-              then we're still on the same last, and there's no need to move
-              or do anything with the source -- the destruction of tempSources
-              will take care of the rest.)
-            */
+            // If we can't coalesce the source with the last, then move it
+            // to the final list, and make it the new last.  (If we succeeded,
+            // then we're still on the same last, and there's no need to move
+            // or do anything with the source -- the destruction of tempSources
+            // will take care of the rest.)
             intrusive_ptr<DocumentSource> &pLastSource = sources.back();
             intrusive_ptr<DocumentSource> &pTemp = tempSources[tempi];
             verify(pTemp && pLastSource);
             if (!pLastSource->coalesce(pTemp))
                 sources.push_back(pTemp);
         }
+    }
 
-        /* optimize the elements in the pipeline */
-        for(SourceContainer::iterator iter(sources.begin()),
-                                      listEnd(sources.end());
-                                    iter != listEnd;
-                                    ++iter) {
-            if (!*iter) {
-                errmsg = "Pipeline received empty document as argument";
-                return intrusive_ptr<Pipeline>();
-            }
-
-            (*iter)->optimize();
+    void Pipeline::Optimizations::Local::optimizeEachDocumentSource(Pipeline* pipeline) {
+        SourceContainer& sources = pipeline->sources;
+        for (SourceContainer::iterator it(sources.begin()); it != sources.end(); ++it) {
+            (*it)->optimize();
         }
+    }
 
-        return pPipeline;
+    void Pipeline::Optimizations::Local::duplicateMatchBeforeInitalRedact(Pipeline* pipeline) {
+        SourceContainer& sources = pipeline->sources;
+        if (sources.size() >= 2 && dynamic_cast<DocumentSourceRedact*>(sources[0].get())) {
+            if (DocumentSourceMatch* match = dynamic_cast<DocumentSourceMatch*>(sources[1].get())) {
+                const BSONObj redactSafePortion = match->redactSafePortion();
+                if (!redactSafePortion.isEmpty()) {
+                    sources.push_front(
+                        DocumentSourceMatch::createFromBson(
+                            BSON("$match" << redactSafePortion).firstElement(),
+                            pipeline->pCtx));
+                }
+            }
+        }
+    }
+
+    void Pipeline::addRequiredPrivileges(Command* commandTemplate,
+                                         const string& db,
+                                         BSONObj cmdObj,
+                                         vector<Privilege>* out) {
+        ResourcePattern inputResource(commandTemplate->parseResourcePattern(db, cmdObj));
+        uassert(17138,
+                mongoutils::str::stream() << "Invalid input resource, " << inputResource.toString(),
+                inputResource.isExactNamespacePattern());
+
+        out->push_back(Privilege(inputResource, ActionType::find));
+
+        BSONObj pipeline = cmdObj.getObjectField("pipeline");
+        BSONForEach(stageElem, pipeline) {
+            BSONObj stage = stageElem.embeddedObjectUserCheck();
+            if (str::equals(stage.firstElementFieldName(), "$out")) {
+                NamespaceString outputNs(db, stage.firstElement().str());
+                uassert(17139,
+                        mongoutils::str::stream() << "Invalid $out target namespace, " <<
+                        outputNs.ns(),
+                        outputNs.isValid());
+
+                ActionSet actions;
+                actions.addAction(ActionType::remove);
+                actions.addAction(ActionType::insert);
+                out->push_back(Privilege(ResourcePattern::forExactNamespace(outputNs), actions));
+            }
+        }
     }
 
     intrusive_ptr<Pipeline> Pipeline::splitForSharded() {
-        /* create an initialize the shard spec we'll return */
-        intrusive_ptr<Pipeline> pShardPipeline(new Pipeline(pCtx));
-        pShardPipeline->collectionName = collectionName;
-        pShardPipeline->explain = explain;
+        // Create and initialize the shard spec we'll return. We start with an empty pipeline on the
+        // shards and all work being done in the merger. Optimizations can move operations between
+        // the pipelines to be more efficient.
+        intrusive_ptr<Pipeline> shardPipeline(new Pipeline(pCtx));
+        shardPipeline->explain = explain;
 
-        /*
-          Run through the pipeline, looking for points to split it into
-          shard pipelines, and the rest.
-         */
-        while (!sources.empty()) {
-            // pop the first source
-            intrusive_ptr<DocumentSource> pSource = sources.front();
-            sources.pop_front();
+        // The order in which optimizations are applied can have significant impact on the
+        // efficiency of the final pipeline. Be Careful!
+        Optimizations::Sharded::findSplitPoint(shardPipeline.get(), this);
+        Optimizations::Sharded::moveFinalUnwindFromShardsToMerger(shardPipeline.get(), this);
+        Optimizations::Sharded::limitFieldsSentFromShardsToMerger(shardPipeline.get(), this);
+
+        return shardPipeline;
+    }
+
+    void Pipeline::Optimizations::Sharded::findSplitPoint(Pipeline* shardPipe,
+                                                          Pipeline* mergePipe) {
+        while (!mergePipe->sources.empty()) {
+            intrusive_ptr<DocumentSource> current = mergePipe->sources.front();
+            mergePipe->sources.pop_front();
 
             // Check if this source is splittable
-            SplittableDocumentSource* splittable=
-                dynamic_cast<SplittableDocumentSource *>(pSource.get());
+            SplittableDocumentSource* splittable =
+                dynamic_cast<SplittableDocumentSource*>(current.get());
 
             if (!splittable){
-                // move the source from the router sources to the shard sources
-                pShardPipeline->sources.push_back(pSource);
+                // move the source from the merger sources to the shard sources
+                shardPipe->sources.push_back(current);
             }
             else {
-                // split into Router and Shard sources
-                intrusive_ptr<DocumentSource> shardSource  = splittable->getShardSource();
-                intrusive_ptr<DocumentSource> routerSource = splittable->getRouterSource();
-                if (shardSource) pShardPipeline->sources.push_back(shardSource);
-                if (routerSource)          this->sources.push_front(routerSource);
+                // split this source into Merge and Shard sources
+                intrusive_ptr<DocumentSource> shardSource = splittable->getShardSource();
+                intrusive_ptr<DocumentSource> mergeSource = splittable->getMergeSource();
+                if (shardSource) shardPipe->sources.push_back(shardSource);
+                if (mergeSource) mergePipe->sources.push_front(mergeSource);
 
                 break;
             }
         }
-
-        return pShardPipeline;
     }
 
-    bool Pipeline::getInitialQuery(BSONObjBuilder *pQueryBuilder) const
-    {
+    void Pipeline::Optimizations::Sharded::moveFinalUnwindFromShardsToMerger(Pipeline* shardPipe,
+                                                                             Pipeline* mergePipe) {
+        while (!shardPipe->sources.empty()
+                && dynamic_cast<DocumentSourceUnwind*>(shardPipe->sources.back().get())) {
+            mergePipe->sources.push_front(shardPipe->sources.back());
+            shardPipe->sources.pop_back();
+        }
+    }
+
+    void Pipeline::Optimizations::Sharded::limitFieldsSentFromShardsToMerger(Pipeline* shardPipe,
+                                                                             Pipeline* mergePipe) {
+        DepsTracker mergeDeps = mergePipe->getDependencies(shardPipe->getInitialQuery());
+        if (mergeDeps.needWholeDocument)
+            return; // the merge needs all fields, so nothing we can do.
+
+        // Empty project is "special" so if no fields are needed, we just ask for _id instead.
+        if (mergeDeps.fields.empty())
+            mergeDeps.fields.insert("_id");
+
+        // Remove metadata from dependencies since it automatically flows through projection and we
+        // don't want to project it in to the document.
+        mergeDeps.needTextScore = false;
+
+        // HEURISTIC: only apply optimization if none of the shard stages have an exhaustive list of
+        // field dependencies. While this may not be 100% ideal in all cases, it is simple and
+        // avoids the worst cases by ensuring that:
+        // 1) Optimization IS applied when the shards wouldn't have known their exhaustive list of
+        //    dependencies. This situation can happen when a $sort is before the first $project or
+        //    $group. Without the optimization, the shards would have to reify and transmit full
+        //    objects even though only a subset of fields are needed.
+        // 2) Optimization IS NOT applied immediately following a $project or $group since it would
+        //    add an unnecessary project (and therefore a deep-copy).
+        for (size_t i = 0; i < shardPipe->sources.size(); i++) {
+            DepsTracker dt; // ignored
+            if (shardPipe->sources[i]->getDependencies(&dt) & DocumentSource::EXHAUSTIVE_FIELDS)
+                return;
+        }
+
+        // if we get here, add the project.
+        shardPipe->sources.push_back(
+            DocumentSourceProject::createFromBson(
+                BSON("$project" << mergeDeps.toProjection()).firstElement(),
+                shardPipe->pCtx));
+    }
+
+    BSONObj Pipeline::getInitialQuery() const {
         if (sources.empty())
-            return false;
+            return BSONObj();
 
         /* look for an initial $match */
-        const intrusive_ptr<DocumentSource> &pMC = sources.front();
-        const DocumentSourceMatch *pMatch =
-            dynamic_cast<DocumentSourceMatch *>(pMC.get());
+        DocumentSourceMatch* match = dynamic_cast<DocumentSourceMatch*>(sources.front().get());
+        if (!match)
+            return BSONObj();
 
-        if (!pMatch)
-            return false;
-
-        /* build the query */
-        pMatch->toMatcherBson(pQueryBuilder);
-
-        return true;
+        return match->getQuery();
     }
 
-    void Pipeline::toBson(BSONObjBuilder *pBuilder) const {
-        /* create an array out of the pipeline operations */
-        BSONArrayBuilder arrayBuilder;
+    Document Pipeline::serialize() const {
+        MutableDocument serialized;
+        // create an array out of the pipeline operations
+        vector<Value> array;
         for(SourceContainer::const_iterator iter(sources.begin()),
                                             listEnd(sources.end());
                                         iter != listEnd;
                                         ++iter) {
             intrusive_ptr<DocumentSource> pSource(*iter);
-            pSource->addToBsonArray(&arrayBuilder);
+            pSource->serializeToArray(array);
         }
 
-        /* add the top-level items to the command */
-        pBuilder->append(commandName, getCollectionName());
-        pBuilder->append(pipelineName, arrayBuilder.arr());
+        // add the top-level items to the command
+        serialized.setField(commandName, Value(pCtx->ns.coll()));
+        serialized.setField(pipelineName, Value(array));
 
         if (explain) {
-            pBuilder->append(explainName, explain);
+            serialized.setField(explainName, Value(explain));
         }
 
-        bool btemp;
-        if ((btemp = getSplitMongodPipeline())) {
-            pBuilder->append(splitMongodPipelineName, btemp);
+        if (pCtx->extSortAllowed) {
+            serialized.setField("allowDiskUse", Value(true));
         }
 
-        if ((btemp = pCtx->getInRouter())) {
-            pBuilder->append(fromRouterName, btemp);
-        }
+        return serialized.freeze();
     }
 
     void Pipeline::stitch() {
@@ -398,98 +491,99 @@ namespace mongo {
     }
 
     void Pipeline::run(BSONObjBuilder& result) {
-        /*
-          Iterate through the resulting documents, and add them to the result.
-          We do this even if we're doing an explain, in order to capture
-          the document counts and other stats.  However, we don't capture
-          the result documents for explain.
-        */
-        if (explain) {
-            if (!pCtx->getInRouter())
-                writeExplainShard(result);
-            else {
-                writeExplainMongos(result);
-            }
-        }
-        else {
-            // the array in which the aggregation results reside
-            // cant use subArrayStart() due to error handling
-            BSONArrayBuilder resultArray;
-            DocumentSource* finalSource = sources.back().get();
-            for (bool hasDoc = !finalSource->eof(); hasDoc; hasDoc = finalSource->advance()) {
-                Document pDocument(finalSource->getCurrent());
+        // should not get here in the explain case
+        verify(!explain);
 
-                /* add the document to the result set */
-                BSONObjBuilder documentBuilder (resultArray.subobjStart());
-                pDocument->toBson(&documentBuilder);
-                documentBuilder.doneFast();
-                // object will be too large, assert. the extra 1KB is for headers
-                uassert(16389,
-                        str::stream() << "aggregation result exceeds maximum document size ("
-                                      << BSONObjMaxUserSize / (1024 * 1024) << "MB)",
-                        resultArray.len() < BSONObjMaxUserSize - 1024);
-            }
-
-            resultArray.done();
-            result.appendArray("result", resultArray.arr());
+        // the array in which the aggregation results reside
+        // cant use subArrayStart() due to error handling
+        BSONArrayBuilder resultArray;
+        DocumentSource* finalSource = sources.back().get();
+        while (boost::optional<Document> next = finalSource->getNext()) {
+            // add the document to the result set
+            BSONObjBuilder documentBuilder (resultArray.subobjStart());
+            next->toBson(&documentBuilder);
+            documentBuilder.doneFast();
+            // object will be too large, assert. the extra 1KB is for headers
+            uassert(16389,
+                    str::stream() << "aggregation result exceeds maximum document size ("
+                                  << BSONObjMaxUserSize / (1024 * 1024) << "MB)",
+                    resultArray.len() < BSONObjMaxUserSize - 1024);
         }
+
+        resultArray.done();
+        result.appendArray("result", resultArray.arr());
     }
 
-    void Pipeline::writeExplainOps(BSONArrayBuilder *pArrayBuilder) const {
-        for(SourceContainer::const_iterator iter(sources.begin()),
-                                            listEnd(sources.end());
-                                        iter != listEnd;
-                                        ++iter) {
-            intrusive_ptr<DocumentSource> pSource(*iter);
-
-            // handled in writeExplainMongos
-            if (dynamic_cast<DocumentSourceBsonArray*>(pSource.get()))
-                continue;
-
-            pSource->addToBsonArray(pArrayBuilder, true);
+    vector<Value> Pipeline::writeExplainOps() const {
+        vector<Value> array;
+        for(SourceContainer::const_iterator it = sources.begin(); it != sources.end(); ++it) {
+            (*it)->serializeToArray(array, /*explain=*/true);
         }
-    }
-
-    void Pipeline::writeExplainShard(BSONObjBuilder &result) const {
-        BSONArrayBuilder opArray; // where we'll put the pipeline ops
-
-        // next, add the pipeline operators
-        writeExplainOps(&opArray);
-
-        result.appendArray(serverPipelineName, opArray.arr());
-    }
-
-    void Pipeline::writeExplainMongos(BSONObjBuilder &result) const {
-
-        /*
-          For now, this should be a BSON source array.
-          In future, we might have a more clever way of getting this, when
-          we have more interleaved fetching between shards.  The DocumentSource
-          interface will have to change to accommodate that.
-         */
-        DocumentSourceBsonArray *pSourceBsonArray =
-            dynamic_cast<DocumentSourceBsonArray *>(sources.front().get());
-        verify(pSourceBsonArray);
-
-        BSONArrayBuilder shardOpArray; // where we'll put the pipeline ops
-        for(bool hasDocument = !pSourceBsonArray->eof(); hasDocument;
-            hasDocument = pSourceBsonArray->advance()) {
-            Document pDocument = pSourceBsonArray->getCurrent();
-            BSONObjBuilder opBuilder;
-            pDocument->toBson(&opBuilder);
-            shardOpArray.append(opBuilder.obj());
-        }
-
-        BSONArrayBuilder mongosOpArray; // where we'll put the pipeline ops
-        writeExplainOps(&mongosOpArray);
-
-        // now we combine the shard pipelines with the one here
-        result.append(serverPipelineName, shardOpArray.arr());
-        result.append(mongosPipelineName, mongosOpArray.arr());
+        return array;
     }
 
     void Pipeline::addInitialSource(intrusive_ptr<DocumentSource> source) {
         sources.push_front(source);
     }
 
+    bool Pipeline::canRunInMongos() const {
+        if (pCtx->extSortAllowed)
+            return false;
+
+        if (explain)
+            return false;
+
+        if (!sources.empty() && dynamic_cast<DocumentSourceNeedsMongod*>(sources.back().get()))
+            return false;
+
+        return true;
+    }
+
+    DepsTracker Pipeline::getDependencies(const BSONObj& initialQuery) const {
+        DepsTracker deps;
+        bool knowAllFields = false;
+        bool knowAllMeta = false;
+        for (size_t i=0; i < sources.size() && !(knowAllFields && knowAllMeta); i++) {
+            DepsTracker localDeps;
+            DocumentSource::GetDepsReturn status = sources[i]->getDependencies(&localDeps);
+
+            if (status == DocumentSource::NOT_SUPPORTED) {
+                // Assume this stage needs everything. We may still know something about our
+                // dependencies if an earlier stage returned either EXHAUSTIVE_FIELDS or
+                // EXHAUSTIVE_META.
+                break;
+            }
+
+            if (!knowAllFields) {
+                deps.fields.insert(localDeps.fields.begin(), localDeps.fields.end());
+                if (localDeps.needWholeDocument)
+                    deps.needWholeDocument = true;
+                knowAllFields = status & DocumentSource::EXHAUSTIVE_FIELDS;
+            }
+
+            if (!knowAllMeta) {
+                if (localDeps.needTextScore)
+                    deps.needTextScore = true;
+
+                knowAllMeta = status & DocumentSource::EXHAUSTIVE_META;
+            }
+        }
+
+        if (!knowAllFields)
+            deps.needWholeDocument = true; // don't know all fields we need
+
+        // NOTE This code assumes that textScore can only be generated by the initial query.
+        if (DocumentSourceMatch::isTextQuery(initialQuery)) {
+            // If doing a text query, assume we need the score if we can't prove we don't.
+            if (!knowAllMeta)
+                deps.needTextScore = true;
+        }
+        else {
+            // If we aren't doing a text query, then we don't need to ask for the textScore since we
+            // know it will be missing anyway.
+            deps.needTextScore = false;
+        }
+
+        return deps;
+    }
 } // namespace mongo

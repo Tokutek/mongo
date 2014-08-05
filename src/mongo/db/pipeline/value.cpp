@@ -12,6 +12,18 @@
  *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * As a special exception, the copyright holders give permission to link the
+ * code of portions of this program with the OpenSSL library under certain
+ * conditions as described in each individual source file and distribute
+ * linked combinations including the program with the OpenSSL library. You
+ * must comply with the GNU Affero General Public License in all respects for
+ * all of the code used other than as permitted herein. If you modify file(s)
+ * with this exception, you may extend this exception to your version of the
+ * file(s), but you are not obligated to do so. If you do not wish to do so,
+ * delete this exception statement from your version. If you delete this
+ * exception statement from all source files in the program, then also delete
+ * it in the license file.
  */
 
 #include "mongo/pch.h"
@@ -21,7 +33,6 @@
 #include <boost/functional/hash.hpp>
 
 #include "mongo/db/jsobj.h"
-#include "mongo/db/pipeline/builder.h"
 #include "mongo/db/pipeline/document.h"
 #include "mongo/util/mongoutils/str.h"
 
@@ -120,55 +131,6 @@ namespace mongo {
     // not in header because document is fwd declared
     Value::Value(const BSONObj& obj) : _storage(Object, Document(obj)) {}
 
-    Value::Value(BSONType theType): _storage(theType) {
-        switch(theType) {
-        case EOO:
-        case Undefined:
-        case jstNULL:
-        case Object: // empty
-            break;
-
-        case Array: // empty
-            _storage.putVector(new RCVector());
-            break;
-
-        case Bool:
-            _storage.boolValue = false;
-            break;
-
-        case NumberDouble:
-            _storage.doubleValue = 0;
-            break;
-
-        case NumberInt:
-            _storage.intValue = 0;
-            break;
-
-        case NumberLong:
-            _storage.longValue = 0;
-            break;
-
-        case Date:
-            _storage.dateValue = 0;
-            break;
-
-        case Timestamp:
-            _storage.timestampValue = 0;
-            break;
-
-        default:
-            // nothing else is allowed
-            uassert(16001, str::stream() <<
-                    "can't create empty Value of type " << typeName(getType()), false);
-            break;
-        }
-    }
-
-
-    Value Value::createFromBsonElement(const BSONElement* pBsonElement) {
-        return Value(*pBsonElement);
-    }
-
     Value::Value(const BSONElement& elem) : _storage(elem.type()) {
         switch(elem.type()) {
         // These are all type-only, no data
@@ -254,21 +216,23 @@ namespace mongo {
         }
     }
 
-    Value Value::createIntOrLong(long long value) {
-        if (value > numeric_limits<int>::max() || value < numeric_limits<int>::min()) {
+    Value::Value(const BSONArray& arr) : _storage(Array) {
+        intrusive_ptr<RCVector> vec (new RCVector);
+        BSONForEach(sub, arr) {
+            vec->vec.push_back(Value(sub));
+        }
+        _storage.putVector(vec.get());
+    }
+
+    Value Value::createIntOrLong(long long longValue) {
+        int intValue = longValue;
+        if (intValue != longValue) {
             // it is too large to be an int and should remain a long
-            return Value(value);
+            return Value(longValue);
         }
 
         // should be an int since all arguments were int and it fits
-        return createInt(value);
-    }
-
-    Value Value::createDate(const long long value) {
-        // Can't directly construct because constructor would clash with createLong
-        Value val (Date);
-        val._storage.dateValue = value;
-        return val;
+        return Value(intValue);
     }
 
     double Value::getDouble() const {
@@ -358,9 +322,6 @@ namespace mongo {
     }
 
     bool Value::coerceToBool() const {
-        if (missing())
-            return false;
-
         // TODO Unify the implementation with BSONElement::trueValue().
         switch(getType()) {
         case CodeWScope:
@@ -595,10 +556,8 @@ namespace mongo {
     int Value::compare(const Value& rL, const Value& rR) {
         // Note, this function needs to behave identically to BSON's compareElementValues().
         // Additionally, any changes here must be replicated in hash_combine().
-
-        // TODO: remove conditional after SERVER-6571
-        BSONType lType = rL.missing() ? EOO : rL.getType();
-        BSONType rType = rR.missing() ? EOO : rR.getType();
+        BSONType lType = rL.getType();
+        BSONType rType = rR.getType();
 
         int ret = lType == rType
                     ? 0 // fast-path common case
@@ -717,8 +676,7 @@ namespace mongo {
     }
 
     void Value::hash_combine(size_t &seed) const {
-        // TODO: remove conditional after SERVER-6571
-        BSONType type = missing() ? EOO : getType();
+        BSONType type = getType();
 
         boost::hash_combine(seed, canonicalizeBSONType(type));
 
@@ -779,7 +737,7 @@ namespace mongo {
         }
 
         case Object:
-            getDocument()->hash_combine(seed);
+            getDocument().hash_combine(seed);
             break;
 
         case Array: {
@@ -872,11 +830,11 @@ namespace mongo {
         case BinData:
         case String:
             return sizeof(Value) + (_storage.shortStr
-                                        ? sizeof(RCString) + _storage.getString().size()
-                                        : 0);
+                                        ? 0 // string stored inline, so no extra mem usage
+                                        : sizeof(RCString) + _storage.getString().size());
 
         case Object:
-            return sizeof(Value) + getDocument()->getApproximateSize();
+            return sizeof(Value) + getDocument().getApproximateSize();
 
         case Array: {
             size_t size = sizeof(Value);
@@ -938,7 +896,7 @@ namespace mongo {
         case Undefined: return out << "undefined";
         case Date: return out << tmToISODateString(val.coerceToTm());
         case Timestamp: return out << val.getTimestamp().toString();
-        case Object: return out << val.getDocument()->toString();
+        case Object: return out << val.getDocument().toString();
         case Array: {
             out << "[";
             const size_t n = val.getArray().size();
@@ -967,6 +925,148 @@ namespace mongo {
         }
 
         // Not in default case to trigger better warning if a case is missing
+        verify(false);
+    }
+
+    void Value::serializeForSorter(BufBuilder& buf) const {
+        buf.appendChar(getType());
+        switch(getType()) {
+        // type-only types
+        case EOO:
+        case MinKey:
+        case MaxKey:
+        case jstNULL:
+        case Undefined:
+            break;
+
+        // simple types
+        case jstOID:       buf.appendStruct(_storage.oid); break;
+        case NumberInt:    buf.appendNum(_storage.intValue); break;
+        case NumberLong:   buf.appendNum(_storage.longValue); break;
+        case NumberDouble: buf.appendNum(_storage.doubleValue); break;
+        case Bool:         buf.appendChar(_storage.boolValue); break;
+        case Date:         buf.appendNum(_storage.dateValue); break;
+        case Timestamp:    buf.appendStruct(getTimestamp()); break;
+
+        // types that are like strings
+        case String:
+        case Symbol:
+        case Code: {
+            StringData str = getStringData();
+            buf.appendNum(int(str.size()));
+            buf.appendStr(str, /*NUL byte*/ false);
+            break;
+        }
+
+        case BinData: {
+            StringData str = getStringData();
+            buf.appendChar(_storage.binDataType());
+            buf.appendNum(int(str.size()));
+            buf.appendStr(str, /*NUL byte*/ false);
+            break;
+        }
+
+        case RegEx:
+            buf.appendStr(getRegex(), /*NUL byte*/ true);
+            buf.appendStr(getRegexFlags(), /*NUL byte*/ true);
+            break;
+
+        case Object:
+            getDocument().serializeForSorter(buf);
+            break;
+
+        case DBRef:
+            buf.appendStruct(_storage.getDBRef()->oid);
+            buf.appendStr(_storage.getDBRef()->ns, /*NUL byte*/ true);
+            break;
+
+        case CodeWScope: {
+            intrusive_ptr<const RCCodeWScope> cws = _storage.getCodeWScope();
+            buf.appendNum(int(cws->code.size()));
+            buf.appendStr(cws->code, /*NUL byte*/ false);
+            cws->scope.serializeForSorter(buf);
+            break;
+         }
+
+        case Array: {
+            const vector<Value>& array = getArray();
+            const int numElems = array.size();
+            buf.appendNum(numElems);
+            for (int i = 0; i < numElems; i++)
+                array[i].serializeForSorter(buf);
+            break;
+        }
+        }
+    }
+
+    Value Value::deserializeForSorter(BufReader& buf, const SorterDeserializeSettings& settings) {
+        const BSONType type = BSONType(buf.read<signed char>()); // need sign extension for MinKey
+        switch(type) {
+        // type-only types
+        case EOO:
+        case MinKey:
+        case MaxKey:
+        case jstNULL:
+        case Undefined:
+            return Value(ValueStorage(type));
+
+        // simple types
+        case jstOID:       return Value(buf.read<OID>());
+        case NumberInt:    return Value(buf.read<int>());
+        case NumberLong:   return Value(buf.read<long long>());
+        case NumberDouble: return Value(buf.read<double>());
+        case Bool:         return Value(bool(buf.read<char>()));
+        case Date:         return Value(Date_t(buf.read<long long>()));
+        case Timestamp:    return Value(buf.read<OpTime>());
+
+        // types that are like strings
+        case String:
+        case Symbol:
+        case Code: {
+            int size = buf.read<int>();
+            const char* str = static_cast<const char*>(buf.skip(size));
+            return Value(ValueStorage(type, StringData(str, size)));
+        }
+
+        case BinData: {
+            BinDataType bdt = BinDataType(buf.read<char>());
+            int size = buf.read<int>();
+            const void* data = buf.skip(size);
+            return Value(BSONBinData(data, size, bdt));
+        }
+
+        case RegEx: {
+            StringData regex = buf.readCStr();
+            StringData flags = buf.readCStr();
+            return Value(BSONRegEx(regex, flags));
+        }
+
+        case Object:
+            return Value(Document::deserializeForSorter(buf,
+                                                        Document::SorterDeserializeSettings()));
+
+        case DBRef: {
+            OID oid = buf.read<OID>();
+            StringData ns = buf.readCStr();
+            return Value(BSONDBRef(ns, oid));
+        }
+
+        case CodeWScope: {
+            int size = buf.read<int>();
+            const char* str = static_cast<const char*>(buf.skip(size));
+            BSONObj bson = BSONObj::deserializeForSorter(buf, BSONObj::SorterDeserializeSettings());
+            return Value(BSONCodeWScope(StringData(str, size), bson));
+         }
+
+        case Array: {
+            const int numElems = buf.read<int>();
+            vector<Value> array;
+            array.reserve(numElems);
+            for (int i = 0; i < numElems; i++)
+                array.push_back(deserializeForSorter(buf, settings));
+            return Value::consume(array);
+        }
+        }
         verify(false);
     }
 }
