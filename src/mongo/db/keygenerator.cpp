@@ -27,14 +27,14 @@
 
 namespace mongo {
 
-    /* Takes a BSONElement, seed and hashVersion, and outputs the
+    /* Takes a BSONElement, seed and hash version, and outputs the
      * 64-bit hash used for this index
      * E.g. if the element is {a : 3} this outputs v1-hash(3)
      * */
     long long int HashKeyGenerator::makeSingleKey(const BSONElement &e,
                                                   const HashSeed &seed,
-                                                  const HashVersion &v) {
-        massert( 16245, "Only HashVersion 0 has been defined", v == 0 );
+                                                  const int v) {
+        massert(16245, "Only hash version 0 has been defined", v == 0);
         return BSONElementHasher::hash64( e , seed );
     }
 

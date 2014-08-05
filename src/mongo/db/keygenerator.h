@@ -29,7 +29,7 @@ namespace mongo {
     class HashKeyGenerator {
     public:
         HashKeyGenerator(const char *hashedField,
-                         const HashSeed &seed, const HashVersion &hashVersion,
+                         const HashSeed &seed, const int hashVersion,
                          const bool sparse) :
             _hashedField(hashedField),
             _seed(seed), _hashVersion(hashVersion),
@@ -41,11 +41,11 @@ namespace mongo {
     private:
         static long long int makeSingleKey(const BSONElement &e,
                                            const HashSeed &seed,
-                                           const HashVersion &v = 0);
+                                           const int &v = 0);
 
         const char *_hashedField;
         const HashSeed &_seed;
-        const HashVersion &_hashVersion;
+        const int _hashVersion;
         const bool _sparse;
 
         friend class HashedIndex;

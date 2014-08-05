@@ -122,7 +122,7 @@ namespace mongo {
         if (h.hashed) {
             // If we ever add new hash versions in the future, we'll need to add
             // a hashVersion field to the descriptor and up the descriptor version.
-            const HashVersion hashVersion = 0;
+            const int hashVersion = 0;
             HashKeyGenerator generator(fields[0], h.hashSeed, hashVersion, h.sparse);
             generator.getKeys(obj, keys);
         } else {

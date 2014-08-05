@@ -162,7 +162,7 @@ namespace mongo {
         const HashSeed _seed;
         // In case we have hashed indexes based on other hash functions in
         // the future, we store a hashVersion number.
-        const HashVersion _hashVersion;
+        const int _hashVersion;
         const BSONObj _hashedNullObj;
     };
 
