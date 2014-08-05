@@ -1,7 +1,5 @@
-// count.h
-
 /**
- *    Copyright (C) 2013 MongoDB Inc.
+ *    Copyright (C) 2013 10gen Inc.
  *
  *    This program is free software: you can redistribute it and/or  modify
  *    it under the terms of the GNU Affero General Public License, version 3,
@@ -28,18 +26,34 @@
  *    it in the license file.
  */
 
-#include "mongo/db/jsobj.h"
+#pragma once
+
+#include "mongo/base/status.h"
 
 namespace mongo {
 
-    /**
-     * 'ns' is the namespace we're counting on.
-     *
-     * { count: "collectionname"[, query: <query>] }
-     *
-     * @return -1 on ns does not exist error and other errors, 0 on other errors, otherwise the
-     * match count.
-     */
-    long long runCount(const std::string& ns, const BSONObj& cmd, string& err, int& errCode );
+    class FieldRef;
+
+    namespace fieldchecker {
+
+        /**
+         * Returns OK if all the below conditions on 'field' are valid:
+         *   + Non-empty
+         *   + Does not start or end with a '.'
+         * Otherwise returns a code indicating cause of failure.
+         */
+        Status isUpdatable(const FieldRef& field);
+
+        /**
+         * Returns true, the position 'pos' of the first $-sign if present in 'fieldRef', and
+         * how many other $-signs were found in 'count'. Otherwise return false.
+         *
+         * Note:
+         *   isPositional assumes that the field is updatable. Call isUpdatable() above to
+         *   verify.
+         */
+        bool isPositional(const FieldRef& fieldRef, size_t* pos, size_t* count = NULL);
+
+    } // namespace fieldchecker
 
 } // namespace mongo

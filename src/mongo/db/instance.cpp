@@ -117,6 +117,8 @@ namespace mongo {
     HANDLE lockFileHandle;
 #endif
 
+    MONGO_FP_DECLARE(rsStopGetMore);
+
     void inProgCmd( Message &m, DbResponse &dbresponse ) {
         DbMessage d(m);
         QueryMessage q(d);
@@ -598,11 +600,6 @@ namespace mongo {
             return;
         }
 
-        OpSettings settings;
-        settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
-        settings.setJustOne(!multi);
-        cc().setOpSettings(settings);
-
         UpdateResult res;
         LOCK_REASON(lockReason, "update");
         try {
@@ -637,11 +634,6 @@ namespace mongo {
 
         op.debug().query = pattern;
         op.setQuery(pattern);
-
-        OpSettings settings;
-        settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
-        settings.setJustOne(justOne);
-        cc().setOpSettings(settings);
 
         DeleteRequest request(ns);
         request.setQuery(pattern);

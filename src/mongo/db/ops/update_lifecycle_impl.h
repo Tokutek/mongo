@@ -1,5 +1,3 @@
-// count.h
-
 /**
  *    Copyright (C) 2013 MongoDB Inc.
  *
@@ -28,18 +26,40 @@
  *    it in the license file.
  */
 
-#include "mongo/db/jsobj.h"
+#pragma once
+
+#include "mongo/base/disallow_copying.h"
+#include "mongo/db/namespace_string.h"
+#include "mongo/db/ops/update_lifecycle.h"
+#include "mongo/db/catalog/collection.h"
 
 namespace mongo {
 
-    /**
-     * 'ns' is the namespace we're counting on.
-     *
-     * { count: "collectionname"[, query: <query>] }
-     *
-     * @return -1 on ns does not exist error and other errors, 0 on other errors, otherwise the
-     * match count.
-     */
-    long long runCount(const std::string& ns, const BSONObj& cmd, string& err, int& errCode );
+    class UpdateLifecycleImpl : public UpdateLifecycle {
+        MONGO_DISALLOW_COPYING(UpdateLifecycleImpl);
 
-} // namespace mongo
+    public:
+
+        /**
+         * ignoreVersion is for shard version checking and
+         * means that version checks will not be done
+         *
+         * nsString represents the namespace for the
+         */
+        UpdateLifecycleImpl(bool ignoreVersion, const NamespaceString& nsString);
+
+        virtual void setCollection(Collection* collection);
+
+        virtual bool canContinue() const;
+
+        virtual const IndexPathSet* getIndexKeys() const;
+
+        virtual const std::vector<FieldRef*>* getImmutableFields() const;
+
+    private:
+        Collection* _collection;
+        const NamespaceString& _nsString;
+        ChunkVersion _shardVersion;
+    };
+
+} /* namespace mongo */

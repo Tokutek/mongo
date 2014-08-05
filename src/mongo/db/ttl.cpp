@@ -115,9 +115,6 @@ namespace mongo {
                 long long n = 0;
                 {
                     string ns = idx["ns"].String();
-                    OpSettings settings;
-                    settings.setQueryCursorMode(WRITE_LOCK_CURSOR);
-                    cc().setOpSettings(settings);
 
                     LOCK_REASON(lockReason, "ttl: deleting expired documents");
                     Client::ReadContext ctx(ns, lockReason);

@@ -1,7 +1,5 @@
-// count.h
-
 /**
- *    Copyright (C) 2013 MongoDB Inc.
+ *    Copyright (C) 2013 10gen Inc.
  *
  *    This program is free software: you can redistribute it and/or  modify
  *    it under the terms of the GNU Affero General Public License, version 3,
@@ -28,18 +26,45 @@
  *    it in the license file.
  */
 
-#include "mongo/db/jsobj.h"
+#pragma once
+
+#include "mongo/db/ops/modifier_interface.h"
 
 namespace mongo {
+namespace modifiertable {
+
+    // NOTE: Please update jstests/verify_update_mods.js or include a jstest for any new mods
+    enum ModifierType {
+        MOD_ADD_TO_SET,
+        MOD_BIT,
+        MOD_CURRENTDATE,
+        MOD_INC,
+        MOD_MAX,
+        MOD_MIN,
+        MOD_MUL,
+        MOD_POP,
+        MOD_PULL,
+        MOD_PULL_ALL,
+        MOD_PUSH,
+        MOD_PUSH_ALL,
+        MOD_SET,
+        MOD_SET_ON_INSERT,
+        MOD_RENAME,
+        MOD_UNSET,
+        MOD_UNKNOWN
+    };
 
     /**
-     * 'ns' is the namespace we're counting on.
-     *
-     * { count: "collectionname"[, query: <query>] }
-     *
-     * @return -1 on ns does not exist error and other errors, 0 on other errors, otherwise the
-     * match count.
+     * Returns the modifier type for 'typeStr', if it was recognized as an existing update
+     * mod, or MOD_UNKNOWN otherwise.
      */
-    long long runCount(const std::string& ns, const BSONObj& cmd, string& err, int& errCode );
+    ModifierType getType(const StringData& typeStr);
 
+    /**
+     * Instantiate an update mod that corresponds to 'modType' or NULL if 'modType' is not
+     * valid. The ownership of the new object is the caller's.
+     */
+    ModifierInterface* makeUpdateMod(ModifierType modType);
+
+} // namespace modifiertable
 } // namespace mongo

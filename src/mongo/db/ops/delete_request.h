@@ -1,7 +1,5 @@
-// count.h
-
 /**
- *    Copyright (C) 2013 MongoDB Inc.
+ *    Copyright (C) 2014 MongoDB Inc.
  *
  *    This program is free software: you can redistribute it and/or  modify
  *    it under the terms of the GNU Affero General Public License, version 3,
@@ -28,18 +26,44 @@
  *    it in the license file.
  */
 
+#pragma once
+
+#include <string>
+
+#include "mongo/base/disallow_copying.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/db/namespace_string.h"
 
 namespace mongo {
 
-    /**
-     * 'ns' is the namespace we're counting on.
-     *
-     * { count: "collectionname"[, query: <query>] }
-     *
-     * @return -1 on ns does not exist error and other errors, 0 on other errors, otherwise the
-     * match count.
-     */
-    long long runCount(const std::string& ns, const BSONObj& cmd, string& err, int& errCode );
+    class DeleteRequest {
+        MONGO_DISALLOW_COPYING(DeleteRequest);
+    public:
+        explicit DeleteRequest(const NamespaceString& nsString) :
+            _nsString(nsString),
+            _multi(false),
+            _logop(false),
+            _god(false) {}
 
-} // namespace mongo
+        void setQuery(const BSONObj& query) { _query = query; }
+        void setMulti(bool multi = true) { _multi = multi; }
+        void setUpdateOpLog(bool logop = true) { _logop = logop; }
+        void setGod(bool god = true) { _god = god; }
+
+        const NamespaceString& getNamespaceString() const { return _nsString; }
+        const BSONObj& getQuery() const { return _query; }
+        bool isMulti() const { return _multi; }
+        bool shouldCallLogOp() const { return _logop; }
+        bool isGod() const { return _god; }
+
+        std::string toString() const;
+
+    private:
+        const NamespaceString& _nsString;
+        BSONObj _query;
+        bool _multi;
+        bool _logop;
+        bool _god;
+    };
+
+}  // namespace mongo

@@ -1,7 +1,5 @@
-// count.h
-
 /**
- *    Copyright (C) 2013 MongoDB Inc.
+ *    Copyright (C) 2013 10gen Inc.
  *
  *    This program is free software: you can redistribute it and/or  modify
  *    it under the terms of the GNU Affero General Public License, version 3,
@@ -28,18 +26,34 @@
  *    it in the license file.
  */
 
-#include "mongo/db/jsobj.h"
+#include "mongo/db/ops/modifier_table.h"
 
-namespace mongo {
+#include <memory>
 
-    /**
-     * 'ns' is the namespace we're counting on.
-     *
-     * { count: "collectionname"[, query: <query>] }
-     *
-     * @return -1 on ns does not exist error and other errors, 0 on other errors, otherwise the
-     * match count.
-     */
-    long long runCount(const std::string& ns, const BSONObj& cmd, string& err, int& errCode );
+#include "mongo/db/ops/modifier_interface.h"
+#include "mongo/unittest/unittest.h"
 
-} // namespace mongo
+namespace {
+
+    using namespace mongo::modifiertable;
+
+    using mongo::ModifierInterface;
+    using std::auto_ptr;
+
+    TEST(getType, Normal) {
+        ASSERT_EQUALS(getType("$set"), MOD_SET);
+        ASSERT_EQUALS(getType("$AModThatDoesn'tExist"), MOD_UNKNOWN);
+        ASSERT_EQUALS(getType("NotAModExpression"), MOD_UNKNOWN);
+    }
+
+    TEST(makeUpdateMod, Normal) {
+        auto_ptr<ModifierInterface> mod;
+
+        mod.reset(makeUpdateMod(MOD_SET));
+        ASSERT_NOT_EQUALS(mod.get(), static_cast<ModifierInterface*>(0));
+
+        mod.reset(makeUpdateMod(MOD_UNKNOWN));
+        ASSERT_EQUALS(mod.get(), static_cast<ModifierInterface*>(0));
+    }
+
+} // unnamed namespace

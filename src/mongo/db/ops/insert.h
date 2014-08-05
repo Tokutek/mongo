@@ -1,7 +1,7 @@
-//@file insert.h
+// insert.h
 
 /**
- *    Copyright (C) 2013 Tokutek Inc.
+ *    Copyright (C) 2008 10gen Inc.
  *
  *    This program is free software: you can redistribute it and/or  modify
  *    it under the terms of the GNU Affero General Public License, version 3,
@@ -14,30 +14,39 @@
  *
  *    You should have received a copy of the GNU Affero General Public License
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *    As a special exception, the copyright holders give permission to link the
+ *    code of portions of this program with the OpenSSL library under certain
+ *    conditions as described in each individual source file and distribute
+ *    linked combinations including the program with the OpenSSL library. You
+ *    must comply with the GNU Affero General Public License in all respects for
+ *    all of the code used other than as permitted herein. If you modify file(s)
+ *    with this exception, you may extend this exception to your version of the
+ *    file(s), but you are not obligated to do so. If you do not wish to do so,
+ *    delete this exception statement from your version. If you delete this
+ *    exception statement from all source files in the program, then also delete
+ *    it in the license file.
  */
 
-#pragma once
-
-#include "mongo/pch.h"
-#include "mongo/bson/bsonobj.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/namespace_string.h"
 
 namespace mongo {
 
-    class Collection;
+    /**
+     * if doc is ok, then return is BSONObj()
+     * otherwise, BSONObj is what should be inserted instead
+     */
+    StatusWith<BSONObj> fixDocumentForInsert( const BSONObj& doc );
 
-    // validate an object before insertion
-    void validateInsert(const BSONObj &obj);
 
-    // Insert an object into the given namespace. May modify the object (ie: maybe add _id field). Does not log.
-    void insertOneObject(Collection *cl, BSONObj &obj, uint64_t flags = 0);
+    /**
+     * check if this is a collection _any_ user can write to
+     * does NOT to permission checking, that is elsewhere
+     * for example, can't write to foo.system.bar
+     */
+    Status userAllowedWriteNS( const StringData& db, const StringData& coll );
+    Status userAllowedWriteNS( const StringData& ns );
+    Status userAllowedWriteNS( const NamespaceString& ns );
 
-    // Internal-use only: Does not check magic system collection inserts.
-    void _insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags, bool logop, bool fromMigrate = false);
-
-    // Insert a vector of objects into the given namespace, logging each operation individually.
-    void insertObjects(const char *ns, const vector<BSONObj> &objs, bool keepGoing, uint64_t flags, bool logop, bool fromMigrate = false);
-
-    // Insert an object into the given namespace. Logs the operation.
-    void insertObject(const char *ns, const BSONObj &obj, uint64_t flags = 0, bool logop = true, bool fromMigrate = false);
-    
-}  // namespace mongo
+}

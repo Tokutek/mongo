@@ -1,5 +1,3 @@
-// count.h
-
 /**
  *    Copyright (C) 2013 MongoDB Inc.
  *
@@ -28,18 +26,44 @@
  *    it in the license file.
  */
 
-#include "mongo/db/jsobj.h"
+#pragma once
+
+#include "mongo/db/field_ref.h"
+#include "mongo/db/catalog/collection.h"
+#include "mongo/s/chunk_version.h"
 
 namespace mongo {
 
-    /**
-     * 'ns' is the namespace we're counting on.
-     *
-     * { count: "collectionname"[, query: <query>] }
-     *
-     * @return -1 on ns does not exist error and other errors, 0 on other errors, otherwise the
-     * match count.
-     */
-    long long runCount(const std::string& ns, const BSONObj& cmd, string& err, int& errCode );
+    class UpdateLifecycle {
+    public:
+
+        virtual ~UpdateLifecycle() {}
+
+        /**
+         * Update the cached collection pointer that this lifecycle object uses.
+         */
+        virtual void setCollection(Collection* collection) = 0;
+
+        /**
+         * Can the update continue?
+         *
+         * The (only) implementation will check the following:
+         *  1.) Collection still exists
+         *  2.) Shard version has not changed (indicating that the query/update is not valid
+         */
+        virtual bool canContinue() const = 0;
+
+        /**
+         * Return a pointer to any indexes if there is a collection.
+         */
+        virtual const IndexPathSet* getIndexKeys() const = 0;
+
+        /**
+         * Returns the shard keys as immutable fields
+         * Immutable fields in this case mean that they are required to exist, cannot change values
+         * and must not be multi-valued (in an array, or an array)
+         */
+        virtual const std::vector<FieldRef*>* getImmutableFields() const = 0;
+    };
 
 } // namespace mongo
