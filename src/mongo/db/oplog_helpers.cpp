@@ -603,7 +603,7 @@ namespace mongo {
             // collection.
             if (docsMap != NULL) {
                 Command* c = getCommand(command);
-                massert(0, "Could not get command", c);
+                massert(17359, "Could not get command", c);
                 std::string dbname = nsToDatabase(ns);
                 c->handleRollbackForward(dbname, command, docsMap);
             }

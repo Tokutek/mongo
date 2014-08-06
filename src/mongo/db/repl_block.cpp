@@ -129,7 +129,7 @@ namespace mongo {
 
             uassert( 16250 , "w has to be a string or a number" , w.type() == String );
 
-            uassert(0, "need to be running with replication to call opReplicatedEnough", theReplSet);
+            uassert(17358, "need to be running with replication to call opReplicatedEnough", theReplSet);
 
             string wStr = w.String();
             if (wStr == "majority") {

@@ -433,7 +433,7 @@ namespace mongo {
             );
         // now we have a cursor
         // put each doc we get back into a map
-        uassert(0, "Could not create a cursor to read remote oplog GTIDs during rollback", cursor.get());
+        uassert(17360, "Could not create a cursor to read remote oplog GTIDs during rollback", cursor.get());
         while (cursor->more()) {
             BSONObj curr = cursor->next();
             GTID gtid = getGTIDFromBSON("_id", curr);
@@ -543,7 +543,7 @@ namespace mongo {
         
         r.resetCursor();
         r.tailingQueryGTE(rsoplog, startPoint);
-        uassert(0, "Cursor died while running replicateForwardToGTID", r.haveCursor());
+        uassert(17361, "Cursor died while running replicateForwardToGTID", r.haveCursor());
 
         // appliedGTIDs only used if preSnapshot is true
         RollbackGTIDSet appliedGTIDs;
@@ -581,7 +581,7 @@ namespace mongo {
                 }
             }
             r.tailCheck();
-            uassert(0, "Cursor died while running replicateForwardToGTID", r.haveCursor());
+            uassert(17362, "Cursor died while running replicateForwardToGTID", r.haveCursor());
         }
         log () << "Done replicating from " << startPoint.toString() << " to " << lastGTID.toString() << rsLog;
     }
