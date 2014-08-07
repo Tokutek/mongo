@@ -46,19 +46,59 @@ namespace mongo {
         return false;
     }
 
-    void updateOneObject(Collection *cl, const BSONObj &pk, 
-                         const BSONObj &oldObj, BSONObj &newObj, 
+    // if true, updates must log the full pre-image and post-image in the oplog,
+    // and cannot log mods in its place
+    bool forceLogFullUpdate(Collection* cl, ModSet* useMods) {
+        return useMods->hasDynamicArray() || !cl->updateObjectModsOk();
+    }
+
+    bool logOfPreImageRequired(Collection* cl) {
+        // if we are dealing with a hidden PK, we must log the
+        // full pre-image of the document in the oplog because
+        // the new rollback algorithm cannot deal with hidden primary keys
+        // Therefore, those documents must be able to use the old
+        // rollback algorithm, which is to undo the previous op
+        // manually.
+        return cl->isPKHidden();
+    }
+
+    bool doFullUpdate(Collection* cl, ModSet* useMods) {
+        bool modsAreIndexed = useMods->isIndexed() > 0;
+
+        // adding cl->indexBuildInProgress() as a check below due to #1085
+        // This is a little heavyweight, as we whould be able to have modsAreIndexed
+        // take hot indexes into account. Unfortunately, that code right now is not
+        // factored cleanly enough to do nicely, so we just do the heavyweight check
+        // here. Hope to get this properly fixed soon.
+        return (forceLogFullUpdate(cl, useMods) ||
+            modsAreIndexed ||
+            cl->indexBuildInProgress() ||
+            hasClusteringSecondaryKey(cl)
+            );
+    }
+
+    bool updateOneObjectWithMods(Collection *cl, const BSONObj &pk, 
                          const BSONObj &updateobj,
                          const bool fromMigrate,
-                         uint64_t flags) {
-        if (flags & Collection::KEYS_UNAFFECTED_HINT && !updateobj.isEmpty() && !hasClusteringSecondaryKey(cl)) {
+                         uint64_t flags,
+                         ModSet* useMods)
+    {
+        if (!doFullUpdate(cl, useMods)) {
             // - operator style update gets applied as an update message
             // - does not maintain sencondary indexes so we can only do it
             // when no indexes were affected
             cl->updateObjectMods(pk, updateobj, fromMigrate, flags);
-        } else {
-            cl->updateObject(pk, oldObj, newObj, fromMigrate, flags);
+            cl->notifyOfWriteOp();
+            return true;
         }
+        return false;
+    }
+
+    void updateOneObject(Collection *cl, const BSONObj &pk,
+                         const BSONObj &oldObj, BSONObj &newObj,
+                         const bool fromMigrate,
+                         uint64_t flags) {
+        cl->updateObject(pk, oldObj, newObj, fromMigrate, flags);
         cl->notifyOfWriteOp();
     }
 
@@ -127,26 +167,32 @@ namespace mongo {
             useMods = mods->fixDynamicArray(details->elemMatchKey());
             mymodset.reset(useMods);
         }
+
         auto_ptr<ModSetState> mss = useMods->prepare(obj, false /* not an insertion */);
         BSONObj newObj = mss->createNewFromMods();
         checkTooLarge(newObj);
-        bool modsAreIndexed = useMods->isIndexed() > 0;
-        bool forceFullUpdate = hasDynamicArray || !cl->updateObjectModsOk();
-        // adding cl->indexBuildInProgress() as a check below due to #1085
-        // This is a little heavyweight, as we whould be able to have modsAreIndexed
-        // take hot indexes into account. Unfortunately, that code right now is not
-        // factored cleanly enough to do nicely, so we just do the heavyweight check
-        // here. Hope to get this properly fixed soon.
-        uint64_t flags = (modsAreIndexed || cl->indexBuildInProgress()) ? 
-            0 : 
-            Collection::KEYS_UNAFFECTED_HINT;
-        updateOneObject(cl, pk, obj, newObj,
-            forceFullUpdate ? BSONObj() : updateobj, // if we have a dynamic array, force it to do a full overwrite
-            fromMigrate, flags);
+
+        // attempt to update the object using mods. If not possible, then
+        // do the more heavyweight method of using a full pre-image followed
+        // by a full post image
+        bool didUpdateWithMods = updateOneObjectWithMods(cl, pk, updateobj, fromMigrate, 0, useMods);
+        if (!didUpdateWithMods) {
+            bool modsAreIndexed = useMods->isIndexed() > 0;
+            uint64_t flags = (modsAreIndexed || cl->indexBuildInProgress()) ? 
+                0 : 
+                Collection::KEYS_UNAFFECTED_HINT;
+            updateOneObject(cl, pk, obj, newObj, fromMigrate, flags);
+        }
 
         // must happen after updateOneObject
-        if (forceFullUpdate) {
+        if (forceLogFullUpdate(cl, useMods)) {
+            verify(!didUpdateWithMods); // sanity check
             OplogHelpers::logUpdate(ns, pk, obj, newObj, fromMigrate);
+        }
+        else if (didUpdateWithMods && !logOfPreImageRequired(cl)) {
+            // this method logs just the pk and not obj
+            // we still need to pass in obj for sharding
+            OplogHelpers::logUpdatePKModsWithRow(ns, pk, obj, updateobj, fromMigrate);
         }
         else {
             OplogHelpers::logUpdateModsWithRow(ns, pk, obj, updateobj, fromMigrate);
@@ -159,7 +205,7 @@ namespace mongo {
         // and modifies it in-place if a timestamp needs to be set.
         BSONElementManipulator::lookForTimestamps(updateobj);
         checkNoMods(updateobj);
-        updateOneObject(cl, pk, obj, updateobj, BSONObj(), fromMigrate, 0);
+        updateOneObject(cl, pk, obj, updateobj, fromMigrate, 0);
         // must happen after updateOneObject
         OplogHelpers::logUpdate(ns, pk, obj, updateobj, fromMigrate);
     }

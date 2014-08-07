@@ -46,6 +46,7 @@ static const char OP_STR_INSERT[] = "i"; // normal insert
 static const char OP_STR_CAPPED_INSERT[] = "ci"; // insert into capped collection
 static const char OP_STR_UPDATE[] = "u"; // normal update with full pre-image and full post-image
 static const char OP_STR_UPDATE_ROW_WITH_MOD[] = "ur"; // update with full pre-image and mods to generate post-image
+static const char OP_STR_UPDATE_PK_WITH_MOD[] = "up"; // update with just pk and mods to generate post-image
 static const char OP_STR_DELETE[] = "d"; // delete with full pre-image
 static const char OP_STR_CAPPED_DELETE[] = "cd"; // delete from capped collection
 static const char OP_STR_COMMENT[] = "n"; // a no-op
@@ -58,7 +59,8 @@ namespace mongo {
             return mongoutils::str::equals(opstr, OP_STR_INSERT) ||
                 mongoutils::str::equals(opstr, OP_STR_DELETE) ||
                 mongoutils::str::equals(opstr, OP_STR_UPDATE) ||
-                mongoutils::str::equals(opstr, OP_STR_UPDATE_ROW_WITH_MOD);
+                mongoutils::str::equals(opstr, OP_STR_UPDATE_ROW_WITH_MOD) ||
+                mongoutils::str::equals(opstr, OP_STR_UPDATE_PK_WITH_MOD);
         }
 
         bool invalidOpForSharding(const char *opstr) {
@@ -157,12 +159,13 @@ namespace mongo {
             }
         }
 
-        void logUpdateModsWithRow(
+        static void logUpdateMods(
             const char *ns,
             const BSONObj &pk,
             const BSONObj &oldObj,
             const BSONObj &updateobj,
-            bool fromMigrate
+            bool fromMigrate,
+            bool onlyPK
             ) 
         {
             bool logForSharding = !fromMigrate &&
@@ -172,12 +175,18 @@ namespace mongo {
                 if (isLocalNs(ns)) {
                     return;
                 }
-
-                appendOpType(OP_STR_UPDATE_ROW_WITH_MOD, &b);
+                if (onlyPK) {
+                    appendOpType(OP_STR_UPDATE_PK_WITH_MOD, &b);
+                }
+                else {
+                    appendOpType(OP_STR_UPDATE_ROW_WITH_MOD, &b);
+                }
                 appendNsStr(ns, &b);
                 appendMigrate(fromMigrate, &b);
                 b.append(KEY_STR_PK, pk);
-                b.append(KEY_STR_OLD_ROW, oldObj);
+                if (!onlyPK) {
+                    b.append(KEY_STR_OLD_ROW, oldObj);
+                }
                 b.append(KEY_STR_MODS, updateobj);
                 BSONObj logObj = b.obj();
                 if (logTxnOpsForReplication()) {
@@ -187,6 +196,28 @@ namespace mongo {
                     cc().txn().logOpForSharding(logObj);
                 }
             }
+        }
+
+        void logUpdateModsWithRow(
+            const char *ns,
+            const BSONObj &pk,
+            const BSONObj &oldObj,
+            const BSONObj &updateobj,
+            bool fromMigrate
+            ) 
+        {
+            logUpdateMods(ns, pk, oldObj, updateobj, fromMigrate, false);
+        }
+
+        void logUpdatePKModsWithRow(
+            const char *ns,
+            const BSONObj &pk,
+            const BSONObj &oldObj,
+            const BSONObj &updateobj,
+            bool fromMigrate
+            ) 
+        {
+            logUpdateMods(ns, pk, oldObj, updateobj, fromMigrate, true);
         }
 
         void logDelete(const char *ns, const BSONObj &row, bool fromMigrate) {
@@ -502,7 +533,7 @@ namespace mongo {
             }
 
             uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
-            updateOneObject(cl, pk, oldObj, newObj, BSONObj(), false, flags);
+            updateOneObject(cl, pk, oldObj, newObj, false, flags);
         }
 
         static void runUpdateFromOplog(const char *ns, const BSONObj &op, RollbackDocsMap* docsMap) {
@@ -550,14 +581,15 @@ namespace mongo {
             // Make sure we pass the best hint in the case of an unindexed update
 
             uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
-            if (mods->isIndexed() <= 0) {
-                flags |= Collection::KEYS_UNAFFECTED_HINT;
+            // attempt to update the object using mods. If not possible, then
+            // do the more heavyweight method of using a full pre-image followed
+            // by a full post image
+            if (!updateOneObjectWithMods(cl, pk, updateobj, false, 0, mods.get())) {
+                if (mods->isIndexed() <= 0) {
+                    flags |= Collection::KEYS_UNAFFECTED_HINT;
+                }
+                updateOneObject(cl, pk, oldObj, newObj, false, 0);
             }
-            // normal replication case
-            // optimization for later: if we know we are using
-            // the updateUsingMods path in updateOneObject,
-            // then we have constructed newObj unnecessarily
-            updateOneObject(cl, pk, oldObj, newObj, updateobj, false, flags);
         }
 
         static void runUpdateModsWithRowFromOplog(const char *ns, const BSONObj &op, const RollbackDocsMap* docsMap) {
@@ -584,6 +616,56 @@ namespace mongo {
                 LOCK_REASON(lockReason, "repl: applying update with write lock");
                 Client::WriteContext ctx(ns, lockReason);
                 runUpdateModsWithRowWithLock(ns, pk, oldObj, updateobj, docsMap);
+            }
+        }
+
+        static void runUpdateModsWithPKWithLock(
+            const char* ns,
+            const BSONObj &pk,
+            const BSONObj &updateobj,
+            const RollbackDocsMap* docsMap
+            )
+        {
+            bool pkExistsInDocsMap = docsMap && docsMap->docExists(ns, pk);
+            if (pkExistsInDocsMap) {
+                return;
+            }
+            Collection *cl = getCollection(ns);
+            uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
+            scoped_ptr<ModSet> mods(new ModSet(updateobj, cl->indexKeys()));
+            if (!updateOneObjectWithMods(cl, pk, updateobj, false, 0, mods.get())) {
+                BSONObj oldObj;
+                bool ret = cl->findByPK(pk, oldObj);
+                verify(ret);
+                auto_ptr<ModSetState> mss = mods->prepare(oldObj);
+                BSONObj newObj = mss->createNewFromMods();
+                if (mods->isIndexed() <= 0) {
+                    flags |= Collection::KEYS_UNAFFECTED_HINT;
+                }
+                updateOneObject(cl, pk, oldObj, newObj, false, flags);
+            }
+        }
+
+        static void runUpdateModsWithPKFromOplog(const char *ns, const BSONObj &op, const RollbackDocsMap* docsMap) {
+            const char *names[] = {
+                KEY_STR_PK,
+                KEY_STR_MODS
+                };
+            BSONElement fields[2];
+            op.getFields(2, names, fields);
+            const BSONObj pk = fields[0].Obj();     // must exist
+            const BSONObj updateobj = fields[1].Obj(); // must exist
+
+            // We have an update obj and we need to create the new obj
+            try {
+                LOCK_REASON(lockReason, "repl: applying update");
+                Client::ReadContext ctx(ns, lockReason);
+                runUpdateModsWithPKWithLock(ns, pk, updateobj, docsMap);
+            }
+            catch (RetryWithWriteLock &e) {
+                LOCK_REASON(lockReason, "repl: applying update with write lock");
+                Client::WriteContext ctx(ns, lockReason);
+                runUpdateModsWithPKWithLock(ns, pk, updateobj, docsMap);
             }
         }
 
@@ -640,6 +722,10 @@ namespace mongo {
             else if (strcmp(opType, OP_STR_UPDATE_ROW_WITH_MOD) == 0) {
                 opCounters->gotUpdate();
                 runUpdateModsWithRowFromOplog(ns, op, docsMap);
+            }
+            else if (strcmp(opType, OP_STR_UPDATE_PK_WITH_MOD) == 0) {
+                opCounters->gotUpdate();
+                runUpdateModsWithPKFromOplog(ns, op, docsMap);
             }
             else if (strcmp(opType, OP_STR_DELETE) == 0) {
                 if (!rowInDocsMap(ns, op, KEY_STR_ROW, docsMap)) {
@@ -732,6 +818,18 @@ namespace mongo {
             }
         }
 
+        static void rollbackUpdatePKModsFromOplog(const char *ns, const BSONObj &op, RollbackDocsMap* docsMap) {
+            const BSONObj pk = op[KEY_STR_PK].Obj();
+            const BSONObj updateobj = op[KEY_STR_MODS].Obj(); // must exist
+            {
+                LOCK_REASON(lockReason, "repl: checking newRow with mods for rollback");
+                Client::ReadContext ctx(ns, lockReason);
+                Collection *cl = getCollection(ns);
+                verify(!cl->isPKHidden()); // sanity check
+                docsMap->addDoc(ns, pk);
+            }
+        }
+
         static void rollbackDeleteFromOplog(const char *ns, const BSONObj &op, RollbackDocsMap* docsMap) {
             // the rollback of a delete is to do the insert
             if (!rowInDocsMap(ns, op, KEY_STR_ROW, docsMap)) {
@@ -771,6 +869,9 @@ namespace mongo {
             }
             else if (strcmp(opType, OP_STR_UPDATE_ROW_WITH_MOD) == 0) {
                 rollbackUpdateModsFromOplog(ns, op, docsMap);
+            }
+            else if (strcmp(opType, OP_STR_UPDATE_PK_WITH_MOD) == 0) {
+                rollbackUpdatePKModsFromOplog(ns, op, docsMap);
             }
             else if (strcmp(opType, OP_STR_DELETE) == 0) {
                 rollbackDeleteFromOplog(ns, op, docsMap);

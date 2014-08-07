@@ -20,6 +20,7 @@
 #include "mongo/pch.h"
 
 #include "mongo/db/jsobj.h"
+#include "mongo/db/ops/update_internal.h"
 
 namespace mongo {
 
@@ -44,9 +45,14 @@ namespace mongo {
 
     BSONObj invertUpdateMods(const BSONObj &updateobj);
 
+    bool updateOneObjectWithMods(Collection *cl, const BSONObj &pk, 
+                         const BSONObj &updateobj,
+                         const bool fromMigrate,
+                         uint64_t flags,
+                         ModSet* useMods);
+    
     void updateOneObject(Collection *cl, const BSONObj &pk, 
                          const BSONObj &oldObj, BSONObj &newObj, 
-                         const BSONObj &updateobj,
                          const bool fromMigrate,
                          uint64_t flags);
 
