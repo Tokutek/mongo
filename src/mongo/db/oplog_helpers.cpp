@@ -469,7 +469,7 @@ namespace mongo {
             else if (!oldObjExistsInDocsMap) {
                 // delete old row
                 verify(!cl->isPKHidden());
-                runRowDelete(newObj, cl);
+                runRowDelete(oldObj, cl);
             }
             else if (!newObjExistsInDocsMap) {
                 verify(!cl->isPKHidden());
