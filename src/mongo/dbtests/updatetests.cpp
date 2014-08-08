@@ -1844,57 +1844,6 @@ namespace UpdateTests {
         };
     };
 
-    namespace Invertible {
-        class SimpleInc {
-        public:
-            void run() {
-                BSONObj mods = BSON("$inc" << BSON("a" << 1));
-                ASSERT_EQUALS(invertUpdateMods(mods),
-                              BSON("$inc" << BSON("a" << -1)));
-
-                mods = BSON("$inc" << BSON("a" << 0));
-                ASSERT_EQUALS(invertUpdateMods(mods),
-                              BSON("$inc" << BSON("a" << 0)));
-
-                mods = BSON("$inc" << BSON("a" << -1));
-                ASSERT_EQUALS(invertUpdateMods(mods),
-                              BSON("$inc" << BSON("a" << 1)));
-
-                mods = BSON("$inc" << BSON("a" << 12345678));
-                ASSERT_EQUALS(invertUpdateMods(mods),
-                              BSON("$inc" << BSON("a" << -12345678)));
-            }
-        };
-        class DoubleInc {
-        public:
-            void run() {
-                BSONObj mods = BSON("$inc" << BSON("a" << 1 << "b" << -1));
-                ASSERT_EQUALS(invertUpdateMods(mods),
-                              BSON("$inc" << BSON("a" << -1 << "b" << 1)));
-            }
-        };
-        class RepeatedInc {
-        public:
-            void run() {
-                BSONObj mods = BSON("$inc" << BSON("a" << 1) << "$inc" << BSON("b" << 1));
-                ASSERT_EQUALS(invertUpdateMods(mods),
-                              BSON("$inc" << BSON("a" << -1) << "$inc" << BSON("b" << -1)));
-            }
-        };
-        class MixedInc {
-        public:
-            void run() {
-                BSONObj mods = BSON("$inc" << BSON("a" << 1) << "$inc" << BSON("b" << -1));
-                ASSERT_EQUALS(invertUpdateMods(mods),
-                              BSON("$inc" << BSON("a" << -1) << "$inc" << BSON("b" << 1)));
-
-                mods = BSON("$inc" << BSON("a" << -1) << "$inc" << BSON("b" << 1));
-                ASSERT_EQUALS(invertUpdateMods(mods),
-                              BSON("$inc" << BSON("a" << 1) << "$inc" << BSON("b" << -1)));
-            }
-        };
-    };
-
     namespace basic {
         class Base : public ClientBase {
         protected:
@@ -2220,11 +2169,6 @@ namespace UpdateTests {
             add< ModSetTests::PositionalWithoutNestedElemMatchKey >();
             add< ModSetTests::DbrefPassesPositionalValidation >();
             add< ModSetTests::CreateNewFromQueryExcludeNot >();
-            add< Invertible::SimpleInc>();
-            add< Invertible::DoubleInc>();
-            add< Invertible::RepeatedInc>();
-            add< Invertible::MixedInc>();
-
             add< basic::inc1 >();
             add< basic::inc2 >();
             add< basic::inc3 >();

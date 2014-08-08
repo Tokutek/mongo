@@ -43,8 +43,6 @@ namespace mongo {
         }
     };
 
-    BSONObj invertUpdateMods(const BSONObj &updateobj);
-
     bool updateOneObjectWithMods(Collection *cl, const BSONObj &pk, 
                          const BSONObj &updateobj,
                          const bool fromMigrate,

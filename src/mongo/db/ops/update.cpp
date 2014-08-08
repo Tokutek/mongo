@@ -268,23 +268,6 @@ namespace mongo {
         return UpdateResult(1, isOperatorUpdate, 1, BSONObj());
     }
 
-    BSONObj invertUpdateMods(const BSONObj &updateobj) {
-        BSONObjBuilder b(updateobj.objsize());
-        for (BSONObjIterator i(updateobj); i.more(); ) {
-            const BSONElement &e = i.next();
-            verify(str::equals(e.fieldName(), "$inc"));
-            BSONObjBuilder inc(b.subobjStart("$inc"));
-            for (BSONObjIterator o(e.Obj()); o.more(); ) {
-                const BSONElement &fieldToInc = o.next();
-                verify(fieldToInc.isNumber());
-                const long long invertedValue = -fieldToInc.numberLong();
-                inc.append(fieldToInc.fieldName(), invertedValue);
-            }
-            inc.done();
-        }
-        return b.obj();
-    }
-
     static UpdateResult _updateObjects(const char *ns,
                                        const BSONObj &updateobj,
                                        const BSONObj &patternOrig,
