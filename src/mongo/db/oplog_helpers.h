@@ -73,7 +73,7 @@ namespace mongo {
 
         void logUpdate(const char *ns, const BSONObj &pk, const BSONObj &oldObj, const BSONObj &newObj, bool fromMigrate);
 
-        void logUpdatePKModsWithRow(const char *ns, const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateobj, bool fromMigrate);
+        void logUpdatePKModsWithRow(const char *ns, const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateobj, const BSONObj& query, const uint32_t fastUpdateFlags, bool fromMigrate);
 
         void logUpdateModsWithRow(const char *ns, const BSONObj &pk, const BSONObj &oldObj, const BSONObj &updateobj, bool fromMigrate);
 

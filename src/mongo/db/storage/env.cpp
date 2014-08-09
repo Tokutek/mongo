@@ -86,16 +86,21 @@ namespace mongo {
 
         static BSONObj pretty_key(const DBT *key, DB *db);
 
-        static void runUpdateMods(DB *db, const DBT *key, const DBT *old_val, const BSONObj& updateObj,
+        static void runUpdateMods(DB *db, const DBT *key, const DBT *old_val, const BSONObj& updateObj, const BSONObj& query, const uint32_t fastUpdateFlags,
                                    void (*set_val)(const DBT *new_val, void *set_extra),
                                    void *set_extra) {
-            uassert(17315, "Got an empty old_val or old_val->data in runUpdateMods, should not happen", old_val && old_val->data);
-            // Apply the update mods
-            const BSONObj oldObj(reinterpret_cast<char *>(old_val->data));
-            BSONObj newObj = _updateCallback->applyMods(oldObj, updateObj);
+            BSONObj oldObj;
+            if (old_val && old_val->data) {
+                oldObj = BSONObj(reinterpret_cast<char *>(old_val->data));
+            }
+            // Apply the update mods            
+            BSONObj newObj;
+            bool setVal = _updateCallback->applyMods(oldObj, updateObj, query, fastUpdateFlags, newObj);
             // Set the new value
-            DBT new_val = dbt_make(newObj.objdata(), newObj.objsize());
-            set_val(&new_val, set_extra);
+            if (setVal) {
+                DBT new_val = dbt_make(newObj.objdata(), newObj.objsize());
+                set_val(&new_val, set_extra);
+            }
         }
 
         static int update_callback(DB *db, const DBT *key, const DBT *old_val, const DBT *extra,
@@ -109,7 +114,10 @@ namespace mongo {
                 // right now, we only support one type of message, an updateMods
                 uassert(17313, str::stream() << "unknown type of update message, type: " << type << " message: " << msg, strcmp(type, "u") == 0);
                 const BSONObj updateObj = msg["o"].Obj();
-                runUpdateMods(db, key, old_val, updateObj, set_val, set_extra);
+                BSONElement queryElement = msg["q"];
+                const BSONObj query = queryElement.ok() ? queryElement.Obj() : BSONObj();
+                const uint32_t fastUpdateFlags = msg["f"].Int();
+                runUpdateMods(db, key, old_val, updateObj, query, fastUpdateFlags, set_val, set_extra);
                 return 0;
             } catch (const std::exception &ex) {
                 problem() << "Caught exception in ydb update callback, ex: " << ex.what()

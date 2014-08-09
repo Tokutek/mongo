@@ -78,7 +78,8 @@ namespace mongo {
     }
 
     bool updateOneObjectWithMods(Collection *cl, const BSONObj &pk, 
-                         const BSONObj &updateobj,
+                         const BSONObj &updateobj, const BSONObj& query,
+                         const uint32_t fastUpdateFlags,
                          const bool fromMigrate,
                          uint64_t flags,
                          ModSet* useMods)
@@ -87,7 +88,7 @@ namespace mongo {
             // - operator style update gets applied as an update message
             // - does not maintain sencondary indexes so we can only do it
             // when no indexes were affected
-            cl->updateObjectMods(pk, updateobj, fromMigrate, flags);
+            cl->updateObjectMods(pk, updateobj, query, fastUpdateFlags, fromMigrate, flags);
             cl->notifyOfWriteOp();
             return true;
         }
@@ -127,14 +128,40 @@ namespace mongo {
     class ApplyUpdateMessage : public storage::UpdateCallback {
         // @param pkQuery - the pk with field names, for proper default obj construction
         //                  in mods.createNewFromQuery().
-        BSONObj applyMods(const BSONObj &oldObj, const BSONObj &msg) {
+        bool applyMods(
+            const BSONObj &oldObj,
+            const BSONObj &msg,
+            const BSONObj& query,
+            const uint32_t fastUpdateFlags,
+            BSONObj& newObj
+            ) 
+        {            
+            if (oldObj.isEmpty()) {
+                // if this update message is allowed to not have an old obj
+                // we simply return false, otherwise, we uassert
+                if (fastUpdateFlags & UpdateFlags::NO_OLDOBJ_OK) {
+                    return false;
+                }
+                uasserted(17315, "Got an empty old_val or old_val->data in runUpdateMods, should not happen");
+            }
             try {
-                // The update message is simply an update object, supplied by the user.
                 ModSet mods(msg);
+                verify(!mods.hasDynamicArray());
+                if (!query.isEmpty()) {
+                    // note, the mods used should not have hasDynamicArray()
+                    // be false, making this code ok. This fact is asserted above
+                    ResultDetails queryResult;
+                    Matcher matcher(query);
+                    bool matches = matcher.matches(oldObj, &queryResult.matchDetails);
+                    if (!matches) {
+                        return false;
+                    }
+                }
+                // The update message is simply an update object, supplied by the user.
                 auto_ptr<ModSetState> mss = mods.prepare(oldObj, false);
-                const BSONObj newObj = mss->createNewFromMods();
+                newObj = mss->createNewFromMods();
                 checkTooLarge(newObj);
-                return newObj;
+                return true;
             } catch (const std::exception &ex) {
                 // Applying an update message in this fashion _always_ ignores errors.
                 // That is the risk you take when using --fastupdates.
@@ -150,7 +177,7 @@ namespace mongo {
                     problem() << "*    exception: " << ex.what() << endl;
                 }
                 fastupdatesErrors.increment(1);
-                return oldObj;
+                return false;
             }
         }
     private:
@@ -175,7 +202,7 @@ namespace mongo {
         // attempt to update the object using mods. If not possible, then
         // do the more heavyweight method of using a full pre-image followed
         // by a full post image
-        bool didUpdateWithMods = updateOneObjectWithMods(cl, pk, updateobj, fromMigrate, 0, useMods);
+        bool didUpdateWithMods = updateOneObjectWithMods(cl, pk, updateobj, BSONObj(), 0, fromMigrate, 0, useMods);
         if (!didUpdateWithMods) {
             bool modsAreIndexed = useMods->isIndexed() > 0;
             uint64_t flags = (modsAreIndexed || cl->indexBuildInProgress()) ? 
@@ -192,7 +219,7 @@ namespace mongo {
         else if (didUpdateWithMods && !logOfPreImageRequired(cl)) {
             // this method logs just the pk and not obj
             // we still need to pass in obj for sharding
-            OplogHelpers::logUpdatePKModsWithRow(ns, pk, obj, updateobj, fromMigrate);
+            OplogHelpers::logUpdatePKModsWithRow(ns, pk, obj, updateobj, BSONObj(), 0, fromMigrate);
         }
         else {
             OplogHelpers::logUpdateModsWithRow(ns, pk, obj, updateobj, fromMigrate);
@@ -231,12 +258,49 @@ namespace mongo {
         return UpdateResult(0, isOperatorUpdate, 1, newObj);
     }
 
+    static bool tryFastUpdate(const char *ns, Collection *cl,
+                            const BSONObj &pk, const BSONObj &query,
+                            const BSONObj &updateobj,
+                            const bool upsert,
+                            const bool fromMigrate,
+                            ModSet* mods,
+                            bool isOperatorUpdate)
+    {
+        if (!cmdLine.fastupdates) {
+            return false;
+        }
+        if (upsert) {
+            return false;
+        }
+        if (!isOperatorUpdate) {
+            return false;
+        }
+        verify(mods);
+        if (doFullUpdate(cl, mods) || logOfPreImageRequired(cl)) {
+            return false;
+        }
+        verify(!forceLogFullUpdate(cl, mods));
+        // looks like we are good to go
+        // TODO: add an option down the pipe to allow some errors
+        // such as a missing doc to update. Right now, this will cause a crash
+        // TODO: handle flags to let it know query matters
+        
+        // a little optimization to get rid of the query, if we can
+        const bool singleQueryField = query.nFields() == 1; // TODO: Optimize?
+        const BSONObj& queryToUse = singleQueryField ? BSONObj() : query;
+        uint32_t fastUpdateFlags = UpdateFlags::NO_OLDOBJ_OK;
+        bool success = updateOneObjectWithMods(cl, pk, updateobj, queryToUse, fastUpdateFlags, fromMigrate, 0, mods);
+        verify(success);
+        // TODO: fix third parameter for sharding
+        OplogHelpers::logUpdatePKModsWithRow(ns, pk, BSONObj(), updateobj, queryToUse, fastUpdateFlags, fromMigrate);
+        return true;
+    }
+
     static UpdateResult updateByPK(const char *ns, Collection *cl,
                             const BSONObj &pk, const BSONObj &patternOrig,
                             const BSONObj &updateobj,
                             const bool upsert,
-                            const bool fromMigrate,
-                            uint64_t flags) {
+                            const bool fromMigrate) {
         // Create a mod set for $ style updates.
         shared_ptr<ModSet> mods;
         const bool isOperatorUpdate = updateobj.firstElementFieldName()[0] == '$';
@@ -244,12 +308,17 @@ namespace mongo {
             mods.reset(new ModSet(updateobj, cl->indexKeys()));
         }
 
+        // try a fast update, if it succeeds, get out, otherwise,
+        // proceed with fetching the pre-image
+        if (tryFastUpdate(ns, cl, pk, patternOrig, updateobj, upsert, fromMigrate, mods.get(), isOperatorUpdate)) {
+            return UpdateResult(1, isOperatorUpdate, 1, BSONObj());
+        }
+
         BSONObj obj;
         ResultDetails queryResult;
         if (mods && mods->hasDynamicArray()) {
             queryResult.matchDetails.requestElemMatchKey();
         }
-
         const bool found = queryByPKHack(cl, pk, patternOrig, obj, &queryResult);
         if (!found) {
             if (!upsert) {
@@ -290,7 +359,7 @@ namespace mongo {
             const BSONObj pk = cl->getSimplePKFromQuery(patternOrig);
             if (!pk.isEmpty()) {
                 return updateByPK(ns, cl, pk, patternOrig, updateobj,
-                                  upsert, fromMigrate, 0);
+                                  upsert, fromMigrate);
             }
         }
 

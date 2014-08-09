@@ -26,6 +26,9 @@ namespace mongo {
 
     class Collection;
 
+    namespace UpdateFlags {
+        static const uint64_t NO_OLDOBJ_OK = 1 << 0; // skip acquiring locktree row locks
+    }
     struct UpdateResult {
         const bool existing; // if existing objects were modified
         const bool mod;      // was this a $ mod
@@ -44,7 +47,8 @@ namespace mongo {
     };
 
     bool updateOneObjectWithMods(Collection *cl, const BSONObj &pk, 
-                         const BSONObj &updateobj,
+                         const BSONObj &updateobj, const BSONObj& query,
+                         const uint32_t fastUpdateFlags,
                          const bool fromMigrate,
                          uint64_t flags,
                          ModSet* useMods);
