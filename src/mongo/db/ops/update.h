@@ -21,11 +21,16 @@
 
 #include "mongo/db/jsobj.h"
 #include "mongo/db/ops/update_internal.h"
+#include "mongo/db/storage/env.h"
 
 namespace mongo {
 
     class Collection;
 
+    namespace UpdateFlags {
+        static const uint64_t FAST_UPDATE_PERFORMED = 1 << 0; // really just for diagnostics and testing. Has no practical usage
+        static const uint64_t NO_OLDOBJ_OK = 1 << 1; // skip acquiring locktree row locks
+    }
     struct UpdateResult {
         const bool existing; // if existing objects were modified
         const bool mod;      // was this a $ mod
@@ -44,7 +49,8 @@ namespace mongo {
     };
 
     bool updateOneObjectWithMods(Collection *cl, const BSONObj &pk, 
-                         const BSONObj &updateobj,
+                         const BSONObj &updateobj, const BSONObj& query,
+                         const uint32_t fastUpdateFlags,
                          const bool fromMigrate,
                          uint64_t flags,
                          ModSet* useMods);
@@ -58,5 +64,21 @@ namespace mongo {
                                const BSONObj &updateobj, const BSONObj &pattern,
                                const bool upsert, const bool multi,
                                const bool fromMigrate = false);
+
+    // Apply an update message supplied by a collection to
+    // some row in an in IndexDetails (for fast ydb updates).
+    //
+    class ApplyUpdateMessage : public storage::UpdateCallback {
+    public:
+        bool applyMods(
+            const BSONObj &oldObj,
+            const BSONObj &msg,
+            const BSONObj& query,
+            const uint32_t fastUpdateFlags,
+            BSONObj& newObj
+            );
+    private:
+        Timer _loggingTimer;
+    };
 
 }  // namespace mongo

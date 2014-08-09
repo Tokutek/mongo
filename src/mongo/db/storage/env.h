@@ -29,10 +29,21 @@ namespace mongo {
     namespace storage {
 
         class UpdateCallback : boost::noncopyable {
+            void reportBug() {
+                msgasserted(17214, "bug: update apply callback not properly installed");
+            }
         public:
             virtual ~UpdateCallback() { }
-            virtual BSONObj applyMods(const BSONObj &oldObj, const BSONObj &msg) {
-                msgasserted(17214, "bug: update apply callback not properly installed");
+            virtual bool applyMods(
+                const BSONObj &oldObj,
+                const BSONObj &msg,
+                const BSONObj& query,
+                const uint32_t fastUpdateFlags,
+                BSONObj& newObj
+                ) 
+            {
+                reportBug();
+                return false;
             }
         };
 

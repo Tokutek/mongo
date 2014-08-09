@@ -37,6 +37,8 @@ static const char *KEY_STR_ROW = "o";
 static const char *KEY_STR_OLD_ROW = "o";
 static const char *KEY_STR_NEW_ROW = "o2";
 static const char *KEY_STR_MODS = "m";
+static const char *KEY_STR_QUERY = "q";
+static const char *KEY_STR_FLAGS = "f";
 static const char *KEY_STR_PK = "pk";
 static const char *KEY_STR_COMMENT = "o";
 static const char *KEY_STR_MIGRATE = "fromMigrate";
@@ -159,13 +161,12 @@ namespace mongo {
             }
         }
 
-        static void logUpdateMods(
+        void logUpdateModsWithRow(
             const char *ns,
             const BSONObj &pk,
             const BSONObj &oldObj,
             const BSONObj &updateobj,
-            bool fromMigrate,
-            bool onlyPK
+            bool fromMigrate
             ) 
         {
             bool logForSharding = !fromMigrate &&
@@ -175,18 +176,11 @@ namespace mongo {
                 if (isLocalNs(ns)) {
                     return;
                 }
-                if (onlyPK) {
-                    appendOpType(OP_STR_UPDATE_PK_WITH_MOD, &b);
-                }
-                else {
-                    appendOpType(OP_STR_UPDATE_ROW_WITH_MOD, &b);
-                }
+                appendOpType(OP_STR_UPDATE_ROW_WITH_MOD, &b);
                 appendNsStr(ns, &b);
                 appendMigrate(fromMigrate, &b);
                 b.append(KEY_STR_PK, pk);
-                if (!onlyPK) {
-                    b.append(KEY_STR_OLD_ROW, oldObj);
-                }
+                b.append(KEY_STR_OLD_ROW, oldObj);
                 b.append(KEY_STR_MODS, updateobj);
                 BSONObj logObj = b.obj();
                 if (logTxnOpsForReplication()) {
@@ -198,26 +192,38 @@ namespace mongo {
             }
         }
 
-        void logUpdateModsWithRow(
-            const char *ns,
-            const BSONObj &pk,
-            const BSONObj &oldObj,
-            const BSONObj &updateobj,
-            bool fromMigrate
-            ) 
-        {
-            logUpdateMods(ns, pk, oldObj, updateobj, fromMigrate, false);
-        }
-
         void logUpdatePKModsWithRow(
             const char *ns,
             const BSONObj &pk,
             const BSONObj &oldObj,
             const BSONObj &updateobj,
+            const BSONObj &query,
+            const uint32_t fastUpdateFlags,
             bool fromMigrate
             ) 
         {
-            logUpdateMods(ns, pk, oldObj, updateobj, fromMigrate, true);
+            bool logForSharding = !fromMigrate &&
+                shouldLogTxnUpdateOpForSharding(OP_STR_UPDATE, ns, oldObj);
+            if (logTxnOpsForReplication() || logForSharding) {
+                BSONObjBuilder b;
+                if (isLocalNs(ns)) {
+                    return;
+                }
+                appendOpType(OP_STR_UPDATE_PK_WITH_MOD, &b);
+                appendNsStr(ns, &b);
+                appendMigrate(fromMigrate, &b);
+                b.append(KEY_STR_PK, pk);
+                b.append(KEY_STR_MODS, updateobj);
+                b.append(KEY_STR_QUERY, query);
+                b.append(KEY_STR_FLAGS, fastUpdateFlags);
+                BSONObj logObj = b.obj();
+                if (logTxnOpsForReplication()) {
+                    cc().txn().logOpForReplication(logObj);
+                }
+                if (logForSharding) {
+                    cc().txn().logOpForSharding(logObj);
+                }
+            }
         }
 
         void logDelete(const char *ns, const BSONObj &row, bool fromMigrate) {
@@ -584,7 +590,7 @@ namespace mongo {
             // attempt to update the object using mods. If not possible, then
             // do the more heavyweight method of using a full pre-image followed
             // by a full post image
-            if (!updateOneObjectWithMods(cl, pk, updateobj, false, 0, mods.get())) {
+            if (!updateOneObjectWithMods(cl, pk, updateobj, BSONObj(), 0, false, 0, mods.get())) {
                 if (mods->isIndexed() <= 0) {
                     flags |= Collection::KEYS_UNAFFECTED_HINT;
                 }
@@ -623,6 +629,8 @@ namespace mongo {
             const char* ns,
             const BSONObj &pk,
             const BSONObj &updateobj,
+            const BSONObj &query,
+            const uint32_t fastUpdateFlags,
             const RollbackDocsMap* docsMap
             )
         {
@@ -633,39 +641,44 @@ namespace mongo {
             Collection *cl = getCollection(ns);
             uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
             scoped_ptr<ModSet> mods(new ModSet(updateobj, cl->indexKeys()));
-            if (!updateOneObjectWithMods(cl, pk, updateobj, false, 0, mods.get())) {
+            if (!updateOneObjectWithMods(cl, pk, updateobj, query, fastUpdateFlags, false, flags, mods.get())) {
                 BSONObj oldObj;
                 bool ret = cl->findByPK(pk, oldObj);
-                verify(ret);
-                auto_ptr<ModSetState> mss = mods->prepare(oldObj);
-                BSONObj newObj = mss->createNewFromMods();
-                if (mods->isIndexed() <= 0) {
-                    flags |= Collection::KEYS_UNAFFECTED_HINT;
+                if (!ret) {
+                    verify(oldObj.isEmpty());
                 }
-                updateOneObject(cl, pk, oldObj, newObj, false, flags);
+                BSONObj newObj;
+                ApplyUpdateMessage storageUpdateCallback;
+                bool applied = storageUpdateCallback.applyMods(oldObj, updateobj, query, fastUpdateFlags, newObj);
+                if (applied) {
+                    updateOneObject(cl, pk, oldObj, newObj, false, flags);
+                }
             }
         }
 
         static void runUpdateModsWithPKFromOplog(const char *ns, const BSONObj &op, const RollbackDocsMap* docsMap) {
             const char *names[] = {
                 KEY_STR_PK,
-                KEY_STR_MODS
+                KEY_STR_MODS,
+                KEY_STR_QUERY,
+                KEY_STR_FLAGS
                 };
-            BSONElement fields[2];
-            op.getFields(2, names, fields);
+            BSONElement fields[3];
+            op.getFields(4, names, fields);
             const BSONObj pk = fields[0].Obj();     // must exist
             const BSONObj updateobj = fields[1].Obj(); // must exist
-
+            const BSONObj query = fields[2].Obj(); // must exist
+            const uint32_t fastUpdateFlags = fields[3].Int();
             // We have an update obj and we need to create the new obj
             try {
                 LOCK_REASON(lockReason, "repl: applying update");
                 Client::ReadContext ctx(ns, lockReason);
-                runUpdateModsWithPKWithLock(ns, pk, updateobj, docsMap);
+                runUpdateModsWithPKWithLock(ns, pk, updateobj, query, fastUpdateFlags, docsMap);
             }
             catch (RetryWithWriteLock &e) {
                 LOCK_REASON(lockReason, "repl: applying update with write lock");
                 Client::WriteContext ctx(ns, lockReason);
-                runUpdateModsWithPKWithLock(ns, pk, updateobj, docsMap);
+                runUpdateModsWithPKWithLock(ns, pk, updateobj, query, fastUpdateFlags, docsMap);
             }
         }
 

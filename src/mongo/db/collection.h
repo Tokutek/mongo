@@ -213,9 +213,10 @@ namespace mongo {
         // update an object in the namespace by pk, described by the updateObj's $ operators
         //
         // handles logging
-        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
-                                      const bool fromMigrate,
-                                      uint64_t flags) = 0;
+        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj,
+            const BSONObj &query, const uint32_t fastUpdateFlags,
+            const bool fromMigrate,
+            uint64_t flags) = 0;
 
         // rebuild the given index, online.
         // - if there are options, change those options in the index and update the system catalog.
@@ -580,9 +581,10 @@ namespace mongo {
         //
         // handles logging
         void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
-                              const bool fromMigrate,
-                              uint64_t flags = 0) {
-            _cd->updateObjectMods(pk, updateObj, fromMigrate, flags);
+            const BSONObj &query, const uint32_t fastUpdateFlags,
+            const bool fromMigrate,
+            uint64_t flags = 0) {
+            _cd->updateObjectMods(pk, updateObj, query, fastUpdateFlags, fromMigrate, flags);
         }
 
         // Rebuild indexes. Details are implementation specific. This is typically an online operation.
@@ -847,8 +849,9 @@ namespace mongo {
         //
         // handles logging
         virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
-                                      const bool fromMigrate,
-                                      uint64_t flags);
+            const BSONObj &query, const uint32_t fastUpdateFlags,
+            const bool fromMigrate,
+            uint64_t flags);
         
         void setIndexIsMultikey(const int idxNum, bool* indexBitChanged);
 
@@ -1135,8 +1138,9 @@ namespace mongo {
                           const bool fromMigrate,
                           uint64_t flags, bool* indexBitChanged);
         void updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
-                              const bool fromMigrate,
-                              uint64_t flags);
+            const BSONObj &query, const uint32_t fastUpdateFlags,
+            const bool fromMigrate,
+            uint64_t flags);
         bool updateObjectModsOk() {
             return false;
         }
@@ -1179,8 +1183,9 @@ namespace mongo {
                           uint64_t flags, bool* indexBitChanged);
 
         void updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
-                              const bool fromMigrate,
-                              uint64_t flags);
+            const BSONObj &query, const uint32_t fastUpdateFlags,
+            const bool fromMigrate,
+            uint64_t flags);
 
         bool updateObjectModsOk() {
             return false;
@@ -1267,8 +1272,9 @@ namespace mongo {
                           uint64_t flags, bool* indexBitChanged);
 
         void updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
-                              const bool fromMigrate,
-                              uint64_t flags);
+            const BSONObj &query, const uint32_t fastUpdateFlags,
+            const bool fromMigrate,
+            uint64_t flags);
 
     private:
         void createIndex(const BSONObj &idx_info);
@@ -1297,8 +1303,13 @@ namespace mongo {
                           uint64_t flags, bool* indexBitChanged);
 
         void updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
-                              const bool fromMigrate,
-                              uint64_t flags);
+            const BSONObj &query, const uint32_t fastUpdateFlags,
+            const bool fromMigrate,
+            uint64_t flags);
+
+        bool updateObjectModsOk() {
+            return false;
+        }
 
         void empty();
 
@@ -1442,14 +1453,15 @@ namespace mongo {
         }
 
         virtual bool updateObjectModsOk() {
-            return true;
+            return _partitions[0]->updateObjectModsOk();
         }
 
-        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
-                                      const bool fromMigrate,
-                                      uint64_t flags) {
+        virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj,
+            const BSONObj &query, const uint32_t fastUpdateFlags,
+            const bool fromMigrate,
+            uint64_t flags) {
             uint64_t whichPartition = partitionWithPK(pk);
-            _partitions[whichPartition]->updateObjectMods(pk, updateObj, fromMigrate, flags);
+            _partitions[whichPartition]->updateObjectMods(pk, updateObj, query, fastUpdateFlags, fromMigrate, flags);
         }
 
         virtual bool rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &result);

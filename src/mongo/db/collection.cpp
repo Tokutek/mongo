@@ -951,13 +951,18 @@ namespace mongo {
     }
 
     void CollectionBase::updateObjectMods(const BSONObj &pk, const BSONObj &updateObj,
-                                          const bool fromMigrate,
-                                          uint64_t flags) {
+        const BSONObj &query, const uint32_t fastUpdateFlags,
+        const bool fromMigrate, uint64_t flags)
+    {
         verify(!updateObj.isEmpty());
         // TODO: anyway to avoid a malloc with this builder?
         BSONObjBuilder b;
         b.append("t", "u");
         b.append("o", updateObj);
+        b.append("f", fastUpdateFlags);
+        if (!query.isEmpty()) {
+            b.append("q", query);
+        }
 
         IndexDetailsBase &pkIdx = getPKIndexBase();
         pkIdx.updatePair(pk, NULL, b.done(), flags);
@@ -2178,8 +2183,9 @@ namespace mongo {
     }
 
     void SystemUsersCollection::updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
-                                            const bool fromMigrate,
-                                            uint64_t flags) {
+        const BSONObj &query, const uint32_t fastUpdateFlags,
+        const bool fromMigrate,
+        uint64_t flags) {
         // updating the system users collection requires calling
         // AuthorizationManager::checkValidPrivilegeDocument. See above.
         // As a result, updateObject should be called
@@ -2333,8 +2339,9 @@ namespace mongo {
     }
 
     void CappedCollection::updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
-                                            const bool fromMigrate,
-                                            uint64_t flags) {
+        const BSONObj &query, const uint32_t fastUpdateFlags,
+        const bool fromMigrate,
+        uint64_t flags) {
         msgasserted(17217, "bug: cannot (fast) update a capped collection, "
                            " should have been enforced higher in the stack" );
     }
@@ -2534,8 +2541,9 @@ namespace mongo {
     }
 
     void ProfileCollection::updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
-                                             const bool fromMigrate,
-                                             uint64_t flags) {
+        const BSONObj &query, const uint32_t fastUpdateFlags,
+        const bool fromMigrate,
+        uint64_t flags) {
         msgasserted( 17219, "bug: The profile collection should not be updated." );
     }
 
@@ -2631,8 +2639,9 @@ namespace mongo {
     }
 
     void BulkLoadedCollection::updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
-                                                const bool fromMigrate,
-                                                uint64_t flags) {
+        const BSONObj &query, const uint32_t fastUpdateFlags,
+        const bool fromMigrate,
+        uint64_t flags) {
         uasserted( 17218, "Cannot update a collection under-going bulk load." );
     }
 
