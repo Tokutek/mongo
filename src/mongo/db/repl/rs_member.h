@@ -75,10 +75,12 @@ namespace mongo {
     public:
         HeartbeatInfo()
                 : _id(0xffffffff), hbstate(MemberState::RS_UNKNOWN), health(-1.0),
-                  downSince(0), opTime(0), skew(INT_MIN), authIssue(false), ping(0), oplogVersion(0) {}
+                  downSince(0), opTime(0), skew(INT_MIN), authIssue(false), ping(0), oplogVersion(0),
+                  highestKnownPrimaryInSet(0) {}
         HeartbeatInfo(unsigned id)
                 : _id(id), hbstate(MemberState::RS_UNKNOWN), health(-1.0), upSince(0),
-                  downSince(0), lastHeartbeat(0), opTime(0), skew(INT_MIN), authIssue(false), ping(0), oplogVersion(0) {}
+                  downSince(0), lastHeartbeat(0), opTime(0), skew(INT_MIN), authIssue(false), ping(0), oplogVersion(0),
+                  highestKnownPrimaryInSet(0) {}
         unsigned id() const { return _id; }
         MemberState hbstate;
         double health;
