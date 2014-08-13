@@ -35,8 +35,15 @@ add_library(synchronization STATIC
   )
 add_dependencies(synchronization generate_error_codes generate_action_types install_tdb_h)
 
-add_library(mongocommon_util STATIC
+add_library(background_job STATIC
   background
+  )
+add_dependencies(background_job generate_error_codes generate_action_types)
+target_link_libraries(background_job LINK_PUBLIC
+  spin_lock
+  )
+
+add_library(mongocommon_util STATIC
   intrusive_counter
   util
   trace
@@ -73,6 +80,7 @@ target_link_libraries(mongocommon_util LINK_PUBLIC
   stringutils
   fail_point
   spin_lock
+  background_job
   thread_name
   options_parser
   ${PCRE_LIBRARIES}

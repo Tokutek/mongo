@@ -588,6 +588,7 @@ if (BUILD_TESTING)
   add_dependencies(background_job_test generate_error_codes generate_action_types)
   link_recursive_deps(background_job_test
     unittest_main
+    background_job
     mongocommon
     ${TOKUMX_SSL_LIBRARIES}
     )
