@@ -526,7 +526,8 @@ env.Library("server_options", [
                     ])
 
 env.CppUnitTest('server_options_test', 'db/server_options_test.cpp',
-                LIBDEPS=['server_options'])
+                LIBDEPS=['server_options', 'mongocommon',],
+                NO_CRUTCH=True)
 
 env.CppUnitTest('v8_deadline_monitor_test', 'scripting/v8_deadline_monitor_test.cpp', LIBDEPS=[])
 

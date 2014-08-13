@@ -22,6 +22,13 @@
 #include "mongo/util/options_parser/option_section.h"
 #include "mongo/util/options_parser/options_parser.h"
 
+// These are stubs that we need now since we include mongocommon
+namespace mongo {
+    bool inShutdown() {
+        return false;
+    }
+}
+
 namespace {
 
     using mongo::ErrorCodes;
