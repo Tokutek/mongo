@@ -58,6 +58,8 @@ doTest = function (signal, startPort, txnLimit) {
         refsPivot = conns[0].getDB("local").oplog.refs.find().sort({_id:-1}).next()._id;
     }
     replTest.awaitReplication();
+    var beforeGTID = conns[0].getDB("local").oplog.rs.find().next()._id;
+
     restartOutOfReplset(replTest, 0);
 
     localdb = conns[0].getDB("local");
@@ -136,9 +138,11 @@ doTest = function (signal, startPort, txnLimit) {
     assert(oplogPartitionInfo.numPartitions == 1);
     assert.eq(oplogPartitionInfo["partitions"][0]["_id"], 1);
     minGTID = conns[0].getDB("local").oplog.rs.find().next()._id;
-    assert(friendlyEqual(minGTID, insertedGTID));
+    print("minGTID " + minGTID.printGTID());
+    print("beforeGTID " + beforeGTID.printGTID());
+    assert(minGTID.GTIDPri() > beforeGTID.GTIDPri() || minGTID.GTIDSec() > beforeGTID.GTIDSec());
     assert.eq(refsPartitionInfo.numPartitions, 1);
-    
+    print("oplog_upgrade SUCCESS");
     replTest.stopSet(signal);
 }
 
