@@ -119,4 +119,4 @@ env.CppUnitTest('metadata_loader_test',
                 LIBDEPS=['metadata',
                          '$BUILD_DIR/mongo/mocklib',
                          '$BUILD_DIR/mongo/db/common'],
-                NO_CRUTCH=True);
+                NO_CRUTCH=True)

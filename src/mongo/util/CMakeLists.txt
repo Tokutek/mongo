@@ -1,5 +1,6 @@
 add_subdirectory(cmdline_utils)
 add_subdirectory(concurrency)
+add_subdirectory(net)
 add_subdirectory(options_parser)
 
 add_library(stacktrace STATIC
@@ -57,14 +58,6 @@ add_library(mongocommon_util STATIC
   histogram
   text_startuptest
   stack_introspect
-  net/sock
-  net/socket_poll
-  net/ssl_manager
-  net/ssl_options
-  net/httpclient
-  net/message
-  net/message_port
-  net/listen
   startup_test
   version
   )
@@ -80,6 +73,7 @@ target_link_libraries(mongocommon_util LINK_PUBLIC
   stringutils
   fail_point
   spin_lock
+  network
   background_job
   thread_name
   options_parser

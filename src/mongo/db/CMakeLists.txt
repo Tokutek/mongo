@@ -16,12 +16,26 @@ add_library(index_set STATIC
   )
 add_dependencies(index_set generate_error_codes generate_action_types)
 
-add_library(server_options STATIC
+# This library exists because some libraries, such as our networking library, need access to server
+# options, but not to the helpers to set them from the command line.  libserver_options_core.a just
+# has the structure for storing the server options, while libserver_options.a has the code to set
+# them via the command line.
+add_library(server_options_core STATIC
   server_options
+  )
+add_dependencies(server_options_core generate_error_codes generate_action_types)
+target_link_libraries(server_options_core LINK_PUBLIC
+  bson
+  )
+
+add_library(server_options STATIC
+  server_options_helpers
   )
 add_dependencies(server_options generate_error_codes generate_action_types)
 target_link_libraries(server_options LINK_PUBLIC
   bson
+  network  # temporary crutch that should go away once the networking library has separate options
+  server_options_core
   server_parameters
   options_parser
   cmdline_utils

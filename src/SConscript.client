@@ -52,6 +52,7 @@ clientSourceBasic = [
     'mongo/db/lasterror.cpp',
     #'mongo/db/namespace.cpp',
     'mongo/db/dbmessage.cpp',
+    'mongo/db/server_options.cpp',
     'mongo/logger/console.cpp',
     'mongo/logger/log_manager.cpp',
     'mongo/logger/log_severity.cpp',

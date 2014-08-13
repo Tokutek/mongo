@@ -133,6 +133,7 @@ set(client_sources
   db/json.cpp
   db/lasterror.cpp
   db/dbmessage.cpp
+  db/server_options.cpp
   logger/console.cpp
   logger/log_manager.cpp
   logger/log_severity.cpp
@@ -547,6 +548,7 @@ if (BUILD_TESTING)
   foreach (test_source
       concurrency/partitioned_counter_test
       concurrency/spin_lock_test
+      background_job_test
       descriptive_stats_test
       fail_point_test
       processinfo_test
@@ -568,6 +570,10 @@ if (BUILD_TESTING)
   endforeach ()
 
   target_link_libraries(spin_lock_test spin_lock)
+  target_link_libraries(background_job_test
+    network  # Temporary crutch since the ssl cleanup is hard coded in background.cpp
+    synchronization
+    )
   target_link_libraries(descriptive_stats_test bson)
   target_link_libraries(fail_point_test fail_point)
   target_link_libraries(processinfo_test processinfo)
@@ -575,21 +581,13 @@ if (BUILD_TESTING)
   target_link_libraries(string_map_test bson)
   target_link_libraries(stringutils_test stringutils)
 
-  # no crutch
   add_executable(sock_test util/net/sock_test)
   add_dependencies(sock_test generate_error_codes generate_action_types)
   link_recursive_deps(sock_test
     unittest_main
-    mongocommon
-    ${TOKUMX_SSL_LIBRARIES}
-    )
-
-  add_executable(background_job_test util/background_job_test)
-  add_dependencies(background_job_test generate_error_codes generate_action_types)
-  link_recursive_deps(background_job_test
-    unittest_main
-    background_job
-    mongocommon
+    network
+    synchronization
+    unittest_crutch
     ${TOKUMX_SSL_LIBRARIES}
     )
 

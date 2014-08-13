@@ -15,6 +15,7 @@
 
 #include "mongo/bson/util/builder.h"
 #include "mongo/db/server_options.h"
+#include "mongo/db/server_options_helpers.h"
 #include "mongo/logger/logger.h"
 #include "mongo/unittest/unittest.h"
 #include "mongo/util/options_parser/environment.h"
