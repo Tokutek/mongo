@@ -332,7 +332,7 @@ namespace mongo {
             verify(cl);
             BSONObjBuilder docBuilder;
             docBuilder.append("_id", "minUnapplied");
-            docBuilder.append("gtid", _minUnappliedGTID);
+            docBuilder.append("gtid", minUnapplied);
             const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
             BSONObj doc = docBuilder.obj();
             insertOneObject(cl, doc, flags);                                
