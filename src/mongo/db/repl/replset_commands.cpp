@@ -563,7 +563,7 @@ namespace mongo {
         }
     } cmdReplGetExpireOplog;
 
-    class CmdReplUndoOplogEntry : public ReplSetCommand {
+    class CmdReplPurgeOplogEntry : public ReplSetCommand {
     public:
         virtual void help( stringstream &help ) const {
             help << "internal\n";
@@ -576,7 +576,7 @@ namespace mongo {
             out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
         }
 
-        CmdReplUndoOplogEntry() : ReplSetCommand("replUndoOplogEntry") { }
+        CmdReplPurgeOplogEntry() : ReplSetCommand("replPurgeOplogEntry") { }
 
         // This command is not meant to be run in a concurrent manner. Assumes user is running this in
         // a controlled setting.
@@ -608,17 +608,37 @@ namespace mongo {
                 if (cmdObj.hasElement("keepEntry")) {
                     purgeEntry = false;
                 }
-                RollbackDocsMap docsMap; // stores the documents we need to get images of
-                rollbackTransactionFromOplog(oplogEntry, purgeEntry, &docsMap);
+                {
+                    LOCK_REASON(lockReason, "repl: purging entry from oplog");
+                    Client::ReadContext ctx(rsoplog, lockReason);
+                    Client::Transaction txn(DB_SERIALIZABLE);
+                    if (purgeEntry) {
+                        purgeEntryFromOplog(oplogEntry);
+                    }
+                    else {
+                        // set the applied bool to false, to let the oplog know that
+                        // this entry has not been applied to collections
+                        // currently, this is just a test hook
+                        updateApplyBitToEntry(oplogEntry, false);
+                    }
+                    txn.commit();
+                }
             }
             catch (std::exception& e2) {
-                log() << "Caught std::exception during replUndoOplogEntry" << e2.what() << endl;
+                log() << "Caught std::exception during replPurgeOplogEntry" << e2.what() << endl;
                 errmsg = "Caught exception, check logs";
                 return false;
             }
             return true;
         }
-    } cmdReplUndoOplogEntry;
+    } ;
+    MONGO_INITIALIZER(RegisterPurgeOplogEntryCmd)(InitializerContext* context) {
+        if (Command::testCommandsEnabled) {
+            // Leaked intentionally: a Command registers itself when constructed.
+            new CmdReplPurgeOplogEntry();
+        }
+        return Status::OK();
+    }
 
     class CmdLogReplInfo : public ReplSetCommand {
     public:

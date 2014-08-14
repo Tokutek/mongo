@@ -1,5 +1,4 @@
 // Test that initial sync's code of applying missing ops and filling gaps works correctly
-if(0) {
 function dbs_match(a, b) {
     print("dbs_match");
 
@@ -37,7 +36,7 @@ function dbs_match(a, b) {
     return true;
 }
 
-function undo_and_redo_entries(replTest, conns, txnLimit) {
+function undo_and_redo_entries(replTest, conns, txnLimit, undoFun) {
     var master = replTest.getMaster();
     print("shutting down secondary");
     replTest.stop(1);
@@ -57,9 +56,12 @@ function undo_and_redo_entries(replTest, conns, txnLimit) {
     var entryID = entry._id;
 
     // now let's undo this entry
-    print("undoing, but keeping entry " + entryID.hex());
-    r = admindb.runCommand({replUndoOplogEntry:1, GTID : entryID, keepEntry:1});
+    print("undoing, but keeping entry " + entryID.printGTID());
+    r = admindb.runCommand({replPurgeOplogEntry:1, GTID : entryID});
     assert.eq(r.ok, 1);
+    // now undo the operation
+    undoFun(conns, false);
+
     // the 5 below is arbitrary
     for (i = 0; i < 5; i++) {
         assert(c.hasNext());
@@ -69,11 +71,13 @@ function undo_and_redo_entries(replTest, conns, txnLimit) {
     printjson(entry);
     entryID = entry._id;
     // set minLive and minUnapplied GTID to be something sensible now
-    print("undoing " + entryID.hex());
-    r = admindb.runCommand({replUndoOplogEntry:1, GTID : entryID});
+    print("undoing " + entryID.printGTID());
+    r = admindb.runCommand({replPurgeOplogEntry:1, GTID : entryID});
     print("running logReplInfo " + entryID.hex());
-    r = admindb.runCommand({logReplInfo:1, minLiveGTID : entryID, minUnappliedGTID : entryID});
+    r = admindb.runCommand({logReplInfo:1, minLiveGTID : entryID, minUnappliedGTID : entryID, keepEntry:1});
     assert.eq(r.ok, 1);
+    // now undo the operation
+    undoFun(conns, true);
 
     print("shutting down secondary");
     replTest.stop(1);
@@ -108,39 +112,69 @@ doTest = function (signal, txnLimit, startPort) {
     }
     replTest.awaitReplication();
 
-    undo_and_redo_entries(replTest, conns, txnLimit);
-
+    undoInsert = function(conns, first) {
+        if (first) {
+            conns[1].getDB("foo").foo.remove({_id : 18});
+        }
+        else {
+            conns[1].getDB("foo").foo.remove({_id : 24});
+        }
+    };
+    undo_and_redo_entries(replTest, conns, txnLimit, undoInsert);
 /*
     print("updating 30 documents on master with $inc optimization");
-	assert.commandWorked(a.getSisterDB('admin').runCommand({ setParameter: 1, fastupdates: true }))
+    assert.commandWorked(a.getSisterDB('admin').runCommand({ setParameter: 1, fastupdates: true }))
     for (i=0; i < 30; i++) {
         a.foo.update({_id:10}, {$inc:{a:1}});
     }
     replTest.awaitReplication();
-	// even though we are updating the same element above,
-	// it should be ok to undo and redo selected entries
-	// because of how $inc operates.
-    undo_and_redo_entries(replTest, conns, txnLimit);
-    */
-
+    // even though we are updating the same element above,
+    // it should be ok to undo and redo selected entries
+    // because of how $inc operates.
+    undoUpdate = function(conns, first) {
+        if (first) {
+            conns[1].getDB("foo").foo.update({_id:10}, {$inc:{a:-1}});
+        }
+        else {
+            conns[1].getDB("foo").foo.update({_id:10}, {$inc:{a:-1}});
+        }
+    };
+    undo_and_redo_entries(replTest, conns, txnLimit, undoUpdate);
+*/
     print("updating 30 documents on master");
     for (i=0; i < 30; i++) {
         a.foo.update({_id:i}, {b:1});
     }
     replTest.awaitReplication();
 
-    undo_and_redo_entries(replTest, conns, txnLimit);
+    undoUpdate2 = function(conns, first) {
+        if (first) {
+            conns[1].getDB("foo").foo.update({_id:18}, {a : 1});
+        }
+        else {
+            conns[1].getDB("foo").foo.update({_id:24}, {a : 1});
+        }
+    };
+    undo_and_redo_entries(replTest, conns, txnLimit, undoUpdate2);
 
     print("removing 30 documents from master");
     for (i=0; i < 30; i++) {
         a.foo.remove({_id:i});
     }
     replTest.awaitReplication();
-    undo_and_redo_entries(replTest, conns, txnLimit);
+    undoRemove = function(conns, first) {
+        if (first) {
+            conns[1].getDB("foo").foo.insert({_id:18, b : 1});
+        }
+        else {
+            conns[1].getDB("foo").foo.insert({_id:24, b : 1});
+        }
+    };
+    undo_and_redo_entries(replTest, conns, txnLimit, undoRemove);
 
+    print("SUCCESS\n");
     replTest.stopSet(signal);
 }
 
 doTest( 15, 1000000, 31000 );
 doTest( 15, 1, 41000 );
-}

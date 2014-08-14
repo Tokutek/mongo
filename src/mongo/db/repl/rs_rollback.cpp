@@ -244,7 +244,7 @@ namespace mongo {
                 dassert(GTID::cmp(lastGTID, idToRollbackTo) == 0);
                 break;
             }
-            rollbackTransactionFromOplog(o, true, docsMap);
+            rollbackTransactionFromOplog(o, docsMap);
         }
         log() << "Rolling back to " << idToRollbackTo.toString() << " produced " << \
             docsMap->size() << " documents for which we need to retrieve a snapshot of." << rsLog;

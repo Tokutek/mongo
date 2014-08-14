@@ -368,7 +368,7 @@ namespace mongo {
         }
     }
 
-    static void updateApplyBitToEntry(BSONObj entry, bool apply) {
+    void updateApplyBitToEntry(BSONObj entry, bool apply) {
         Collection* rsOplogDetails = getCollection(rsoplog);
         verify(rsOplogDetails);
         const BSONObj pk = rsOplogDetails->getValidatedPKFromObject(entry);
@@ -475,7 +475,7 @@ namespace mongo {
         }
     }
 
-    void rollbackTransactionFromOplog(BSONObj entry, bool purgeEntry, RollbackDocsMap* docsMap) {
+    void rollbackTransactionFromOplog(BSONObj entry, RollbackDocsMap* docsMap) {
         bool transactionAlreadyApplied = entry["a"].Bool();
         Client::Transaction transaction(DB_SERIALIZABLE);
         if (transactionAlreadyApplied) {
@@ -490,15 +490,7 @@ namespace mongo {
         {
             LOCK_REASON(lockReason, "repl: purging entry from oplog");
             Client::ReadContext ctx(rsoplog, lockReason);
-            if (purgeEntry) {
-                purgeEntryFromOplog(entry);
-            }
-            else {
-                // set the applied bool to false, to let the oplog know that
-                // this entry has not been applied to collections
-                // currently, this is just a test hook
-                updateApplyBitToEntry(entry, false);
-            }
+            purgeEntryFromOplog(entry);
         }
         transaction.commit(DB_TXN_NOSYNC);
     }

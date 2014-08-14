@@ -49,7 +49,7 @@ namespace mongo {
     void writeEntryToOplogRefs(BSONObj entry);
     void replicateFullTransactionToOplog(BSONObj& o, OplogReader& r, bool* bigTxn);
     void applyTransactionFromOplog(BSONObj entry, RollbackDocsMap* docsMap);
-    void rollbackTransactionFromOplog(BSONObj entry, bool purgeEntry, RollbackDocsMap* docsMap);
+    void rollbackTransactionFromOplog(BSONObj entry, RollbackDocsMap* docsMap);
     void purgeEntryFromOplog(BSONObj entry);
 
     // @return the age, in milliseconds, when an oplog entry expires.
@@ -60,4 +60,7 @@ namespace mongo {
     void trimOplogWithTS(uint64_t tsMillis);
     void trimOplogwithGTID(GTID gtid);
     void convertOplogToPartitionedIfNecessary();
+
+    void updateApplyBitToEntry(BSONObj entry, bool apply);
+
 }
