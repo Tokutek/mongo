@@ -136,8 +136,9 @@ namespace mongo {
                 internalSecurity.user->getName().getUser().toString(), str);
         internalSecurity.user->setCredentials(credentials);
 
-        if (serverGlobalParams.clusterAuthMode == "keyFile" ||
-            serverGlobalParams.clusterAuthMode == "sendKeyFile") {
+        int clusterAuthMode = serverGlobalParams.clusterAuthMode.load();
+        if (clusterAuthMode == ServerGlobalParams::ClusterAuthMode_keyFile ||
+            clusterAuthMode == ServerGlobalParams::ClusterAuthMode_sendKeyFile) {
             setInternalUserAuthParams(
                     BSON(saslCommandMechanismFieldName << "MONGODB-CR" <<
                          saslCommandUserSourceFieldName <<

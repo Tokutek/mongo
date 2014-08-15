@@ -75,7 +75,6 @@ namespace mongo {
         std::string logpath;   // Path to log file, if logging to a file; otherwise, empty.
         bool logAppend;        // True if logging to a file in append mode.
         bool logWithSyslog;    // True if logging to syslog; must not be set if logpath is set.
-        std::string clusterAuthMode; // Cluster authentication mode
 
         bool isHttpInterfaceEnabled; // True if the dbwebserver should be enabled.
 
@@ -94,6 +93,30 @@ namespace mongo {
 
         BSONArray argvArray;
         BSONObj parsedOpts;
+        AtomicInt32 clusterAuthMode;    // --clusterAuthMode, the internal cluster auth mode
+
+        enum ClusterAuthModes {
+            ClusterAuthMode_undefined,
+            /** 
+            * Authenticate using keyfile, accept only keyfiles
+            */
+            ClusterAuthMode_keyFile,
+
+            /**
+            * Authenticate using keyfile, accept both keyfiles and X.509
+            */
+            ClusterAuthMode_sendKeyFile,
+
+            /**
+            * Authenticate using X.509, accept both keyfiles and X.509
+            */
+            ClusterAuthMode_sendX509,
+
+            /**
+            * Authenticate using X.509, accept only X.509
+            */
+            ClusterAuthMode_x509
+        };
     };
 
     extern ServerGlobalParams serverGlobalParams;
