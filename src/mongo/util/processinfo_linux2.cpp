@@ -379,7 +379,7 @@ namespace mongo {
 
     string ProcessInfo::getExePath() const {
         char name[128];
-        sprintf(name, "/proc/%d/exe", _pid);
+        sprintf(name, "/proc/%d/exe", _pid.asUInt32());
         shared_ptr<char> real(realpath(name, NULL), free);
         if (!real.get()) {
             stringstream ss;
