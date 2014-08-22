@@ -32,6 +32,22 @@ target_link_libraries(db_common LINK_PUBLIC
   foundation
   )
 
+add_library(geometry STATIC
+  geo/hash
+  geo/shapes
+  )
+add_dependencies(geometry bson)
+
+add_library(geoparser STATIC
+  geo/geoparser
+  )
+add_dependencies(geoparser bson geometry s2)
+
+add_library(geoquery STATIC
+  geo/geoquery
+  )
+add_dependencies(geoquery bson geometry s2)
+
 add_library(coredb STATIC
   client_transaction
   opsettings
@@ -106,6 +122,8 @@ target_link_libraries(coredb LINK_PUBLIC
   coreserver
   plugins
   server_parameters
+  geoparser
+  geoquery
   foundation
   ${TokuKV_LIBRARIES}
   )
@@ -168,6 +186,14 @@ add_library(serveronly STATIC
   ops/update
   ops/update_internal
   ops/insert
+  geo/2d.cpp
+  geo/geonear
+  geo/geoquery
+  geo/haystack
+  geo/s2common
+  geo/s2cursor
+  geo/s2index
+  geo/s2nearcursor
 
   # most commands are only for mongod
   dbcommands
@@ -209,6 +235,8 @@ target_link_libraries(serveronly LINK_PUBLIC
   db_common
   dbcmdline
   defaultversion
+  geoparser
+  geoquery
   index_set
   ${TokuKV_LIBRARIES}
   )
