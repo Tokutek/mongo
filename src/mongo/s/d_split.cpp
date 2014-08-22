@@ -454,6 +454,12 @@ namespace mongo {
                 errmsg = "ns not found";
                 return false;
             }
+            if (cl->isPartitioned()) {
+                // hack just return nothing, we don't want to auto split these
+                vector<BSONObj> emptyVector;
+                result.append( "splitKeys" , emptyVector );
+                return true;
+            }
 
             const IndexDetails *idx = cl->findIndexByPrefix( keyPattern ,
                                                             true ); /* require single key */
