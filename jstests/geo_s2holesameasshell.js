@@ -1,10 +1,11 @@
-t = db.geo_s2holessameasshell
+// If polygons have holes, the holes cannot be equal to the entire geometry.
+var t = db.geo_s2holessameasshell
 t.drop();
 t.ensureIndex({geo: "2dsphere"});
 
-centerPoint = {"type": "Point", "coordinates": [0.5, 0.5]};
-edgePoint = {"type": "Point", "coordinates": [0, 0.5]};
-cornerPoint = {"type": "Point", "coordinates": [0, 0]};
+var centerPoint = {"type": "Point", "coordinates": [0.5, 0.5]};
+var edgePoint = {"type": "Point", "coordinates": [0, 0.5]};
+var cornerPoint = {"type": "Point", "coordinates": [0, 0]};
 
 // Various "edge" cases.  None of them should be returned by the non-polygon
 // polygon below.
@@ -13,7 +14,7 @@ t.insert({geo : edgePoint});
 t.insert({geo : cornerPoint});
 
 // This generates an empty covering.
-polygonWithFullHole = { "type" : "Polygon", "coordinates": [
+var polygonWithFullHole = { "type" : "Polygon", "coordinates": [
         [[0,0], [0,1], [1, 1], [1, 0], [0, 0]],
         [[0,0], [0,1], [1, 1], [1, 0], [0, 0]]
     ]

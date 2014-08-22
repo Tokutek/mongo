@@ -10,13 +10,13 @@ assert.eq(foo.geo, someline);
 t.dropIndex({geo: "2dsphere"})
 
 pointA = { "type" : "Point", "coordinates": [ 40, 5 ] }
-t.insert( {geo : pointA , nonGeo: ["pointA"]})
+t.insert( {geo : pointA , nonGeo: "pointA"})
 
 pointD = { "type" : "Point", "coordinates": [ 41.001, 6.001 ] }
-t.insert( {geo : pointD , nonGeo: ["pointD"]})
+t.insert( {geo : pointD , nonGeo: "pointD"})
 
 pointB = { "type" : "Point", "coordinates": [ 41, 6 ] }
-t.insert( {geo : pointB , nonGeo: ["pointB"]})
+t.insert( {geo : pointB , nonGeo: "pointB"})
 
 pointC = { "type" : "Point", "coordinates": [ 41, 6 ] }
 t.insert( {geo : pointC} )
