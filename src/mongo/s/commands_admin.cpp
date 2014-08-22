@@ -380,6 +380,43 @@ namespace mongo {
                 actions.addAction(ActionType::shardCollection);
                 out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
             }
+
+            bool createShartitionedCollection(const BSONObj& cmdObj, string& errmsg, ScopedDbConnection* conn, DBConfigPtr config) {
+                const string ns = cmdObj.firstElement().valuestrsafe();
+                BSONObj proposedPartitionKey = cmdObj.getObjectField( "partition" );
+                BSONObj proposedShardKey = cmdObj.getObjectField( "key" );
+                BSONObjBuilder cmd;
+                cmd.append("create", NamespaceString(ns).coll);
+                BSONObjBuilder pk(cmd.subobjStart("primaryKey"));
+                pk.appendElements(proposedPartitionKey);
+                BSONObj pkObj = pk.done();
+                cmd.append("partitioned", true);
+                LOG(0) << "sharding non-existent parititoned collection, creating " << ns << " with a primary key on " << pkObj << endl;
+                BSONObj res;
+                bool createSuccess = conn->get()->runCommand(config->getName(), cmd.done(), res);
+                if (!createSuccess) {
+                    errmsg = "create failed to create collection on primary shard: " + res["errmsg"].String();
+                    conn->done();
+                    return false;
+                }
+                BSONElement ce = cmdObj["clustering"];
+                bool clustering = (ce.ok() ? ce.trueValue() : true);
+                // call ensureIndex with cache=false, see SERVER-1691
+                bool careAboutUnique = cmdObj["unique"].trueValue();
+                bool ensureSuccess = conn->get()->ensureIndex(ns,
+                                                              proposedShardKey,
+                                                              careAboutUnique,
+                                                              clustering,
+                                                              "",
+                                                              false);
+                if ( ! ensureSuccess ) {
+                    errmsg = "ensureIndex failed to create index on primary shard";
+                    conn->done();
+                    return false;
+                }
+                return true;
+            }
+
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 const string ns = cmdObj.firstElement().valuestrsafe();
                 if ( ns.size() == 0 ) {
@@ -465,7 +502,7 @@ namespace mongo {
                 }
                 if ( res["options"].type() == Object &&
                      res["options"].embeddedObject()["partitioned"].trueValue() ) {
-                    errmsg = "can't shard partitioned collection";
+                    errmsg = "can't shard an existing partitioned collection";
                     conn->done();
                     return false;
                 }
@@ -626,7 +663,13 @@ namespace mongo {
                     }
                     bool onlyId = proposedKey.nFields() == 1 && proposedKey["_id"].ok();
                     bool onlyHashed = proposedKey.nFields() == 1 && StringData(proposedKey.firstElement().valuestrsafe()) == "hashed";
-                    if (!collectionExists && !onlyId && !onlyHashed && !careAboutUnique) {
+                    bool partitioned = cmdObj["partition"].ok();
+                    if (!collectionExists && partitioned) {
+                        bool created = createShartitionedCollection(cmdObj, errmsg, conn.get(), config);
+                        if (!created) {
+                            return false;
+                        }
+                    } else if (!collectionExists && !onlyId && !onlyHashed && !careAboutUnique) {
                         BSONObjBuilder cmd;
                         cmd.append("create", NamespaceString(ns).coll);
                         BSONObjBuilder pk(cmd.subobjStart("primaryKey"));
