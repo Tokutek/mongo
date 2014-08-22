@@ -70,6 +70,7 @@ DBCollection.prototype.help = function () {
     print("\tdb." + shortName + ".addPartition( <pivot> ) - add partition to a partitioned collection, optionally pass in pivot");
     print("\tdb." + shortName + ".getPartitionInfo() - get partition information of partitioned collection");
     print("\tdb." + shortName + ".dropPartition( id ) - drop partition of partitioned collection with specified id");
+    print("\tdb." + shortName + ".dropPartitionsLEQ( key ) - drop all partitions of a partitioned collection that contain data less than the provided partition key");
     return __magicNoPrint;
 }
 
@@ -705,6 +706,13 @@ DBCollection.prototype.dropPartition = function( partitionID ){
         throw "must specify id of partition to drop";
     }
     return this._dbCommand( { dropPartition : this._shortName , id : partitionID } );
+}
+
+DBCollection.prototype.dropPartitionsLEQ = function( maxKey ){
+    if ( maxKey == undefined) {
+        throw "must specify the maximum key";
+    }
+    return this._dbCommand( { dropPartition : this._shortName , max : maxKey } );
 }
 
 MapReduceResult = function( db , o ){

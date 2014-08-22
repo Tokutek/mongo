@@ -66,4 +66,14 @@ namespace mongo {
         bool copyIndexes,
         bool logForRepl
         );
+    
+    bool cloneRemotePartitionInfo(
+        const string& fromdb,
+        const string& todb,
+        const string& fromns, 
+        const string& tons, 
+        DBClientBase* conn,
+        string& errmsg,
+        bool logForRepl
+        );
 } // namespace mongo

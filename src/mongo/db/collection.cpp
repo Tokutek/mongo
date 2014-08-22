@@ -3475,6 +3475,14 @@ namespace mongo {
         sanityCheck();
     }
 
+    void PartitionedCollection::dropPartitionsLEQ(const BSONObj &pivot) {
+        BSONObj key = getValidatedPKFromObject(pivot);
+        while (numPartitions() > 1 &&
+               key.woCompare(_partitionPivots[0], _ordering) >= 0) {
+            dropPartition(_partitionIDs[0]);
+        }
+    }
+    
     class OrderedBSONComparator {
         const Ordering _ordering;
       public:

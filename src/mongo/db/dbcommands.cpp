@@ -1813,12 +1813,28 @@ namespace mongo {
             uassert( 17301, "dropPartition no such collection", cl );
             uassert( 17302, "collection must be partitioned", cl->isPartitioned() );
 
-            BSONElement e = cmdObj["id"];
-            uassert(17303, "invalid id", e.ok() && e.isNumber());
-            
-            PartitionedCollection *pc = cl->as<PartitionedCollection>();
-            uint64_t partitionID = e.numberLong();
-            pc->dropPartition(partitionID);
+            BSONElement idElem = cmdObj["id"];
+            BSONElement maxElem = cmdObj["max"];
+            if (idElem.ok() ==  maxElem.ok()) {
+                errmsg = "must provide either an id or a max key of data to be dropped";
+                return false;
+            }
+            else if (idElem.ok()) {
+                if (!idElem.isNumber()) {
+                    errmsg = "invalid id";
+                    return false;
+                }
+                PartitionedCollection *pc = cl->as<PartitionedCollection>();
+                uint64_t partitionID = idElem.numberLong();
+                pc->dropPartition(partitionID);
+            }
+            else {
+                verify(maxElem.ok());
+                BSONObj pivot = maxElem.embeddedObjectUserCheck();
+                validateInsert(pivot);
+                PartitionedCollection *pc = cl->as<PartitionedCollection>();
+                pc->dropPartitionsLEQ(pivot);
+            }
             return true;
         }
     } cmdDropPartition;

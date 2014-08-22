@@ -61,6 +61,7 @@
 #include "mongo/db/relock.h"
 #include "mongo/db/server_parameters.h"
 #include "mongo/db/storage/assert_ids.h"
+#include "mongo/db/cloner.h"
 
 #include "mongo/client/connpool.h"
 #include "mongo/client/distlock.h"
@@ -1841,6 +1842,20 @@ namespace mongo {
                             string errmsg;
                             if (!userCreateNS(ns, opts, errmsg, true)) {
                                 warning() << "failed to create collection " << ns << " with options " << opts << ": " << errmsg << migrateLog;
+                            }
+                            if (opts["partitioned"].trueValue()) {
+                                bool ret = cloneRemotePartitionInfo(
+                                    nsToDatabase(ns),
+                                    nsToDatabase(ns),
+                                    ns,
+                                    ns,
+                                    conn.get(),
+                                    errmsg,
+                                    true
+                                    );
+                                if (!ret) {
+                                    warning() << "failed to create proper partitions for sharded+partitioned collection" << migrateLog;
+                                }
                             }
                         }
                         string system_indexes = getSisterNS(ns, "system.indexes");
