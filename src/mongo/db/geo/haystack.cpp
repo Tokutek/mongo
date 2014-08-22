@@ -184,7 +184,7 @@ namespace mongo {
                             BSONObjBuilder& result, unsigned limit) {
             Timer t;
 
-            log(1) << "SEARCH near:" << n << " maxDistance:" << maxDistance
+            LOG(1) << "SEARCH near:" << n << " maxDistance:" << maxDistance
                    << " search: " << search << endl;
             int x, y;
             {
