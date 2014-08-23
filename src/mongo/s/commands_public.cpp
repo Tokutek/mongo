@@ -223,6 +223,25 @@ namespace mongo {
             }
         } addPartitionCmd;
 
+        class DropPartitionCmd : public AllShardsCollectionCommand {
+        public:
+            DropPartitionCmd() :  AllShardsCollectionCommand("dropPartition") {}
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {
+                ActionSet actions;
+                actions.addAction(ActionType::dropPartition);
+                out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
+            }
+            virtual bool run(const string& dbName , BSONObj& cmdObj, int dummyInt, string& errmsg, BSONObjBuilder& output, bool dummy) {
+                if (cmdObj["id"].ok()) {
+                    errmsg = "Cannot drop partitions by id through mongos";
+                    return false;
+                }
+                return AllShardsCollectionCommand::run(dbName , cmdObj, dummyInt, errmsg, output, dummy);
+            }
+        } dropPartitionCmd;
+
         class GetPartitionInfoCmd : public AllShardsCollectionCommand {
         public:
             GetPartitionInfoCmd() :  AllShardsCollectionCommand("getPartitionInfo") {}
