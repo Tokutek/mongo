@@ -223,6 +223,18 @@ namespace mongo {
             }
         } addPartitionCmd;
 
+        class GetPartitionInfoCmd : public AllShardsCollectionCommand {
+        public:
+            GetPartitionInfoCmd() :  AllShardsCollectionCommand("getPartitionInfo") {}
+            virtual void addRequiredPrivileges(const std::string& dbname,
+                                               const BSONObj& cmdObj,
+                                               std::vector<Privilege>* out) {
+                ActionSet actions;
+                actions.addAction(ActionType::find);
+                out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
+            }
+        } getPartitionInfoCmd;
+
         class ReIndexCmd : public AllShardsCollectionCommand {
         public:
             ReIndexCmd() :  AllShardsCollectionCommand("reIndex") {}
