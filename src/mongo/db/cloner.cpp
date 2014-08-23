@@ -390,6 +390,38 @@ namespace mongo {
         }
     }
 
+    bool cloneRemotePartitionInfo(
+        const string& fromdb,
+        const string& todb,
+        const string& fromns, 
+        const string& tons, 
+        DBClientBase* conn,
+        string& errmsg,
+        bool logForRepl
+        )
+    {
+        BSONObj res;
+        StringData collectionName = nsToCollectionSubstring(fromns);
+        bool ok = conn->runCommand(fromdb, BSON("getPartitionInfo" << collectionName), res);
+        if (!ok) {
+            errmsg = res["errmsg"].String();
+            LOG(0) << errmsg << endl;
+            return false;
+        }
+        Collection* cl = getCollection(tons);
+        massert(17310, "Could not get collection we just created", cl);
+        if (logForRepl) {
+            BSONObjBuilder b;
+            b.append("clonePartitionInfo", collectionName);
+            b.appendAs(res["partitions"], "info");
+            string logNs = todb + ".$cmd";
+            OplogHelpers::logCommand(logNs.c_str(), b.obj());
+        }
+        PartitionedCollection* pc = cl->as<PartitionedCollection>();
+        pc->addClonedPartitionInfo(res["partitions"].Array());
+        return true;
+    }
+
     bool Cloner::copyCollection(
         const string& dbname,
         const string& ns, 
@@ -417,24 +449,10 @@ namespace mongo {
                 }
                 
                 if (options["partitioned"].trueValue()) {
-                    BSONObj res;
-                    StringData collectionName = nsToCollectionSubstring(ns);
-                    bool ok = conn->runCommand(dbname, BSON("getPartitionInfo" << collectionName), res);
-                    if (!ok) {
-                        errmsg = res["errmsg"].String();
-                        LOG(0) << errmsg << endl;
+                    bool ret = cloneRemotePartitionInfo(dbname, dbname, ns, ns, conn.get(), errmsg, logForRepl);
+                    if (!ret) {
+                        return false;
                     }
-                    Collection* cl = getCollection(ns);
-                    massert(17309, "Could not get collection we just created", cl);
-                    PartitionedCollection* pc = cl->as<PartitionedCollection>();
-                    if (logForRepl) {
-                        BSONObjBuilder b;
-                        b.append("clonePartitionInfo", collectionName);
-                        b.appendAs(res["partitions"], "info");
-                        string logNs = dbname + ".$cmd";
-                        OplogHelpers::logCommand(logNs.c_str(), b.obj());
-                    }
-                    pc->addClonedPartitionInfo(res["partitions"].Array());
                 }
             }
         }
@@ -597,25 +615,18 @@ namespace mongo {
                 userCreateNS(toname, options, err, opts.logForRepl);
             }
             if (options["partitioned"].trueValue()) {
-                BSONObj res;
-                StringData collectionName = nsToCollectionSubstring(from_name);
-                bool ok = conn->runCommand(opts.fromDB, BSON("getPartitionInfo" << collectionName), res);
-                if (!ok) {
-                    errmsg = res["errmsg"].String();
-                    LOG(0) << errmsg << endl;
+                bool ret = cloneRemotePartitionInfo(
+                    opts.fromDB,
+                    todb,
+                    from_name,
+                    to_name,
+                    conn.get(),
+                    errmsg,
+                    opts.logForRepl
+                    );
+                if (!ret) {
                     return false;
                 }
-                Collection* cl = getCollection(to_name);
-                massert(17310, "Could not get collection we just created", cl);
-                if (opts.logForRepl) {
-                    BSONObjBuilder b;
-                    b.append("clonePartitionInfo", collectionName);
-                    b.appendAs(res["partitions"], "info");
-                    string logNs = todb + ".$cmd";
-                    OplogHelpers::logCommand(logNs.c_str(), b.obj());
-                }
-                PartitionedCollection* pc = cl->as<PartitionedCollection>();
-                pc->addClonedPartitionInfo(res["partitions"].Array());
             }
             LOG(1) << "\t\t cloning " << from_name << " -> " << to_name << endl;
             Query q;
