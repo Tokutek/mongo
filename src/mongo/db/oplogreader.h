@@ -37,6 +37,7 @@ namespace mongo {
         shared_ptr<DBClientCursor> cursor;
         bool _doHandshake;
         int _tailingQueryOptions;
+        double _socketTimeout;
     public:
         OplogReader( bool doHandshake = true );
         ~OplogReader() { }
@@ -112,6 +113,8 @@ namespace mongo {
         BSONObj next() { return cursor->next(); }
 
         shared_ptr<DBClientCursor> getOplogRefsCursor(OID &oid);
+        void setSocketTimeout(double timeout);        
+        void resetSocketTimeout();
 
     private:
         /** @return true iff connection was successful */ 

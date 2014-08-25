@@ -298,7 +298,13 @@ namespace mongo {
         if (o.hasElement("ref")) {
             OID oid = o["ref"].OID();
             LOG(3) << "oplog ref " << oid << endl;
+            // set the socket timeout to be unlimited, because we are trying to replicate
+            // a large transaction. We will reset it at the end of this if-clause
+            // If something throws in here, the oplog reader ought to get destroyed,
+            // so no need for an RAII style of resetting
+            r.setSocketTimeout(0);
             shared_ptr<DBClientCursor> c = r.getOplogRefsCursor(oid);
+            uassert(17363, "Could not get oplog refs cursor", c.get());
             // we are doing the work of copying oplog.refs data and writing to oplog
             // underneath a read lock
             // to ensure that neither oplog or oplog.refs has a partition
@@ -320,6 +326,7 @@ namespace mongo {
             }
             replicateTransactionToOplog(o);
             *bigTxn = true;
+            r.resetSocketTimeout();
         }
         else {
             LOCK_REASON(lockReason, "repl: copying entry to local oplog");
