@@ -137,7 +137,7 @@ namespace mongo {
                                                     &readersCreatedStats );
 
     OplogReader::OplogReader( bool doHandshake ) : 
-        _doHandshake( doHandshake ) { 
+        _doHandshake( doHandshake ), _socketTimeout(default_so_timeout) { 
         
         _tailingQueryOptions = QueryOption_SlaveOk;
         _tailingQueryOptions |= QueryOption_CursorTailable | QueryOption_OplogReplay;
@@ -150,6 +150,7 @@ namespace mongo {
 
     bool OplogReader::commonConnect(const string& hostName, const double default_timeout) {
         if( conn() == 0 ) {
+            _socketTimeout = default_timeout;
             _conn = shared_ptr<DBClientConnection>(new DBClientConnection(false,
                                                                           0,
                                                                           default_timeout /* tcp timeout */));
@@ -250,5 +251,13 @@ namespace mongo {
         // this maps to {_id : {$gt : { oid : oid , seq : 0 }}}
         retCursor.reset(_conn->query(rsOplogRefs, QUERY("_id" << BSON("$gt" << BSON("oid" << oid << "seq" << 0)) ).hint(BSON("_id" << 1))).release());
         return retCursor;
+    }
+
+    void OplogReader::setSocketTimeout(double timeout) {
+        _conn->setSoTimeout(timeout);
+    }
+
+    void OplogReader::resetSocketTimeout() {
+        _conn->setSoTimeout(_socketTimeout);
     }
 }
