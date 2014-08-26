@@ -348,6 +348,11 @@ namespace mongo {
                    << " upsert: " << upsert << " multi: " << multi << endl;
 
         Collection *cl = getOrCreateCollection(ns, true);
+        const bool isOperatorUpdate = updateobj.firstElementFieldName()[0] == '$';
+        if (!isOperatorUpdate) {
+            // replace-style update only affects a single matching document
+            uassert(10158, "multi update only works with $ operators", !multi);
+        }
 
         // Fast-path for simple primary key updates.
         //
@@ -355,7 +360,7 @@ namespace mongo {
         // and the fast path doesn't know if docs grow until the update message is applied.
         // - We don't do it if multi=true because semantically we're not supposed to, if
         // the update ends up being a replace-style upsert. See jstests/update_multi6.js
-        if (!multi && !cl->isCapped()) {
+        if (!cl->isCapped()) {
             const BSONObj pk = cl->getSimplePKFromQuery(patternOrig);
             if (!pk.isEmpty()) {
                 return updateByPK(ns, cl, pk, patternOrig, updateobj,
@@ -369,7 +374,6 @@ namespace mongo {
         MatchDetails details;
         shared_ptr<ModSet> mods;
 
-        const bool isOperatorUpdate = updateobj.firstElementFieldName()[0] == '$';
         if (isOperatorUpdate) {
             mods.reset(new ModSet(updateobj, cl->indexKeys()));
             if (mods->hasDynamicArray()) {
