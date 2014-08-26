@@ -421,12 +421,15 @@ namespace mongo {
 
             // operator-style updates may affect many documents
             BSONObj currentObj;
+            if (!canBeFast) {
+                currentObj = c->current();
+            }
             if (multi) {
                 // Advance past the document to be modified - SERVER-5198,
                 // First, get owned copies of currPK/currObj, which live in the cursor.
                 currPK = currPK.getOwned();
                 if (!canBeFast) {
-                    currentObj = c->current().getOwned();
+                    currentObj = currentObj.getOwned();
                 }
                 while (c->ok() && currPK == c->currPK()) {
                     c->advance();

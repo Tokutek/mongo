@@ -40,11 +40,12 @@ function dbs_match(a, b) {
 // check last entry is a full update with pre-image and post-image
 verifyLastEntry = function (conn, expectedOp) {
     lastEntry = conn.getDB("local").oplog.rs.find().sort({_id:-1}).next();
+    printjson(lastEntry);
     assert(lastEntry["ops"][0]["op"] == expectedOp);
 }
 
 
-doTest = function (signal, txnLimit, startPort) {
+doTest = function (signal, txnLimit, startPort, fastup) {
     var num = 3;
     var host = getHostName();
     var name = "rollback_unit";
@@ -75,13 +76,17 @@ doTest = function (signal, txnLimit, startPort) {
         return res.myState == 7;
     }, "Arbiter failed to initialize.");
 
+    if (fastup) {
+        assert.commandWorked(conns[0].getDB("admin").runCommand({ setParameter: 1, fastupdates: true }));
+    }
+
     // make our collections
     var db = conns[0].getDB("foo");
     var db2 = conns[1].getDB("foo");
     assert.commandWorked(db.createCollection("foo"));
     db.foo.ensureIndex({b:1});
     assert.commandWorked(db.createCollection("fooCK"));
-    db.foo.ensureIndex({b:1}, {clustering : true});
+    db.fooCK.ensureIndex({b:1}, {clustering : true});
     assert.commandWorked(db.createCollection("fooPK", {primaryKey : {a : 1, _id : 1}}));
     assert.commandWorked(db.createCollection("fooCapped", {capped : 1, size : 11111}));
 
@@ -112,6 +117,18 @@ doTest = function (signal, txnLimit, startPort) {
 
     // indexed update
     db.foo.update({_id : 0}, {$inc : {b : 1}});
+    replTest.awaitReplication();
+    verifyLastEntry(conns[1], "ur");
+    db.foo.update({b : 100}, {$inc : {b : 1}});
+    replTest.awaitReplication();
+    verifyLastEntry(conns[1], "ur");
+    db.fooPK.ensureIndex({b:1});
+    db.getLastError();
+    db.fooPK.update({a : 20, _id : 2}, {$inc : {b : 1}});
+    replTest.awaitReplication();
+    verifyLastEntry(conns[1], "ur");
+    // pk update
+    db.fooPK.update({_id : 0}, {$inc : {a:1}});
     replTest.awaitReplication();
     verifyLastEntry(conns[1], "ur");
     // has a clustering key
@@ -165,6 +182,7 @@ doTest = function (signal, txnLimit, startPort) {
     replTest.stopSet(signal);
 };
 
-doTest(15, 1000000, 31000);
+doTest(15, 1000000, 31000, true);
+doTest(15, 1000000, 31000, false);
 
 
