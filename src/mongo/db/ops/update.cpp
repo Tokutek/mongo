@@ -405,21 +405,26 @@ namespace mongo {
                 c->advance();
                 continue;
             }
+            bool canBeFast = canRunFastUpdate(cl, upsert, mods.get(), isOperatorUpdate);
 
-            BSONObj currentObj = c->current();
             if (!isOperatorUpdate) {
                 verify(!multi); // should be uasserted above
+                verify(!canBeFast); // just a sanity check to make sure we are not losing performance
+                BSONObj currentObj = c->current();
                 BSONObj copy = updateobj.copy();
                 updateNoMods(ns, cl, currPK, currentObj, copy, fromMigrate);
                 return UpdateResult(1, 0, 1, BSONObj());
             }
 
             // operator-style updates may affect many documents
+            BSONObj currentObj;
             if (multi) {
                 // Advance past the document to be modified - SERVER-5198,
                 // First, get owned copies of currPK/currObj, which live in the cursor.
                 currPK = currPK.getOwned();
-                currentObj = currentObj.getOwned();
+                if (!canBeFast) {
+                    currentObj = c->current().getOwned();
+                }
                 while (c->ok() && currPK == c->currPK()) {
                     c->advance();
                 }
@@ -433,7 +438,26 @@ namespace mongo {
                 }
             }
 
-            updateUsingMods(ns, cl, currPK, currentObj, updateobj, mods, &details, fromMigrate);
+            if (canBeFast) {
+                verify(currentObj.isEmpty()); // sanity check
+                bool ranFast = tryFastUpdate(
+                    ns,
+                    cl,
+                    currPK,
+                    BSONObj(), // no query needed
+                    updateobj,
+                    upsert,
+                    fromMigrate,
+                    mods.get(),
+                    isOperatorUpdate,
+                    false // old obj must exist in main dictionary
+                    );
+                verify(ranFast); // must have succeeded because canBeFast is true
+            }
+            else {
+                verify(!currentObj.isEmpty()); // sanity check
+                updateUsingMods(ns, cl, currPK, currentObj, updateobj, mods, &details, fromMigrate);
+            }
             numModded++;
 
             if (!multi) {
