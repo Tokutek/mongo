@@ -258,14 +258,12 @@ namespace mongo {
         return UpdateResult(0, isOperatorUpdate, 1, newObj);
     }
 
-    static bool tryFastUpdate(const char *ns, Collection *cl,
-                            const BSONObj &pk, const BSONObj &query,
-                            const BSONObj &updateobj,
-                            const bool upsert,
-                            const bool fromMigrate,
-                            ModSet* mods,
-                            const bool isOperatorUpdate,
-                            const bool oldObjMayNotExist)
+    static bool canRunFastUpdate(
+        Collection *cl,
+        const bool upsert,
+        ModSet* mods,
+        const bool isOperatorUpdate
+        )
     {
         if (!cmdLine.fastupdates) {
             return false;
@@ -281,6 +279,22 @@ namespace mongo {
             return false;
         }
         verify(!forceLogFullUpdate(cl, mods));
+        return true;
+    }
+
+    static bool tryFastUpdate(const char *ns, Collection *cl,
+                            const BSONObj &pk, const BSONObj &query,
+                            const BSONObj &updateobj,
+                            const bool upsert,
+                            const bool fromMigrate,
+                            ModSet* mods,
+                            const bool isOperatorUpdate,
+                            const bool oldObjMayNotExist)
+    {
+        if (!canRunFastUpdate(cl, upsert, mods, isOperatorUpdate)) {
+            return false;
+        }
+        verify(mods);
 
         // looks like we are good to go
         
