@@ -301,7 +301,10 @@ namespace mongo {
         // a little optimization to get rid of the query, if we can
         const bool singleQueryField = query.nFields() == 1; // TODO: Optimize?
         const BSONObj& queryToUse = singleQueryField ? BSONObj() : query;
-        uint32_t fastUpdateFlags = oldObjMayNotExist ? UpdateFlags::NO_OLDOBJ_OK : 0;
+        uint32_t fastUpdateFlags = UpdateFlags::FAST_UPDATE_PERFORMED;
+        if (oldObjMayNotExist) {
+            fastUpdateFlags |= UpdateFlags::NO_OLDOBJ_OK;
+        }
         bool success = updateOneObjectWithMods(cl, pk, updateobj, queryToUse, fastUpdateFlags, fromMigrate, 0, mods);
         verify(success);
         // TODO: fix third parameter for sharding

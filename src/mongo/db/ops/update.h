@@ -27,7 +27,8 @@ namespace mongo {
     class Collection;
 
     namespace UpdateFlags {
-        static const uint64_t NO_OLDOBJ_OK = 1 << 0; // skip acquiring locktree row locks
+        static const uint64_t FAST_UPDATE_PERFORMED = 1 << 0; // really just for diagnostics and testing. Has no practical usage
+        static const uint64_t NO_OLDOBJ_OK = 1 << 1; // skip acquiring locktree row locks
     }
     struct UpdateResult {
         const bool existing; // if existing objects were modified
