@@ -662,7 +662,7 @@ namespace mongo {
                 KEY_STR_FLAGS
                 };
             BSONElement fields[3];
-            op.getFields(2, names, fields);
+            op.getFields(4, names, fields);
             const BSONObj pk = fields[0].Obj();     // must exist
             const BSONObj updateobj = fields[1].Obj(); // must exist
             const BSONObj query = fields[2].Obj(); // must exist
