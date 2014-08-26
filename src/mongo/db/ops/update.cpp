@@ -264,7 +264,8 @@ namespace mongo {
                             const bool upsert,
                             const bool fromMigrate,
                             ModSet* mods,
-                            bool isOperatorUpdate)
+                            const bool isOperatorUpdate,
+                            const bool oldObjMayNotExist)
     {
         if (!cmdLine.fastupdates) {
             return false;
@@ -280,15 +281,13 @@ namespace mongo {
             return false;
         }
         verify(!forceLogFullUpdate(cl, mods));
+
         // looks like we are good to go
-        // TODO: add an option down the pipe to allow some errors
-        // such as a missing doc to update. Right now, this will cause a crash
-        // TODO: handle flags to let it know query matters
         
         // a little optimization to get rid of the query, if we can
         const bool singleQueryField = query.nFields() == 1; // TODO: Optimize?
         const BSONObj& queryToUse = singleQueryField ? BSONObj() : query;
-        uint32_t fastUpdateFlags = UpdateFlags::NO_OLDOBJ_OK;
+        uint32_t fastUpdateFlags = oldObjMayNotExist ? UpdateFlags::NO_OLDOBJ_OK : 0;
         bool success = updateOneObjectWithMods(cl, pk, updateobj, queryToUse, fastUpdateFlags, fromMigrate, 0, mods);
         verify(success);
         // TODO: fix third parameter for sharding
@@ -310,7 +309,7 @@ namespace mongo {
 
         // try a fast update, if it succeeds, get out, otherwise,
         // proceed with fetching the pre-image
-        if (tryFastUpdate(ns, cl, pk, patternOrig, updateobj, upsert, fromMigrate, mods.get(), isOperatorUpdate)) {
+        if (tryFastUpdate(ns, cl, pk, patternOrig, updateobj, upsert, fromMigrate, mods.get(), isOperatorUpdate, true)) {
             return UpdateResult(1, isOperatorUpdate, 1, BSONObj());
         }
 
@@ -358,8 +357,6 @@ namespace mongo {
         //
         // - We don't do it for capped collections since  their documents may not grow,
         // and the fast path doesn't know if docs grow until the update message is applied.
-        // - We don't do it if multi=true because semantically we're not supposed to, if
-        // the update ends up being a replace-style upsert. See jstests/update_multi6.js
         if (!cl->isCapped()) {
             const BSONObj pk = cl->getSimplePKFromQuery(patternOrig);
             if (!pk.isEmpty()) {
@@ -397,8 +394,7 @@ namespace mongo {
 
             BSONObj currentObj = c->current();
             if (!isOperatorUpdate) {
-                // replace-style update only affects a single matching document
-                uassert(10158, "multi update only works with $ operators", !multi);
+                verify(!multi); // should be uasserted above
                 BSONObj copy = updateobj.copy();
                 updateNoMods(ns, cl, currPK, currentObj, copy, fromMigrate);
                 return UpdateResult(1, 0, 1, BSONObj());
