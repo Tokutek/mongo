@@ -1307,6 +1307,10 @@ namespace mongo {
             const bool fromMigrate,
             uint64_t flags);
 
+        bool updateObjectModsOk() {
+            return false;
+        }
+
         void empty();
 
         bool rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &wasBuilder);
@@ -1449,7 +1453,7 @@ namespace mongo {
         }
 
         virtual bool updateObjectModsOk() {
-            return true;
+            return _partitions[0]->updateObjectModsOk();
         }
 
         virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj,
