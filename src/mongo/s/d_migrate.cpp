@@ -1845,8 +1845,8 @@ namespace mongo {
                             }
                             if (opts["partitioned"].trueValue()) {
                                 bool ret = cloneRemotePartitionInfo(
-                                    nsToDatabaseSubstring(ns).toString(),
-                                    nsToDatabaseSubstring(ns).toString(),
+                                    nsToDatabase(ns),
+                                    nsToDatabase(ns),
                                     ns,
                                     ns,
                                     conn.get(),

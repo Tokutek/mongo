@@ -3451,19 +3451,11 @@ namespace mongo {
         sanityCheck();
     }
 
-    void PartitionedCollection::dropPartitionsLEQ(BSONObj pivot) {
+    void PartitionedCollection::dropPartitionsLEQ(const BSONObj &pivot) {
         BSONObj key = getValidatedPKFromObject(pivot);
-        Client::WithOpSettings wos(OpSettings().setQueryCursorMode(READ_LOCK_CURSOR));
-        while (true) {
-            if(numPartitions() == 1) {
-                return;
-            }
-            if (key.woCompare(_partitionPivots[0], _ordering) >= 0) {
-                dropPartition(_partitionIDs[0]);
-            }
-            else {
-                return;
-            }
+        while (numPartitions() > 1 &&
+               key.woCompare(_partitionPivots[0], _ordering) >= 0) {
+            dropPartition(_partitionIDs[0]);
         }
     }
     

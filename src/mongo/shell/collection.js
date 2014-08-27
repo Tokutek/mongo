@@ -70,7 +70,7 @@ DBCollection.prototype.help = function () {
     print("\tdb." + shortName + ".addPartition( <pivot> ) - add partition to a partitioned collection, optionally pass in pivot");
     print("\tdb." + shortName + ".getPartitionInfo() - get partition information of partitioned collection");
     print("\tdb." + shortName + ".dropPartition( id ) - drop partition of partitioned collection with specified id");
-    print("\tdb." + shortName + ".dropPartitions( key ) - drop all partitions of a partitioned collection that contain data less than the provided partition key");
+    print("\tdb." + shortName + ".dropPartitionsLEQ( key ) - drop all partitions of a partitioned collection that contain data less than the provided partition key");
     return __magicNoPrint;
 }
 

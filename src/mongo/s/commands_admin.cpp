@@ -383,18 +383,16 @@ namespace mongo {
 
             bool createShartitionedCollection(const BSONObj& cmdObj, string& errmsg, ScopedDbConnection* conn, DBConfigPtr config) {
                 const string ns = cmdObj.firstElement().valuestrsafe();
-                BSONObj proposedPartitionKey = cmdObj.getObjectField( "partition" );
-                BSONObj proposedShardKey = cmdObj.getObjectField( "key" );
+                BSONObj proposedPartitionKey = cmdObj.getObjectField("partitionKey");
+                BSONObj proposedShardKey = cmdObj.getObjectField("key");
                 BSONObjBuilder cmd;
-                cmd.append("create", NamespaceString(ns).coll);
-                BSONObjBuilder pk(cmd.subobjStart("primaryKey"));
-                pk.appendElements(proposedPartitionKey);
-                BSONObj pkObj = pk.done();
+                cmd.append("create", nsToCollectionSubstring(ns));
+                cmd.append("primaryKey", proposedPartitionKey);
                 cmd.append("partitioned", true);
-                LOG(0) << "sharding non-existent parititoned collection, creating " << ns << " with a primary key on " << pkObj << endl;
+                LOG(0) << "sharding non-existent partitioned collection, creating " << ns << " with a primary key on " << proposedPartitionKey << endl;
                 BSONObj res;
-                bool createSuccess = conn->get()->runCommand(config->getName(), cmd.done(), res);
-                if (!createSuccess) {
+                bool ret = conn->get()->runCommand(config->getName(), cmd.done(), res);
+                if (!ret) {
                     errmsg = "create failed to create collection on primary shard: " + res["errmsg"].String();
                     conn->done();
                     return false;
@@ -409,7 +407,7 @@ namespace mongo {
                                                               clustering,
                                                               "",
                                                               false);
-                if ( ! ensureSuccess ) {
+                if (!ensureSuccess) {
                     errmsg = "ensureIndex failed to create index on primary shard";
                     conn->done();
                     return false;
@@ -663,7 +661,7 @@ namespace mongo {
                     }
                     bool onlyId = proposedKey.nFields() == 1 && proposedKey["_id"].ok();
                     bool onlyHashed = proposedKey.nFields() == 1 && StringData(proposedKey.firstElement().valuestrsafe()) == "hashed";
-                    bool partitioned = cmdObj["partition"].ok();
+                    bool partitioned = cmdObj["partitionKey"].ok();
                     if (!collectionExists && partitioned) {
                         bool created = createShartitionedCollection(cmdObj, errmsg, conn.get(), config);
                         if (!created) {
