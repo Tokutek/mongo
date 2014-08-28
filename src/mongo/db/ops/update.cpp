@@ -300,7 +300,7 @@ namespace mongo {
         
         // a little optimization to get rid of the query, if we can
         const bool singleQueryField = query.nFields() == 1; // TODO: Optimize?
-        const BSONObj& queryToUse = singleQueryField ? BSONObj() : query;
+        const BSONObj queryToUse = singleQueryField ? BSONObj() : query;
         uint32_t fastUpdateFlags = UpdateFlags::FAST_UPDATE_PERFORMED;
         if (oldObjMayNotExist) {
             fastUpdateFlags |= UpdateFlags::NO_OLDOBJ_OK;
