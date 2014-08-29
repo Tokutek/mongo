@@ -44,6 +44,7 @@
 #include "mongo/db/jsobjmanipulator.h"
 #include "mongo/util/elapsed_tracker.h"
 #include "mongo/db/storage/assert_ids.h"
+#include "mongo/db/server_parameters.h"
 
 namespace mongo {
 
@@ -285,6 +286,8 @@ namespace mongo {
         writeEntryToOplog(op, true);
     }
 
+    MONGO_EXPORT_SERVER_PARAMETER(soTimeoutForReplLargeTxn, double, 600.0);
+
     void replicateFullTransactionToOplog(BSONObj& o, OplogReader& r, bool* bigTxn) {
         *bigTxn = false;
         if (o.hasElement("ref")) {
@@ -294,7 +297,7 @@ namespace mongo {
             // a large transaction. We will reset it at the end of this if-clause
             // If something throws in here, the oplog reader ought to get destroyed,
             // so no need for an RAII style of resetting
-            r.setSocketTimeout(0);
+            r.setSocketTimeout(soTimeoutForReplLargeTxn);
             shared_ptr<DBClientCursor> c = r.getOplogRefsCursor(oid);
             uassert(17363, "Could not get oplog refs cursor", c.get());
             // we are doing the work of copying oplog.refs data and writing to oplog
