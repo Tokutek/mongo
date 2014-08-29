@@ -16,53 +16,29 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
-#include "db/json.h"
-#include "mongo/base/initializer.h"
-#include "mongo/client/dbclientcursor.h"
-
-#include "tool.h"
-
-#include <fstream>
-#include <iostream>
+#include "mongo/pch.h"
 
 #include <boost/filesystem/convenience.hpp>
 #include <boost/filesystem/operations.hpp>
 #include <boost/program_options.hpp>
+#include <fstream>
+#include <iostream>
+
+#include "mongo/client/dbclientcursor.h"
+#include "mongo/db/json.h"
+#include "mongo/tools/mongoexport_options.h"
+#include "mongo/tools/tool.h"
+#include "mongo/tools/tool_logger.h"
+#include "mongo/util/options_parser/option_section.h"
 
 using namespace mongo;
 
-namespace po = boost::program_options;
-
 class Export : public Tool {
 public:
-    Export() : Tool( "export" ) {
-        addFieldOptions();
-        add_options()
-        ("query,q" , po::value<string>() , "query filter, as a JSON string" )
-        ("csv","export to csv instead of json")
-        ("out,o", po::value<string>(), "output file; if not specified, stdout is used")
-        ("jsonArray", "output to a json array rather than one object per line")
-        ("slaveOk,k", po::value<bool>()->default_value(true) , "use secondaries for export if available, default true")
-        ("forceTableScan", "deprecated" )
-        ;
-        _usesstdout = false;
-    }
+    Export() : Tool() { }
 
-    virtual void preSetup() {
-        if ( hasParam("out") ) {
-            string out = getParam("out");
-            if ( out != "-" ) {
-                // we write output to standard error by default to avoid
-                // mangling output, but we don't need to do this if an output
-                // file was specified
-                useStandardOutput(true);
-            }
-        }
-    }
-
-    virtual void printExtraHelp( ostream & out ) {
-        out << "Export MongoDB data to CSV, TSV or JSON files.\n" << endl;
+    virtual void printHelp( ostream & out ) {
+        printMongoExportHelp(&out);
     }
 
     // Turn every double quote character into two double quote characters
@@ -107,7 +83,10 @@ public:
         case jstOID:
             return "ObjectID(" + object.OID().toString() + ")"; // OIDs are always 24 bytes
         case Date:
-            return timeToISOString(object.Date() / 1000);
+            // We need to check if we can actually format this date.  See SERVER-13760.
+            return object.Date().isFormatable() ?
+                        dateToISOStringUTC(object.Date()) :
+                        csvEscape(object.jsonString(Strict, false));
         case Timestamp:
             return csvEscape(object.jsonString(Strict, false));
         case RegEx:
@@ -134,22 +113,19 @@ public:
 
     int run() {
         string ns;
-        const bool csv = hasParam( "csv" );
-        const bool jsonArray = hasParam( "jsonArray" );
         ostream *outPtr = &cout;
-        string outfile = getParam( "out" );
         auto_ptr<ofstream> fileStream;
-        if ( hasParam( "out" ) && outfile != "-" ) {
-            size_t idx = outfile.rfind( "/" );
+        if (mongoExportGlobalParams.outputFileSpecified && mongoExportGlobalParams.outputFile != "-") {
+            size_t idx = mongoExportGlobalParams.outputFile.rfind("/");
             if ( idx != string::npos ) {
-                string dir = outfile.substr( 0 , idx + 1 );
+                string dir = mongoExportGlobalParams.outputFile.substr( 0 , idx + 1 );
                 boost::filesystem::create_directories( dir );
             }
-            ofstream * s = new ofstream( outfile.c_str() , ios_base::out );
+            ofstream * s = new ofstream(mongoExportGlobalParams.outputFile.c_str(), ios_base::out);
             fileStream.reset( s );
             outPtr = s;
             if ( ! s->good() ) {
-                cerr << "couldn't open [" << outfile << "]" << endl;
+                cerr << "couldn't open [" << mongoExportGlobalParams.outputFile << "]" << endl;
                 return -1;
             }
         }
@@ -166,18 +142,17 @@ public:
             return 1;
         }
 
-        if ( hasParam( "fields" ) || csv ) {
-            needFields();
+        if (toolGlobalParams.fieldsSpecified || mongoExportGlobalParams.csv) {
             
-            // we can't use just _fieldsObj since we support everything getFieldDotted does
+            // we can't use just toolGlobalParams.fields since we support everything getFieldDotted
+            // does
             
             set<string> seen;
             BSONObjBuilder b;
             
-            BSONObjIterator i( _fieldsObj );
-            while ( i.more() ){
-                BSONElement e = i.next();
-                string f = str::before( e.fieldName() , '.' );
+            for (std::vector<std::string>::iterator i = toolGlobalParams.fields.begin();
+                 i != toolGlobalParams.fields.end(); i++) {
+                std::string f = str::before(*i, '.');
                 if ( seen.insert( f ).second )
                     b.append( f , 1 );
             }
@@ -187,36 +162,43 @@ public:
         }
         
         
-        if ( csv && _fields.size() == 0 ) {
+        if (mongoExportGlobalParams.csv && !toolGlobalParams.fieldsSpecified) {
             cerr << "csv mode requires a field list" << endl;
             return -1;
         }
 
-        Query q( getParam( "query" , "" ) );
+        Query q(mongoExportGlobalParams.query);
 
-        bool slaveOk = _params["slaveOk"].as<bool>();
+        if (mongoExportGlobalParams.snapShotQuery) {
+            q.snapshot();
+        }
 
-        auto_ptr<DBClientCursor> cursor = conn().query( ns.c_str() , q , 0 , 0 , fieldsToReturn , ( slaveOk ? QueryOption_SlaveOk : 0 ) | QueryOption_NoCursorTimeout );
+        auto_ptr<DBClientCursor> cursor = conn().query(ns.c_str(), q,
+                mongoExportGlobalParams.limit, mongoExportGlobalParams.skip, fieldsToReturn,
+                (mongoExportGlobalParams.slaveOk ? QueryOption_SlaveOk : 0 ) |
+                QueryOption_NoCursorTimeout);
 
-        if ( csv ) {
-            for ( vector<string>::iterator i=_fields.begin(); i != _fields.end(); i++ ) {
-                if ( i != _fields.begin() )
+        if (mongoExportGlobalParams.csv) {
+            for (std::vector<std::string>::iterator i = toolGlobalParams.fields.begin();
+                 i != toolGlobalParams.fields.end(); i++) {
+                if (i != toolGlobalParams.fields.begin())
                     out << ",";
                 out << *i;
             }
             out << endl;
         }
 
-        if (jsonArray)
+        if (mongoExportGlobalParams.jsonArray)
             out << '[';
 
         long long num = 0;
         while ( cursor->more() ) {
             num++;
             BSONObj obj = cursor->next();
-            if ( csv ) {
-                for ( vector<string>::iterator i=_fields.begin(); i != _fields.end(); i++ ) {
-                    if ( i != _fields.begin() )
+            if (mongoExportGlobalParams.csv) {
+                for (std::vector<std::string>::iterator i = toolGlobalParams.fields.begin();
+                     i != toolGlobalParams.fields.end(); i++) {
+                    if (i != toolGlobalParams.fields.begin())
                         out << ",";
                     const BSONElement & e = obj.getFieldDotted(i->c_str());
                     if ( ! e.eoo() ) {
@@ -226,27 +208,25 @@ public:
                 out << endl;
             }
             else {
-                if (jsonArray && num != 1)
+                if (mongoExportGlobalParams.jsonArray && num != 1)
                     out << ',';
 
                 out << obj.jsonString();
 
-                if (!jsonArray)
+                if (!mongoExportGlobalParams.jsonArray)
                     out << endl;
             }
         }
 
-        if (jsonArray)
+        if (mongoExportGlobalParams.jsonArray)
             out << ']' << endl;
 
-        cerr << "exported " << num << " records" << endl;
+        if (!toolGlobalParams.quiet) {
+            toolOutput() << "exported " << num << " records" << endl;
+        }
 
         return 0;
     }
 };
 
-int main( int argc , char ** argv, char** envp ) {
-    mongo::runGlobalInitializersOrDie(argc, argv, envp);
-    Export e;
-    return e.main( argc , argv );
-}
+REGISTER_MONGO_TOOL(Export);

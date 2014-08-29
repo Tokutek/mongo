@@ -87,17 +87,17 @@ function testMapReduce() {
 
     // test new user auth causes scope to be cleared
     test.auth('a', 'a');
-    getGlobalFromMap('a'); // throws on fail
+    assert.doesNotThrow(function() { getGlobalFromMap('a'); }, [], "M/R: Auth user 'a'");
 
     // test auth as another user causes scope to be cleared
     setGlobalInMap('a');
     test.auth('b', 'b');
-    getGlobalFromMap('a&b'); // throws on fail
+    assert.doesNotThrow(function() { getGlobalFromMap('a&b'); }, [], "M/R: Auth user 'b'");
 
     // test user logout causes scope to be cleared
     setGlobalInMap('a&b');
     test.logout();
-    getGlobalFromMap('noUsers'); // throws on fail
+    assert.doesNotThrow(function() { getGlobalFromMap('noUsers'); }, [], "M/R: Log out");
 }
 testMapReduce();
 testMapReduce();
@@ -121,17 +121,17 @@ function testGroup() {
 
     // test new user auth causes scope to be cleared
     test.auth('a', 'a');
-    getGlobalFromGroup('a'); // throws on fail
+    assert.doesNotThrow(getGlobalFromGroup, ['a'], "Group: Auth user 'a'");
 
     // test auth as another user causes scope to be cleared
     setGlobalInGroup('a');
     test.auth('b', 'b');
-    getGlobalFromGroup('a&b'); // throws on fail
+    assert.doesNotThrow(getGlobalFromGroup, ['a&b'], "Group: Auth user 'b'");
 
     // test user logout causes scope to be cleared
     setGlobalInGroup('a&b');
     test.logout();
-    getGlobalFromGroup('noUsers'); // throws on fail
+    assert.doesNotThrow(getGlobalFromGroup, ['noUsers'], "Group: Log out");
 }
 testGroup();
 testGroup();

@@ -16,48 +16,32 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
+#include "mongo/pch.h"
 
-#include "mongo/base/initializer.h"
-#include "db/json.h"
-#include "../util/text.h"
-#include "tool.h"
-#include "stat_util.h"
 #include <fstream>
 #include <iostream>
-#include <boost/program_options.hpp>
 
-namespace po = boost::program_options;
+#include "mongo/db/json.h"
+#include "mongo/tools/stat_util.h"
+#include "mongo/tools/mongotop_options.h"
+#include "mongo/tools/tool.h"
+#include "mongo/util/options_parser/option_section.h"
 
 namespace mongo {
 
     class TopTool : public Tool {
     public:
 
-        TopTool() : Tool( "top" , REMOTE_SERVER , "admin" ) {
-            _sleep = 1;
-
-            add_hidden_options()
-            ( "sleep" , po::value<int>() , "time to sleep between calls" )
-            ;
-            add_options()
-            ( "locks" , "use db lock info instead of top" )
-            ;
-            addPositionArg( "sleep" , 1 );
-
+        TopTool() : Tool() {
             _autoreconnect = true;
         }
 
-        virtual void printExtraHelp( ostream & out ) {
-            out << "View live MongoDB collection statistics.\n" << endl;
-        }
-        
-        bool useLocks() {
-            return hasParam( "locks" );
+        virtual void printHelp( ostream & out ) {
+            printMongoTopHelp(&out);
         }
 
         NamespaceStats getData() {
-            if ( useLocks() )
+            if (mongoTopGlobalParams.useLocks)
                 return getDataLocks();
             return getDataTop();
         }
@@ -65,7 +49,7 @@ namespace mongo {
         NamespaceStats getDataLocks() {
 
             BSONObj out;
-            if ( ! conn().simpleCommand( _db , &out , "serverStatus" ) ) {
+            if (!conn().simpleCommand(toolGlobalParams.db, &out, "serverStatus")) {
                 cout << "error: " << out << endl;
                 return NamespaceStats();
             }
@@ -77,7 +61,7 @@ namespace mongo {
             NamespaceStats stats;
 
             BSONObj out;
-            if ( ! conn().simpleCommand( _db , &out , "top" ) ) {
+            if (!conn().simpleCommand(toolGlobalParams.db, &out, "top")) {
                 cout << "error: " << out << endl;
                 return stats;
             }
@@ -117,7 +101,7 @@ namespace mongo {
             for ( unsigned i=0; i < data.size(); i++ ) {
                 const string& ns = data[i].ns;
 
-                if ( ! useLocks() && ns.find( '.' ) == string::npos )
+                if (!mongoTopGlobalParams.useLocks && ns.find('.') == string::npos)
                     continue;
 
                 if ( ns.size() > longest )
@@ -127,7 +111,7 @@ namespace mongo {
             int numberWidth = 10;
 
             cout << "\n"
-                 << setw(longest) << ( useLocks() ? "db" : "ns" )
+                 << setw(longest) << (mongoTopGlobalParams.useLocks ? "db" : "ns")
                  << setw(numberWidth+2) << "total"
                  << setw(numberWidth+2) << "read"
                  << setw(numberWidth+2) << "write"
@@ -135,7 +119,7 @@ namespace mongo {
                  << endl;
             for ( int i=data.size()-1; i>=0 && data.size() - i < 10 ; i-- ) {
                 
-                if ( ! useLocks() && data[i].ns.find( '.' ) == string::npos )
+                if (!mongoTopGlobalParams.useLocks && data[i].ns.find('.') == string::npos)
                     continue;
 
                 cout << setw(longest) << data[i].ns 
@@ -148,8 +132,6 @@ namespace mongo {
         }
 
         int run() {
-            _sleep = getParam( "sleep" , _sleep );
-
             if (isMongos()) {
                 log() << "mongotop only works on instances of mongod." << endl;
                 return EXIT_FAILURE;
@@ -158,7 +140,7 @@ namespace mongo {
             NamespaceStats prev = getData();
 
             while ( true ) {
-                sleepsecs( _sleep );
+                sleepsecs(mongoTopGlobalParams.sleep);
                 
                 NamespaceStats now;
                 try {
@@ -184,16 +166,8 @@ namespace mongo {
 
             return 0;
         }
-
-    private:
-        int _sleep;
     };
 
-}
+    REGISTER_MONGO_TOOL(TopTool);
 
-int main( int argc , char ** argv, char ** envp ) {
-    mongo::runGlobalInitializersOrDie(argc, argv, envp);
-    mongo::TopTool top;
-    return top.main( argc , argv );
 }
-

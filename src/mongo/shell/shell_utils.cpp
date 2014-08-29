@@ -19,12 +19,14 @@
 
 #include "mongo/shell/shell_utils.h"
 
+#include "mongo/client/dbclient_rs.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/shell/shell_utils_extended.h"
 #include "mongo/shell/shell_utils_launcher.h"
 #include "mongo/util/processinfo.h"
-#include "mongo/util/version.h"
+#include "mongo/util/text.h"
+#include "mongo/util/version_reporting.h"
 
 namespace mongo {
 
@@ -246,6 +248,20 @@ namespace mongo {
                 return;
             }
             connectionRegistry.registerConnection( c );
+        }
+
+        bool fileExists(const std::string& file) {
+            try {
+#ifdef _WIN32
+                boost::filesystem::path p(toWideString(file.c_str()));
+#else
+                boost::filesystem::path p(file);
+#endif
+                return boost::filesystem::exists(p);
+            }
+            catch ( ... ) {
+                return false;
+            }
         }
     }
 }

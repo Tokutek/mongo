@@ -37,10 +37,10 @@
 
 #include "mongo/db/curop.h"
 #include "mongo/db/client.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/commands/server_status.h"
 #include "mongo/db/descriptor.h"
 #include "mongo/db/server_parameters.h"
+#include "mongo/db/storage_options.h"
 #include "mongo/db/storage/assert_ids.h"
 #include "mongo/db/storage/dbt.h"
 #include "mongo/db/storage/exception.h"
@@ -49,9 +49,6 @@
 #include "mongo/util/log.h"
 
 namespace mongo {
-
-    // TODO: Should be in CmdLine or something.
-    extern string dbpath;
 
     namespace storage {
 
@@ -230,8 +227,7 @@ namespace mongo {
         }
 
         static void tokudb_print_error(const DB_ENV * db_env, const char *db_errpfx, const char *buffer) {
-            // We may be calling this from a crashing state, so we should use rawOut.
-            rawOut(buffer);
+            log() << buffer << std::endl;
         }
 
         // Called by the ydb to determine how long a txn should sleep on a lock.
@@ -241,13 +237,12 @@ namespace mongo {
             if (haveClient()) {
                 return cc().lockTimeout();
             } else {
-                return cmdLine.lockTimeout;
+                return storageGlobalParams.lockTimeout;
             }
         }
 
         static uint64_t get_loader_memory_size_callback(void) {
-            return cmdLine.loaderMaxMemory > 0 ?
-                (uint64_t) cmdLine.loaderMaxMemory : 100 * 1024 * 1024;
+            return storageGlobalParams.loaderMaxMemory;
         }
 
         static void lock_not_granted_callback(DB *db, uint64_t requesting_txnid,
@@ -269,7 +264,7 @@ namespace mongo {
 
             tokulog() << "startup" << endl;
 
-            db_env_set_direct_io(cmdLine.directio);
+            db_env_set_direct_io(storageGlobalParams.directio);
 
             int r = db_env_set_toku_product_name("tokumx");
             if (r != 0) {
@@ -284,8 +279,8 @@ namespace mongo {
             env->set_errcall(env, tokudb_print_error);
             env->set_errpfx(env, "TokuMX");
 
-            const uint64_t cachesize = (cmdLine.cacheSize > 0
-                                        ? (uint64_t) cmdLine.cacheSize
+            const uint64_t cachesize = (storageGlobalParams.cacheSize > 0
+                                        ? storageGlobalParams.cacheSize
                                         : calculate_cachesize());
             if (cachesize < 1ULL<<30) {
                 warning() << "*****************************" << endl;
@@ -303,8 +298,8 @@ namespace mongo {
 
             // Use 10% the size of the cachetable for lock tree memory
             // if no value was specified on the command line.
-            const uint64_t lock_memory = (cmdLine.locktreeMaxMemory > 0
-                                          ? (uint64_t) cmdLine.locktreeMaxMemory
+            const uint64_t lock_memory = (storageGlobalParams.locktreeMaxMemory > 0
+                                          ? storageGlobalParams.locktreeMaxMemory
                                           : (cachesize / 10));
             r = env->set_lk_max_memory(env, lock_memory);
             if (r != 0) {
@@ -312,12 +307,11 @@ namespace mongo {
             }
             TOKULOG(1) << "locktree max memory set to " << lock_memory << " bytes." << endl;
 
-            const uint64_t lock_timeout = cmdLine.lockTimeout;
-            r = env->set_lock_timeout(env, lock_timeout, get_lock_timeout_callback);
+            r = env->set_lock_timeout(env, storageGlobalParams.lockTimeout, get_lock_timeout_callback);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
-            TOKULOG(1) << "lock timeout set to " << lock_timeout << " milliseconds." << endl;
+            TOKULOG(1) << "lock timeout set to " << storageGlobalParams.lockTimeout << " milliseconds." << endl;
 
             env->set_loader_memory_size(env, get_loader_memory_size_callback);
             TOKULOG(1) << "loader memory size set to " << get_loader_memory_size_callback() << " bytes." << endl;
@@ -342,32 +336,29 @@ namespace mongo {
                 handle_ydb_error_fatal(r);
             }
 
-            env->change_fsync_log_period(env, cmdLine.logFlushPeriod);
+            env->change_fsync_log_period(env, storageGlobalParams.logFlushPeriod);
             env->set_update(env, update_callback);
 
-            const int redzone_threshold = cmdLine.fsRedzone;
-            r = env->set_redzone(env, redzone_threshold);
+            r = env->set_redzone(env, storageGlobalParams.fsRedzone);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
-            TOKULOG(1) << "filesystem redzone set to " << redzone_threshold << " percent." << endl;
+            TOKULOG(1) << "filesystem redzone set to " << storageGlobalParams.fsRedzone << " percent." << endl;
 
-            const char *logDir = cmdLine.logDir.c_str();
-            if (!mongoutils::str::equals(logDir, "")) {
-                r = env->set_lg_dir(env, logDir);
+            if (!storageGlobalParams.logDir.empty()) {
+                r = env->set_lg_dir(env, storageGlobalParams.logDir.c_str());
                 if (r != 0) {
                     handle_ydb_error_fatal(r);
                 }
-                TOKULOG(1) << "transaction log directory set to " << logDir << endl;
+                TOKULOG(1) << "transaction log directory set to " << storageGlobalParams.logDir << endl;
             }
 
-            const char *tmpDir = cmdLine.tmpDir.c_str();
-            if (!mongoutils::str::equals(tmpDir, "")) {
-                r = env->set_tmp_dir(env, tmpDir);
+            if (!storageGlobalParams.tmpDir.empty()) {
+                r = env->set_tmp_dir(env, storageGlobalParams.tmpDir.c_str());
                 if (r != 0) {
                     handle_ydb_error_fatal(r);
                 }
-                TOKULOG(1) << "temporary bulk loader directory set to " << tmpDir << endl;
+                TOKULOG(1) << "temporary bulk loader directory set to " << storageGlobalParams.tmpDir << endl;
             }
 
             if (numCachetableBucketMutexes > 0) {
@@ -378,31 +369,28 @@ namespace mongo {
 
             const int env_flags = DB_INIT_LOCK|DB_INIT_MPOOL|DB_INIT_TXN|DB_CREATE|DB_PRIVATE|DB_INIT_LOG|DB_RECOVER;
             const int env_mode = S_IRWXU|S_IRGRP|S_IROTH|S_IXGRP|S_IXOTH;
-            r = env->open(env, dbpath.c_str(), env_flags, env_mode);
+            r = env->open(env, storageGlobalParams.dbpath.c_str(), env_flags, env_mode);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
 
-            const int checkpoint_period = cmdLine.checkpointPeriod;
-            r = env->checkpointing_set_period(env, checkpoint_period);
+            r = env->checkpointing_set_period(env, storageGlobalParams.checkpointPeriod);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
-            TOKULOG(1) << "checkpoint period set to " << checkpoint_period << " seconds." << endl;
+            TOKULOG(1) << "checkpoint period set to " << storageGlobalParams.checkpointPeriod << " seconds." << endl;
 
-            const int cleaner_period = cmdLine.cleanerPeriod;
-            r = env->cleaner_set_period(env, cleaner_period);
+            r = env->cleaner_set_period(env, storageGlobalParams.cleanerPeriod);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
-            TOKULOG(1) << "cleaner period set to " << cleaner_period << " seconds." << endl;
+            TOKULOG(1) << "cleaner period set to " << storageGlobalParams.cleanerPeriod << " seconds." << endl;
 
-            const int cleaner_iterations = cmdLine.cleanerIterations;
-            r = env->cleaner_set_iterations(env, cleaner_iterations);
+            r = env->cleaner_set_iterations(env, storageGlobalParams.cleanerIterations);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
-            TOKULOG(1) << "cleaner iterations set to " << cleaner_iterations << "." << endl;
+            TOKULOG(1) << "cleaner iterations set to " << storageGlobalParams.cleanerIterations << "." << endl;
         }
 
         void shutdown(void) {
@@ -634,7 +622,7 @@ namespace mongo {
             virtual bool includeByDefault() const { return true; }
 
             BSONObj generateSection(const BSONElement &configElement) const {
-                if (cmdLine.isMongos()) {
+                if (isMongos()) {
                     return BSONObj();
                 }
 
@@ -1048,13 +1036,13 @@ namespace mongo {
             }
         }
 
-        class LogFlushPeriodParameter : public ExportedServerParameter<uint32_t> {
+        class LogFlushPeriodParameter : public ExportedServerParameter<int> {
           public:
-            LogFlushPeriodParameter() : ExportedServerParameter<uint32_t>(ServerParameterSet::getGlobal(), "logFlushPeriod", &cmdLine.logFlushPeriod, true, true) {}
+            LogFlushPeriodParameter() : ExportedServerParameter<int>(ServerParameterSet::getGlobal(), "logFlushPeriod", &storageGlobalParams.logFlushPeriod, true, true) {}
 
           protected:
-            virtual Status validate(const uint32_t& period) {
-                if (static_cast<int32_t>(period) < 0 || period > 500) {
+            virtual Status validate(const int& period) {
+                if (period < 0 || period > 500) {
                     return Status(ErrorCodes::BadValue, "logFlushPeriod must be between 0 and 500 ms");
                 }
                 env->change_fsync_log_period(env, period);
@@ -1062,12 +1050,12 @@ namespace mongo {
             }
         } logFlushPeriod;
 
-        class CheckpointPeriodParameter : public ExportedServerParameter<uint32_t> {
+        class CheckpointPeriodParameter : public ExportedServerParameter<int> {
           public:
-            CheckpointPeriodParameter() : ExportedServerParameter<uint32_t>(ServerParameterSet::getGlobal(), "checkpointPeriod", &cmdLine.checkpointPeriod, true, true) {}
+            CheckpointPeriodParameter() : ExportedServerParameter<int>(ServerParameterSet::getGlobal(), "checkpointPeriod", &storageGlobalParams.checkpointPeriod, true, true) {}
 
-            virtual Status validate(const uint32_t &period) {
-                if (static_cast<int32_t>(period) < 0) {
+            virtual Status validate(const int &period) {
+                if (period < 0) {
                     return Status(ErrorCodes::BadValue, "checkpointPeriod must be greater than 0s");
                 }
                 int r = env->checkpointing_set_period(env, period);
@@ -1079,12 +1067,12 @@ namespace mongo {
             }
         } checkpointPeriodParameter;
 
-        class CleanerPeriodParameter : public ExportedServerParameter<uint32_t> {
+        class CleanerPeriodParameter : public ExportedServerParameter<int> {
           public:
-            CleanerPeriodParameter() : ExportedServerParameter<uint32_t>(ServerParameterSet::getGlobal(), "cleanerPeriod", &cmdLine.cleanerPeriod, true, true) {}
+            CleanerPeriodParameter() : ExportedServerParameter<int>(ServerParameterSet::getGlobal(), "cleanerPeriod", &storageGlobalParams.cleanerPeriod, true, true) {}
 
-            virtual Status validate(const uint32_t &period) {
-                if (static_cast<int32_t>(period) < 0) {
+            virtual Status validate(const int &period) {
+                if (period < 0) {
                     return Status(ErrorCodes::BadValue, "cleanerPeriod must be greater than 0s");
                 }
                 int r = env->cleaner_set_period(env, period);
@@ -1096,12 +1084,12 @@ namespace mongo {
             }
         } cleanerPeriodParameter;
 
-        class CleanerIterationsParameter : public ExportedServerParameter<uint32_t> {
+        class CleanerIterationsParameter : public ExportedServerParameter<int> {
           public:
-            CleanerIterationsParameter() : ExportedServerParameter<uint32_t>(ServerParameterSet::getGlobal(), "cleanerIterations", &cmdLine.cleanerIterations, true, true) {}
+            CleanerIterationsParameter() : ExportedServerParameter<int>(ServerParameterSet::getGlobal(), "cleanerIterations", &storageGlobalParams.cleanerIterations, true, true) {}
 
-            virtual Status validate(const uint32_t &iterations) {
-                if (static_cast<int32_t>(iterations) < 0) {
+            virtual Status validate(const int &iterations) {
+                if (iterations < 0) {
                     return Status(ErrorCodes::BadValue, "cleanerIterations must be greater than 0");
                 }
                 int r = env->cleaner_set_iterations(env, iterations);
@@ -1126,9 +1114,9 @@ namespace mongo {
         } compressBuffersBeforeEvictionParameter;
 
         // These do not need set functions because the ydb uses a callback
-        // to read cmdLine.lockTimeout / cmdLine.loaderMaxMemory 
-        ExportedServerParameter<uint64_t> lockTimeoutParameter(ServerParameterSet::getGlobal(), "lockTimeout", &cmdLine.lockTimeout, true, true);
-        ExportedServerParameter<BytesQuantity<uint64_t> > loaderMaxMemoryParameter(ServerParameterSet::getGlobal(), "loaderMaxMemory", &cmdLine.loaderMaxMemory, true, true);
+        // to read storageGlobalParams.lockTimeout / storageGlobalParams.loaderMaxMemory 
+        ExportedServerParameter<uint64_t> lockTimeoutParameter(ServerParameterSet::getGlobal(), "lockTimeout", &storageGlobalParams.lockTimeout, true, true);
+        ExportedServerParameter<uint64_t> loaderMaxMemoryParameter(ServerParameterSet::getGlobal(), "loaderMaxMemory", &storageGlobalParams.loaderMaxMemory, true, true);
 
         __attribute__((noreturn))
         static void handle_filesystem_error_nicely(int error) {
@@ -1203,41 +1191,41 @@ namespace mongo {
                 case TOKUDB_MVCC_DICTIONARY_TOO_NEW:
                     throw RetryableException::MvccDictionaryTooNew();
                 case TOKUDB_HUGE_PAGES_ENABLED:
-                    LOG(LL_ERROR) << endl << endl
-                                  << "************************************************************" << endl
-                                  << "                                                            " << endl
-                                  << "                        @@@@@@@@@@@                         " << endl
-                                  << "                      @@'         '@@                       " << endl
-                                  << "                     @@    _     _  @@                      " << endl
-                                  << "                     |    (.)   (.)  |                      " << endl
-                                  << "                     |             ` |                      " << endl
-                                  << "                     |        >    ' |                      " << endl
-                                  << "                     |     .----.    |                      " << endl
-                                  << "                     ..   |.----.|  ..                      " << endl
-                                  << "                      ..  '      ' ..                       " << endl
-                                  << "                        .._______,.                         " << endl
-                                  << "                                                            " << endl
-                                  << " TokuMX will not run with transparent huge pages enabled.   " << endl
-                                  << " Please disable them to continue.                           " << endl
-                                  << " (echo never > /sys/kernel/mm/transparent_hugepage/enabled) " << endl
-                                  << "                                                            " << endl
-                                  << " The assertion failure you are about to see is intentional. " << endl
-                                  << "************************************************************" << endl
-                                  << endl;
+                    severe() << endl << endl
+                             << "************************************************************" << endl
+                             << "                                                            " << endl
+                             << "                        @@@@@@@@@@@                         " << endl
+                             << "                      @@'         '@@                       " << endl
+                             << "                     @@    _     _  @@                      " << endl
+                             << "                     |    (.)   (.)  |                      " << endl
+                             << "                     |             ` |                      " << endl
+                             << "                     |        >    ' |                      " << endl
+                             << "                     |     .----.    |                      " << endl
+                             << "                     ..   |.----.|  ..                      " << endl
+                             << "                      ..  '      ' ..                       " << endl
+                             << "                        .._______,.                         " << endl
+                             << "                                                            " << endl
+                             << " TokuMX will not run with transparent huge pages enabled.   " << endl
+                             << " Please disable them to continue.                           " << endl
+                             << " (echo never > /sys/kernel/mm/transparent_hugepage/enabled) " << endl
+                             << "                                                            " << endl
+                             << " The assertion failure you are about to see is intentional. " << endl
+                             << "************************************************************" << endl
+                             << endl;
                     verify(false);
                 case TOKUDB_UPGRADE_FAILURE:
-                    LOG(LL_ERROR) << endl << endl;
-                    LOG(LL_ERROR) << "************************************************************" << endl;
-                    LOG(LL_ERROR) << endl;
-                    LOG(LL_ERROR) << " Detected an unclean shutdown during version upgrade." << endl;
-                    LOG(LL_ERROR) << " Before upgrading, you must perform a clean shutdown of the" << endl;
-                    LOG(LL_ERROR) << " old version of TokuMX before starting the new version." << endl;
-                    LOG(LL_ERROR) << endl;
-                    LOG(LL_ERROR) << " You must go back to the old version, recover, and then" << endl;
-                    LOG(LL_ERROR) << " shut down cleanly before upgrading." << endl;
-                    LOG(LL_ERROR) << endl;
-                    LOG(LL_ERROR) << " The assertion failure you are about to see is intentional." << endl;
-                    LOG(LL_ERROR) << "************************************************************" << endl;
+                    severe() << endl << endl
+                             << "************************************************************" << endl
+                             << endl
+                             << " Detected an unclean shutdown during version upgrade." << endl
+                             << " Before upgrading, you must perform a clean shutdown of the" << endl
+                             << " old version of TokuMX before starting the new version." << endl
+                             << endl
+                             << " You must go back to the old version, recover, and then" << endl
+                             << " shut down cleanly before upgrading." << endl
+                             << endl
+                             << " The assertion failure you are about to see is intentional." << endl
+                             << "************************************************************" << endl;
                     // uassert(17357, "for below SystemException");
                     throw SystemException(error, 17357, "Detected an unclean shutdown during version upgrade.");
                 default: 

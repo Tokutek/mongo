@@ -15,8 +15,9 @@
  *    limitations under the License.
  */
 
-#include "pch.h"
 #include "synchronization.h"
+
+#include <boost/date_time/posix_time/posix_time.hpp>
 
 namespace mongo {
 

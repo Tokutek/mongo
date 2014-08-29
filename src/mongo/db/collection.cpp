@@ -17,7 +17,7 @@
 #include "mongo/pch.h"
 
 #include "mongo/db/auth/action_type.h"
-#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_manager_global.h"
 #include "mongo/base/init.h"
 #include "mongo/db/collection.h"
 #include "mongo/db/cursor.h"
@@ -35,6 +35,7 @@
 #include "mongo/db/ops/delete.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/repl/rs.h"
+#include "mongo/db/server_options.h"
 #include "mongo/db/storage/key.h"
 #include "mongo/platform/atomic_word.h"
 #include "mongo/scripting/engine.h"
@@ -274,7 +275,18 @@ namespace mongo {
             int idx = _cd->findIndexByKeyPattern(extendedSystemUsersKeyPattern);
             if (idx < 0) {
                 BSONObj info = SystemUsersCollection::extendedSystemUsersIndexInfo(_ns);
-                _cd->ensureIndex(info);
+                try {
+                    _cd->ensureIndex(info);
+                } catch (const DBException& e) {
+                    if (e.getCode() == ASSERT_ID_DUPKEY) {
+                        log() << "Duplicate key exception while trying to build unique index on " <<
+                                ns << ".  You most likely have user documents with duplicate \"user\" "
+                                "fields.  To resolve this, start up with a version of MongoDB prior to "
+                                "2.4, drop the duplicate user documents, then start up again with the "
+                                "current version." << endl;
+                    }
+                    throw;
+                }
                 addToIndexesCatalog(info);
                 reserializeNeeded = true;
             }
@@ -1400,7 +1412,7 @@ namespace mongo {
             return false;
         }
 
-        if ( cmdLine.configsvr &&
+        if ( serverGlobalParams.configsvr &&
              !( ns.startsWith( "config." ) ||
                 ns.startsWith( "local." ) ||
                 ns.startsWith( "admin." ) ) ) {
@@ -2153,7 +2165,7 @@ namespace mongo {
     }
 
     void SystemUsersCollection::insertObject(BSONObj &obj, uint64_t flags, bool* indexBitChanged) {
-        uassertStatusOK(AuthorizationManager::checkValidPrivilegeDocument(nsToDatabaseSubstring(_ns), obj));
+        uassertStatusOK(getGlobalAuthorizationManager()->checkValidPrivilegeDocument(nsToDatabaseSubstring(_ns), obj));
         IndexedCollection::insertObject(obj, flags, indexBitChanged);
     }
     
@@ -2161,7 +2173,7 @@ namespace mongo {
                       const bool fromMigrate,
                       uint64_t flags, bool* indexBitChanged)
     {
-        uassertStatusOK(AuthorizationManager::checkValidPrivilegeDocument(nsToDatabaseSubstring(_ns), newObj));
+        uassertStatusOK(getGlobalAuthorizationManager()->checkValidPrivilegeDocument(nsToDatabaseSubstring(_ns), newObj));
         IndexedCollection::updateObject(pk, oldObj, newObj, fromMigrate, flags, indexBitChanged);
     }
 

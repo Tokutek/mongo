@@ -16,17 +16,19 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "mongo/pch.h"
+
 #include <time.h>
 
-#include "mongo/pch.h"
 #include "mongo/bson/util/builder.h"
-#include "mongo/db/jsobj.h"
-#include "mongo/db/introspect.h"
-#include "mongo/db/cursor.h"
-#include "mongo/db/json.h"
-#include "mongo/db/repl.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_manager_global.h"
+#include "mongo/db/auth/authorization_session.h"
+#include "mongo/db/auth/privilege_set.h"
 #include "mongo/db/commands.h"
-#include "mongo/db/cmdline.h"
+#include "mongo/db/introspect.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/json.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/util/lruishmap.h"
 
@@ -57,7 +59,7 @@ namespace mongo {
             return false;
         }
 
-        const string userToken = ClientBasic::getCurrent()->getAuthorizationManager()
+        const string userToken = ClientBasic::getCurrent()->getAuthorizationSession()
                                                           ->getAuthenticatedPrincipalNamesToken();
         auto_ptr<Scope> s = globalScriptEngine->getPooledScope( dbName, "dbeval" + userToken );
         ScriptingFunction f = s->createFunction(code);
@@ -85,9 +87,9 @@ namespace mongo {
         int res;
         {
             Timer t;
-            res = s->invoke(f, &args, 0, cmdLine.quota ? 10 * 60 * 1000 : 0 );
+            res = s->invoke(f, &args, 0, storageGlobalParams.quota ? 10 * 60 * 1000 : 0);
             int m = t.millis();
-            if ( m > cmdLine.slowMS ) {
+            if (m > serverGlobalParams.slowMS) {
                 out() << "dbeval slow, time: " << dec << m << "ms " << dbName << endl;
                 if ( m >= 1000 ) log() << code << endl;
                 else OCCASIONALLY log() << code << endl;
@@ -124,7 +126,7 @@ namespace mongo {
                                            std::vector<Privilege>* out) {
             // $eval can do pretty much anything, so require all privileges.
             out->push_back(Privilege(PrivilegeSet::WILDCARD_RESOURCE,
-                                     AuthorizationManager::getAllUserActions()));
+                                     getGlobalAuthorizationManager()->getAllUserActions()));
         }
         CmdEval() : Command("eval", false, "$eval") { }
         virtual bool needsTxn() const { return false; }

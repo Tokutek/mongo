@@ -19,9 +19,9 @@
 
 #pragma once
 
-#include "mongo/db/cmdline.h"
 #include "mongo/db/collection.h"
 #include "mongo/db/collection_map.h"
+#include "mongo/db/storage_options.h"
 
 namespace mongo {
 
@@ -34,7 +34,7 @@ namespace mongo {
     */
     class Database {
     public:
-        Database(const StringData &name, const StringData &path = dbpath);
+        Database(const StringData &name, const StringData &path = storageGlobalParams.dbpath);
 
         /* you must use this to close - there is essential code in this method that is not in the ~Database destructor.
            thus the destructor is private.  this could be cleaned up one day...
@@ -54,7 +54,7 @@ namespace mongo {
 
         const string &path() const { return _path; }
 
-        void diskSize(size_t &uncompressedSize, size_t &compressedSize);
+        void diskSize(intmax_t &uncompressedSize, intmax_t &compressedSize);
 
         /**
          * @return true if success.  false if bad level or error creating profile ns

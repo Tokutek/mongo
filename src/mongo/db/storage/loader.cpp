@@ -18,9 +18,10 @@
 
 #include <db.h>
 
-#include "mongo/db/cmdline.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/interrupt_status.h"
+#include "mongo/db/server_parameters.h"
+#include "mongo/db/storage_options.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/storage/builder.h"
 
@@ -37,7 +38,7 @@ namespace mongo {
 
             uint32_t db_flags = 0;
             uint32_t dbt_flags = 0;
-            const int loader_flags = (cmdLine.loaderCompressTmp
+            const int loader_flags = (storageGlobalParams.loaderCompressTmp
                                       ? LOADER_COMPRESS_INTERMEDIATES
                                       : 0);
             int r = storage::env->create_loader(storage::env, cc().txn().db_txn(),
@@ -88,5 +89,11 @@ namespace mongo {
         }
 
     } // namespace storage
+
+    ExportedServerParameter<bool> LoaderCompressTmpSetting(ServerParameterSet::getGlobal(),
+                                                           "loaderCompressTmp",
+                                                           &storageGlobalParams.loaderCompressTmp,
+                                                           true,
+                                                           true);
 
 } // namespace mongo

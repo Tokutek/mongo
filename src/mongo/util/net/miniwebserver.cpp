@@ -16,11 +16,13 @@
  *    limitations under the License.
  */
 
-#include "pch.h"
-#include "miniwebserver.h"
-#include "../hex.h"
+#include "mongo/pch.h"
 
-#include "pcrecpp.h"
+#include "mongo/util/net/miniwebserver.h"
+
+#include <pcrecpp.h>
+
+#include "mongo/util/hex.h"
 
 namespace mongo {
 
@@ -113,14 +115,18 @@ namespace mongo {
         char buf[4096];
         int len = 0;
         try {
+#ifdef MONGO_SSL
             psock->doSSLHandshake();
+#endif
             psock->setTimeout(8);
             while ( 1 ) {
                 int left = sizeof(buf) - 1 - len;
                 if( left == 0 )
                     break;
-                int x = psock->unsafe_recv( buf + len , left );
-                if ( x <= 0 ) {
+                int x;
+                try {
+                    x = psock->unsafe_recv( buf + len , left );
+                } catch (const SocketException&) {
                     psock->close();
                     return;
                 }

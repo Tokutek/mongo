@@ -25,6 +25,7 @@
 #include "mongo/db/json.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/s/grid.h"
+#include "mongo/s/mongos_options.h"
 #include "mongo/s/shard.h"
 #include "mongo/s/type_collection.h"
 #include "mongo/s/type_database.h"
@@ -169,9 +170,7 @@ namespace mongo {
 
         vector<string> dbNames;
         try {
-            scoped_ptr<ScopedDbConnection> newShardConnPtr(
-                    ScopedDbConnection::getInternalScopedDbConnection( servers.toString() ) );
-            ScopedDbConnection& newShardConn = *newShardConnPtr;
+            ScopedDbConnection newShardConn(servers.toString());
             newShardConn->getLastError();
 
             if ( newShardConn->type() == ConnectionString::SYNC ) {
@@ -265,7 +264,7 @@ namespace mongo {
                 vector<HostAndPort> hosts = servers.getServers();
                 for ( size_t i = 0 ; i < hosts.size() ; i++ ) {
                     if (!hosts[i].hasPort()) {
-                        hosts[i].setPort(CmdLine::DefaultDBPort);
+                        hosts[i].setPort(ServerGlobalParams::DefaultDBPort);
                     }
                     string host = hosts[i].toString(); // host:port
                     if ( hostSet.find( host ) == hostSet.end() ) {
@@ -360,30 +359,29 @@ namespace mongo {
         BSONObj shardDoc = b.obj();
 
         {
-            scoped_ptr<ScopedDbConnection> conn( ScopedDbConnection::getInternalScopedDbConnection(
-                    configServer.getPrimary().getConnString(), 30));
+            ScopedDbConnection conn(configServer.getPrimary().getConnString(), 30);
 
             // check whether the set of hosts (or single host) is not an already a known shard
-            BSONObj old = conn->get()->findOne(ShardType::ConfigNS,
-                                               BSON(ShardType::host(servers.toString())));
+            BSONObj old = conn->findOne(ShardType::ConfigNS,
+                                        BSON(ShardType::host(servers.toString())));
 
             if ( ! old.isEmpty() ) {
                 errMsg = "host already used";
-                conn->done();
+                conn.done();
                 return false;
             }
 
             log() << "going to add shard: " << shardDoc << endl;
 
-            conn->get()->insert(ShardType::ConfigNS , shardDoc);
-            errMsg = conn->get()->getLastError();
+            conn->insert(ShardType::ConfigNS , shardDoc);
+            errMsg = conn->getLastError();
             if ( ! errMsg.empty() ) {
                 log() << "error adding shard: " << shardDoc << " err: " << errMsg << endl;
-                conn->done();
+                conn.done();
                 return false;
             }
 
-            conn->done();
+            conn.done();
         }
 
         Shard::reloadShardInfo();
@@ -400,10 +398,9 @@ namespace mongo {
     }
 
     bool Grid::knowAboutShard( const string& name ) const {
-        scoped_ptr<ScopedDbConnection> conn( ScopedDbConnection::getInternalScopedDbConnection(
-                configServer.getPrimary().getConnString(), 30));
-        BSONObj shard = conn->get()->findOne(ShardType::ConfigNS, BSON(ShardType::host(name)));
-        conn->done();
+        ScopedDbConnection conn(configServer.getPrimary().getConnString(), 30);
+        BSONObj shard = conn->findOne(ShardType::ConfigNS, BSON(ShardType::host(name)));
+        conn.done();
         return ! shard.isEmpty();
     }
 
@@ -413,11 +410,10 @@ namespace mongo {
         bool ok = false;
         int count = 0;
 
-        scoped_ptr<ScopedDbConnection> conn( ScopedDbConnection::getInternalScopedDbConnection(
-                configServer.getPrimary().getConnString(), 30));
-        BSONObj o = conn->get()->findOne(ShardType::ConfigNS,
-                                         Query(fromjson("{" + ShardType::name() + ": /^shard/}"))
-                                         .sort(BSON(ShardType::name() << -1 )));
+        ScopedDbConnection conn(configServer.getPrimary().getConnString(), 30);
+        BSONObj o = conn->findOne(ShardType::ConfigNS,
+                                  Query(fromjson("{" + ShardType::name() + ": /^shard/}"))
+                                      .sort(BSON(ShardType::name() << -1 )));
         if ( ! o.isEmpty() ) {
             string last = o[ShardType::name()].String();
             istringstream is( last.substr( 5 ) );
@@ -430,7 +426,7 @@ namespace mongo {
             *name = ss.str();
             ok = true;
         }
-        conn->done();
+        conn.done();
 
         return ok;
     }
@@ -444,23 +440,22 @@ namespace mongo {
         // Allow disabling the balancer for testing
         if ( MONGO_FAIL_POINT(neverBalance) ) return false;
 
-        scoped_ptr<ScopedDbConnection> conn( ScopedDbConnection::getInternalScopedDbConnection(
-                configServer.getPrimary().getConnString(), 30));
+        ScopedDbConnection conn(configServer.getPrimary().getConnString(), 30);
         BSONObj balancerDoc;
         BSONObj collDoc;
 
         try {
             // look for the stop balancer marker
-            balancerDoc = conn->get()->findOne( SettingsType::ConfigNS,
-                                                BSON( SettingsType::key("balancer") ) );
-            if( ns.size() > 0 ) collDoc = conn->get()->findOne(CollectionType::ConfigNS,
-                                                               BSON( CollectionType::ns(ns)));
-            conn->done();
+            balancerDoc = conn->findOne( SettingsType::ConfigNS,
+                                         BSON( SettingsType::key("balancer") ) );
+            if( ns.size() > 0 ) collDoc = conn->findOne(CollectionType::ConfigNS,
+                                                        BSON( CollectionType::ns(ns)));
+            conn.done();
         }
         catch( DBException& e ){
-            conn->kill();
+            conn.kill();
             warning() << "could not determine whether balancer should be running, error getting"
-                "config data from " << conn->getHost() << causedBy( e ) << endl;
+                "config data from " << conn.getHost() << causedBy( e ) << endl;
             // if anything goes wrong, we shouldn't try balancing
             return false;
         }
@@ -513,13 +508,10 @@ namespace mongo {
             return true;
         }
 
-        if ( logLevel ) {
-            stringstream ss;
-            ss << " now: " << now
-               << " startTime: " << startTime 
-               << " stopTime: " << stopTime;
-            log() << "_inBalancingWindow: " << ss.str() << endl;
-        }
+        LOG(1).stream() << "_inBalancingWindow: "
+                        << " now: " << now
+                        << " startTime: " << startTime
+                        << " stopTime: " << stopTime;
 
         // allow balancing if during the activeWindow
         // note that a window may be open during the night
@@ -538,14 +530,13 @@ namespace mongo {
     }
 
     unsigned long long Grid::getNextOpTime() const {
-        scoped_ptr<ScopedDbConnection> conn( ScopedDbConnection::getInternalScopedDbConnection(
-                configServer.getPrimary().getConnString(), 30));
+        ScopedDbConnection conn(configServer.getPrimary().getConnString(), 30);
 
         BSONObj result;
         massert( 10421,
                  "getoptime failed",
-                 conn->get()->simpleCommand( "admin" , &result , "getoptime" ) );
-        conn->done();
+                 conn->simpleCommand( "admin" , &result , "getoptime" ) );
+        conn.done();
 
         return result["optime"]._numberLong();
     }
@@ -560,11 +551,10 @@ namespace mongo {
     }
 
     BSONObj Grid::getConfigSetting( const std::string& name ) const {
-        scoped_ptr<ScopedDbConnection> conn( ScopedDbConnection::getInternalScopedDbConnection(
-                configServer.getPrimary().getConnString(), 30));
-        BSONObj result = conn->get()->findOne( SettingsType::ConfigNS,
-                                               BSON( SettingsType::key(name) ) );
-        conn->done();
+        ScopedDbConnection conn(configServer.getPrimary().getConnString(), 30);
+        BSONObj result = conn->findOne( SettingsType::ConfigNS,
+                                        BSON( SettingsType::key(name) ) );
+        conn.done();
 
         return result;
     }
@@ -578,7 +568,7 @@ namespace mongo {
     public:
         void run() {
             
-            if ( ! cmdLine.isMongos() )
+            if (!isMongos())
                 return;
 
             // T0 < T1 < now < T2 < T3 and Error

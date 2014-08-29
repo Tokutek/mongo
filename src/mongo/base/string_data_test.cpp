@@ -14,7 +14,9 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <algorithm>
 #include <string>
+#include <vector>
 
 #include "mongo/base/string_data.h"
 #include "mongo/unittest/unittest.h"
@@ -123,6 +125,42 @@ namespace {
         ASSERT_EQUALS( string("foo").find( "" ), StringData("foo").find( "" ) );
     }
 
+    // Helper function for Test(Hasher, Str1)
+    template <int SizeofSizeT>
+    void SDHasher_check(void);
+
+    template <>
+    void SDHasher_check<4>(void) {
+        ASSERT_EQUALS(StringData::Hasher()(""),
+            static_cast<size_t>(0));
+        ASSERT_EQUALS(StringData::Hasher()("foo"),
+            static_cast<size_t>(4138058784ULL));
+        ASSERT_EQUALS(StringData::Hasher()("pizza"),
+            static_cast<size_t>(3587803311ULL));
+        ASSERT_EQUALS(StringData::Hasher()("mongo"),
+            static_cast<size_t>(3724335885ULL));
+        ASSERT_EQUALS(StringData::Hasher()("murmur"),
+            static_cast<size_t>(1945310157ULL));
+    }
+
+    template <>
+    void SDHasher_check<8>(void) {
+        ASSERT_EQUALS(StringData::Hasher()(""),
+            static_cast<size_t>(0));
+        ASSERT_EQUALS(StringData::Hasher()("foo"),
+            static_cast<size_t>(16316970633193145697ULL));
+        ASSERT_EQUALS(StringData::Hasher()("pizza"),
+            static_cast<size_t>(12165495155477134356ULL));
+        ASSERT_EQUALS(StringData::Hasher()("mongo"),
+            static_cast<size_t>(2861051452199491487ULL));
+        ASSERT_EQUALS(StringData::Hasher()("murmur"),
+            static_cast<size_t>(18237957392784716687ULL));
+    }
+
+    TEST(Hasher, Str1) {
+        SDHasher_check<sizeof(size_t)>();
+    }
+
     TEST(Rfind, Char1) {
         ASSERT_EQUALS( string::npos, StringData( "foo" ).rfind( 'a' ) );
 
@@ -222,6 +260,49 @@ namespace {
         ASSERT(StringData("abcde").endsWith(StringData("bcdef").substr(0, 4)));
         ASSERT(!StringData("abcde").endsWith(StringData("bcde", 3)));
         ASSERT(!StringData("abcde").substr(0, 3).endsWith("cde"));
+    }
+
+    TEST(ConstIterator, StdCopy) {
+        std::vector<char> chars;
+        const char rawData[] = "This is some raw data.";
+        StringData data(rawData, StringData::LiteralTag());
+
+        chars.resize(data.size());
+        std::copy(data.begin(), data.end(), chars.begin());
+
+        for (size_t i = 0; i < data.size(); ++i) {
+            ASSERT_EQUALS(data[i], chars[i]);
+        }
+    }
+
+    TEST(ConstIterator, StdReverseCopy) {
+        std::vector<char> chars;
+        const char rawData[] = "This is some raw data.";
+        StringData data(rawData, StringData::LiteralTag());
+
+        chars.resize(data.size());
+        std::reverse_copy(data.begin(), data.end(), chars.begin());
+
+        const char rawDataExpected[] = ".atad war emos si sihT";
+
+        for (size_t i = 0; i < data.size(); ++i) {
+            ASSERT_EQUALS(rawDataExpected[i], chars[i]);
+        }
+    }
+
+    TEST(ConstIterator, StdReplaceCopy) {
+        std::vector<char> chars;
+        const char rawData[] = "This is some raw data.";
+        StringData data(rawData, StringData::LiteralTag());
+
+        chars.resize(data.size());
+        std::replace_copy(data.begin(), data.end(), chars.begin(), ' ', '_');
+
+        const char rawDataExpected[] = "This_is_some_raw_data.";
+
+        for (size_t i = 0; i < data.size(); ++i) {
+            ASSERT_EQUALS(rawDataExpected[i], chars[i]);
+        }
     }
 
 } // unnamed namespace

@@ -20,9 +20,10 @@
 
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/client_basic.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/commands/server_status.h"
 #include "mongo/db/stats/counters.h"
@@ -80,16 +81,16 @@ namespace mongo {
             BSONObjBuilder timeBuilder(256);
 
             const ClientBasic* myClientBasic = ClientBasic::getCurrent();
-            AuthorizationManager* authManager = myClientBasic->getAuthorizationManager();
+            AuthorizationSession* authSession = myClientBasic->getAuthorizationSession();
             
             // --- basic fields that are global
 
             result.append("host", prettyHostName() );
             result.append("version", mongodbVersionString);
             result.append("tokumxVersion", tokumxVersionString);
-            result.append("process",cmdLine.binaryName);
+            result.append("process", serverGlobalParams.binaryName);
             result.append("pid", ProcessId::getCurrent().asLongLong());
-            result.append("uptime",(double) (time(0)-cmdLine.started));
+            result.append("uptime", (double) (time(0) - serverGlobalParams.started));
             result.append("uptimeMillis", (long long)(curTimeMillis64()-_started));
             result.append("uptimeEstimate",(double) (start/1000));
             result.appendDate( "localTime" , jsTime() );
@@ -103,7 +104,7 @@ namespace mongo {
                 
                 std::vector<Privilege> requiredPrivileges;
                 section->addRequiredPrivileges(&requiredPrivileges);
-                if (!authManager->checkAuthForPrivileges(requiredPrivileges).isOK())
+                if (!authSession->checkAuthForPrivileges(requiredPrivileges).isOK())
                     continue;
 
                 bool include = section->includeByDefault();
@@ -137,20 +138,16 @@ namespace mongo {
             // --- some hard coded global things hard to pull out
 
             {
-                RamLog* rl = RamLog::get( "warnings" );
-                massert(15880, "no ram log for warnings?" , rl);
-                
-                if (rl->lastWrite() >= time(0)-(10*60)){ // only show warnings from last 10 minutes
-                    vector<const char*> lines;
-                    rl->get( lines );
-                    
-                    BSONArrayBuilder arr( result.subarrayStart( "warnings" ) );
-                    for ( unsigned i=std::max(0,(int)lines.size()-10); i<lines.size(); i++ )
-                        arr.append( lines[i] );
+                RamLog::LineIterator rl(RamLog::get("warnings"));
+                if (rl.lastWrite() >= time(0)-(10*60)){  // only show warnings from last 10 minutes
+                    BSONArrayBuilder arr(result.subarrayStart("warnings"));
+                    while (rl.more()) {
+                        arr.append(rl.next());
+                    }
                     arr.done();
                 }
             }
-            
+
             timeBuilder.appendNumber( "at end" , Listener::getElapsedTimeMillis() - start );
             if ( Listener::getElapsedTimeMillis() - start > 1000 ) {
                 BSONObj t = timeBuilder.obj();

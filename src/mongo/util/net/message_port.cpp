@@ -16,21 +16,21 @@
  *    limitations under the License.
  */
 
-#include "pch.h"
+#include "mongo/pch.h"
+
+#include "mongo/util/net/message_port.h"
 
 #include <fcntl.h>
 #include <time.h>
 
-#include "message.h"
-#include "message_port.h"
-#include "listen.h"
-
-#include "../goodies.h"
-#include "../background.h"
-#include "../time_support.h"
-#include "../../db/cmdline.h"
-#include "../scopeguard.h"
-
+#include "mongo/util/background.h"
+#include "mongo/util/goodies.h"
+#include "mongo/util/net/listen.h"
+#include "mongo/util/net/message.h"
+#include "mongo/util/net/ssl_manager.h"
+#include "mongo/util/net/ssl_options.h"
+#include "mongo/util/scopeguard.h"
+#include "mongo/util/time_support.h"
 
 #ifndef _WIN32
 # ifndef __sunos__
@@ -130,7 +130,7 @@ namespace mongo {
         ports.insert(this);
     }
 
-    MessagingPort::MessagingPort( double timeout, int ll ) 
+    MessagingPort::MessagingPort( double timeout, logger::LogSeverity ll ) 
         : psock( new Socket( timeout, ll ) ) {
         ports.insert(this);
         piggyBackData = 0;
@@ -155,51 +155,72 @@ namespace mongo {
         shutdown();
         ports.erase(this);
     }
-
+    
     bool MessagingPort::recv(Message& m) {
         try {
 again:
             //mmm( log() << "*  recv() sock:" << this->sock << endl; )
-            int len = -1;
+            MSGHEADER header;
+            int headerLen = sizeof(MSGHEADER);
+            psock->recv( (char *)&header, headerLen );
+            int len = header.messageLength; 
 
-            char *lenbuf = (char *) &len;
-            int lft = 4;
-            psock->recv( lenbuf, lft );
-
-            if ( len < 16 || len > MaxMessageSizeBytes ) { // messages must be large enough for headers
-                if ( len == -1 ) {
-                    // Endian check from the client, after connecting, to see what mode server is running in.
-                    unsigned foo = 0x10203040;
-                    send( (char *) &foo, 4, "endian" );
+            if ( len == 542393671 ) {
+                // an http GET
+                string msg = "It looks like you are trying to access MongoDB over HTTP on the native driver port.\n";
+                LOG( psock->getLogLevel() ) << msg << endl;
+                stringstream ss;
+                ss << "HTTP/1.0 200 OK\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: " << msg.size() << "\r\n\r\n" << msg;
+                string s = ss.str();
+                send( s.c_str(), s.size(), "http" );
+                return false;
+            }
+            else if ( len == -1 ) {
+                // Endian check from the client, after connecting, to see what mode server is running in.
+                unsigned foo = 0x10203040;
+                send( (char *) &foo, 4, "endian" );
+                psock->setHandshakeReceived();
+                goto again;
+            }
+            // If responseTo is not 0 or -1 for first packet assume SSL
+            else if (psock->isAwaitingHandshake()) {
+#ifndef MONGO_SSL
+                if (header.responseTo != 0 && header.responseTo != -1) {
+                    uasserted(17133,
+                              "SSL handshake requested, SSL feature not available in this build");
+                }
+#else                    
+                if (header.responseTo != 0 && header.responseTo != -1) {
+                    uassert(17132,
+                            "SSL handshake received but server is started without SSL support",
+                            sslGlobalParams.sslMode.load() != SSLGlobalParams::SSLMode_disabled);
+                    setX509SubjectName(psock->doSSLHandshake(
+                                       reinterpret_cast<const char*>(&header), sizeof(header)));
+                    psock->setHandshakeReceived();
                     goto again;
                 }
-
-                if ( len == 542393671 ) {
-                    // an http GET
-                    LOG( psock->getLogLevel() ) << "looks like you're trying to access db over http on native driver port.  please add 1000 for webserver" << endl;
-                    string msg = "You are trying to access MongoDB on the native driver port. For http diagnostic access, add 1000 to the port number\n";
-                    stringstream ss;
-                    ss << "HTTP/1.0 200 OK\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: " << msg.size() << "\r\n\r\n" << msg;
-                    string s = ss.str();
-                    send( s.c_str(), s.size(), "http" );
-                    return false;
-                }
-                LOG(0) << "recv(): message len " << len << " is too large. "
-                       << "Max is " << MaxMessageSizeBytes << endl;
+                uassert(17370, "The server is configured to only allow SSL connections",
+                        sslGlobalParams.sslMode.load() != SSLGlobalParams::SSLMode_requireSSL);
+#endif // MONGO_SSL
+            }
+            if ( static_cast<size_t>(len) < sizeof(MSGHEADER) || 
+                 static_cast<size_t>(len) > MaxMessageSizeBytes ) {
+                LOG(0) << "recv(): message len " << len << " is invalid. "
+                       << "Min " << sizeof(MSGHEADER) << " Max: " << MaxMessageSizeBytes << endl;
                 return false;
             }
 
+            psock->setHandshakeReceived();
             int z = (len+1023)&0xfffffc00;
             verify(z>=len);
             MsgData *md = (MsgData *) malloc(z);
             ScopeGuard guard = MakeGuard(free, md);
             verify(md);
-            md->len = len;
 
-            char *p = (char *) &md->id;
-            int left = len -4;
+            memcpy(md, &header, headerLen);
+            int left = len - headerLen;
 
-            psock->recv( p, left );
+            psock->recv( (char *)&md->_data, left );
 
             guard.Dismiss();
             m.setData(md, true);
@@ -207,7 +228,10 @@ again:
 
         }
         catch ( const SocketException & e ) {
-            LOG(psock->getLogLevel() + (e.shouldPrint() ? 0 : 1) ) << "SocketException: remote: " << remote() << " error: " << e << endl;
+            logger::LogSeverity severity = psock->getLogLevel();
+            if (!e.shouldPrint())
+                severity = severity.lessSevere();
+            LOG(severity) << "SocketException: remote: " << remote() << " error: " << e << endl;
             m.reset();
             return false;
         }
@@ -297,5 +321,12 @@ again:
         return _remoteParsed;
     }
 
+    SockAddr MessagingPort::remoteAddr() const {
+        return psock->remoteAddr();
+    }
+
+    SockAddr MessagingPort::localAddr() const {
+        return psock->localAddr();
+    }
 
 } // namespace mongo

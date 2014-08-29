@@ -74,10 +74,7 @@ set_source_files_properties(
   PROPERTIES GENERATED TRUE)
 add_library(mongocommon STATIC
   pch
-  "${CMAKE_CURRENT_BINARY_DIR}/buildinfo.cpp"
-  db/lasterror
   "${CMAKE_CURRENT_BINARY_DIR}/shell/mongo.cpp"
-  db/dbmessage
   )
 add_dependencies(mongocommon generate_mongo_cpp generate_action_types)
 target_link_libraries(mongocommon LINK_PUBLIC
@@ -85,6 +82,7 @@ target_link_libraries(mongocommon LINK_PUBLIC
   mongocommon_util
   bson
   foundation
+  lasterror
   stringutils
   fail_point
   ${Boost_LIBRARIES}
@@ -93,6 +91,7 @@ target_link_libraries(mongocommon LINK_PUBLIC
 add_subdirectory(base)
 add_subdirectory(bson)
 add_subdirectory(db)
+add_subdirectory(logger)
 add_subdirectory(platform)
 add_subdirectory(plugins)
 add_subdirectory(s)
@@ -102,7 +101,6 @@ add_subdirectory(tools)
 add_subdirectory(util)
 
 set(client_sources
-  base/configuration_variable_manager.cpp
   base/global_initializer.cpp
   base/global_initializer_registerer.cpp
   base/init.cpp
@@ -116,14 +114,15 @@ set(client_sources
   bson/bson_validate.cpp
   bson/oid.cpp
   bson/util/bson_extract.cpp
+  client/auth_helpers.cpp
   client/clientAndShell.cpp
   client/clientOnly.cpp
-  client/connection_factory.cpp
   client/connpool.cpp
   client/dbclient.cpp
   client/dbclient_rs.cpp
   client/dbclientcursor.cpp
   client/gridfs.cpp
+  client/init.cpp
   client/remote_loader.cpp
   client/remote_transaction.cpp
   client/sasl_client_authenticate.cpp
@@ -132,9 +131,19 @@ set(client_sources
   db/json.cpp
   db/lasterror.cpp
   db/dbmessage.cpp
+  db/server_options.cpp
+  logger/console.cpp
+  logger/log_manager.cpp
+  logger/log_severity.cpp
+  logger/logger.cpp
+  logger/logstream_builder.cpp
+  logger/message_event_utf8_encoder.cpp
+  logger/message_log_domain.cpp
+  logger/ramlog.cpp
+  logger/rotatable_file_manager.cpp
+  logger/rotatable_file_writer.cpp
   pch.cpp
   platform/backtrace.cpp
-  platform/posix_fadvise.cpp
   platform/process_id.cpp
   platform/random.cpp
   util/assert_util.cpp
@@ -144,6 +153,7 @@ set(client_sources
   util/concurrency/spin_lock.cpp
   util/concurrency/synchronization.cpp
   util/concurrency/task.cpp
+  util/concurrency/thread_name.cpp
   util/concurrency/thread_pool.cpp
   util/concurrency/mutexdebugger.cpp
   util/debug_util.cpp
@@ -152,6 +162,7 @@ set(client_sources
   util/fail_point_registry.cpp
   util/fail_point_service.cpp
   util/file.cpp
+  util/hex.cpp
   util/histogram.cpp
   util/intrusive_counter.cpp
   util/log.cpp
@@ -161,12 +172,10 @@ set(client_sources
   util/net/listen.cpp
   util/net/message.cpp
   util/net/message_port.cpp
+  util/net/socket_poll.cpp
   util/net/sock.cpp
   util/net/ssl_manager.cpp
   util/password.cpp
-  util/processinfo.cpp
-  util/processinfo_${system_suffix}.cpp
-  util/ramlog.cpp
   util/signal_handlers.cpp
   util/stringutils.cpp
   util/text.cpp
@@ -285,6 +294,7 @@ foreach (client_header_dir
     db/repl
     db/ops
     db/storage
+    logger
     platform
     s
     scripting
@@ -317,13 +327,13 @@ endif ()
 # subdirectories.
 if (BUILD_TESTING)
   foreach (test
-      configuration_variable_manager_test
       initializer_dependency_graph_test
       initializer_test
       owned_pointer_vector_test
       owned_pointer_map_test
       parse_number_test
       status_test
+      counter_test
       string_data_test
       units_test
       )
@@ -361,17 +371,31 @@ if (BUILD_TESTING)
 
   foreach (test
       dbclient_rs_test
-      scoped_db_conn_test
       )
     add_executable(${test} client/${test})
     add_dependencies(${test} generate_error_codes generate_action_types)
     link_recursive_deps(${test}
       COMBINED_LIBNAME client_rs_unittest_deps
       unittest_main
+      clientdriver
+      mocklib
+      unittest_crutch
+      ${TokuKV_LIBRARIES}
+      ${TOKUMX_SSL_LIBRARIES}
+      )
+  endforeach ()
+
+  foreach (test
+      scoped_db_conn_test
+      )
+    add_executable(${test} client/${test})
+    add_dependencies(${test} generate_error_codes generate_action_types)
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME scoped_db_conn_unittest_deps
+      unittest_main
       coredb
       coreserver
       coreshard
-      dbcmdline
       mongocommon
       mongodandmongos
       mongoscore
@@ -379,13 +403,8 @@ if (BUILD_TESTING)
       ${TOKUMX_SSL_LIBRARIES}
       )
   endforeach ()
-  target_link_libraries(dbclient_rs_test
-    mocklib
-    )
 
   foreach (test
-      cmdline_test
-      field_ref_test
       index_set_test
       server_parameters_test
       )
@@ -399,10 +418,23 @@ if (BUILD_TESTING)
       )
   endforeach ()
 
-  target_link_whole_libraries(cmdline_test dbcmdline)
-  target_link_whole_libraries(field_ref_test db_common)
-  target_link_whole_libraries(index_set_test bson index_set)
+  target_link_whole_libraries(index_set_test index_set)
   target_link_whole_libraries(server_parameters_test server_parameters)
+
+  foreach (test
+      field_ref_test
+      field_parser_test
+      )
+    add_executable(${test} db/${test})
+    add_dependencies(${test} generate_error_codes generate_action_types)
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME db_unittest_deps
+      db_common
+      unittest_main
+      unittest_crutch
+      ${TOKUMX_SSL_LIBRARIES}
+      )
+  endforeach ()
 
   foreach (test
       atomic_word_test
@@ -435,7 +467,6 @@ if (BUILD_TESTING)
 
   foreach (test
       chunk_version_test
-      field_parser_test
       mongo_version_range_test
       type_changelog_test
       type_chunk_test
@@ -454,6 +485,7 @@ if (BUILD_TESTING)
     link_recursive_deps(${test}
       COMBINED_LIBNAME sharding_unittest_deps
       s_base
+      db_common
       unittest_main
       unittest_crutch
       ${TOKUMX_SSL_LIBRARIES}
@@ -462,7 +494,6 @@ if (BUILD_TESTING)
 
   target_link_libraries(mongo_version_range_test bson)
 
-  # no crutch
   foreach (test
       chunk_diff_test
       collection_manager_test
@@ -473,8 +504,9 @@ if (BUILD_TESTING)
     link_recursive_deps(${test}
       COMBINED_LIBNAME sharding_nocrutch_unittest_deps
       unittest_main
-      mongocommon
       s_metadata
+      db_common
+      unittest_crutch
       ${TOKUMX_SSL_LIBRARIES}
       )
   endforeach ()
@@ -494,7 +526,6 @@ if (BUILD_TESTING)
       mongocommon
       coreserver
       coredb
-      dbcmdline
       mongodandmongos
       ${TokuKV_LIBRARIES}
       ${TOKUMX_SSL_LIBRARIES}
@@ -502,7 +533,7 @@ if (BUILD_TESTING)
   endforeach ()
   target_link_whole_libraries(collection_manager_test mocklib)
   target_link_whole_libraries(metadata_loader_test mocklib)
-  target_link_whole_libraries(shard_conn_test mocklib)
+  target_link_whole_libraries(shard_conn_test mocklib authmocks)
 
   foreach (test
       bson_template_evaluator_test
@@ -522,6 +553,8 @@ if (BUILD_TESTING)
 
   foreach (test_source
       concurrency/partitioned_counter_test
+      concurrency/spin_lock_test
+      background_job_test
       descriptive_stats_test
       fail_point_test
       processinfo_test
@@ -529,6 +562,7 @@ if (BUILD_TESTING)
       string_map_test
       stringutils_test
       text_test
+      time_support_test
       )
     string(REGEX REPLACE "^.*/" "" test ${test_source})
     add_executable(${test} util/${test_source})
@@ -541,6 +575,11 @@ if (BUILD_TESTING)
       )
   endforeach ()
 
+  target_link_libraries(spin_lock_test spin_lock)
+  target_link_libraries(background_job_test
+    network  # Temporary crutch since the ssl cleanup is hard coded in background.cpp
+    synchronization
+    )
   target_link_libraries(descriptive_stats_test bson)
   target_link_libraries(fail_point_test fail_point)
   target_link_libraries(processinfo_test processinfo)
@@ -548,13 +587,13 @@ if (BUILD_TESTING)
   target_link_libraries(string_map_test bson)
   target_link_libraries(stringutils_test stringutils)
 
-  # no crutch
   add_executable(sock_test util/net/sock_test)
   add_dependencies(sock_test generate_error_codes generate_action_types)
   link_recursive_deps(sock_test
     unittest_main
-    mongocommon
-    notmongodormongos
+    network
+    synchronization
+    unittest_crutch
     ${TOKUMX_SSL_LIBRARIES}
     )
 
@@ -566,14 +605,101 @@ if (BUILD_TESTING)
     unittest_crutch
     ${TOKUMX_SSL_LIBRARIES}
     )
-  target_link_whole_libraries(md5_test
-    md5
+
+  add_executable(version_test util/version_test)
+  add_dependencies(version_test generate_error_codes generate_action_types)
+  link_recursive_deps(version_test
+    unittest_main
+    mongocommon
+    unittest_crutch
+    ${TOKUMX_SSL_LIBRARIES}
     )
+
+  foreach (test
+      censor_cmdline_test
+      )
+    add_executable(${test} util/cmdline_utils/${test})
+    add_dependencies(${test} generate_error_codes generate_action_types)
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME cmdline_utils_unittest_deps
+      cmdline_utils
+      unittest_main
+      unittest_crutch
+      ${TOKUMX_SSL_LIBRARIES}
+      )
+  endforeach ()
+
+  foreach (test
+      options_parser_test
+      environment_test
+      )
+    add_executable(${test} util/options_parser/${test})
+    add_dependencies(${test} generate_error_codes generate_action_types)
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME options_parser_unittest_deps
+      options_parser
+      unittest_main
+      unittest_crutch
+      ${TOKUMX_SSL_LIBRARIES}
+      )
+  endforeach ()
+
+  foreach (test
+      unittest_test
+      fixture_test
+      )
+    add_executable(${test} unittest/${test})
+    add_dependencies(${test} generate_error_codes generate_action_types)
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME basic_unittest_deps
+      unittest_main
+      unittest_crutch
+      ${TOKUMX_SSL_LIBRARIES}
+      )
+  endforeach ()
+
+  foreach (test
+      action_set_test
+      principal_set_test
+      privilege_set_test
+      role_graph_test
+      ## TODO: re-enable after bringing in new matcher
+      #authorization_manager_test
+      #authorization_session_test
+      )
+    add_executable(${test} db/auth/${test})
+    add_dependencies(${test} generate_error_codes generate_action_types)
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME auth_unittest_deps
+      unittest_main
+      authcore
+      unittest_crutch
+      ${TOKUMX_SSL_LIBRARIES}
+      )
+  endforeach ()
+  #target_link_libraries(authorization_manager_test authmocks)
+  #target_link_libraries(authorization_session_test authmocks)
+
+  foreach (test
+      log_test
+      rotatable_file_writer_test
+      )
+    add_executable(${test} logger/${test})
+    add_dependencies(${test} generate_error_codes generate_action_types)
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME logger_unittest_deps
+      logger
+      unittest_main
+      unittest_crutch
+      ${TOKUMX_SSL_LIBRARIES}
+      )
+  endforeach ()
 endif ()
 
 add_executable(mongod
   db/db
   db/commands/touch
+  db/mongod_options_init
   )
 add_dependencies(mongod generate_error_codes generate_action_types install_tdb_h)
 
@@ -590,6 +716,7 @@ link_recursive_deps(mongod
   coreserver
   mongodandmongos
   serveronly
+  mongod_options
   ${TOKUMX_SSL_LIBRARIES}
   )
 
@@ -601,12 +728,18 @@ foreach (tool
     stat
     top
     2toku
-    files
     bridge
+    files
     )
-  add_executable(mongo${tool} tools/${tool})
+  add_executable(mongo${tool}
+    tools/${tool}
+    tools/mongo${tool}_options_init
+    )
 endforeach ()
-add_executable(bsondump tools/bsondump)
+add_executable(bsondump
+  tools/bsondump
+  tools/bsondump_options
+  )
 foreach (tool
     mongodump
     mongorestore
@@ -617,6 +750,25 @@ foreach (tool
     mongo2toku
     mongofiles
     mongobridge
+    bsondump
+    )
+  add_library(${tool}_options STATIC
+    tools/${tool}_options
+    )
+  add_dependencies(${tool}_options generate_error_codes generate_action_types)
+  target_link_libraries(${tool}_options LINK_PUBLIC
+    tool_options
+    )
+endforeach ()
+foreach (tool
+    mongodump
+    mongorestore
+    mongoexport
+    mongoimport
+    mongostat
+    mongotop
+    mongo2toku
+    mongofiles
     bsondump
     )
   add_dependencies(${tool} generate_error_codes generate_action_types install_tdb_h)
@@ -630,7 +782,24 @@ foreach (tool
     alltools
     ${TOKUMX_SSL_LIBRARIES}
     )
+  target_link_libraries(${tool} LINK_PUBLIC
+    ${tool}_options
+    )
 endforeach ()
+add_dependencies(mongobridge generate_error_codes generate_action_types install_tdb_h)
+if (NOT APPLE)
+  target_link_whole_libraries(mongobridge
+    jemalloc
+    )
+endif ()
+link_recursive_deps(mongobridge
+  COMBINED_LIBNAME mongobridge_deps
+  serveronly
+  coreserver
+  coredb
+  mongobridge_options
+  ${TOKUMX_SSL_LIBRARIES}
+  )
 install_executables(tokumx_tools
   mongodump
   mongorestore
@@ -644,28 +813,9 @@ install_executables(tokumx_tools
   )
 target_link_libraries(mongofiles gridfs)
 
-add_executable(docgen tools/docgeneratormain)
-add_executable(loadgen tools/loadgenerator)
-foreach (tool
-    docgen
-    loadgen
-    )
-  add_dependencies(${tool} generate_error_codes generate_action_types)
-  if (NOT APPLE)
-    target_link_whole_libraries(${tool}
-      jemalloc
-      )
-  endif ()
-  link_recursive_deps(${tool}
-    COMBINED_LIBNAME docgen_tool_deps
-    alltools
-    docgenerator
-    ${TOKUMX_SSL_LIBRARIES}
-    )
-endforeach ()
-
 add_executable(mongos
   s/server
+  s/mongos_options_init
   )
 add_dependencies(mongos generate_error_codes generate_action_types)
 if (NOT APPLE)
@@ -679,9 +829,9 @@ link_recursive_deps(mongos
   coredb
   mongocommon
   coreshard
-  dbcmdline
   mongodandmongos
   s_upgrade
+  mongos_options
   ${TOKUMX_SSL_LIBRARIES}
   )
 
@@ -701,7 +851,6 @@ if (APPLE OR PCAP_FOUND)
     serveronly
     coreserver
     coredb
-    notmongodormongos
     ${PCAP_LIBRARIES}
     ${TOKUMX_SSL_LIBRARIES}
     )
@@ -712,24 +861,13 @@ endif ()
 
 remove_as_needed(mongod mongos)
 
-set_source_files_properties(
-  "${CMAKE_CURRENT_BINARY_DIR}/shell/mongo-server.cpp"
-  PROPERTIES GENERATED TRUE)
 add_executable(mongo
   shell/dbshell
-  shell/shell_utils
-  shell/shell_utils_extended
-  shell/shell_utils_launcher
-  "${CMAKE_CURRENT_BINARY_DIR}/shell/mongo-server.cpp"
-  shell/linenoise
-  shell/linenoise_utf8
-  shell/mk_wcwidth
   )
-add_dependencies(mongo generate_mongo_server_cpp generate_error_codes generate_action_types)
+add_dependencies(mongo generate_error_codes generate_action_types)
 link_recursive_deps(mongo
-  clientandshell
-  mongocommon
-  scripting
+  shell_options
+  shell_core
   ${PCRE_LIBRARIES}
   ${TOKUMX_SSL_LIBRARIES}
   )
@@ -800,13 +938,13 @@ if (BUILD_TESTING)
   endfunction ()
 
   foreach (test
-      configuration_variable_manager_test
       initializer_dependency_graph_test
       initializer_test
       owned_pointer_vector_test
       owned_pointer_map_test
       parse_number_test
       status_test
+      counter_test
       string_data_test
       units_test
       )
@@ -827,6 +965,20 @@ if (BUILD_TESTING)
   endforeach ()
 
   foreach (test
+      log_test
+      rotatable_file_writer_test
+      )
+    add_mongo_test(logger ${test} ${test})
+  endforeach ()
+
+  foreach (test
+      options_parser_test
+      environment_test
+      )
+    add_mongo_test(util/options_parser ${test} ${test})
+  endforeach ()
+
+  foreach (test
       atomic_word_test
       bits_test
       process_id_test
@@ -840,7 +992,6 @@ if (BUILD_TESTING)
       chunk_diff_test
       chunk_version_test
       collection_manager_test
-      field_parser_test
       metadata_loader_test
       mongo_version_range_test
       shard_conn_test
@@ -862,6 +1013,8 @@ if (BUILD_TESTING)
 
   foreach (test
       partitioned_counter_test
+      spin_lock_test
+      background_job_test
       descriptive_stats_test
       fail_point_test
       md5_test
@@ -871,6 +1024,8 @@ if (BUILD_TESTING)
       string_map_test
       stringutils_test
       text_test
+      time_support_test
+      version_test
       )
     add_mongo_test(util ${test} ${test})
   endforeach ()
@@ -879,14 +1034,16 @@ if (BUILD_TESTING)
       action_set_test
       principal_set_test
       privilege_set_test
+      role_graph_test
       authorization_manager_test
+      authorization_session_test
       )
     add_mongo_test(db/auth ${test} ${test})
   endforeach ()
 
   foreach (test
-      cmdline_test
       field_ref_test
+      field_parser_test
       index_set_test
       server_parameters_test
       )

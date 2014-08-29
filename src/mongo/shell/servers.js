@@ -410,6 +410,18 @@ MongoRunner.mongoOptions = function( opts ){
     // Default for waitForConnect is true
     if (waitForConnect == undefined || waitForConnect == null) opts.waitForConnect = true;
     
+    if( jsTestOptions().useSSL ) {
+        if (!opts.sslMode) opts.sslMode = "requireSSL";
+        if (!opts.sslPEMKeyFile) opts.sslPEMKeyFile = "jstests/libs/server.pem";
+        if (!opts.sslCAFile) opts.sslCAFile = "jstests/libs/ca.pem";
+        opts.sslWeakCertificateValidation = "";
+        opts.sslAllowInvalidCertificates = "";
+    }
+
+    if ( jsTestOptions().useX509 ) {
+        opts.clusterAuthMode = "x509";
+    }
+    
     opts.port = opts.port || MongoRunner.nextOpenPort()
     MongoRunner.usedPortMap[ "" + parseInt( opts.port ) ] = true
     
@@ -461,6 +473,18 @@ MongoRunner.mongodOptions = function( opts ){
 
     if( jsTestOptions().keyFile && !opts.keyFile) {
         opts.keyFile = jsTestOptions().keyFile
+    }
+
+    if( jsTestOptions().useSSL ) {
+        if (!opts.sslMode) opts.sslMode = "requireSSL";
+        if (!opts.sslPEMKeyFile) opts.sslPEMKeyFile = "jstests/libs/server.pem";
+        if (!opts.sslCAFile) opts.sslCAFile = "jstests/libs/ca.pem";
+        opts.sslWeakCertificateValidation = "";
+        opts.sslAllowInvalidCertificates = "";
+    }
+
+    if ( jsTestOptions().useX509 ) {
+        opts.clusterAuthMode = "x509";
     }
 
     if( opts.noReplSet ) opts.replSet = null
@@ -687,6 +711,18 @@ startMongodTest = function (port, dirname, restart, extraOptions ) {
     if( jsTestOptions().auth ) options["auth"] = ""
     if( jsTestOptions().keyFile && (!extraOptions || !extraOptions['keyFile']) ) options['keyFile'] = jsTestOptions().keyFile
 
+    if( jsTestOptions().useSSL ) {
+        if (!options["sslMode"]) options["sslMode"] = "requireSSL";
+        if (!options["sslPEMKeyFile"]) options["sslPEMKeyFile"] = "jstests/libs/server.pem";
+        if (!options["sslCAFile"]) options["sslCAFile"] = "jstests/libs/ca.pem";
+        options["sslWeakCertificateValidation"] = "";
+        options["sslAllowInvalidCertificates"] = "";
+    }
+
+    if ( jsTestOptions().useX509 ) {
+        options["clusterAuthMode"] = "x509";
+    }
+
     if ( extraOptions )
         Object.extend( options , extraOptions );
     
@@ -737,7 +773,7 @@ function appendSetParameterArgs(argArray) {
         if (jsTest.options().enableTestCommands) {
             argArray.push.apply(argArray, ['--setParameter', "enableTestCommands=1"]);
         }
-        if (jsTest.options().authMechanism) {
+        if (jsTest.options().authMechanism && jsTest.options().authMechanism != "MONGODB-CR") {
             argArray.push.apply(argArray,
                                 ['--setParameter',
                                  "authenticationMechanisms=" + jsTest.options().authMechanism]);

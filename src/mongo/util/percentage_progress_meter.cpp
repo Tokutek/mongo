@@ -19,6 +19,8 @@
 
 #include "mongo/pch.h"
 
+#include <iomanip>
+
 #include "mongo/util/log.h"
 
 namespace mongo {

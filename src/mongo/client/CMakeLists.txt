@@ -1,4 +1,5 @@
-set(common_files
+add_library(clientdriver STATIC
+  auth_helpers
   connpool
   dbclient
   dbclient_rs
@@ -7,7 +8,13 @@ set(common_files
   remote_transaction
   sasl_client_authenticate
   syncclusterconnection
+  ../db/dbmessage
   )
+add_dependencies(clientdriver generate_error_codes generate_action_types)
+target_link_libraries(clientdriver LINK_PUBLIC
+  network
+  )
+set(common_files)
 if (USE_SASL_CLIENT)
   list(APPEND common_files sasl_client_authenticate_impl)
   add_library(sasl_client_session STATIC
@@ -23,13 +30,14 @@ add_library(mongocommon_client STATIC ${common_files})
 add_dependencies(mongocommon_client generate_error_codes generate_action_types)
 target_link_libraries(mongocommon_client LINK_PUBLIC
   bson
+  clientdriver
+  fail_point
   foundation
-  mongohasher
   md5
+  mongohasher
   processinfo
   stacktrace
   stringutils
-  fail_point
   ${PCRE_LIBRARIES}
   murmurhash3
   ${Boost_LIBRARIES}
@@ -45,11 +53,6 @@ add_library(client_parallel STATIC
   )
 add_dependencies(client_parallel generate_error_codes generate_action_types install_tdb_h)
 
-add_library(notmongodormongos STATIC
-  connection_factory
-  )
-add_dependencies(notmongodormongos generate_error_codes generate_action_types)
-
 add_library(gridfs STATIC
   gridfs
   )
@@ -63,7 +66,6 @@ target_link_libraries(clientandshell LINK_PUBLIC
   mongocommon
   defaultversion
   gridfs
-  notmongodormongos
   )
 
 add_library(allclient STATIC

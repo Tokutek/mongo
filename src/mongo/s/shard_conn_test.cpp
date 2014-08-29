@@ -15,6 +15,10 @@
 
 #include "mongo/base/init.h"
 #include "mongo/client/connpool.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_manager_global.h"
+#include "mongo/db/auth/authorization_manager_global.h"
+#include "mongo/db/auth/authz_manager_external_state_mock.h"
 #include "mongo/dbtests/mock/mock_conn_registry.h"
 #include "mongo/dbtests/mock/mock_dbclient_connection.h"
 #include "mongo/platform/cstdint.h"
@@ -40,7 +44,6 @@ using std::vector;
 
 namespace mongo {
     // Note: these are all crutch and hopefully will eventually go away
-    CmdLine cmdLine;
 
     bool inShutdown() {
         return false;
@@ -72,6 +75,9 @@ namespace mongo_test {
                     mongo::MockConnRegistry::get()->getConnStrHook());
             _dummyServer = new MockRemoteDBServer(TARGET_HOST);
             mongo::MockConnRegistry::get()->addServer(_dummyServer);
+
+            mongo::setGlobalAuthorizationManager(new mongo::AuthorizationManager(
+                    new mongo::AuthzManagerExternalStateMock()));
         }
 
         void tearDown() {
@@ -81,6 +87,8 @@ namespace mongo_test {
             delete _dummyServer;
 
             mongo::PoolForHost::setMaxPerHost(_maxPoolSizePerHost);
+
+            mongo::clearGlobalAuthorizationManager();
         }
 
         void killServer() {

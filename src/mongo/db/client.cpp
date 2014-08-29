@@ -31,8 +31,9 @@
 #include "mongo/base/status.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
-#include "mongo/db/auth/authorization_manager.h"
-#include "mongo/db/auth/auth_external_state_d.h"
+#include "mongo/db/auth/authorization_manager_global.h"
+#include "mongo/db/auth/authorization_session.h"
+#include "mongo/db/auth/authz_session_external_state_d.h"
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/database.h"
@@ -46,10 +47,12 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/server_parameters.h"
+#include "mongo/db/storage_options.h"
 #include "mongo/s/chunk_version.h"
 #include "mongo/s/d_logic.h"
 #include "mongo/s/stale_exception.h" // for SendStaleConfigException
 #include "mongo/scripting/engine.h"
+#include "mongo/util/concurrency/thread_name.h"
 #include "mongo/util/mongoutils/html.h"
 #include "mongo/util/mongoutils/str.h"
 
@@ -104,7 +107,8 @@ namespace mongo {
         Client *c = new Client(desc, mp);
         currentClient.reset(c);
         mongo::lastError.initThread();
-        c->setAuthorizationManager(new AuthorizationManager(new AuthExternalStateMongod()));
+        c->setAuthorizationSession(new AuthorizationSession(new AuthzSessionExternalStateMongod(
+                getGlobalAuthorizationManager())));
         return *c;
     }
 
@@ -120,7 +124,7 @@ namespace mongo {
         _upgradingDiskFormatVersion(false),
         _globallyUninterruptible(false),
         _isYieldingToWriteLock(forceWriteLocks),
-        _lockTimeout(cmdLine.lockTimeout)
+        _lockTimeout(storageGlobalParams.lockTimeout)
     {
         _connectionId = p ? p->connectionId() : 0;
         
@@ -202,7 +206,8 @@ namespace mongo {
     Client::Context::Context(const StringData& ns , Database * db) :
         _client( currentClient.get() ), 
         _oldContext( _client->_context ),
-        _path( mongo::dbpath ), // is this right? could be a different db? may need a dassert for this
+        _path(storageGlobalParams.dbpath), // is this right? could be a different db?
+                                               // may need a dassert for this
         _doVersion( true ),
         _ns( ns.toString() ),
         _db(db)
@@ -224,11 +229,11 @@ namespace mongo {
     // Locking and context in one operation
     Client::ReadContext::ReadContext(const StringData& ns, const string &context)
         : _lk(ns, context) ,
-          _c(ns, dbpath) {
+          _c(ns, storageGlobalParams.dbpath) {
     }
     Client::WriteContext::WriteContext(const StringData& ns, const string &context)
         : _lk(ns, context) ,
-          _c(ns, dbpath) {
+          _c(ns, storageGlobalParams.dbpath) {
     }
 
     void Client::Context::checkNotStale() const { 

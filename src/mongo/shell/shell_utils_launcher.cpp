@@ -40,6 +40,8 @@
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/shell/shell_utils.h"
+#include "mongo/util/scopeguard.h"
+#include "mongo/util/signal_win32.h"
 
 namespace mongo {
 
@@ -152,6 +154,7 @@ namespace mongo {
             else
                 buf << "sh" << pid << "| " << line;
             printf( "%s\n", buf.str().c_str() ); // cout << buf.str() << endl;
+            fflush(stdout); // not implicit if stdout isn't directly outputting to a console.
             _buffer << buf.str() << endl;
         }
 
@@ -596,34 +599,30 @@ namespace mongo {
             if (sig == SIGKILL || port == 0) {
                 verify( registry._handles.count(pid) );
                 TerminateProcess(registry._handles[pid], 1); // returns failure for "zombie" processes.
+                return;
             }
-            else {
-                DBClientConnection conn;
-                try {
-                    conn.connect("127.0.0.1:" + BSONObjBuilder::numStr(port));
 
-                    BSONElement authObj = opt["auth"];
+            std::string eventName = getShutdownSignalName(pid.asUInt32());
 
-                    if ( !authObj.eoo() ){
-                        string errMsg;
-                        conn.auth( "admin", authObj["user"].String(),
-                                   authObj["pwd"].String(), errMsg );
-
-                        if ( !errMsg.empty() ) {
-                            cout << "Failed to authenticate before shutdown: "
-                                 << errMsg << endl;
-                        }
-                    }
-
-                    BSONObj info;
-                    BSONObjBuilder b;
-                    b.append( "shutdown", 1 );
-                    b.append( "force", 1 );
-                    conn.runCommand( "admin", b.done(), info );
+            HANDLE event = OpenEventA(EVENT_MODIFY_STATE, FALSE, eventName.c_str());
+            if (event == NULL) {
+                int gle = GetLastError();
+                if (gle != ERROR_FILE_NOT_FOUND) {
+                    warning() << "kill_wrapper OpenEvent failed: " << errnoWithDescription();
                 }
-                catch (...) {
-                    //Do nothing. This command never returns data to the client and the driver doesn't like that.
+                else {
+                    log() << "kill_wrapper OpenEvent failed to open event to the process "
+                        << pid.asUInt32() << ". It has likely died already";
                 }
+                return;
+            }
+
+            ON_BLOCK_EXIT(CloseHandle, event);
+
+            bool result = SetEvent(event);
+            if (!result) {
+                error() << "kill_wrapper SetEvent failed: " << errnoWithDescription();
+                return;
             }
 #else
             int x = kill( pid.toNative(), sig );
@@ -658,10 +657,7 @@ namespace mongo {
             int i = 0;
             for( ; i < 130; ++i ) {
                 if ( i == 60 ) {
-                    char now[64];
-                    time_t_to_String(time(0), now);
-                    now[ 20 ] = 0;
-                    log() << now << " process on port " << port << ", with pid " << pid << " not terminated, sending sigkill" << endl;
+                    log() << "process on port " << port << ", with pid " << pid << " not terminated, sending sigkill" << endl;
                     kill_wrapper( pid, SIGKILL, port, opt );
                 }
                 if(wait_for_pid(pid, false, &exitCode))
@@ -669,10 +665,7 @@ namespace mongo {
                 sleepmillis( 1000 );
             }
             if ( i == 130 ) {
-                char now[64];
-                time_t_to_String(time(0), now);
-                now[ 20 ] = 0;
-                log() << now << " failed to terminate process on port " << port << ", with pid " << pid << endl;
+                log() << "failed to terminate process on port " << port << ", with pid " << pid << endl;
                 verify( "Failed to terminate process" == 0 );
             }
 

@@ -25,7 +25,6 @@
 #pragma once
 
 #include "mongo/client/dbclient_rs.h"
-
 #include "mongo/s/chunk.h"
 #include "mongo/s/shard.h"
 #include "mongo/s/shardkey.h"

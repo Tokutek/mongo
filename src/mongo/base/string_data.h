@@ -140,6 +140,16 @@ namespace mongo {
         };
 
         string toStdString() const { return string(_data, size()); }
+
+        //
+        // iterators
+        //
+
+        typedef const char* const_iterator;
+
+        const_iterator begin() const { return rawData(); }
+        const_iterator end() const { return rawData() + size(); }
+
     private:
         const char* _data;        // is not guaranted to be null terminated (see "notes" above)
         mutable size_t _size;     // 'size' does not include the null terminator

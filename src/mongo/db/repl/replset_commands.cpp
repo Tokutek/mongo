@@ -15,22 +15,22 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
+#include "mongo/pch.h"
 
 #include "mongo/base/init.h"
 #include "mongo/base/status.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
-#include "../cmdline.h"
-#include "../commands.h"
-#include "../repl.h"
-#include "health.h"
-#include "rs.h"
-#include "rs_config.h"
-#include "../dbwebserver.h"
-#include "../../util/mongoutils/html.h"
-#include "../repl_block.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/dbwebserver.h"
+#include "mongo/db/repl.h"
+#include "mongo/db/repl/health.h"
+#include "mongo/db/repl/replication_server_status.h"  // replSettings
+#include "mongo/db/repl/rs.h"
+#include "mongo/db/repl/rs_config.h"
+#include "mongo/db/repl_block.h"
+#include "mongo/util/mongoutils/html.h"
 
 using namespace bson;
 
@@ -53,7 +53,6 @@ namespace mongo {
             help << "Just for regression tests.\n";
         }
         // No auth needed because it only works when enabled via command line.
-        virtual bool requiresAuth() { return false; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {}
@@ -444,7 +443,7 @@ namespace mongo {
             s << p(t);
 
             if( theReplSet == 0 ) {
-                if( cmdLine._replSet.empty() )
+                if( replSettings.replSet.empty() )
                     s << p("Not using --replSet");
                 else  {
                     s << p("Still starting up, or else set is not yet " + a("http://dochub.mongodb.org/core/replicasetconfiguration#ReplicaSetConfiguration-InitialSetup", "", "initiated")
@@ -475,7 +474,7 @@ namespace mongo {
                   );
 
             if( theReplSet == 0 ) {
-                if( cmdLine._replSet.empty() )
+                if( replSettings.replSet.empty() )
                     s << p("Not using --replSet");
                 else  {
                     s << p("Still starting up, or else set is not yet " + a("http://dochub.mongodb.org/core/replicasetconfiguration#ReplicaSetConfiguration-InitialSetup", "", "initiated")
@@ -516,8 +515,8 @@ namespace mongo {
         CmdReplSetExpireOplog() : ReplSetCommand("replSetExpireOplog") { }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             if( cmdObj.hasElement("expireOplogDays") || cmdObj.hasElement("expireOplogHours") ) {
-                uint32_t expireOplogDays = cmdLine.expireOplogDays;
-                uint32_t expireOplogHours = cmdLine.expireOplogHours;
+                int expireOplogDays = replSettings.expireOplogDays;
+                int expireOplogHours = replSettings.expireOplogHours;
                 if (cmdObj.hasElement("expireOplogHours")) {
                     BSONElement e = cmdObj["expireOplogHours"];
                     if (!e.isNumber()) {
@@ -557,8 +556,8 @@ namespace mongo {
         CmdReplGetExpireOplog() : ReplSetCommand("replGetExpireOplog") { }
         virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             // these reads can be racy. It does not matter
-            result.append("expireOplogDays", cmdLine.expireOplogDays);
-            result.append("expireOplogHours", cmdLine.expireOplogHours);
+            result.append("expireOplogDays", replSettings.expireOplogDays);
+            result.append("expireOplogHours", replSettings.expireOplogHours);
             return true;
         }
     } cmdReplGetExpireOplog;

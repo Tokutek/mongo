@@ -29,6 +29,7 @@
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/privilege.h"
+#include "mongo/db/auth/security_key.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/server_parameters.h"
@@ -50,15 +51,13 @@ namespace mongo {
 
             list<BSONObj> all;
             {
-                scoped_ptr<ScopedDbConnection> conn(
-                        ScopedDbConnection::getInternalScopedDbConnection(
-                                configServer.getPrimary().getConnString(), 30));
-                auto_ptr<DBClientCursor> c = conn->get()->query(ShardType::ConfigNS , Query());
+                ScopedDbConnection conn(configServer.getPrimary().getConnString(), 30);
+                auto_ptr<DBClientCursor> c = conn->query(ShardType::ConfigNS , Query());
                 massert( 13632 , "couldn't get updated shard list from config server" , c.get() );
                 while ( c->more() ) {
                     all.push_back( c->next().getOwned() );
                 }
-                conn->done();
+                conn.done();
             }
 
             scoped_lock lk( _mutex );
@@ -344,23 +343,17 @@ namespace mongo {
     }
 
     BSONObj Shard::runCommand( const string& db , const BSONObj& cmd , bool internal ) const {
-        scoped_ptr<ScopedDbConnection> conn;
-
-        if ( internal ) {
-            conn.reset( ScopedDbConnection::getInternalScopedDbConnection( getConnString() ) );
-        } else {
-            conn.reset( ScopedDbConnection::getScopedDbConnection( getConnString() ) );
-        }
+        ScopedDbConnection conn(getConnString());
         BSONObj res;
-        bool ok = conn->get()->runCommand( db , cmd , res );
+        bool ok = conn->runCommand( db , cmd , res );
         if ( ! ok ) {
             stringstream ss;
             ss << "runCommand (" << cmd << ") on shard (" << _name << ") failed : " << res;
-            conn->done();
+            conn.done();
             throw UserException( 13136 , ss.str() );
         }
         res = res.getOwned();
-        conn->done();
+        conn.done();
         return res;
     }
 
@@ -413,30 +406,14 @@ namespace mongo {
     }
 
     void ShardingConnectionHook::onCreate( DBClientBase * conn ) {
-        if( !noauth ) {
-            bool result;
-            string err;
+        if(AuthorizationManager::isAuthEnabled()) {
             LOG(2) << "calling onCreate auth for " << conn->toString() << endl;
 
-            if ( conn->type() == ConnectionString::SET && !authOnPrimaryOnly ) {
-                DBClientReplicaSet* setConn = dynamic_cast<DBClientReplicaSet*>(conn);
-                verify(setConn);
-                result = setConn->authAny( "local",
-                                           internalSecurity.user,
-                                           internalSecurity.pwd,
-                                           err,
-                                           false );
-            }
-            else {
-                result = conn->auth( "local",
-                                     internalSecurity.user,
-                                     internalSecurity.pwd,
-                                     err,
-                                     false );
-            }
+            bool result = authenticateInternalUser(conn);
 
             uassert( 15847, str::stream() << "can't authenticate to server "
-                                          << conn->getServerAddress() << causedBy( err ), result );
+                                          << conn->getServerAddress(), 
+                     result );
         }
 
         if ( _shardedConnections && versionManager.isVersionableCB( conn ) ) {

@@ -14,6 +14,7 @@
  */
 
 #include <sstream>
+#include <boost/static_assert.hpp>
 
 #include "mongo/pch.h" // for malloc/realloc/INFINITY pulled from bson
 
@@ -21,18 +22,6 @@
 #include "mongo/util/safe_num.h"
 
 namespace mongo {
-
-    SafeNum::SafeNum() : _type(EOO) {
-    }
-
-    SafeNum::SafeNum(const SafeNum& rhs) : _type(rhs._type), _value(rhs._value) {
-    }
-
-    SafeNum& SafeNum::operator=(const SafeNum& rhs) {
-        _type = rhs._type;
-        _value = rhs._value;
-        return *this;
-    }
 
     SafeNum::SafeNum(const BSONElement& element) {
         switch (element.type()) {
@@ -51,34 +40,6 @@ namespace mongo {
         default:
             _type = EOO;
         }
-    }
-
-    SafeNum::SafeNum(int num) : _type(NumberInt) {
-        _value.int32Val = num;
-    }
-
-    SafeNum::SafeNum(long long int num) : _type(NumberLong) {
-        _value.int64Val = num;
-    }
-
-    SafeNum::SafeNum(double num) : _type(NumberDouble) {
-        _value.doubleVal = num;
-    }
-
-    SafeNum SafeNum::operator+(const SafeNum& rhs) const {
-        return addInternal(*this, rhs);
-    }
-
-    SafeNum& SafeNum::operator+=(const SafeNum& rhs) {
-        return *this = addInternal(*this, rhs);
-    }
-
-    bool SafeNum::operator==(const SafeNum& rhs) const {
-        return isEquivalent(rhs);
-    }
-
-    bool SafeNum::operator!=(const SafeNum& rhs) const {
-        return ! isEquivalent(rhs);
     }
 
     std::string SafeNum::debugString() const {
@@ -190,36 +151,120 @@ namespace mongo {
         }
     }
 
-    //
-    // addition support
-    //
+    namespace {
 
-    SafeNum addInt32Int32(int lInt32, int rInt32) {
-        int sum = lInt32 + rInt32;
-        if ((sum < 0 && lInt32 > 0 && rInt32 > 0) ||
-            (sum > 0 && lInt32 < 0 && rInt32 < 0)) {
-            long long int result = static_cast<long long int>(lInt32) +
-                                   static_cast<long long int>(rInt32);
+        SafeNum addInt32Int32(int lInt32, int rInt32) {
+            // NOTE: Please see "Secure Coding in C and C++", Second Edition, page 264-265 for
+            // details on this algorithm (for an alternative resources, see
+            //
+            // https://www.securecoding.cert.org/confluence/display/seccode/INT32-C.+Ensure+that+operations+on+signed+integers+do+not+result+in+overflow?showComments=false).
+            //
+            // We are using the "Downcast from a larger type" algorithm here. We always perform
+            // the arithmetic in 64-bit mode, which can never overflow for 32-bit
+            // integers. Then, if we fall within the allowable range of int, we downcast,
+            // otherwise, we retain the 64-bit result.
+
+            // This algorithm is only correct if sizeof(long long) > sizeof(int)
+            BOOST_STATIC_ASSERT(sizeof(long long) > sizeof(int));
+
+            const long long int result =
+                static_cast<long long int>(lInt32) +
+                static_cast<long long int>(rInt32);
+
+            if (result <= std::numeric_limits<int>::max() &&
+                result >= std::numeric_limits<int>::min()) {
+                return SafeNum(static_cast<int>(result));
+            }
+
             return SafeNum(result);
         }
 
-        return SafeNum(sum);
-    }
+        SafeNum addInt64Int64(long long lInt64, long long rInt64) {
+            // NOTE: Please see notes in addInt32Int32 above for references. In this case, since we
+            // have no larger integer size, if our precondition test detects overflow we must
+            // return an invalid SafeNum. Otherwise, the operation is safely performed by standard
+            // arithmetic.
+            if (((rInt64 > 0) && (lInt64 > (std::numeric_limits<long long>::max() - rInt64))) ||
+                ((rInt64 < 0) && (lInt64 < (std::numeric_limits<long long>::min() - rInt64)))) {
+                return SafeNum();
+            }
 
-    SafeNum addInt64Int64(long long lInt64, long long rInt64) {
-        long long sum = lInt64 + rInt64;
-        if ((sum < 0 && lInt64 > 0 && rInt64 > 0) ||
-            (sum > 0 && lInt64 < 0 && rInt64 < 0)) {
-            return SafeNum();
+            return SafeNum(lInt64 + rInt64);
         }
 
-        return SafeNum(sum);
-    }
+        SafeNum addFloats(double lDouble, double rDouble) {
+            double sum = lDouble + rDouble;
+            return SafeNum(sum);
+        }
 
-    SafeNum addFloats(double lDouble, double rDouble) {
-        double sum = lDouble + rDouble;
-        return SafeNum(sum);
-    }
+        SafeNum mulInt32Int32(int lInt32, int rInt32) {
+            // NOTE: Please see "Secure Coding in C and C++", Second Edition, page 264-265 for
+            // details on this algorithm (for an alternative resources, see
+            //
+            // https://www.securecoding.cert.org/confluence/display/seccode/INT32-C.+Ensure+that+operations+on+signed+integers+do+not+result+in+overflow?showComments=false).
+            //
+            // We are using the "Downcast from a larger type" algorithm here. We always perform
+            // the arithmetic in 64-bit mode, which can never overflow for 32-bit
+            // integers. Then, if we fall within the allowable range of int, we downcast,
+            // otherwise, we retain the 64-bit result.
+
+            // This algorithm is only correct if sizeof(long long) >= (2 * sizeof(int))
+            BOOST_STATIC_ASSERT(sizeof(long long) >= (2 * sizeof(int)));
+
+            const long long int result =
+                static_cast<long long int>(lInt32) *
+                static_cast<long long int>(rInt32);
+
+            if (result <= std::numeric_limits<int>::max() &&
+                result >= std::numeric_limits<int>::min()) {
+                return SafeNum(static_cast<int>(result));
+            }
+
+            return SafeNum(result);
+        }
+
+        SafeNum mulInt64Int64(long long lInt64, long long rInt64) {
+            // NOTE: Please see notes in mulInt32Int32 above for references. In this case,
+            // since we have no larger integer size, if our precondition test detects overflow
+            // we must return an invalid SafeNum. Otherwise, the operation is safely performed
+            // by standard arithmetic.
+
+            if (lInt64 > 0) {
+                if (rInt64 > 0) {
+                    if (lInt64 > (std::numeric_limits<long long>::max() / rInt64)) {
+                        return SafeNum();
+                    }
+                }
+                else {
+                    if (rInt64 < (std::numeric_limits<long long>::min() / lInt64)) {
+                        return SafeNum();
+                    }
+                }
+            }
+            else {
+                if (rInt64 > 0) {
+                    if (lInt64 < (std::numeric_limits<long long>::min() / rInt64)) {
+                        return SafeNum();
+                    }
+                }
+                else {
+                    if ( (lInt64 != 0) &&
+                         (rInt64 < (std::numeric_limits<long long>::max() / lInt64))) {
+                        return SafeNum();
+                    }
+                }
+            }
+
+            const long long result = lInt64 * rInt64;
+            return SafeNum(result);
+        }
+
+        SafeNum mulFloats(double lDouble, double rDouble) {
+            const double product = lDouble * rDouble;
+            return SafeNum(product);
+        }
+
+    } // namespace
 
     SafeNum SafeNum::addInternal(const SafeNum& lhs, const SafeNum& rhs) {
         BSONType lType = lhs._type;
@@ -244,6 +289,80 @@ namespace mongo {
         if ((lType == NumberInt || lType == NumberLong || lType == NumberDouble) &&
             (rType == NumberInt || rType == NumberLong || rType == NumberDouble)) {
             return addFloats(getDouble(lhs), getDouble(rhs));
+        }
+
+        return SafeNum();
+    }
+
+    SafeNum SafeNum::mulInternal(const SafeNum& lhs, const SafeNum& rhs) {
+        BSONType lType = lhs._type;
+        BSONType rType = rhs._type;
+
+        if (lType == NumberInt && rType == NumberInt) {
+            return mulInt32Int32(lhs._value.int32Val, rhs._value.int32Val);
+        }
+
+        if (lType == NumberInt && rType == NumberLong) {
+            return mulInt64Int64(lhs._value.int32Val, rhs._value.int64Val);
+        }
+
+        if (lType == NumberLong && rType == NumberInt) {
+            return mulInt64Int64(lhs._value.int64Val, rhs._value.int32Val);
+        }
+
+        if (lType == NumberLong && rType == NumberLong) {
+            return mulInt64Int64(lhs._value.int64Val, rhs._value.int64Val);
+        }
+
+        if ((lType == NumberInt || lType == NumberLong || lType == NumberDouble) &&
+            (rType == NumberInt || rType == NumberLong || rType == NumberDouble)) {
+            return mulFloats(getDouble(lhs), getDouble(rhs));
+        }
+
+        return SafeNum();
+    }
+
+    SafeNum SafeNum::andInternal(const SafeNum& lhs, const SafeNum& rhs) {
+        const BSONType lType = lhs._type;
+        const BSONType rType = rhs._type;
+
+        if (lType == NumberInt && rType == NumberInt) {
+            return (lhs._value.int32Val & rhs._value.int32Val);
+        }
+
+        if (lType == NumberInt && rType == NumberLong) {
+            return (static_cast<long long int>(lhs._value.int32Val) & rhs._value.int64Val);
+        }
+
+        if (lType == NumberLong && rType == NumberInt) {
+            return (lhs._value.int64Val & static_cast<long long int>(rhs._value.int32Val));
+        }
+
+        if (lType == NumberLong && rType == NumberLong) {
+            return (lhs._value.int64Val & rhs._value.int64Val);
+        }
+
+        return SafeNum();
+    }
+
+    SafeNum SafeNum::orInternal(const SafeNum& lhs, const SafeNum& rhs) {
+        const BSONType lType = lhs._type;
+        const BSONType rType = rhs._type;
+
+        if (lType == NumberInt && rType == NumberInt) {
+            return (lhs._value.int32Val | rhs._value.int32Val);
+        }
+
+        if (lType == NumberInt && rType == NumberLong) {
+            return (static_cast<long long int>(lhs._value.int32Val) | rhs._value.int64Val);
+        }
+
+        if (lType == NumberLong && rType == NumberInt) {
+            return (lhs._value.int64Val | static_cast<long long int>(rhs._value.int32Val));
+        }
+
+        if (lType == NumberLong && rType == NumberLong) {
+            return (lhs._value.int64Val | rhs._value.int64Val);
         }
 
         return SafeNum();

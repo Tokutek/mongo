@@ -15,10 +15,11 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "pch.h"
-#include "../commands.h"
-#include "rs.h"
-#include "multicmd.h"
+#include "mongo/pch.h"
+
+#include "mongo/db/commands.h"
+#include "mongo/db/repl/multicmd.h"
+#include "mongo/db/repl/rs.h"
 
 namespace mongo {
 
@@ -377,7 +378,7 @@ namespace mongo {
 
         rs.sethbmsg("",9);
 
-        if( !allUp && time(0) - started < 60 * 5 ) {
+        if (!allUp && time(0) - serverGlobalParams.started < 60 * 5) {
             /* the idea here is that if a bunch of nodes bounce all at once, we don't want to drop data
                if we don't have to -- we'd rather be offline and wait a little longer instead
                todo: make this configurable.

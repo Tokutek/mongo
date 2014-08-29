@@ -59,7 +59,7 @@ namespace mongo {
                                "%lu "  /* start_time */
                                "%lu "
                                "%ld " // rss
-                               "%lu %"KLF"u %"KLF"u %"KLF"u %"KLF"u %"KLF"u "
+                               "%lu %" KLF "u %" KLF "u %" KLF "u %" KLF "u %" KLF "u "
                                /*
                                  "%*s %*s %*s %*s "
                                  "%"KLF"u %*lu %*lu "
@@ -276,7 +276,10 @@ namespace mongo {
                 catch (const std::out_of_range &e) {
                     // attempted to get invalid substr
                 }
-                return; // return with lsb-relase data
+                // return with lsb-release data if we found both the name and version
+                if ( !name.empty() && !version.empty() ) {
+                    return;
+                }
             }
 
             // try known flat-text file locations
@@ -295,6 +298,8 @@ namespace mongo {
             paths.push_back( "/etc/sles-release" );
             paths.push_back( "/etc/debian_release" );
             paths.push_back( "/etc/slackware-version" );
+            paths.push_back( "/etc/centos-release" );
+            paths.push_back( "/etc/os-release" );
         
             for ( i = paths.begin(); i != paths.end(); ++i ) {
                 // for each path
@@ -343,11 +348,15 @@ namespace mongo {
                 // trim whitespace and append 000 to replace kB.
                 while ( isspace( meminfo.at( lineOff ) ) ) lineOff++;
                 meminfo = meminfo.substr( lineOff );
+
+                unsigned long long systemMem = 0;
+                if ( mongo::parseNumberFromString( meminfo, &systemMem ).isOK() )   {
+                    return systemMem * 1024; // convert from kB to bytes
+                }
+                else
+                    log() << "Unable to collect system memory information" << endl;
             }
-            else {
-                meminfo = "";
-            }
-            return atoll(meminfo.c_str()) * 1024;   // convert from kB to bytes
+            return 0;
         }
 
     };
@@ -375,7 +384,7 @@ namespace mongo {
 
     string ProcessInfo::getExePath() const {
         char name[128];
-        sprintf(name, "/proc/%d/exe", _pid);
+        sprintf(name, "/proc/%d/exe", _pid.asUInt32());
         shared_ptr<char> real(realpath(name, NULL), free);
         if (!real.get()) {
             stringstream ss;
@@ -447,8 +456,19 @@ namespace mongo {
     * Determine if the process is running with (cc)NUMA
     */
     bool ProcessInfo::checkNumaEnabled() {
-        if ( boost::filesystem::exists( "/sys/devices/system/node/node1" ) && 
-             boost::filesystem::exists( "/proc/self/numa_maps" ) ) {
+        bool hasMultipleNodes = false;
+        bool hasNumaMaps = false;
+
+        try {
+            hasMultipleNodes = boost::filesystem::exists("/sys/devices/system/node/node1");
+            hasNumaMaps = boost::filesystem::exists("/proc/self/numa_maps");
+        } catch(boost::filesystem::filesystem_error& e) {
+            log() << "WARNING: Cannot detect if NUMA interleaving is enabled. " <<
+                     "Failed to probe \"" << e.path1().string() << "\": " << e.code().message();
+            return false;
+        }
+
+        if ( hasMultipleNodes && hasNumaMaps ) {
             // proc is populated with numa entries
 
             // read the second column of first line to determine numa state

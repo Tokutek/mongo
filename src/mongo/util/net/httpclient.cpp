@@ -15,13 +15,16 @@
  *    limitations under the License.
  */
 
-#include "pch.h"
-#include "httpclient.h"
-#include "sock.h"
-#include "message.h"
-#include "message_port.h"
-#include "../mongoutils/str.h"
-#include "../../bson/util/builder.h"
+#include "mongo/pch.h"
+
+#include "mongo/util/net/httpclient.h"
+
+#include "mongo/bson/util/builder.h"
+#include "mongo/util/mongoutils/str.h"
+#include "mongo/util/net/message.h"
+#include "mongo/util/net/message_port.h"
+#include "mongo/util/net/sock.h"
+#include "mongo/util/net/ssl_manager.h"
 
 namespace mongo {
 
@@ -102,12 +105,10 @@ namespace mongo {
         
         if ( ssl ) {
 #ifdef MONGO_SSL
-            const SSLParams params(cmdLine.sslPEMKeyFile, 
-                                   cmdLine.sslPEMKeyPassword);
-            // never deleted
-            SSLManager* mgr = new SSLManager(params);
+            // pointer to global singleton instance
+            SSLManagerInterface* mgr = getSSLManager();
 
-            sock.secure(mgr);
+            sock.secure(mgr, "");
 #else
             uasserted( 15862 , "no ssl support" );
 #endif
@@ -132,11 +133,15 @@ namespace mongo {
         if ( result )
             sb << buf;
 
-        while ( ( got = sock.unsafe_recv( buf , 4096 ) ) > 0) {
-            buf[got] = 0;
-            if ( result )
-                sb << buf;
-        }
+        // SERVER-8864, unsafe_recv will throw when recv returns 0 indicating closed socket.
+        try {
+            while ( ( got = sock.unsafe_recv( buf , 4096 ) ) > 0) {
+                buf[got] = 0;
+                if ( result )
+                    sb << buf;
+            }
+        } catch (const SocketException&) {}
+
 
         if ( result ) {
             result->_init( rc , sb.str() );

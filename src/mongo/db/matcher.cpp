@@ -27,7 +27,7 @@
 #include "mongo/db/queryutil.h"
 #include "mongo/db/client.h"
 #include "mongo/db/namespacestring.h"
-#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_session.h"
 
 namespace {
     inline pcrecpp::RE_Options flags2options(const char* flags) {
@@ -73,7 +73,7 @@ namespace mongo {
                 return;
             _initCalled = true;
 
-            const string userToken = ClientBasic::getCurrent()->getAuthorizationManager()
+            const string userToken = ClientBasic::getCurrent()->getAuthorizationSession()
                                                               ->getAuthenticatedPrincipalNamesToken();
             string dbstr = nsToDatabase(_ns);
             _scope = globalScriptEngine->getPooledScope( dbstr.c_str(), "where" + userToken );

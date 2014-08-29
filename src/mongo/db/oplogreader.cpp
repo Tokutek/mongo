@@ -5,6 +5,9 @@
 #include <boost/thread/thread.hpp>
 
 #include "mongo/base/counter.h"
+#include "mongo/client/dbclientinterface.h"
+#include "mongo/db/auth/authorization_session.h"
+#include "mongo/db/auth/security_key.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/repl.h"
 #include "mongo/util/net/message.h"
@@ -34,40 +37,36 @@ namespace mongo {
      * connection will be used for!
      */
     bool replAuthenticate(DBClientBase *conn, bool skipAuthCheck) {
-        if( noauth ) {
+        if(!AuthorizationManager::isAuthEnabled()) {
             return true;
         }
-        if (!skipAuthCheck && !cc().getAuthorizationManager()->hasInternalAuthorization()) {
+        if (!skipAuthCheck && !cc().getAuthorizationSession()->hasInternalAuthorization()) {
             log() << "replauthenticate: requires internal authorization, failing" << endl;
             return false;
         }
 
-        string u;
-        string p;
-        if (internalSecurity.pwd.length() > 0) {
-            u = internalSecurity.user;
-            p = internalSecurity.pwd;
-        }
-        else {
-            BSONObj user;
-            {
-                StringData ns("local.system.users");
-                LOCK_REASON(lockReason, "repl: authenticating with local db");
-                Client::ReadContext ctx(ns, lockReason);
-                if (!Collection::findOne(ns, userReplQuery, user) ||
-                        // try the first user in local
-                        !Collection::findOne(ns, BSONObj(), user)) {
-                    log() << "replauthenticate: no user in local.system.users to use for authentication\n";
-                    return false;
-                }
-            }
-            u = user.getStringField("user");
-            p = user.getStringField("pwd");
-            massert( 10392 , "bad user object? [1]", !u.empty());
-            massert( 10393 , "bad user object? [2]", !p.empty());
+        if (isInternalAuthSet()) { 
+            return authenticateInternalUser(conn); 
         }
 
-        string err;
+        BSONObj user;
+        {
+            StringData ns("local.system.users");
+            LOCK_REASON(lockReason, "repl: authenticating with local db");
+            Client::ReadContext ctx(ns, lockReason);
+            if (!Collection::findOne(ns, userReplQuery, user) ||
+                // try the first user in local
+                !Collection::findOne(ns, BSONObj(), user)) {
+                log() << "replauthenticate: no user in local.system.users to use for authentication" << endl;
+                return false;
+            }
+        }
+        std::string u = user.getStringField("user");
+        std::string p = user.getStringField("pwd");
+        massert( 10392 , "bad user object? [1]", !u.empty());
+        massert( 10393 , "bad user object? [2]", !p.empty());
+
+        std::string err;
         if( !conn->auth("local", u.c_str(), p.c_str(), err, false) ) {
             log() << "replauthenticate: can't authenticate to master server, user:" << u << endl;
             return false;
@@ -155,7 +154,7 @@ namespace mongo {
                                                                           default_timeout /* tcp timeout */));
             string errmsg;
             if ( !_conn->connect(hostName.c_str(), errmsg) ||
-                 (!noauth && !replAuthenticate(_conn.get(), true)) ) {
+                 (AuthorizationManager::isAuthEnabled() && !replAuthenticate(_conn.get(), true)) ) {
                 resetConnection();
                 log() << "repl: " << errmsg << endl;
                 return false;

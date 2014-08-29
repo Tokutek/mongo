@@ -23,7 +23,6 @@
 #if !defined(_WIN32)
 # include <sys/socket.h>
 # include <sys/types.h>
-# include <sys/socket.h>
 # include <sys/un.h>
 # include <netinet/in.h>
 # include <netinet/tcp.h>
@@ -35,15 +34,13 @@
 # endif
 #endif
 
-#ifdef MONGO_SSL
-#include "mongo/util/net/ssl_manager.h"
-#endif
-
 #include "mongo/util/background.h"
 #include "mongo/util/concurrency/value.h"
 #include "mongo/util/fail_point_service.h"
 #include "mongo/util/mongoutils/str.h"
-#include "mongo/db/cmdline.h"
+#include "mongo/util/net/message.h"
+#include "mongo/util/net/ssl_manager.h"
+#include "mongo/util/net/socket_poll.h"
 
 namespace mongo {
     MONGO_FP_DECLARE(throwSockExcep);
@@ -56,7 +53,7 @@ namespace mongo {
         struct timeval tv;
         tv.tv_sec = (int)secs;
         tv.tv_usec = (int)((long long)(secs*1000*1000) % (1000*1000));
-        bool report = logLevel > 3; // solaris doesn't provide these
+        bool report = logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(4));
         DEV report = true;
 #if defined(_WIN32)
         tv.tv_sec *= 1000; // Windows timeout is a DWORD, in milliseconds.
@@ -136,7 +133,6 @@ namespace mongo {
 #endif
     }
 
-
     // --- SockAddr
 
     SockAddr::SockAddr(int sourcePort) {
@@ -194,7 +190,7 @@ namespace mongo {
                 if( target != "0.0.0.0" ) { // don't log if this as it is a 
                                             // CRT construction and log() may not work yet.
                     log() << "getaddrinfo(\"" << target << "\") failed: " << 
-                        gai_strerror(ret) << endl;
+                        getAddrInfoStrError(ret) << endl;
                 }
                 *this = SockAddr(port);
             }
@@ -320,7 +316,8 @@ namespace mongo {
     SockAddr unknownAddress( "0.0.0.0", 0 );
 
     string makeUnixSockPath(int port) {
-        return mongoutils::str::stream() << cmdLine.socket << "/mongodb-" << port << ".sock";
+        return mongoutils::str::stream() << serverGlobalParams.socket << "/mongodb-" << port
+                                         << ".sock";
     }
 
 
@@ -361,8 +358,8 @@ namespace mongo {
     string prettyHostName() {
         StringBuilder s;
         s << getHostNameCached();
-        if( cmdLine.port != CmdLine::DefaultDBPort )
-            s << ':' << mongo::cmdLine.port;
+        if (serverGlobalParams.port != ServerGlobalParams::DefaultDBPort)
+            s << ':' << mongo::serverGlobalParams.port;
         return s.str();
     }
 
@@ -390,42 +387,66 @@ namespace mongo {
     }
 
     // ------------ Socket -----------------
-    
-    Socket::Socket(int fd , const SockAddr& remote) : 
-        _fd(fd), _remote(remote), _timeout(0) {
-        _logLevel = 0;
-        _init();
+
+    static int socketGetLastError() {
+#ifdef _WIN32
+        return WSAGetLastError();
+#else
+        return errno;
+#endif
     }
 
-    Socket::Socket( double timeout, int ll ) {
-        _logLevel = ll;
+    static SockAddr getLocalAddrForBoundSocketFd(int fd) {
+        SockAddr result;
+        int rc = getsockname(fd, result.raw(), &result.addressSize);
+        if (rc != 0) {
+            warning() << "Could not resolve local address for socket with fd " << fd << ": " <<
+                getAddrInfoStrError(socketGetLastError());
+            result = SockAddr();
+        }
+        return result;
+    }
+
+    Socket::Socket(int fd , const SockAddr& remote) : 
+        _fd(fd), _remote(remote), _timeout(0), _lastValidityCheckAtSecs(time(0)), 
+        _logLevel(logger::LogSeverity::Log()) {
+        _init();
+        if (fd >= 0) {
+            _local = getLocalAddrForBoundSocketFd(_fd);
+        }
+    }
+
+    Socket::Socket( double timeout, logger::LogSeverity ll ) : _logLevel(ll) {
         _fd = -1;
         _timeout = timeout;
+        _lastValidityCheckAtSecs = time(0);
         _init();
     }
 
     Socket::~Socket() {
         close();
-#ifdef MONGO_SSL
-        if ( _ssl ) {
-            SSL_shutdown( _ssl );
-            SSL_free( _ssl );
-            _ssl = 0;
-        }
-#endif
     }
     
     void Socket::_init() {
         _bytesOut = 0;
         _bytesIn = 0;
+        _awaitingHandshake = true;
 #ifdef MONGO_SSL
-        _ssl = 0;
-        _sslAccepted = 0;
+        _sslManager = 0;
 #endif
     }
 
     void Socket::close() {
         if ( _fd >= 0 ) {
+#ifdef MONGO_SSL
+            if (_sslConnection.get()) {
+                try {
+                    _sslManager->SSL_shutdown( _sslConnection.get() );
+                }
+                catch (const SocketException&) { // SSL_shutdown may throw if the connection fails
+                }  
+            }
+#endif
             // Stop any blocking reads/writes, and prevent new reads/writes
 #if defined(_WIN32)
             shutdown( _fd, SD_BOTH );
@@ -436,46 +457,54 @@ namespace mongo {
             _fd = -1;
         }
     }
-    
+
 #ifdef MONGO_SSL
-    void Socket::secure(SSLManager* mgr) {
+    bool Socket::secure(SSLManagerInterface* mgr, const std::string& remoteHost) {
         fassert(16503, mgr);
-        fassert(16504, !_ssl);
-        fassert(16505, _fd >= 0);
-        _ssl = mgr->connect(_fd);        
-        mgr->validatePeerCertificate(_ssl);
+        if ( _fd < 0 ) { 
+            return false;
+        }
+        _sslManager = mgr;
+        _sslConnection.reset(_sslManager->connect(this));
+        mgr->parseAndValidatePeerCertificate(_sslConnection.get(), remoteHost);
+        return true;
     }
 
-    void Socket::secureAccepted( SSLManager * ssl ) { 
-        _sslAccepted = ssl;
+    void Socket::secureAccepted( SSLManagerInterface* ssl ) { 
+        _sslManager = ssl;
     }
-#endif
 
-    void Socket::doSSLHandshake() {
-#ifdef MONGO_SSL
-        if (!_sslAccepted) return;
-        
+    std::string Socket::doSSLHandshake(const char* firstBytes, int len) {
+        if (!_sslManager) return "";
         fassert(16506, _fd);
-        _ssl = _sslAccepted->accept(_fd);
-        _sslAccepted->validatePeerCertificate(_ssl);
-        _sslAccepted = 0;
-        
-        
-#endif
+        if (_sslConnection.get()) {
+            throw SocketException(SocketException::RECV_ERROR, 
+                                  "Attempt to call SSL_accept on already secure Socket from " +
+                                  remoteString());
+        }
+        _sslConnection.reset(_sslManager->accept(this, firstBytes, len));
+        return _sslManager->parseAndValidatePeerCertificate(_sslConnection.get(), "");
     }
+#endif
 
     class ConnectBG : public BackgroundJob {
     public:
         ConnectBG(int sock, SockAddr remote) : _sock(sock), _remote(remote) { }
 
-        void run() { _res = ::connect(_sock, _remote.raw(), _remote.addressSize); }
-        string name() const { return "ConnectBG"; }
+        void run() {
+            _res = ::connect(_sock, _remote.raw(), _remote.addressSize);
+            _errnoWithDescription = errnoWithDescription();
+        }
+
+        std::string name() const { return "ConnectBG"; }
+        std::string getErrnoWithDescription() const { return _errnoWithDescription; }
         int inError() const { return _res; }
 
     private:
         int _sock;
         int _res;
         SockAddr _remote;
+        std::string _errnoWithDescription;
     };
 
     bool Socket::connect(SockAddr& remote) {
@@ -495,6 +524,9 @@ namespace mongo {
         bg.go();
         if ( bg.wait(5000) ) {
             if ( bg.inError() ) {
+                warning() << "Failed to connect to "
+                          << _remote.getAddr() << ":" << _remote.getPort()
+                          << ", reason: " << bg.getErrnoWithDescription() << endl;
                 close();
                 return false;
             }
@@ -515,17 +547,27 @@ namespace mongo {
         setsockopt( _fd , SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(int));
 #endif
 
+        _local = getLocalAddrForBoundSocketFd(_fd);
+
         _fdCreationMicroSec = curTimeMicros64();
+
+        _awaitingHandshake = false;
+
         return true;
     }
 
-    int Socket::_send( const char * data , int len ) {
+    // throws if SSL_write or send fails 
+    int Socket::_send( const char * data , int len, const char * context ) {
 #ifdef MONGO_SSL
-        if ( _ssl ) {
-            return SSL_write( _ssl , data , len );
+        if ( _sslConnection.get() ) {
+            return _sslManager->SSL_write( _sslConnection.get() , data , len );
         }
 #endif
-        return ::send( _fd , data , len , portSendFlags );
+        int ret = ::send( _fd , data , len , portSendFlags );
+        if (ret < 0) {
+            handleSendError(ret, context);
+        }
+        return ret;
     }
 
     // sends all data or throws an exception
@@ -538,13 +580,11 @@ namespace mongo {
 #else
                 errno = ENETUNREACH;
 #endif
+                handleSendError(ret, context);
             }
             else {
-                ret = _send(data, len);
+                ret = _send(data, len, context);
             }
-
-            if (ret == -1)
-                _handleSendError(ret, context);
 
             _bytesOut += ret;
 
@@ -571,7 +611,7 @@ namespace mongo {
     void Socket::send( const vector< pair< char *, int > > &data, const char *context ) {
 
 #ifdef MONGO_SSL
-        if ( _ssl ) {
+        if ( _sslConnection.get() ) {
             _send( data , context );
             return;
         }
@@ -643,7 +683,6 @@ namespace mongo {
     }
 
     void Socket::recv( char * buf , int len ) {
-        int retries = 0;
         while( len > 0 ) {
             int ret = -1;
             if (MONGO_FAIL_POINT(throwSockExcep)) {
@@ -652,18 +691,15 @@ namespace mongo {
 #else
                 errno = ENETUNREACH;
 #endif
+                if (ret <= 0) {
+                    handleRecvError(ret, len);
+                    continue;
+                }
             }
             else {
                 ret = unsafe_recv(buf, len);
             }
-            if (ret <= 0) {
-                _handleRecvError(ret, len, &retries);
-                continue;
-            }
 
-            if ( len <= 4 && ret != len )
-                LOG(_logLevel) << "Socket recv() got " << ret <<
-                    " bytes wanted len=" << len << endl;
             fassert(16508, ret <= len);
             len -= ret;
             buf += ret;
@@ -676,25 +712,22 @@ namespace mongo {
         return x;
     }
 
-
+    // throws if SSL_read fails or recv returns an error
     int Socket::_recv( char *buf, int max ) {
 #ifdef MONGO_SSL
-        if ( _ssl ){
-            return SSL_read( _ssl , buf , max );
+        if ( _sslConnection.get() ){
+            return _sslManager->SSL_read( _sslConnection.get() , buf , max );
         }
 #endif
-        return ::recv( _fd , buf , max , portRecvFlags );
+        int ret = ::recv( _fd , buf , max , portRecvFlags );
+        if (ret <= 0) {
+            handleRecvError(ret, max); // If no throw return and call _recv again
+            return 0;
+        }
+        return ret;
     }
 
-    void Socket::_handleSendError(int ret, const char* context) {
-#ifdef MONGO_SSL
-        if (_ssl) {
-            LOG(_logLevel) << "SSL Error ret: " << ret << " err: " << SSL_get_error(_ssl , ret) 
-                           << " " << ERR_error_string(ERR_get_error(), NULL) 
-                           << endl;
-            throw SocketException(SocketException::SEND_ERROR , remoteString());
-        }
-#endif
+    void Socket::handleSendError(int ret, const char* context) {
 
 #if defined(_WIN32)
         const int mongo_errno = WSAGetLastError();
@@ -714,29 +747,20 @@ namespace mongo {
         }
     }
 
-    void Socket::_handleRecvError(int ret, int len, int* retries) {
+    void Socket::handleRecvError(int ret, int len) {
         if (ret == 0) {
             LOG(3) << "Socket recv() conn closed? " << remoteString() << endl;
             throw SocketException(SocketException::CLOSED , remoteString());
         }
      
         // ret < 0
-#ifdef MONGO_SSL
-        if (_ssl) {
-            LOG(_logLevel) << "SSL Error ret: " << ret << " err: " << SSL_get_error(_ssl , ret) 
-                           << " " << ERR_error_string(ERR_get_error(), NULL) 
-                           << endl;
-            throw SocketException(SocketException::RECV_ERROR, remoteString());
-        }
-#endif
-
 #if defined(_WIN32)
         int e = WSAGetLastError();
 #else
         int e = errno;
 # if defined(EINTR)
         if (e == EINTR) {
-            LOG(_logLevel) << "EINTR retry " << ++*retries << endl;
+            LOG(_logLevel) << "EINTR returned from recv(), retrying";
             return;
         }
 # endif
@@ -760,6 +784,138 @@ namespace mongo {
 
     void Socket::setTimeout( double secs ) {
         setSockTimeouts( _fd, secs );
+    }
+
+    // TODO: allow modification?
+    //
+    // <positive value> : secs to wait between stillConnected checks
+    // 0 : always check
+    // -1 : never check
+    const int Socket::errorPollIntervalSecs( 5 );
+
+    // Patch to allow better tolerance of flaky network connections that get broken
+    // while we aren't looking.
+    // TODO: Remove when better async changes come.
+    //
+    // isStillConnected() polls the socket at max every Socket::errorPollIntervalSecs to determine
+    // if any disconnection-type events have happened on the socket.
+    bool Socket::isStillConnected() {
+
+        if ( errorPollIntervalSecs < 0 ) return true;
+        if ( ! isPollSupported() ) return true; // nothing we can do
+
+        time_t now = time( 0 );
+        time_t idleTimeSecs = now - _lastValidityCheckAtSecs;
+
+        // Only check once every 5 secs
+        if ( idleTimeSecs < errorPollIntervalSecs ) return true;
+        // Reset our timer, we're checking the connection
+        _lastValidityCheckAtSecs = now;
+
+        // It's been long enough, poll to see if our socket is still connected
+
+        pollfd pollInfo;
+        pollInfo.fd = _fd;
+        // We only care about reading the EOF message on clean close (and errors)
+        pollInfo.events = POLLIN;
+
+        // Poll( info[], size, timeout ) - timeout == 0 => nonblocking
+        int nEvents = socketPoll( &pollInfo, 1, 0 );
+
+        LOG( 2 ) << "polling for status of connection to " << remoteString()
+                 << ", " << ( nEvents == 0 ? "no events" :
+                              nEvents == -1 ? "error detected" :
+                                               "event detected" ) << endl;
+
+        if ( nEvents == 0 ) {
+            // No events incoming, return still connected AFAWK
+            return true;
+        }
+        else if ( nEvents < 0 ) {
+            // Poll itself failed, this is weird, warn and log errno
+            warning() << "Socket poll() failed during connectivity check"
+                      << " (idle " << idleTimeSecs << " secs,"
+                      << " remote host " << remoteString() << ")"
+                      << causedBy(errnoWithDescription()) << endl;
+
+            // Return true since it's not clear that we're disconnected.
+            return true;
+        }
+
+        dassert( nEvents == 1 );
+        dassert( pollInfo.revents > 0 );
+
+        // Return false at this point, some event happened on the socket, but log what the
+        // actual event was.
+
+        if ( pollInfo.revents & POLLIN ) {
+
+            // There shouldn't really be any data to recv here, so make sure this
+            // is a clean hangup.
+
+            const int testBufLength = 1024;
+            char testBuf[testBufLength];
+
+            int recvd = ::recv( _fd, testBuf, testBufLength, portRecvFlags );
+
+            if ( recvd < 0 ) {
+                // An error occurred during recv, warn and log errno
+                warning() << "Socket recv() failed during connectivity check"
+                          << " (idle " << idleTimeSecs << " secs,"
+                          << " remote host " << remoteString() << ")"
+                          << causedBy(errnoWithDescription()) << endl;
+            }
+            else if ( recvd > 0 ) {
+                // We got nonzero data from this socket, very weird?
+                // Log and warn at runtime, log and abort at devtime
+                // TODO: Dump the data to the log somehow?
+                error() << "Socket found pending " << recvd
+                        << " bytes of data during connectivity check"
+                        << " (idle " << idleTimeSecs << " secs,"
+                        << " remote host " << remoteString() << ")" << endl;
+                DEV {
+                    std::string hex = hexdump(testBuf, recvd);
+                    error() << "Hex dump of stale log data: " << hex << endl;
+                }
+                dassert( false );
+            }
+            else {
+                // recvd == 0, socket closed remotely, just return false
+                LOG( 0 ) << "Socket closed remotely, no longer connected"
+                         << " (idle " << idleTimeSecs << " secs,"
+                         << " remote host " << remoteString() << ")" << endl;
+            }
+        }
+        else if ( pollInfo.revents & POLLHUP ) {
+            // A hangup has occurred on this socket
+            LOG( 0 ) << "Socket hangup detected, no longer connected" << " (idle "
+                         << idleTimeSecs << " secs," << " remote host " << remoteString() << ")"
+                         << endl;
+        }
+        else if ( pollInfo.revents & POLLERR ) {
+            // An error has occurred on this socket
+            LOG( 0 ) << "Socket error detected, no longer connected" << " (idle "
+                         << idleTimeSecs << " secs," << " remote host " << remoteString() << ")"
+                         << endl;
+        }
+        else if ( pollInfo.revents & POLLNVAL ) {
+            // Socket descriptor itself is weird
+            // Log and warn at runtime, log and abort at devtime
+            error() << "Socket descriptor detected as invalid"
+                    << " (idle " << idleTimeSecs << " secs,"
+                    << " remote host " << remoteString() << ")" << endl;
+            dassert( false );
+        }
+        else {
+            // Don't know what poll is saying here
+            // Log and warn at runtime, log and abort at devtime
+            error() << "Socket had unknown event (" << static_cast<int>(pollInfo.revents) << ")"
+                    << " (idle " << idleTimeSecs << " secs,"
+                    << " remote host " << remoteString() << ")" << endl;
+            dassert( false );
+        }
+
+        return false;
     }
 
 #if defined(_WIN32)

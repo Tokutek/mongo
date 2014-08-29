@@ -36,7 +36,7 @@
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
-#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/commands.h"
@@ -495,7 +495,7 @@ namespace mongo {
         }
 
         // Can't be in a lock when checking authorization
-        if (!cc().getAuthorizationManager()->checkAuthorization(ns, ActionType::killCursors)) {
+        if (!cc().getAuthorizationSession()->checkAuthorization(ns, ActionType::killCursors)) {
             return false;
         }
 

@@ -18,6 +18,8 @@
 
 #pragma once
 
+#include <boost/thread/tss.hpp>
+
 #include "mongo/bson/oid.h"
 
 namespace mongo {

@@ -24,7 +24,7 @@
 
 #include "mongo/client/connpool.h"
 #include "mongo/client/parallel.h"
-#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/instance.h"
@@ -648,7 +648,7 @@ namespace mongo {
          */
         void State::init() {
             // setup js
-            const string userToken = ClientBasic::getCurrent()->getAuthorizationManager()
+            const string userToken = ClientBasic::getCurrent()->getAuthorizationSession()
                                                               ->getAuthenticatedPrincipalNamesToken();
             _scope.reset(globalScriptEngine->getPooledScope(
                             _config.dbname, "mapreduce" + userToken).release());

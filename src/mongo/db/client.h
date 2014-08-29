@@ -38,9 +38,10 @@
 #include "mongo/db/txn_context.h"
 #include "mongo/db/opsettings.h"
 #include "mongo/s/d_logic.h"
-#include "mongo/util/paths.h"
-#include "mongo/util/concurrency/threadlocal.h"
+#include "mongo/db/storage_options.h"
 #include "mongo/util/concurrency/rwlock.h"
+#include "mongo/util/concurrency/threadlocal.h"
+#include "mongo/util/paths.h"
 
 namespace mongo {
 
@@ -485,7 +486,7 @@ namespace mongo {
         class Context : boost::noncopyable {
         public:
             /** this is probably what you want */
-            Context(const StringData &ns, const StringData &path=dbpath, bool doVersion=true);
+            Context(const StringData &ns, const StringData &path=storageGlobalParams.dbpath, bool doVersion=true);
 
             /** note: this does not call finishInit -- i.e., does not call 
                       shardVersionOk() for example. 
@@ -497,10 +498,10 @@ namespace mongo {
             Client* getClient() const { return _client; }
             Database* db() const { return _db; }
             const char * ns() const { return _ns.c_str(); }
-            bool equals( const StringData &ns , const StringData &path=dbpath ) const { return _ns == ns && _path == path; }
+            bool equals( const StringData &ns , const StringData &path=storageGlobalParams.dbpath ) const { return _ns == ns && _path == path; }
 
             /** @return true iff the current Context is using db/path */
-            bool inDB( const StringData& db , const StringData& path=dbpath ) const;
+            bool inDB( const StringData& db , const StringData& path=storageGlobalParams.dbpath ) const;
 
             void _clear() { // this is sort of an "early destruct" indication, _ns can never be uncleared
                 const_cast<string&>(_ns).clear();

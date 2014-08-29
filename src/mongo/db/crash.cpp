@@ -18,15 +18,19 @@
 
 #include "mongo/db/crash.h"
 
+#include <iostream>
+#include <iomanip>
+
 #include <db.h>
 
 #include "mongo/base/init.h"
 #include "mongo/base/string_data.h"
 #include "mongo/db/client.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/db/server_options.h"
+#include "mongo/db/storage_options.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/log.h"
@@ -91,80 +95,53 @@ namespace mongo {
     namespace crashdump {
 
         static void header() {
-            rawOut(" ");
-            rawOut("================================================================================");
-            rawOut(" Fatal error detected");
-            rawOut("================================================================================");
-            rawOut(" ");
-            rawOut("About to gather debugging information, please include all of the following along");
-            rawOut("with logs from other servers in the cluster in a bug report.");
-            rawOut(" ");
+            severe() << std::endl
+                     << "================================================================================" << std::endl
+                     << " Fatal error detected" << std::endl
+                     << "================================================================================" << std::endl
+                     << std::endl
+                     << "About to gather debugging information, please include all of the following along" << std::endl
+                     << "with logs from other servers in the cluster in a bug report." << std::endl
+                     << std::endl;
         }
 
         static void versionInfo() {
-            char *p;
-            char buf[1<<12];
-            rawOut("--------------------------------------------------------------------------------");
-            rawOut("Version info:");
-            rawOut(" ");
-            p = buf;
-            p = stpcpy(p, "tokumxVersion: ");
-            p = stpcpy(p, tokumxVersionString);
-            rawOut(buf);
-            p = buf;
-            p = stpcpy(p, "gitVersion: ");
-            p = stpcpy(p, gitVersion());
-            rawOut(buf);
-            p = buf;
-            p = stpcpy(p, "tokukvVersion: ");
-            p = stpcpy(p, tokukvVersion());
-            rawOut(buf);
-            p = buf;
-            p = stpcpy(p, "sysInfo: ");
-            p = stpcpy(p, sysInfoCstr());
-            rawOut(buf);
-            p = buf;
-            p = stpcpy(p, "loaderFlags: ");
-            p = stpcpy(p, loaderFlags());
-            rawOut(buf);
-            p = buf;
-            p = stpcpy(p, "compilerFlags: ");
-            p = stpcpy(p, compilerFlags());
-            rawOut(buf);
-            p = buf;
-            p = stpcpy(p, "debug: ");
-            if (debug) {
-                p = stpcpy(p, "true");
-            } else {
-                p = stpcpy(p, "false");
-            }
-            rawOut(buf);
-            rawOut(" ");
+            severe() << "--------------------------------------------------------------------------------" << std::endl
+                     << "Version info:" << std::endl
+                     << std::endl
+                     << "tokumxVersion: " << tokumxVersionString << std::endl
+                     << "gitVersion: " << gitVersion() << std::endl
+                     << "tokukvVersion: " << tokukvVersion() << std::endl
+                     << "sysInfo: " << sysInfo() << std::endl
+                     << "loaderFlags: " << loaderFlags() << std::endl
+                     << "compilerFlags: " << compilerFlags() << std::endl
+                     << "debug: " << (debug ? "true" : "false") << std::endl
+                     << std::endl;
         }
 
         static void simpleStacktrace() {
-            rawOut("--------------------------------------------------------------------------------");
-            rawOut("Simple stacktrace:");
-            rawOut(" ");
+            severe() << "--------------------------------------------------------------------------------" << std::endl
+                     << "Simple stacktrace:" << std::endl
+                     << std::endl;
             printStackTrace();
-            rawOut(" ");
+            severe() << std::endl;
         }
 
         static void tokukvBacktrace() {
-            rawOut("--------------------------------------------------------------------------------");
-            rawOut("TokuKV engine backtrace:");
-            rawOut(" ");
+            severe() << "--------------------------------------------------------------------------------" << std::endl
+                     << "TokuKV engine backtrace:" << std::endl
+                     << std::endl;
             storage::do_backtrace();
-            rawOut(" ");
+            severe() << std::endl;
         }
 
         static void gdbStacktrace() {
-            if (!cmdLine.gdbPath.empty()) {
-                rawOut("--------------------------------------------------------------------------------");
-                rawOut("GDB backtrace:");
-                rawOut(" ");
-                db_env_try_gdb_stack_trace(cmdLine.gdbPath.c_str());
-                rawOut(" ");
+            if (!serverGlobalParams.gdbPath.empty()) {
+                severe() << "--------------------------------------------------------------------------------" << std::endl
+                         << "GDB backtrace:" << std::endl
+                         << std::endl;
+                db_env_try_gdb_stack_trace(serverGlobalParams.gdbPath.c_str());
+                severe() << std::endl;
             }
         }
 
@@ -177,128 +154,97 @@ namespace mongo {
         }
 
         static void reason(const char *s) {
-            rawOut("--------------------------------------------------------------------------------");
-            rawOut("Crash reason:");
-            rawOut(" ");
-            rawOut(s);
-            rawOut(" ");
         }
 
 #if MONGO_HAVE_HEADER_SYS_RESOURCE_H
-        static void printResourceLimit(int resource, const char *rname) {
-            char buf[1<<12];
-            char *p;
-            int r;
+        static void printResourceLimit(LogstreamBuilder &s, int resource, const char *rname) {
             struct rlimit rlim;
-            r = getrlimit(resource, &rlim);
+            int r = getrlimit(resource, &rlim);
             if (r != 0) {
                 int eno = errno;
-                p = buf;
-                p = stpcpy(p, "Error getting ");
-                p = stpcpy(p, rname);
-                p = stpcpy(p, ": ");
-                p = stpcpy(p, strerror(eno));
-                rawOut(buf);
+                s << "Error getting " << rname << ": " << strerror(eno) << std::endl;
                 return;
             }
 
-            p = buf;
-            p = stpcpy(p, rname);
-            p = stpcpy(p, ": ");
+            s << rname << ": ";
             if (rlim.rlim_cur == RLIM_INFINITY) {
-                p = stpcpy(p, "unlimited (soft)");
+                s << "unlimited";
             } else {
-                int n;
-                snprintf(p, (sizeof buf) - (p - buf), "%zu (soft)%n", static_cast<size_t>(rlim.rlim_cur), &n);
-                p += n;
+                s << static_cast<size_t>(rlim.rlim_cur);
             }
+            s << " (soft), ";
             if (rlim.rlim_max == RLIM_INFINITY) {
-                p = stpcpy(p, ", unlimited (hard)");
+                s << "unlimited";
             } else {
-                int n;
-                snprintf(p, (sizeof buf) - (p - buf), ", %zu (hard)%n", static_cast<size_t>(rlim.rlim_max), &n);
-                p += n;
+                s << static_cast<size_t>(rlim.rlim_max);
             }
-            rawOut(buf);
+            s << " (hard)" << std::endl;
         }
 #endif
 
-        static void printSysconf(int var, const char *name) {
-            char buf[1<<12];
+        static void printSysconf(LogstreamBuilder &s, int var, const char *name) {
             long val = sysconf(var);
             if (val == -1) {
                 int eno = errno;
-                char *p = buf;
-                p = stpcpy(p, "Error getting ");
-                p = stpcpy(p, name);
-                p = stpcpy(p, ": ");
-                p = stpcpy(p, strerror(eno));
-                rawOut(buf);
+                s << "Error getting " << name << ": " << strerror(eno) << std::endl;
                 return;
             }
-            snprintf(buf, sizeof buf, "%s: %ld", name, val);
-            rawOut(buf);
+            s << name << ": " << val << std::endl;
         }
 
         static void processInfo() {
-            rawOut("--------------------------------------------------------------------------------");
-            rawOut("Process info:");
-            rawOut(" ");
+            severe() << "--------------------------------------------------------------------------------" << std::endl
+                     << "Process info:" << std::endl
+                     << std::endl;
             ProcessInfo pi;
-            char buf[1<<12];
-            snprintf(buf, sizeof buf, "OS:   %s %s %s %s",
-                     pi.getOsType().c_str(), pi.getOsName().c_str(), pi.getOsVersion().c_str(), pi.getArch().c_str());
-            rawOut(buf);
-            snprintf(buf, sizeof buf, "NCPU: %d", pi.getNumCores());
-            rawOut(buf);
-            snprintf(buf, sizeof buf, "VIRT: %d MB", pi.getVirtualMemorySize());
-            rawOut(buf);
-            snprintf(buf, sizeof buf, "RES:  %d MB", pi.getVirtualMemorySize());
-            rawOut(buf);
-            snprintf(buf, sizeof buf, "PHYS: %llu MB", pi.getMemSizeMB());
-            rawOut(buf);
+            LogstreamBuilder s = severe();
+            s << "OS:   " << pi.getOsType() << pi.getOsName() << pi.getOsVersion() << pi.getArch() << std::endl
+              << "NCPU: " << pi.getNumCores() << std::endl
+              << "VIRT: " << pi.getVirtualMemorySize() << " MB" << std::endl
+              << "RES:  " << pi.getResidentSize() << " MB" << std::endl
+              << "PHYS: " << pi.getMemSizeMB() << " MB" << std::endl;
 #if MONGO_HAVE_HEADER_SYS_RESOURCE_H
-            printResourceLimit(RLIMIT_CORE,   "RLIMIT_CORE");
-            printResourceLimit(RLIMIT_CPU,    "RLIMIT_CPU");
-            printResourceLimit(RLIMIT_DATA,   "RLIMIT_DATA");
-            printResourceLimit(RLIMIT_FSIZE,  "RLIMIT_FSIZE");
-            printResourceLimit(RLIMIT_NOFILE, "RLIMIT_NOFILE");
-            printResourceLimit(RLIMIT_STACK,  "RLIMIT_STACK");
-            printResourceLimit(RLIMIT_AS,     "RLIMIT_AS");
+            printResourceLimit(s, RLIMIT_CORE,   "RLIMIT_CORE");
+            printResourceLimit(s, RLIMIT_CPU,    "RLIMIT_CPU");
+            printResourceLimit(s, RLIMIT_DATA,   "RLIMIT_DATA");
+            printResourceLimit(s, RLIMIT_FSIZE,  "RLIMIT_FSIZE");
+            printResourceLimit(s, RLIMIT_NOFILE, "RLIMIT_NOFILE");
+            printResourceLimit(s, RLIMIT_STACK,  "RLIMIT_STACK");
+            printResourceLimit(s, RLIMIT_AS,     "RLIMIT_AS");
 #endif
 #if MONGO_HAVE_HEADER_UNISTD_H
   #ifdef _SC_OPEN_MAX
-            printSysconf(_SC_OPEN_MAX,         "_SC_OPEN_MAX");
+            printSysconf(s, _SC_OPEN_MAX,         "_SC_OPEN_MAX");
   #endif
   #ifdef _SC_PAGESIZE
-            printSysconf(_SC_PAGESIZE,         "_SC_PAGESIZE");
+            printSysconf(s, _SC_PAGESIZE,         "_SC_PAGESIZE");
   #endif
   #ifdef _SC_PHYS_PAGES
-            printSysconf(_SC_PHYS_PAGES,       "_SC_PHYS_PAGES");
+            printSysconf(s, _SC_PHYS_PAGES,       "_SC_PHYS_PAGES");
   #endif
   #ifdef _SC_AVPHYS_PAGES
-            printSysconf(_SC_AVPHYS_PAGES,     "_SC_AVPHYS_PAGES");
+            printSysconf(s, _SC_AVPHYS_PAGES,     "_SC_AVPHYS_PAGES");
   #endif
   #ifdef _SC_NPROCESSORS_CONF
-            printSysconf(_SC_NPROCESSORS_CONF, "_SC_NPROCESSORS_CONF");
+            printSysconf(s, _SC_NPROCESSORS_CONF, "_SC_NPROCESSORS_CONF");
   #endif
   #ifdef _SC_NPROCESSORS_ONLN
-            printSysconf(_SC_NPROCESSORS_ONLN, "_SC_NPROCESSORS_ONLN");
+            printSysconf(s, _SC_NPROCESSORS_ONLN, "_SC_NPROCESSORS_ONLN");
   #endif
 #endif
-            rawOut(" ");
+            s << std::endl;
         }
 
         static void parsedOpts() {
-            rawOut("--------------------------------------------------------------------------------");
-            rawOut("Parsed server options:");
-            rawOut(" ");
-            const BSONObj &opts = CmdLine::getParsedOpts();
-            for (BSONObjIterator it(opts); it.more(); ) {
+            severe() << "--------------------------------------------------------------------------------" << std::endl
+                     << "Parsed server options:" << std::endl
+                     << " " << std::endl;
+            LogstreamBuilder s = severe();
+            for (BSONObjIterator it(serverGlobalParams.parsedOpts); it.more(); ) {
                 const BSONElement &elt = it.next();
-                rawOut(elt.toString());
+                s << elt.toString() << std::endl;
             }
-            rawOut(" ");
+            s << std::endl;
         }
 
 #if MONGO_CRASH_HAVE_STATFS_IMPL
@@ -380,137 +326,113 @@ namespace mongo {
 
 #endif /* MONGO_CRASH_HAVE_STATFS_IMPL */
 
-        static void singleFsInfo(const char *path) {
+    static void singleFsInfo(LogstreamBuilder &s, const char *path) {
 #if MONGO_CRASH_HAVE_STATFS_IMPL
-            char buf[1<<12];
-            char *p;
             struct statfs st;
             int r = statfs(path, &st);
             if (r != 0) {
                 int eno = errno;
-                p = buf;
-                p = stpcpy(p, "Error looking up filesystem information: ");
-                p = stpcpy(p, strerror(eno));
-                rawOut(buf);
+                s << "Error looking up filesystem information: " << strerror(eno) << std::endl;
                 return;
             }
-            snprintf(buf, sizeof buf, "type magic: 0x%08lX", static_cast<long unsigned>(st.f_type));
-            rawOut(buf);
-            p = buf;
-            p = stpcpy(p, "type: ");
+            s.stream() << "type magic: 0x" << std::hex << std::setw(8) << std::setfill('0')
+                       << static_cast<long unsigned>(st.f_type) << std::endl
+                       << "type: ";
 #if MONGO_HAVE_HEADER_XFS_XFS_H
             if (platform_test_xfs_path(path)) {
-                p = stpcpy(p, "xfs");
+                s << "xfs";
             } else {
 #endif
-            p = stpcpy(p, f_typeString(st));
+            s << f_typeString(st);
 #if MONGO_HAVE_HEADER_XFS_XFS_H
             }
 #endif
-            rawOut(buf);
-            snprintf(buf, sizeof buf, "bsize: %zu", static_cast<size_t>(st.f_bsize));
-            rawOut(buf);
-            snprintf(buf, sizeof buf, "blocks: %zu", static_cast<size_t>(st.f_blocks));
-            rawOut(buf);
-            snprintf(buf, sizeof buf, "bfree: %zu", static_cast<size_t>(st.f_bfree));
-            rawOut(buf);
-            snprintf(buf, sizeof buf, "bavail: %zu", static_cast<size_t>(st.f_bavail));
-            rawOut(buf);
+            s << std::endl
+              << "bsize: " << st.f_bsize << std::endl
+              << "blocks: " << st.f_blocks << std::endl
+              << "bfree: " << st.f_bfree << std::endl
+              << "bavail: " << st.f_bavail << std::endl;
 
 #else /* !MONGO_CRASH_HAVE_STATFS_IMPL */
-            rawOut("statfs(2) unavailable");
+            severe() << "statfs(2) unavailable" << std::endl;
 #endif
         }
 
         static void fsInfo() {
-            rawOut("--------------------------------------------------------------------------------");
-            rawOut("Filesystem information:");
-            rawOut(" ");
-
-            char buf[1<<12];
-            char *p;
+            severe() << "--------------------------------------------------------------------------------" << std::endl
+                     << "Filesystem information:" << std::endl
+                     << " " << std::endl;
 
             char dbpath_cstr[1<<12];
-            if (cmdLine.doFork || dbpath[0] == '/') {
-                strncpy(dbpath_cstr, dbpath.c_str(), sizeof dbpath_cstr);
+            if (serverGlobalParams.doFork || storageGlobalParams.dbpath[0] == '/') {
+                strncpy(dbpath_cstr, storageGlobalParams.dbpath.c_str(), sizeof dbpath_cstr);
             } else {
                 // mallocs, hopefully this is ok
                 std::stringstream ss;
-                ss << cmdLine.cwd << "/" << dbpath;
+                ss << serverGlobalParams.cwd << "/" << storageGlobalParams.dbpath;
                 std::string absdbpath = ss.str();
                 strncpy(dbpath_cstr, absdbpath.c_str(), sizeof dbpath_cstr);
             }
 
-            p = buf;
-            p = stpcpy(p, "Information for dbpath \"");
-            p = stpncpy(p, dbpath_cstr, (sizeof buf) - (p - buf));
-            p = stpncpy(p, "\":", (sizeof buf) - (p - buf));
-            rawOut(buf);
-            rawOut(" ");
-            singleFsInfo(dbpath_cstr);
-            rawOut(" ");
+            LogstreamBuilder s = severe();
+            s << "Information for dbpath \"" << dbpath_cstr << "\":" << std::endl
+              << std::endl;
+            singleFsInfo(s, dbpath_cstr);
+            s << std::endl;
 
-            if (!cmdLine.logDir.empty() && cmdLine.logDir != dbpath) {
-                p = buf;
-                p = stpcpy(p, "Information for logDir \"");
-                p = stpncpy(p, cmdLine.logDir.c_str(), (sizeof buf) - (p - buf));
-                p = stpncpy(p, "\":", (sizeof buf) - (p - buf));
-                rawOut(buf);
-                rawOut(" ");
-                singleFsInfo(cmdLine.logDir.c_str());
-                rawOut(" ");
+            if (!storageGlobalParams.logDir.empty() && storageGlobalParams.logDir != storageGlobalParams.dbpath) {
+                s << "Information for logDir \"" << storageGlobalParams.logDir << "\":" << std::endl
+                  << std::endl;
+                singleFsInfo(s, storageGlobalParams.logDir.c_str());
+                s << std::endl;
             }
 
-            if (!cmdLine.tmpDir.empty() && cmdLine.tmpDir != dbpath) {
-                p = buf;
-                p = stpcpy(p, "Information for tmpDir \"");
-                p = stpncpy(p, cmdLine.tmpDir.c_str(), (sizeof buf) - (p - buf));
-                p = stpncpy(p, "\":", (sizeof buf) - (p - buf));
-                rawOut(buf);
-                rawOut(" ");
-                singleFsInfo(cmdLine.tmpDir.c_str());
-                rawOut(" ");
+            if (!storageGlobalParams.tmpDir.empty() && storageGlobalParams.tmpDir != storageGlobalParams.dbpath) {
+                s << "Information for tmpDir \"" << storageGlobalParams.tmpDir << "\":" << std::endl
+                  << std::endl;
+                singleFsInfo(s, storageGlobalParams.tmpDir.c_str());
+                s << std::endl;
             }
         }
 
         static void curOpInfo() {
-            rawOut("--------------------------------------------------------------------------------");
-            rawOut("Current operations in progress:");
-            rawOut(" ");
+            severe() << "--------------------------------------------------------------------------------" << std::endl
+                     << "Current operations in progress:" << std::endl
+                     << " " << std::endl;
             for (set<Client *>::const_iterator i = Client::clients.begin(); i != Client::clients.end(); i++) {
                 Client *c = *i;
                 if (c == NULL) {
-                    rawOut("NULL pointer in clients map");
+                    severe() << "NULL pointer in clients map" << std::endl;
                     continue;
                 }
                 CurOp *co = c->curop();
                 if (co == NULL) {
-                    rawOut("NULL pointer in curop");
+                    severe() << "NULL pointer in curop" << std::endl;
                     continue;
                 }
-                rawOut(co->info().toString());
+                severe() << co->info().toString() << std::endl;
             }
-            rawOut(" ");
+            severe() << std::endl;
         }
 
         static void opDebugInfo() {
-            rawOut("--------------------------------------------------------------------------------");
-            rawOut("OpDebug info:");
-            rawOut(" ");
+            severe() << "--------------------------------------------------------------------------------" << std::endl
+                     << "OpDebug info:" << std::endl
+                     << " " << std::endl;
             for (set<Client *>::const_iterator i = Client::clients.begin(); i != Client::clients.end(); i++) {
                 Client *c = *i;
                 if (c == NULL) {
-                    rawOut("NULL pointer in clients map");
+                    severe() << "NULL pointer in clients map" << std::endl;
                     continue;
                 }
                 CurOp *co = c->curop();
                 if (co == NULL) {
-                    rawOut("NULL pointer in curop");
+                    severe() << "NULL pointer in curop" << std::endl;
                     continue;
                 }
-                rawOut(co->debug().report(*co));
+                severe() << co->debug().report(*co) << std::endl;
             }
-            rawOut(" ");
+            severe() << std::endl;
         }
 
         static void extraInfo() {
@@ -525,35 +447,32 @@ namespace mongo {
 
     void dumpCrashInfo(const StringData &reason) try {
         crashdump::basicInfo();
-        char buf[1<<12];
-        strncpy(buf, reason.rawData(), reason.size());
-        buf[reason.size()] = '\0';
-        crashdump::reason(buf);
+        severe() << "--------------------------------------------------------------------------------" << std::endl
+                 << "Crash reason:" << std::endl
+                 << std::endl
+                 << reason << std::endl
+                 << std::endl;
         crashdump::extraInfo();
     } catch (DBException &e) {
         // can't rethrow here, might be crashing
         try {
-            rawOut(" ");
-            rawOut("Unhandled DBException while dumping crash info:");
-            rawOut(e.what());
-            char buf[1<<12];
-            snprintf(buf, 1<<12, "code: %d", e.getCode());
-            rawOut(buf);
+            severe() << std::endl
+                     << "Unhandled DBException while dumping crash info: " << e.what() << std::endl
+                     << " code: " << e.getCode() << std::endl;
         } catch (...) {
             // uh-oh
         }
     } catch (std::exception &e) {
         try {
-            rawOut(" ");
-            rawOut("Unhandled exception while dumping crash info:");
-            rawOut(e.what());
+            severe() << std::endl
+                     << "Unhandled exception while dumping crash info: " << e.what() << std::endl;
         } catch (...) {
             // uh-oh
         }
     } catch (...) {
         try {
-            rawOut(" ");
-            rawOut("Unhandled unknown exception while dumping crash info.");
+            severe() << std::endl
+                     << "Unhandled unknown exception while dumping crash info." << std::endl;
         } catch (...) {
             // whoa, nelly
         }
@@ -561,34 +480,32 @@ namespace mongo {
 
     void dumpCrashInfo(const DBException &e) try {
         crashdump::basicInfo();
-        char buf[1<<12];
-        snprintf(buf, 1<<12, "DBException code: %d what: %s", e.getCode(), e.what());
-        crashdump::reason(buf);
+        severe() << "--------------------------------------------------------------------------------" << std::endl
+                 << "Crash reason:" << std::endl
+                 << std::endl
+                 << "DBException code: " << e.getCode() << " what: " << e.what() << std::endl
+                 << std::endl;
         crashdump::extraInfo();
     } catch (DBException &newEx) {
         // can't rethrow here, might be crashing
         try {
-            rawOut(" ");
-            rawOut("Unhandled DBException while dumping crash info:");
-            rawOut(newEx.what());
-            char buf[1<<12];
-            snprintf(buf, 1<<12, "code: %d", newEx.getCode());
-            rawOut(buf);
+            severe() << std::endl
+                     << "Unhandled DBException while dumping crash info: " << newEx.what() << std::endl
+                     << " code: " << newEx.getCode() << std::endl;
         } catch (...) {
             // uh-oh
         }
     } catch (std::exception &newEx) {
         try {
-            rawOut(" ");
-            rawOut("Unhandled exception while dumping crash info:");
-            rawOut(newEx.what());
+            severe() << std::endl
+                     << "Unhandled exception while dumping crash info: " << newEx.what() << std::endl;
         } catch (...) {
             // uh-oh
         }
     } catch (...) {
         try {
-            rawOut(" ");
-            rawOut("Unhandled unknown exception while dumping crash info.");
+            severe() << std::endl
+                     << "Unhandled unknown exception while dumping crash info." << std::endl;
         } catch (...) {
             // whoa, nelly
         }
@@ -602,7 +519,6 @@ namespace mongo {
         virtual void help( stringstream& help ) const {
             help << "internal testing-only command: makes the server dump some debugging info to the log";
         }
-        virtual bool requiresAuth() { return false; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {}

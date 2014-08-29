@@ -35,15 +35,18 @@
 #include "mongo/db/commands.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/lasterror.h"
+#include "mongo/db/log_process_details.h"
 #include "mongo/db/repl/multicmd.h"
+#include "mongo/db/server_options.h"
 #include "mongo/db/stats/counters.h"
 #include "mongo/s/shard.h"
 #include "mongo/scripting/engine.h"
+#include "mongo/server.h"
 #include "mongo/util/lruishmap.h"
 #include "mongo/util/md5.hpp"
 #include "mongo/util/processinfo.h"
-#include "mongo/util/version.h"
 #include "mongo/util/ramlog.h"
+#include "mongo/util/version_reporting.h"
 
 namespace mongo {
 
@@ -51,7 +54,6 @@ namespace mongo {
     public:
         CmdBuildInfo() : WebInformationCommand("buildInfo", true, "buildinfo") {}
         virtual bool adminOnly() const { return false; }
-        virtual bool requiresAuth() { return false; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {} // No auth required
@@ -76,7 +78,6 @@ namespace mongo {
     public:
         PingCommand() : InformationCommand("ping") {}
         virtual void help( stringstream &help ) const { help << "a way to check that the server is alive. responds immediately even if server is in a db lock."; }
-        virtual bool requiresAuth() { return false; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {} // No auth required
@@ -145,6 +146,26 @@ namespace mongo {
         }
 
     } hostInfoCmd;
+
+    class LogRotateCmd : public InformationCommand {
+    public:
+        LogRotateCmd() : InformationCommand( "logRotate" ) {}
+        virtual bool adminOnly() const { return true; }
+        virtual void addRequiredPrivileges(const std::string& dbname,
+                                           const BSONObj& cmdObj,
+                                           std::vector<Privilege>* out) {
+            ActionSet actions;
+            actions.addAction(ActionType::logRotate);
+            out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
+        }
+        virtual bool run(const string& ns, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
+            bool didRotate = rotateLogs();
+            if (didRotate)
+                logProcessDetailsForLogRotate();
+            return didRotate;
+        }
+
+    } logRotateCmd;
 
     class ListCommandsCmd : public InformationCommand {
     public:
@@ -254,20 +275,18 @@ namespace mongo {
                 result.appendArray( "names" , arr.arr() );
             }
             else {
-                RamLog* rl = RamLog::get( p );
-                if ( ! rl ) {
+                RamLog* ramlog = RamLog::getIfExists(p);
+                if ( ! ramlog ) {
                     errmsg = str::stream() << "no RamLog named: " << p;
                     return false;
                 }
+                RamLog::LineIterator rl(ramlog);
 
-                result.appendNumber( "totalLinesWritten", rl->getTotalLinesWritten() );
-
-                vector<const char*> lines;
-                rl->get( lines );
+                result.appendNumber( "totalLinesWritten", rl.getTotalLinesWritten() );
 
                 BSONArrayBuilder arr( result.subarrayStart( "log" ) );
-                for ( unsigned i=0; i<lines.size(); i++ )
-                    arr.append( lines[i] );
+                while (rl.more())
+                    arr.append(rl.next());
                 arr.done();
             }
             return true;
@@ -288,8 +307,8 @@ namespace mongo {
             out->push_back(Privilege(AuthorizationManager::SERVER_RESOURCE_NAME, actions));
         }
         virtual bool run(const string&, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
-            result.append("argv", CmdLine::getArgvArray());
-            result.append("parsed", CmdLine::getParsedOpts());
+            result.append("argv", serverGlobalParams.argvArray);
+            result.append("parsed", serverGlobalParams.parsedOpts);
             return true;
         }
 

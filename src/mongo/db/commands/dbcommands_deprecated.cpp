@@ -100,8 +100,9 @@ namespace mongo {
         bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl ) {
             string ns = dbname + "." + cmdObj.firstElement().valuestrsafe();
             Collection *cl = getCollection(ns);
-            if ( !cmdLine.quiet )
-                tlog() << "CMD: validate " << ns << endl;
+            if ( !serverGlobalParams.quiet ) {
+                MONGO_TLOG(0) << "CMD: validate " << ns << endl;
+            }
 
             if ( ! cl ) {
                 errmsg = "ns not found";
@@ -115,11 +116,6 @@ namespace mongo {
             return true;
         }
     } validateCmd;
-
-    class LogRotateCmd : public DeprecatedCommand {
-      public:
-        LogRotateCmd() : DeprecatedCommand("logRotate") {}
-    } logRotateCmd;
 
     class ApplyOpsCmd : public DeprecatedCommand {
       public:

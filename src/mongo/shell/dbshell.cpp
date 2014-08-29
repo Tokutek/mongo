@@ -25,15 +25,20 @@
 #include <string.h>
 
 #include "mongo/base/initializer.h"
+#include "mongo/base/status.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/client/sasl_client_authenticate.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/repl/rs_member.h"
+#include "mongo/logger/console_appender.h"
+#include "mongo/logger/logger.h"
+#include "mongo/logger/message_event_utf8_encoder.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/shell/linenoise.h"
+#include "mongo/shell/shell_options.h"
 #include "mongo/shell/shell_utils.h"
 #include "mongo/shell/shell_utils_launcher.h"
 #include "mongo/util/file.h"
+#include "mongo/util/net/ssl_options.h"
 #include "mongo/util/password.h"
 #include "mongo/util/stacktrace.h"
 #include "mongo/util/startup_test.h"
@@ -53,7 +58,6 @@ string historyFile;
 bool gotInterrupted = false;
 bool inMultiLine = false;
 static volatile bool atPrompt = false; // can eval before getting to prompt
-bool autoKillOp = false;
 
 #if !defined(__freebsd__) && !defined(__openbsd__) && !defined(_WIN32)
 // this is for ctrl-c handling
@@ -129,7 +133,10 @@ void shellHistoryAdd( const char * line ) {
     // We don't want any .auth() or .addUser() commands added, but we want to
     // be able to add things like `.author`, so be smart about how this is
     // detected by using regular expresions.
-    static pcrecpp::RE hiddenCommands("\\.(auth|addUser)\\s*\\(");
+    // TODO(spencer): If the createUser or updateUser commands are run directly via runCommand they
+    // are not filtered from the history.
+    static pcrecpp::RE hiddenCommands(
+            "\\.(auth|addUser|createUser|updateUser|changeUserPassword)\\s*\\(");
     if (!hiddenCommands.PartialMatch(line))
     {
         linenoiseHistoryAdd( line );
@@ -151,7 +158,8 @@ void killOps() {
 
     sleepmillis(10); // give current op a chance to finish
 
-    mongo::shell_utils::connectionRegistry.killOperationsOnAllConnections( !autoKillOp );
+    mongo::shell_utils::connectionRegistry.
+        killOperationsOnAllConnections(!shellGlobalParams.autoKillOp);
 }
 
 void quitNicely( int sig ) {
@@ -209,13 +217,8 @@ char * strsignal(int sig){
 #endif
 
 void quitAbruptly( int sig ) {
-    ostringstream ossSig;
-    ossSig << "mongo got signal " << sig << " (" << strsignal( sig ) << "), stack trace: " << endl;
-    mongo::rawOut( ossSig.str() );
-
-    ostringstream ossBt;
-    mongo::printStackTrace( ossBt );
-    mongo::rawOut( ossBt.str() );
+    log() << "mongo got signal " << sig << " (" << strsignal( sig ) << "), stack trace: ";
+    mongo::printStackTrace();
 
     mongo::shell_utils::KillMongoProgramInstances();
     ::_exit( 14 );
@@ -224,8 +227,7 @@ void quitAbruptly( int sig ) {
 // this will be called in certain c++ error cases, for example if there are two active
 // exceptions
 void myterminate() {
-    mongo::rawOut( "terminate() called in shell, printing stack:" );
-    mongo::printStackTrace();
+    mongo::printStackTrace(severe().stream() << "terminate() called in shell, printing stack:\n");
     ::_exit( 14 );
 }
 
@@ -421,31 +423,6 @@ string finishCode( string code ) {
     return code;
 }
 
-#include <boost/program_options.hpp>
-namespace po = boost::program_options;
-
-void show_help_text( const char* name, po::options_description options ) {
-    cout << "TokuMX mongo shell v" << mongo::fullVersionString() << endl;
-    cout << "usage: " << name << " [options] [db address] [file names (ending in .js)]" << endl
-         << "db address can be:" << endl
-         << "  foo                   foo database on local machine" << endl
-         << "  192.169.0.5/foo       foo database on 192.168.0.5 machine" << endl
-         << "  192.169.0.5:9999/foo  foo database on 192.168.0.5 machine on port 9999" << endl
-         << options << endl
-         << "file names: a list of files to run. files have to end in .js and will exit after "
-         << "unless --shell is specified" << endl;
-};
-
-bool fileExists( string file ) {
-    try {
-        boost::filesystem::path p( file );
-        return boost::filesystem::exists( file );
-    }
-    catch ( ... ) {
-        return false;
-    }
-}
-
 namespace mongo {
     extern bool isShell;
 }
@@ -530,7 +507,7 @@ static void edit( const string& whatToEdit ) {
         sb << "/tmp/mongo_edit" << time( 0 ) + i << ".js";
 #endif
         filename = sb.str();
-        if ( ! fileExists( filename ) )
+        if (!::mongo::shell_utils::fileExists(filename))
             break;
     }
     if ( i == maxAttempts ) {
@@ -610,98 +587,14 @@ static void edit( const string& whatToEdit ) {
 }
 
 int _main( int argc, char* argv[], char **envp ) {
-    mongo::runGlobalInitializersOrDie(argc, argv, envp);
     mongo::isShell = true;
     setupSignals();
 
     mongo::shell_utils::RecordMyLocation( argv[ 0 ] );
 
-    string url = "test";
-    string dbhost;
-    string port;
-    vector<string> files;
+    shellGlobalParams.url = "test";
 
-    string username;
-    string password;
-    string authenticationMechanism;
-    string authenticationDatabase;
-
-    std::string sslPEMKeyFile;
-    std::string sslPEMKeyPassword;
-    std::string sslCAFile;
-
-    bool runShell = false;
-    bool nodb = false;
-    bool norc = false;
-
-    string script;
-
-    po::options_description shell_options( "options" );
-    po::options_description hidden_options( "Hidden options" );
-    po::options_description cmdline_options( "Command line options" );
-    po::positional_options_description positional_options;
-
-    shell_options.add_options()
-    ( "shell", "run the shell after executing files" )
-    ( "nodb", "don't connect to mongod on startup - no 'db address' arg expected" )
-    ( "norc", "will not run the \".mongorc.js\" file on start up" )
-    ( "quiet", "be less chatty" )
-    ( "port", po::value<string>( &port ), "port to connect to" )
-    ( "host", po::value<string>( &dbhost ), "server to connect to" )
-    ( "eval", po::value<string>( &script ), "evaluate javascript" )
-    ( "username,u", po::value<string>(&username), "username for authentication" )
-    ( "password,p", new mongo::PasswordValue( &password ), "password for authentication" )
-    ("authenticationDatabase",
-     po::value<string>(&authenticationDatabase)->default_value(""),
-     "user source (defaults to dbname)" )
-    ("authenticationMechanism",
-     po::value<string>(&authenticationMechanism)->default_value("MONGODB-CR"),
-     "authentication mechanism")
-    ( "help,h", "show this usage information" )
-    ( "version", "show version information" )
-    ( "verbose", "increase verbosity" )
-    ( "ipv6", "enable IPv6 support (disabled by default)" )
-#ifdef MONGO_SSL
-    ( "ssl", "use SSL for all connections" )
-    ( "sslCAFile", po::value<std::string>(&sslCAFile), "Certificate Authority for SSL" )
-    ( "sslPEMKeyFile", po::value<std::string>(&sslPEMKeyFile), "PEM certificate/key file for SSL" )
-    ( "sslPEMKeyPassword", po::value<std::string>(&sslPEMKeyFile), 
-      "password for key in PEM file for SSL" )
-#endif
-    ;
-
-    hidden_options.add_options()
-    ( "dbaddress", po::value<string>(), "dbaddress" )
-    ( "files", po::value< vector<string> >(), "files" )
-    ( "nokillop", "nokillop" ) // for testing, kill op will also be disabled automatically if the tests starts a mongo program
-    ( "autokillop", "autokillop" ) // for testing, will kill op without prompting
-    ;
-
-    positional_options.add( "dbaddress", 1 );
-    positional_options.add( "files", -1 );
-
-    cmdline_options.add( shell_options ).add( hidden_options );
-
-    po::variables_map params;
-
-    /* using the same style as db.cpp uses because eventually we're going
-     * to merge some of this stuff. */
-    int command_line_style = (((po::command_line_style::unix_style ^
-                                po::command_line_style::allow_guessing) |
-                               po::command_line_style::allow_long_disguise) ^
-                              po::command_line_style::allow_sticky);
-
-    try {
-        po::store(po::command_line_parser(argc, argv).options(cmdline_options).
-                  positional(positional_options).
-                  style(command_line_style).run(), params);
-        po::notify( params );
-    }
-    catch ( po::error &e ) {
-        cout << "ERROR: " << e.what() << endl << endl;
-        show_help_text( argv[0], shell_options );
-        return mongo::EXIT_BADOPTIONS;
-    }
+    mongo::runGlobalInitializersOrDie(argc, argv, envp);
 
     // hide password from ps output
     for ( int i = 0; i < (argc-1); ++i ) {
@@ -713,103 +606,29 @@ int _main( int argc, char* argv[], char **envp ) {
         }
     }
 
-    if ( params.count( "shell" ) ) {
-        runShell = true;
-    }
-    if ( params.count( "nodb" ) ) {
-        nodb = true;
-    }
-    if ( params.count( "norc" ) ) {
-        norc = true;
-    }
-    if ( params.count( "help" ) ) {
-        show_help_text( argv[0], shell_options );
-        return mongo::EXIT_CLEAN;
-    }
-    if ( params.count( "files" ) ) {
-        files = params["files"].as< vector<string> >();
-    }
-    if ( params.count( "version" ) ) {
-        cout << "TokuMX mongo shell v" << mongo::fullVersionString() << endl;
-        return mongo::EXIT_CLEAN;
-    }
-    if ( params.count( "quiet" ) ) {
-        mongo::cmdLine.quiet = true;
-    }
-#ifdef MONGO_SSL
-    if ( params.count( "ssl" ) ) {
-        mongo::cmdLine.sslOnNormalPorts = true;
-    }
-    if (params.count("sslPEMKeyFile")) {
-        mongo::cmdLine.sslPEMKeyFile = params["sslPEMKeyFile"].as<std::string>();
-    }
-    if (params.count("sslPEMKeyPassword")) {
-        mongo::cmdLine.sslPEMKeyPassword = params["sslPEMKeyPassword"].as<std::string>();
-    }
-    if (params.count("sslCAFile")) {
-        mongo::cmdLine.sslCAFile = params["sslCAFile"].as<std::string>();
-    }
-#endif
-    if ( params.count( "nokillop" ) ) {
-        mongo::shell_utils::_nokillop = true;
-    }
-    if ( params.count( "autokillop" ) ) {
-        autoKillOp = true;
-    }
-
-    /* This is a bit confusing, here are the rules:
-     *
-     * if nodb is set then all positional parameters are files
-     * otherwise the first positional parameter might be a dbaddress, but
-     * only if one of these conditions is met:
-     *   - it contains no '.' after the last appearance of '\' or '/'
-     *   - it doesn't end in '.js' and it doesn't specify a path to an existing file */
-    if ( params.count( "dbaddress" ) ) {
-        string dbaddress = params["dbaddress"].as<string>();
-        if (nodb) {
-            files.insert( files.begin(), dbaddress );
-        }
-        else {
-            string basename = dbaddress.substr( dbaddress.find_last_of( "/\\" ) + 1 );
-            if (basename.find_first_of( '.' ) == string::npos ||
-                    ( basename.find( ".js", basename.size() - 3 ) == string::npos && !fileExists( dbaddress ) ) ) {
-                url = dbaddress;
-            }
-            else {
-                files.insert( files.begin(), dbaddress );
-            }
-        }
-    }
-    if ( params.count( "ipv6" ) ) {
-        mongo::enableIPv6();
-    }
-    if ( params.count( "verbose" ) ) {
-        logLevel = 1;
-    }
-
-    if ( url == "*" ) {
-        cout << "ERROR: " << "\"*\" is an invalid db address" << endl << endl;
-        show_help_text( argv[0], shell_options );
-        return mongo::EXIT_BADOPTIONS;
-    }
-
-    if ( ! mongo::cmdLine.quiet )
+    if (!mongo::serverGlobalParams.quiet)
         cout << "TokuMX mongo shell v" << mongo::fullVersionString() << endl;
 
     mongo::StartupTest::runTests();
 
-    if ( !nodb ) { // connect to db
-        //if ( ! mongo::cmdLine.quiet ) cout << "url: " << url << endl;
+    logger::globalLogManager()->getNamedDomain("javascriptOutput")->attachAppender(
+            logger::MessageLogDomain::AppenderAutoPtr(
+                    new logger::ConsoleAppender<logger::MessageEventEphemeral>(
+                            new logger::MessageEventUnadornedEncoder)));
 
+    if (!shellGlobalParams.nodb) { // connect to db
         stringstream ss;
-        if ( mongo::cmdLine.quiet )
+        if (mongo::serverGlobalParams.quiet)
             ss << "__quiet = true;";
-        ss << "db = connect( \"" << fixHost( url , dbhost , port ) << "\")";
+        ss << "db = connect( \""
+           << fixHost(shellGlobalParams.url, shellGlobalParams.dbhost, shellGlobalParams.port)
+           << "\")";
 
         mongo::shell_utils::_dbConnect = ss.str();
 
-        if ( params.count( "password" ) && password.empty() )
-            password = mongo::askPassword();
+        if (shellGlobalParams.usingPassword && shellGlobalParams.password.empty()) {
+            shellGlobalParams.password = mongo::askPassword();
+        }
     }
 
     // Construct the authentication-related code to execute on shell startup.
@@ -824,23 +643,23 @@ int _main( int argc, char* argv[], char **envp ) {
     //  }())
     stringstream authStringStream;
     authStringStream << "(function() { " << endl;
-    if ( !authenticationMechanism.empty() ) {
+    if ( !shellGlobalParams.authenticationMechanism.empty() ) {
         authStringStream << "DB.prototype._defaultAuthenticationMechanism = \"" <<
-            authenticationMechanism << "\";" << endl;
+            shellGlobalParams.authenticationMechanism << "\";" << endl;
     }
 
-    if (!nodb && username.size()) {
-        authStringStream << "var username = \"" << username << "\";" << endl;
-        authStringStream << "var password = \"" << password << "\";" << endl;
-        if (authenticationDatabase.empty()) {
+    if (!shellGlobalParams.nodb && shellGlobalParams.username.size()) {
+        authStringStream << "var username = \"" << shellGlobalParams.username << "\";" << endl;
+        authStringStream << "var password = \"" << shellGlobalParams.password << "\";" << endl;
+        if (shellGlobalParams.authenticationDatabase.empty()) {
             authStringStream << "var authDb = db;" << endl;
         }
         else {
-            authStringStream << "var authDb = db.getSiblingDB(\"" << authenticationDatabase <<
-                "\");" << endl;
+            authStringStream << "var authDb = db.getSiblingDB(\""
+                             << shellGlobalParams.authenticationDatabase << "\");" << endl;
         }
         authStringStream << "authDb._authOrThrow({ " <<
-            saslCommandPrincipalFieldName << ": username, " <<
+            saslCommandUserFieldName << ": username, " <<
             saslCommandPasswordFieldName << ": password });" << endl;
     }
     authStringStream << "}())";
@@ -853,36 +672,58 @@ int _main( int argc, char* argv[], char **envp ) {
     auto_ptr< mongo::Scope > scope( mongo::globalScriptEngine->newScope() );
     shellMainScope = scope.get();
 
-    if( runShell )
+    if( shellGlobalParams.runShell )
         cout << "type \"help\" for help" << endl;
+   
+    // Load and execute /etc/mongorc.js before starting shell
+    std::string rcGlobalLocation;
+#ifndef _WIN32
+    rcGlobalLocation = "/etc/mongorc.js" ;
+#else
+    wchar_t programDataPath[MAX_PATH];
+    if ( S_OK == SHGetFolderPathW(NULL,
+                                CSIDL_COMMON_APPDATA,
+                                NULL,
+                                0,
+                                programDataPath) ) {
+        rcGlobalLocation = str::stream() << toUtf8String(programDataPath)
+                                         << "\\MongoDB\\mongorc.js";
+    }
+#endif   
+    if ( !rcGlobalLocation.empty() && ::mongo::shell_utils::fileExists(rcGlobalLocation) ) {
+        if ( ! scope->execFile( rcGlobalLocation , false , true ) ) {
+            cout << "The \"" << rcGlobalLocation << "\" file could not be executed" << endl;
+        }
+    }
 
-    if ( !script.empty() ) {
+    if ( !shellGlobalParams.script.empty() ) {
         mongo::shell_utils::MongoProgramScope s;
-        if ( ! scope->exec( script , "(shell eval)" , true , true , false ) )
+        if ( ! scope->exec( shellGlobalParams.script , "(shell eval)" , true , true , false ) )
             return -4;
     }
 
-    for (size_t i = 0; i < files.size(); ++i) {
+    for (size_t i = 0; i < shellGlobalParams.files.size(); ++i) {
         mongo::shell_utils::MongoProgramScope s;
 
-        if ( files.size() > 1 )
-            cout << "loading file: " << files[i] << endl;
+        if ( shellGlobalParams.files.size() > 1 )
+            cout << "loading file: " << shellGlobalParams.files[i] << endl;
 
-        if ( ! scope->execFile( files[i] , false , true , false ) ) {
-            cout << "failed to load: " << files[i] << endl;
+        if ( ! scope->execFile( shellGlobalParams.files[i] , false , true ) ) {
+            cout << "failed to load: " << shellGlobalParams.files[i] << endl;
             return -3;
         }
     }
 
-    if ( files.size() == 0 && script.empty() )
-        runShell = true;
+    if ( shellGlobalParams.files.size() == 0 && shellGlobalParams.script.empty() )
+        shellGlobalParams.runShell = true;
 
-    if ( runShell ) {
+    if ( shellGlobalParams.runShell ) {
 
         mongo::shell_utils::MongoProgramScope s;
-        bool hasMongoRC = norc; // If they specify norc, assume it's not their first time
+        // If they specify norc, assume it's not their first time
+        bool hasMongoRC = shellGlobalParams.norc;
         string rcLocation;
-        if ( !norc ) {
+        if ( !shellGlobalParams.norc ) {
 #ifndef _WIN32
             if ( getenv( "HOME" ) != NULL )
                 rcLocation = str::stream() << getenv( "HOME" ) << "/.mongorc.js" ;
@@ -890,7 +731,7 @@ int _main( int argc, char* argv[], char **envp ) {
             if ( getenv( "HOMEDRIVE" ) != NULL && getenv( "HOMEPATH" ) != NULL )
                 rcLocation = str::stream() << getenv( "HOMEDRIVE" ) << getenv( "HOMEPATH" ) << "\\.mongorc.js";
 #endif
-            if ( !rcLocation.empty() && fileExists(rcLocation) ) {
+            if ( !rcLocation.empty() && ::mongo::shell_utils::fileExists(rcLocation) ) {
                 hasMongoRC = true;
                 if ( ! scope->execFile( rcLocation , false , true ) ) {
                     cout << "The \".mongorc.js\" file located in your home folder could not be executed" << endl;
@@ -910,7 +751,7 @@ int _main( int argc, char* argv[], char **envp ) {
            f.close();
         }
 
-        if ( !nodb && !mongo::cmdLine.quiet && isatty(fileno(stdin)) ) {
+        if (!shellGlobalParams.nodb && !mongo::serverGlobalParams.quiet && isatty(fileno(stdin))) {
             scope->exec( "shellHelper( 'show', 'startupWarnings' )", "(shellwarnings", false, true, false );
         }
 
@@ -952,7 +793,7 @@ int _main( int argc, char* argv[], char **envp ) {
             }
 
             if ( ! linePtr || ( strlen( linePtr ) == 4 && strstr( linePtr , "exit" ) ) ) {
-                if ( ! mongo::cmdLine.quiet )
+                if (!mongo::serverGlobalParams.quiet)
                     cout << "bye" << endl;
                 if ( line )
                     free( line );
@@ -1043,12 +884,12 @@ int _main( int argc, char* argv[], char **envp ) {
 }
 
 #ifdef _WIN32
-int wmain( int argc, wchar_t* argvW[] ) {
+int wmain(int argc, wchar_t* argvW[], wchar_t* envpW[]) {
     static mongo::StaticObserver staticObserver;
     int returnCode;
     try {
-        WindowsCommandLine wcl( argc, argvW );
-        returnCode = _main( argc, wcl.argv(), NULL );  // TODO: Convert wide env to utf8 env.
+        WindowsCommandLine wcl(argc, argvW, envpW);
+        returnCode = _main(argc, wcl.argv(), wcl.envp());
     }
     catch ( mongo::DBException& e ) {
         cerr << "exception: " << e.what() << endl;

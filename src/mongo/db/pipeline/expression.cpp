@@ -14,6 +14,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <boost/algorithm/string.hpp>
+
 #include "pch.h"
 #include "db/pipeline/expression.h"
 
@@ -1741,7 +1743,8 @@ namespace mongo {
         checkArgCount(1);
         Value date(vpOperand[0]->evaluate(document));
         const int ms = date.coerceToDate() % 1000LL;
-        return Value::createInt( ms >= 0 ? ms : 1000 + ms );
+        // adding 1000 since dates before 1970 would have negative ms
+        return Value::createInt(ms >= 0 ? ms : 1000 + ms);
     }
 
     const char *ExpressionMillisecond::getOpName() const {

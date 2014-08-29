@@ -44,11 +44,11 @@
 #include "../util/background.h"
 #include "../client/connpool.h"
 #include "commands.h"
-#include "cmdline.h"
 #include "repl_block.h"
 #include "repl/rs.h"
 #include "replutil.h"
 #include "repl/connections.h"
+#include "mongo/db/repl/replication_server_status.h"
 #include "ops/update.h"
 #include "pcrecpp.h"
 #include "mongo/db/commands/server_status.h"
@@ -60,9 +60,6 @@
 #include "mongo/base/counter.h"
 
 namespace mongo {
-
-    // our config from command line etc.
-    ReplSettings replSettings;
 
     /* if 1 sync() is running */
     volatile int syncing = 0;
@@ -90,87 +87,6 @@ namespace mongo {
 
     /* output by the web console */
     const char *replInfo = "";
-
-    bool anyReplEnabled() {
-        return theReplSet;
-    }
-
-    bool replAuthenticate(DBClientBase *conn, bool skipAuthCheck);
-
-    void appendReplicationInfo(BSONObjBuilder& result, int level) {
-        if ( replSet ) {
-            if( theReplSet == 0 || theReplSet->state().shunned() ) {
-                result.append("ismaster", false);
-                result.append("secondary", false);
-                result.append("info", ReplSet::startupStatusMsg.get());
-                result.append( "isreplicaset" , true );
-            }
-            else {
-                theReplSet->fillIsMaster(result);
-            }
-            return;
-        }
-        
-        if ( replAllDead ) {
-            result.append("ismaster", 0);
-            string s = string("dead: ") + replAllDead;
-            result.append("info", s);
-        }
-        else {
-            result.appendBool("ismaster", _isMaster() );
-        }
-    }
-    
-    class ReplicationInfoServerStatus : public ServerStatusSection {
-    public:
-        ReplicationInfoServerStatus() : ServerStatusSection( "repl" ){}
-        bool includeByDefault() const { return true; }
-        
-        BSONObj generateSection(const BSONElement& configElement) const {
-            if ( ! anyReplEnabled() )
-                return BSONObj();
-            
-            int level = configElement.numberInt();
-            
-            BSONObjBuilder result;
-            appendReplicationInfo( result, level );
-            return result.obj();
-        }
-    } replicationInfoServerStatus;
-
-    class CmdIsMaster : public Command {
-    public:
-        virtual bool requiresAuth() { return false; }
-        virtual bool slaveOk() const {
-            return true;
-        }
-        virtual bool requiresShardedOperationScope() const { return false; }
-        virtual void help( stringstream &help ) const {
-            help << "Check if this server is primary for a replica pair/set; also if it is --master or --slave in simple master/slave setups.\n";
-            help << "{ isMaster : 1 }";
-        }
-        virtual LockType locktype() const { return NONE; }
-        virtual bool requiresSync() const { return false; }
-        virtual bool needsTxn() const { return false; }
-        virtual int txnFlags() const { return noTxnFlags(); }
-        virtual bool canRunInMultiStmtTxn() const { return true; }
-        virtual OpSettings getOpSettings() const { return OpSettings(); }
-        virtual void addRequiredPrivileges(const std::string& dbname,
-                                           const BSONObj& cmdObj,
-                                           std::vector<Privilege>* out) {} // No auth required
-        CmdIsMaster() : Command("isMaster", true, "ismaster") { }
-        virtual bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool /*fromRepl*/) {
-            /* currently request to arbiter is (somewhat arbitrarily) an ismaster request that is not
-               authenticated.
-            */
-            appendReplicationInfo(result, 0);
-
-            result.appendNumber("maxBsonObjectSize", BSONObjMaxUserSize);
-            result.appendNumber("maxMessageSizeBytes", MaxMessageSizeBytes);
-            result.appendDate("localTime", jsTime());
-            return true;
-        }
-    } cmdismaster;
 
     class ReplApplyBatchSize : public ServerParameter {
     public:
@@ -215,14 +131,14 @@ namespace mongo {
     void startReplSets(ReplSetCmdline*);
     void startReplication() {
         /* if we are going to be a replica set, we aren't doing other forms of replication. */
-        if( !cmdLine._replSet.empty() ) {
+        if (!replSettings.replSet.empty()) {
             replSet = true;
             setLogTxnOpsForReplication(true);
             setLogTxnToOplog(logTransactionOps);
             setLogTxnRefToOplog(logTransactionOpsRef);
             setLogOpsToOplogRef(logOpsToOplogRef);
             setOplogInsertStats(&oplogInsertStats, &oplogInsertBytesStats);
-            ReplSetCmdline *replSetCmdline = new ReplSetCmdline(cmdLine._replSet);
+            ReplSetCmdline *replSetCmdline = new ReplSetCmdline(replSettings.replSet);
             boost::thread t( boost::bind( &startReplSets, replSetCmdline) );
 
             return;
@@ -240,14 +156,12 @@ namespace mongo {
             // todo: speed up the secondary case.  as written here there are 2 mutex entries, it
             // can b 1.
             if( isMaster() ) return;
-            uassert(13435, "not master and slaveOk=false",
+            uassert(NotMasterNoSlaveOkCode, "not master and slaveOk=false",
                     !pq || pq->hasOption(QueryOption_SlaveOk) || pq->hasReadPref());
-            uassert(13436,
+            uassert(NotMasterOrSecondaryCode,
                     "not master or secondary; cannot currently read from this replSet member",
                     theReplSet && theReplSet->isSecondary() );
         }
     }
-
-    OpCounterServerStatusSection replOpCounterServerStatusSection( "opcountersRepl", &replOpCounters );
 
 } // namespace mongo

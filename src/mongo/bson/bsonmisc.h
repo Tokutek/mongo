@@ -20,6 +20,7 @@
 #include <memory>
 
 #include "mongo/bson/bsonelement.h"
+#include "mongo/client/export_macros.h"
 
 namespace mongo {
 
@@ -69,14 +70,14 @@ namespace mongo {
         BSON( "a" << GT << 23.4 << NE << 30 << "b" << 2 ) produces the object
         { a: { \$gt: 23.4, \$ne: 30 }, b: 2 }.
     */
-#define BSON(x) (( mongo::BSONObjBuilder(64) << x ).obj())
+#define BSON(x) (( ::mongo::BSONObjBuilder(64) << x ).obj())
 
     /** Use BSON_ARRAY macro like BSON macro, but without keys
 
         BSONArray arr = BSON_ARRAY( "hello" << 1 << BSON( "foo" << BSON_ARRAY( "bar" << "baz" << "qux" ) ) );
 
      */
-#define BSON_ARRAY(x) (( mongo::BSONArrayBuilder() << x ).arr())
+#define BSON_ARRAY(x) (( ::mongo::BSONArrayBuilder() << x ).arr())
 
     /* Utility class to auto assign object IDs.
        Example:
@@ -94,7 +95,7 @@ namespace mongo {
        Example:
          std::cout << BSON( "a" << BSONNULL ); // { a : null }
     */
-    extern struct NullLabeler { } BSONNULL;
+    extern MONGO_CLIENT_API struct MONGO_CLIENT_API NullLabeler { } BSONNULL;
 
     /* Utility class to assign an Undefined value to a given attribute
        Example:
@@ -191,7 +192,7 @@ namespace mongo {
     // definitions in bsonobjbuilder.h b/c of incomplete types
 
     // Utility class to implement BSON( key << val ) as described above.
-    class BSONObjBuilderValueStream : public boost::noncopyable {
+    class MONGO_CLIENT_API BSONObjBuilderValueStream : public boost::noncopyable {
     public:
         friend class Labeler;
         BSONObjBuilderValueStream( BSONObjBuilder * builder );

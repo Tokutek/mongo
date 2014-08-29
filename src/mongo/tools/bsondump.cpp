@@ -17,19 +17,17 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "../pch.h"
-#include "mongo/base/initializer.h"
-#include "mongo/client/dbclientcursor.h"
-#include "../util/text.h"
-#include "tool.h"
-
-#include <boost/program_options.hpp>
+#include "mongo/pch.h"
 
 #include <fcntl.h>
 
-using namespace mongo;
+#include "mongo/client/dbclientcursor.h"
+#include "mongo/tools/bsondump_options.h"
+#include "mongo/tools/tool.h"
+#include "mongo/util/options_parser/option_section.h"
+#include "mongo/util/text.h"
 
-namespace po = boost::program_options;
+using namespace mongo;
 
 class BSONDump : public BSONTool {
 
@@ -37,38 +35,27 @@ class BSONDump : public BSONTool {
 
 public:
 
-    BSONDump() : BSONTool( "bsondump", NONE ) {
-        add_options()
-        ("type" , po::value<string>()->default_value("json") , "type of output: json,debug" )
-        ;
-        add_hidden_options()
-        ("file" , po::value<string>() , ".bson file" )
-        ;
-        addPositionArg( "file" , 1 );
-        _noconnection = true;
-    }
+    BSONDump() : BSONTool() { }
 
-    virtual void printExtraHelp(ostream& out) {
-        out << "Display BSON objects in a data file.\n" << endl;
-        out << "usage: " << _name << " [options] <bson filename>" << endl;
+    virtual void printHelp(ostream& out) {
+        printBSONDumpHelp(&out);
     }
 
     virtual int doRun() {
         {
-            string t = getParam( "type" );
-            if ( t == "json" )
+            if (bsonDumpGlobalParams.type == "json")
                 _type = JSON;
-            else if ( t == "debug" )
+            else if (bsonDumpGlobalParams.type == "debug")
                 _type = DEBUG;
             else {
-                cerr << "bad type: " << t << endl;
+                cerr << "bad type: " << bsonDumpGlobalParams.type << endl;
                 return 1;
             }
         }
 
-        boost::filesystem::path root = getParam( "file" );
+        boost::filesystem::path root = bsonDumpGlobalParams.file;
         if ( root == "" ) {
-            printExtraHelp(cout);
+            printBSONDumpHelp(&std::cout);
             return 1;
         }
 
@@ -111,7 +98,7 @@ public:
                     else if ( e.type() == String && ! isValidUTF8( e.valuestr() ) ) {
                         cout << prefix << "\t\t\t" << "bad utf8 String!" << endl;
                     }
-                    else if ( logLevel > 0 ) {
+                    else if ( logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(1)) ) {
                         cout << prefix << "\t\t\t" << e << endl;
                     }
 
@@ -142,8 +129,4 @@ public:
     }
 };
 
-int main( int argc , char ** argv, char **envp ) {
-    mongo::runGlobalInitializersOrDie(argc, argv, envp);
-    BSONDump dump;
-    return dump.main( argc , argv );
-}
+REGISTER_MONGO_TOOL(BSONDump);

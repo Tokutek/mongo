@@ -25,6 +25,7 @@
 #include "mongo/db/instance.h"
 #include "mongo/db/introspect.h"
 #include "mongo/db/namespacestring.h"
+#include "mongo/db/storage_options.h"
 
 namespace mongo {
 
@@ -59,7 +60,7 @@ namespace mongo {
                 }
             }
 #endif
-            _profile = cmdLine.defaultProfile;
+            _profile = serverGlobalParams.defaultProfile;
             // The underlying dbname.ns dictionary is opend if it exists,
             // and created lazily on the next write.
             _collectionMap.init();
@@ -76,7 +77,7 @@ namespace mongo {
         }
     }
 
-    void Database::diskSize(size_t &uncompressedSize, size_t &compressedSize) {
+    void Database::diskSize(intmax_t &uncompressedSize, intmax_t &compressedSize) {
         list<string> colls;
         _collectionMap.getNamespaces(colls);
         CollectionData::Stats dbstats;
@@ -175,8 +176,8 @@ namespace mongo {
             if (db == NULL) {
                 StringData dbname = _todb( ns );
                 DBs &m = _paths[path];
-                if( logLevel >= 1 || m.size() > 40 || DEBUG_BUILD ) {
-                    log() << "opening db: " << (path==dbpath?"":path) << ' ' << dbname << endl;
+                if( logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(1)) || m.size() > 40 || DEBUG_BUILD ) {
+                    log() << "opening db: " << (path==storageGlobalParams.dbpath?"":path) << ' ' << dbname << endl;
                 }
 
                 db = new Database( dbname , path );

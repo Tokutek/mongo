@@ -18,8 +18,6 @@
 
 #pragma once
 
-#include "mongo/pch.h"
-
 #include <stdio.h>
 
 #ifndef _WIN32
@@ -37,14 +35,26 @@
 
 #endif // not _WIN32
 
-#ifdef MONGO_SSL
-#include <openssl/ssl.h>
-#include "mongo/util/net/ssl_manager.h"
-#endif
+#include <boost/scoped_ptr.hpp>
+#include <string>
+#include <utility>
+#include <vector>
 
+#include "mongo/base/disallow_copying.h"
+#include "mongo/logger/log_severity.h"
 #include "mongo/platform/compiler.h"
+#include "mongo/platform/cstdint.h"
+#include "mongo/util/assert_util.h"
 
 namespace mongo {
+
+#ifdef MONGO_SSL
+    class SSLManagerInterface;
+    class SSLConnection;
+#endif
+
+    extern const int portSendFlags;
+    extern const int portRecvFlags;
 
     const int SOCK_FAMILY_UNKNOWN_ERROR=13078;
 
@@ -69,11 +79,11 @@ namespace mongo {
 
 #endif // _WIN32
 
-    string makeUnixSockPath(int port);
+    std::string makeUnixSockPath(int port);
 
     // If an ip address is passed in, just return that.  If a hostname is passed
     // in, look up its ip and return that.  Returns "" on failure.
-    string hostbyname(const char *hostname);
+    std::string hostbyname(const char *hostname);
 
     void enableIPv6(bool state=true);
     bool IPv6Enabled();
@@ -88,13 +98,13 @@ namespace mongo {
             memset(&sa, 0, sizeof(sa));
             sa.ss_family = AF_UNSPEC;
         }
-        SockAddr(int sourcePort); /* listener side */
+        explicit SockAddr(int sourcePort); /* listener side */
         SockAddr(const char *ip, int port); /* EndPoint (remote) side, or if you want to specify which interface locally */
 
         template <typename T> T& as() { return *(T*)(&sa); }
         template <typename T> const T& as() const { return *(const T*)(&sa); }
         
-        string toString(bool includePort=true) const;
+        std::string toString(bool includePort=true) const;
 
         /** 
          * @return one of AF_INET, AF_INET6, or AF_UNIX
@@ -103,7 +113,7 @@ namespace mongo {
 
         unsigned getPort() const;
 
-        string getAddr() const;
+        std::string getAddr() const;
 
         bool isLocalHost() const;
 
@@ -124,13 +134,13 @@ namespace mongo {
     extern SockAddr unknownAddress; // ( "0.0.0.0", 0 )
 
     /** this is not cache and does a syscall */
-    string getHostName();
+    std::string getHostName();
     
     /** this is cached, so if changes during the process lifetime
      * will be stale */
-    string getHostNameCached();
+    std::string getHostNameCached();
 
-    string prettyHostName();
+    std::string prettyHostName();
 
     /**
      * thrown by Socket and SockAddr
@@ -140,7 +150,7 @@ namespace mongo {
         const enum Type { CLOSED , RECV_ERROR , SEND_ERROR, RECV_TIMEOUT, SEND_TIMEOUT, FAILED_STATE, CONNECT_ERROR } _type;
         
         SocketException( Type t , const std::string& server , int code = 9001 , const std::string& extra="" ) 
-            : DBException( (string)"socket exception ["  + _getStringType( t ) + "] for " + server, code ),
+            : DBException( std::string("socket exception [")  + _getStringType( t ) + "] for " + server, code ),
               _type(t),
               _server(server),
               _extra(extra)
@@ -149,12 +159,12 @@ namespace mongo {
         virtual ~SocketException() throw() {}
 
         bool shouldPrint() const { return _type != CLOSED; }
-        virtual string toString() const;
+        virtual std::string toString() const;
         virtual const std::string* server() const { return &_server; }
     private:
 
         // TODO: Allow exceptions better control over their messages
-        static string _getStringType( Type t ){
+        static std::string _getStringType( Type t ){
             switch (t) {
                 case CLOSED:        return "CLOSED";
                 case RECV_ERROR:    return "RECV_ERROR";
@@ -167,8 +177,8 @@ namespace mongo {
             }
         }
 
-        string _server;
-        string _extra;
+        std::string _server;
+        std::string _extra;
     };
 
 
@@ -176,8 +186,12 @@ namespace mongo {
      * thin wrapped around file descriptor and system calls
      * todo: ssl
      */
-    class Socket : boost::noncopyable {
+    class Socket {
+        MONGO_DISALLOW_COPYING(Socket);
     public:
+
+        static const int errorPollIntervalSecs;
+
         Socket(int sock, const SockAddr& farEnd);
 
         /** In some cases the timeout will actually be 2x this value - eg we do a partial send,
@@ -186,47 +200,66 @@ namespace mongo {
 
             Generally you don't want a timeout, you should be very prepared for errors if you set one.
         */
-        Socket(double so_timeout = 0, int logLevel = 0 );
+        Socket(double so_timeout = 0, logger::LogSeverity logLevel = logger::LogSeverity::Log() );
 
         ~Socket();
 
         bool connect(SockAddr& farEnd);
         void close();
-        
         void send( const char * data , int len, const char *context );
-        void send( const vector< pair< char *, int > > &data, const char *context );
+        void send( const std::vector< std::pair< char *, int > > &data, const char *context );
 
         // recv len or throw SocketException
         void recv( char * data , int len );
         int unsafe_recv( char *buf, int max );
         
-        int getLogLevel() const { return _logLevel; }
-        void setLogLevel( int ll ) { _logLevel = ll; }
+        logger::LogSeverity getLogLevel() const { return _logLevel; }
+        void setLogLevel( logger::LogSeverity ll ) { _logLevel = ll; }
 
         SockAddr remoteAddr() const { return _remote; }
-        string remoteString() const { return _remote.toString(); }
+        std::string remoteString() const { return _remote.toString(); }
         unsigned remotePort() const { return _remote.getPort(); }
+
+        SockAddr localAddr() const { return _local; }
 
         void clearCounters() { _bytesIn = 0; _bytesOut = 0; }
         long long getBytesIn() const { return _bytesIn; }
         long long getBytesOut() const { return _bytesOut; }
-        
+        int rawFD() const { return _fd; }
+
         void setTimeout( double secs );
+        bool isStillConnected();
+
+        void setHandshakeReceived() {
+            _awaitingHandshake = false;
+        }
+
+        bool isAwaitingHandshake() {
+            return _awaitingHandshake;
+        }
 
 #ifdef MONGO_SSL
-        /** secures inline */
-        void secure( SSLManager * ssl );
+        /** secures inline 
+         *  ssl - Pointer to the global SSLManager.
+         *  remoteHost - The hostname of the remote server.
+         */
+        bool secure( SSLManagerInterface* ssl, const std::string& remoteHost);
 
-        void secureAccepted( SSLManager * ssl );
+        void secureAccepted( SSLManagerInterface* ssl );
 #endif
         
         /**
          * This function calls SSL_accept() if SSL-encrypted sockets
          * are desired. SSL_accept() waits until the remote host calls
-         * SSL_connect().
+         * SSL_connect(). The return value is the subject name of any
+         * client certificate provided during the handshake.
+         *
+         * @firstBytes is the first bytes received on the socket used
+         * to detect the connection SSL, @len is the number of bytes
+         *
          * This function may throw SocketException.
          */
-        void doSSLHandshake();
+        std::string doSSLHandshake(const char* firstBytes = NULL, int len = 0);
         
         /**
          * @return the time when the socket was opened.
@@ -235,34 +268,39 @@ namespace mongo {
             return _fdCreationMicroSec;
         }
 
+        void handleRecvError(int ret, int len);
+        MONGO_COMPILER_NORETURN void handleSendError(int ret, const char* context);
+
     private:
         void _init();
 
         /** sends dumbly, just each buffer at a time */
-        void _send( const vector< pair< char *, int > > &data, const char *context );
+        void _send( const std::vector< std::pair< char *, int > > &data, const char *context );
 
-        /** raw send, same semantics as ::send */
-        int _send( const char * data , int len );
+        /** raw send, same semantics as ::send with an additional context parameter */
+        int _send( const char * data , int len , const char * context );
 
         /** raw recv, same semantics as ::recv */
         int _recv( char * buf , int max );
 
-        void _handleRecvError(int ret, int len, int* retries);
-        MONGO_COMPILER_NORETURN void _handleSendError(int ret, const char* context);
-
         int _fd;
         uint64_t _fdCreationMicroSec;
+        SockAddr _local;
         SockAddr _remote;
         double _timeout;
 
         long long _bytesIn;
         long long _bytesOut;
+        time_t _lastValidityCheckAtSecs;
 
 #ifdef MONGO_SSL
-        SSL* _ssl;
-        SSLManager * _sslAccepted;
+        boost::scoped_ptr<SSLConnection> _sslConnection;
+        SSLManagerInterface* _sslManager;
 #endif
-        int _logLevel; // passed to log() when logging errors
+        logger::LogSeverity _logLevel; // passed to log() when logging errors
+ 
+        /** true until the first packet has been received or an outgoing connect has been made */
+        bool _awaitingHandshake;
 
     };
 

@@ -32,20 +32,21 @@
 #include <boost/thread/thread.hpp>
 
 #include "mongo/pch.h"
-#include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/crash.h"
 #include "mongo/db/database.h"
+#include "mongo/db/clientcursor.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/db/field_parser.h"
 #include "mongo/db/hasher.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/query_optimizer_internal.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/repl_block.h"
-#include "mongo/db/clientcursor.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/repl.h"
@@ -67,10 +68,11 @@
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/client/remote_transaction.h"
 
+#include "mongo/logger/ramlog.h"
+
 #include "mongo/util/queue.h"
 #include "mongo/util/startup_test.h"
 #include "mongo/util/processinfo.h"
-#include "mongo/util/ramlog.h"
 #include "mongo/util/elapsed_tracker.h"
 
 #include "mongo/s/chunk.h"
@@ -83,7 +85,6 @@
 #include "mongo/util/elapsed_tracker.h"
 #include "mongo/util/processinfo.h"
 #include "mongo/util/queue.h"
-#include "mongo/util/ramlog.h"
 #include "mongo/util/startup_test.h"
 
 using namespace std;
@@ -107,7 +108,7 @@ namespace mongo {
         return true;
     }
 
-    Tee* migrateLog = new RamLog( "migrate" );
+    Tee* migrateLog = RamLog::get("migrate");
 
     class MoveTimingHelper {
     public:
@@ -975,18 +976,16 @@ namespace mongo {
             ChunkVersion startingVersion;
             string myOldShard;
             {
-                scoped_ptr<ScopedDbConnection> conn(
-                        ScopedDbConnection::getInternalScopedDbConnection(
-                                shardingState.getConfigServer(), 30));
+                ScopedDbConnection conn(shardingState.getConfigServer(), 30);
 
                 BSONObj x;
                 BSONObj currChunk;
                 try{
-                    x = conn->get()->findOne(ChunkType::ConfigNS,
+                    x = conn->findOne(ChunkType::ConfigNS,
                                              Query(BSON(ChunkType::ns(ns)))
                                                   .sort(BSON(ChunkType::DEPRECATED_lastmod() << -1)));
 
-                    currChunk = conn->get()->findOne(ChunkType::ConfigNS,
+                    currChunk = conn->findOne(ChunkType::ConfigNS,
                                                      shardId.wrap(ChunkType::name().c_str()));
                 }
                 catch( DBException& e ){
@@ -1000,7 +999,7 @@ namespace mongo {
                 verify(currChunk[ChunkType::min()].type());
                 verify(currChunk[ChunkType::max()].type());
                 myOldShard = currChunk[ChunkType::shard()].String();
-                conn->done();
+                conn.done();
 
                 BSONObj currMin = currChunk[ChunkType::min()].Obj();
                 BSONObj currMax = currChunk[ChunkType::max()].Obj();
@@ -1074,20 +1073,19 @@ namespace mongo {
             }
 
             {
-                scoped_ptr<ScopedDbConnection> connTo(
-                        ScopedDbConnection::getScopedDbConnection( toShard.getConnString() ) );
+                ScopedDbConnection connTo(toShard.getConnString());
                 BSONObj res;
                 bool ok;
                 try{
-                    ok = connTo->get()->runCommand( "admin" ,
-                                                    BSON( "_recvChunkStart" << ns <<
-                                                          "from" << fromShard.getConnString() <<
-                                                          "min" << min <<
-                                                          "max" << max <<
-                                                          "shardKeyPattern" << shardKeyPattern <<
-                                                          "configServer" << configServer.modelServer()
-                                                          ) ,
-                                                    res );
+                    ok = connTo->runCommand( "admin" ,
+                                             BSON( "_recvChunkStart" << ns <<
+                                                   "from" << fromShard.getConnString() <<
+                                                   "min" << min <<
+                                                   "max" << max <<
+                                                   "shardKeyPattern" << shardKeyPattern <<
+                                                   "configServer" << configServer.modelServer()
+                                                   ) ,
+                                             res );
                 }
                 catch( DBException& e ){
                     errmsg = str::stream() << "moveChunk could not contact to: shard "
@@ -1096,7 +1094,7 @@ namespace mongo {
                     return false;
                 }
 
-                connTo->done();
+                connTo.done();
 
                 if ( ! ok ) {
                     errmsg = "moveChunk failed to engage TO-shard in the data transfer: ";
@@ -1116,12 +1114,11 @@ namespace mongo {
                 // Exponential sleep backoff, up to 1024ms. Don't sleep much on the first few
                 // iterations, since we want empty chunk migrations to be fast.
                 sleepmillis( 1 << std::min( i , 10 ) );
-                scoped_ptr<ScopedDbConnection> conn(
-                        ScopedDbConnection::getScopedDbConnection( toShard.getConnString() ) );
+                ScopedDbConnection conn(toShard.getConnString());
                 BSONObj res;
                 bool ok;
                 try {
-                    ok = conn->get()->runCommand( "admin" , BSON( "_recvChunkStatus" << 1 ) , res );
+                    ok = conn->runCommand( "admin" , BSON( "_recvChunkStatus" << 1 ) , res );
                     res = res.getOwned();
                 }
                 catch( DBException& e ){
@@ -1130,7 +1127,7 @@ namespace mongo {
                     return false;
                 }
 
-                conn->done();
+                conn.done();
 
                 LOG(0) << "moveChunk data transfer progress: " << res << migrateLog;
 
@@ -1194,12 +1191,10 @@ namespace mongo {
                     // This timeout (330 seconds) is bigger than on vanilla mongodb, since the
                     // transferMods we have to do even though we think we're in a steady state could
                     // be much larger than in vanilla.
-                    scoped_ptr<ScopedDbConnection> connTo(
-                            ScopedDbConnection::getScopedDbConnection( toShard.getConnString(),
-                                                                       330.0 ) );
+                    ScopedDbConnection connTo(toShard.getConnString(), 330.0);
 
-                    ok = connTo->get()->runCommand( "admin", BSON( "_recvChunkCommit" << 1 ), res );
-                    connTo->done();
+                    ok = connTo->runCommand( "admin", BSON( "_recvChunkCommit" << 1 ), res );
+                    connTo.done();
                 }
                 catch( DBException& e ){
                     errmsg = str::stream() << "moveChunk could not contact to: shard "
@@ -1243,8 +1238,8 @@ namespace mongo {
                 // local one (so to bump version for the entire shard)
 
                 try {
-                    scoped_ptr<ScopedDbConnection> conn(ScopedDbConnection::getInternalScopedDbConnection(shardingState.getConfigServer(), 10.0));
-                    scoped_ptr<RemoteTransaction> txn(new RemoteTransaction(conn->conn(), "serializable"));
+                    ScopedDbConnection conn(shardingState.getConfigServer(), 10.0);
+                    scoped_ptr<RemoteTransaction> txn(new RemoteTransaction(conn.conn(), "serializable"));
 
                     // Check the precondition
                     BSONObjBuilder b;
@@ -1252,7 +1247,7 @@ namespace mongo {
                     BSONObj expect = b.done();
                     Matcher m(expect);
 
-                    BSONObj found = conn->get()->findOne(ChunkType::ConfigNS, QUERY(ChunkType::ns(ns)).sort(ChunkType::DEPRECATED_lastmod(), -1));
+                    BSONObj found = conn->findOne(ChunkType::ConfigNS, QUERY(ChunkType::ns(ns)).sort(ChunkType::DEPRECATED_lastmod(), -1));
                     if (!m.matches(found)) {
                         // TODO(leif): Make sure that this means the sharding algorithm is broken and we should bounce the server.
                         error() << "moveChunk commit failed: " << ChunkVersion::fromBSON(found[ChunkType::DEPRECATED_lastmod()])
@@ -1271,13 +1266,13 @@ namespace mongo {
                         n.append(ChunkType::min(), min);
                         n.append(ChunkType::max(), max);
                         n.append(ChunkType::shard(), toShard.getName());
-                        conn->get()->update(ChunkType::ConfigNS, QUERY(ChunkType::name() << Chunk::genID(ns, min)), n.done());
+                        conn->update(ChunkType::ConfigNS, QUERY(ChunkType::name() << Chunk::genID(ns, min)), n.done());
                     }
                     catch (DBException &e) {
                         warning() << e << migrateLog;
                         error() << "moveChunk error updating the chunk being moved" << migrateLog;
                         txn.reset();
-                        conn->done();
+                        conn.done();
                         throw;
                     }
 
@@ -1307,7 +1302,7 @@ namespace mongo {
                             n.append(ChunkType::min(), bumpMin);
                             n.append(ChunkType::max(), bumpMax);
                             n.append(ChunkType::shard(), fromShard.getName());
-                            conn->get()->update(ChunkType::ConfigNS, QUERY(ChunkType::name() << Chunk::genID(ns, bumpMin)), n.done());
+                            conn->update(ChunkType::ConfigNS, QUERY(ChunkType::name() << Chunk::genID(ns, bumpMin)), n.done());
                             log() << "moveChunk updating self version to: " << nextVersion << " through "
                                   << bumpMin << " -> " << bumpMax << " for collection '" << ns << "'" << migrateLog;
                         }
@@ -1315,7 +1310,7 @@ namespace mongo {
                             warning() << e << migrateLog;
                             error() << "moveChunk error updating chunk on the FROM shard" << migrateLog;
                             txn.reset();
-                            conn->done();
+                            conn.done();
                             throw;
                         }
                     }
@@ -1345,9 +1340,9 @@ namespace mongo {
 
                                 // look for the chunk in this shard whose version got bumped
                                 // we assume that if that mod made it to the config, the transaction was successful
-                                BSONObj doc = conn->get()->findOne(ChunkType::ConfigNS,
-                                                                   Query(BSON(ChunkType::ns(ns)))
-                                                                   .sort(BSON(ChunkType::DEPRECATED_lastmod() << -1)));
+                                BSONObj doc = conn->findOne(ChunkType::ConfigNS,
+                                                            Query(BSON(ChunkType::ns(ns)))
+                                                            .sort(BSON(ChunkType::DEPRECATED_lastmod() << -1)));
 
                                 ChunkVersion checkVersion =
                                         ChunkVersion::fromBSON(doc[ChunkType::DEPRECATED_lastmod()]);
@@ -1373,12 +1368,12 @@ namespace mongo {
                             ss << "Couldn't commit transaction to finish migration after " << (max_commit_retries - retries) << " attempts.";
                             error() << ss.str() << migrateLog;
                             txn.reset();
-                            conn->done();
+                            conn.done();
                             msgasserted(17328, ss.str());
                         }
                     }
                     txn.reset();
-                    conn->done();
+                    conn.done();
                 }
                 catch (DBException& e) {
                     warning() << e << migrateLog;
@@ -1791,9 +1786,7 @@ namespace mongo {
             string errmsg;
             MoveTimingHelper timing( "to" , ns , min , max , 5 /* steps */ , errmsg );
 
-            scoped_ptr<ScopedDbConnection> connPtr(
-                    ScopedDbConnection::getScopedDbConnection( from ) );
-            ScopedDbConnection& conn = *connPtr;
+            ScopedDbConnection conn(from);
             conn->getLastError(); // just test connection
 
             {
@@ -2237,9 +2230,10 @@ namespace mongo {
 
     void migrateThread() {
         Client::initThread( "migrateThread" );
-        if (!noauth) {
+        if (AuthorizationManager::isAuthEnabled()) {
             ShardedConnectionInfo::addHook();
-            cc().getAuthorizationManager()->grantInternalAuthorization("_migrateThread");
+            cc().getAuthorizationSession()->grantInternalAuthorization(
+                    UserName("_migrateThread", "local"));
         }
         migrateStatus.go();
         cc().shutdown();

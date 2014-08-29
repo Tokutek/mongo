@@ -12,6 +12,18 @@
  *
  *    You should have received a copy of the GNU Affero General Public License
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *    As a special exception, the copyright holders give permission to link the
+ *    code of portions of this program with the OpenSSL library under certain
+ *    conditions as described in each individual source file and distribute
+ *    linked combinations including the program with the OpenSSL library. You
+ *    must comply with the GNU Affero General Public License in all respects
+ *    for all of the code used other than as permitted herein. If you modify
+ *    file(s) with this exception, you may extend this exception to your
+ *    version of the file(s), but you are not obligated to do so. If you do not
+ *    wish to do so, delete this exception statement from your version. If you
+ *    delete this exception statement from all source files in the program,
+ *    then also delete it here.
  */
 
 #include "mongo/platform/basic.h"
@@ -26,20 +38,10 @@
 #include <sys/types.h>
 #endif
 
-#include "mongo/db/cmdline.h"
+#include "mongo/db/server_options.h"
 #include "mongo/unittest/unittest.h"
 #include "mongo/util/concurrency/synchronization.h"
 #include "mongo/util/fail_point_service.h"
-
-namespace mongo {
-
-    CmdLine cmdLine;
-
-    bool inShutdown() {
-        return false;
-    }
-
-} // namespace mongo
 
 namespace {
 
@@ -56,18 +58,18 @@ namespace {
 
 #if defined(_WIN32)
     namespace detail {
-        void awaitAccept(int* acceptSock, int listenSock, Notification& notify) {
+        void awaitAccept(SOCKET* acceptSock, SOCKET listenSock, Notification& notify) {
             *acceptSock = INVALID_SOCKET;
-            const int result = ::accept(listenSock, NULL, 0);
+            const SOCKET result = ::accept(listenSock, NULL, 0);
             if (result != INVALID_SOCKET) {
                 *acceptSock = result;
             }
             notify.notifyOne();
         }
 
-        void awaitConnect(int* connectSock, const struct addrinfo& where, Notification& notify) {
+        void awaitConnect(SOCKET* connectSock, const struct addrinfo& where, Notification& notify) {
             *connectSock = INVALID_SOCKET;
-            int newSock = ::socket(where.ai_family, where.ai_socktype, where.ai_protocol);
+            SOCKET newSock = ::socket(where.ai_family, where.ai_socktype, where.ai_protocol);
             if (newSock != INVALID_SOCKET) {
                 int result = ::connect(newSock, where.ai_addr, where.ai_addrlen);
                 if (result == 0) {
@@ -83,7 +85,7 @@ namespace {
         const int domain = PF_INET;
 
         // Create a listen socket and a connect socket.
-        const int listenSock = ::socket(domain, type, protocol);
+        const SOCKET listenSock = ::socket(domain, type, protocol);
         if (listenSock == INVALID_SOCKET)
             return SocketPair();
 
@@ -143,12 +145,12 @@ namespace {
         // threads to do the connect and acccept.
 
         Notification accepted;
-        int acceptSock = INVALID_SOCKET;
+        SOCKET acceptSock = INVALID_SOCKET;
         boost::thread acceptor(
             boost::bind(&detail::awaitAccept, &acceptSock, listenSock, boost::ref(accepted)));
 
         Notification connected;
-        int connectSock = INVALID_SOCKET;
+        SOCKET connectSock = INVALID_SOCKET;
         boost::thread connector(
             boost::bind(&detail::awaitConnect, &connectSock, *connectRes, boost::ref(connected)));
 
@@ -176,8 +178,8 @@ namespace {
         ::freeaddrinfo(res);
         ::freeaddrinfo(connectRes);
 
-        SocketPtr first(new Socket(acceptSock, SockAddr()));
-        SocketPtr second(new Socket(connectSock, SockAddr()));
+        SocketPtr first(new Socket(static_cast<int>(acceptSock), SockAddr()));
+        SocketPtr second(new Socket(static_cast<int>(connectSock), SockAddr()));
 
         return SocketPair(first, second);
     }

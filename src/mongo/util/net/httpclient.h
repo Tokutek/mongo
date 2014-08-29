@@ -17,17 +17,17 @@
 
 #pragma once
 
+#include "mongo/client/export_macros.h"
 #include "mongo/pch.h"
-#include "sock.h"
 
 namespace mongo {
 
-    class HttpClient : boost::noncopyable {
+    class MONGO_CLIENT_API HttpClient : boost::noncopyable {
     public:
 
         typedef map<string,string> Headers;
 
-        class Result {
+        class MONGO_CLIENT_API Result {
         public:
             Result() {}
 
@@ -68,11 +68,5 @@ namespace mongo {
 
     private:
         int _go( const char * command , string url , const char * body , Result * result );
-
-#ifdef MONGO_SSL
-        void _checkSSLManager();
-
-        scoped_ptr<SSLManager> _sslManager;
-#endif
     };
 }

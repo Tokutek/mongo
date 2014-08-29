@@ -25,9 +25,11 @@
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/privilege.h"
+#include "mongo/db/auth/security_key.h"
+#include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
-#include "../../util/net/listen.h"
-#include "../commands.h"
+#include "mongo/db/server_options.h"
+#include "mongo/util/net/listen.h"
 #include "mongo/util/net/hostandport.h"
 #include "mongo/client/dbclientinterface.h"
 
@@ -64,8 +66,8 @@ namespace mongo {
         vector<string> out;
         ifaddrs * addrs;
         
-        if ( ! cmdLine.bind_ip.empty() ) {
-            boost::split( out, cmdLine.bind_ip, boost::is_any_of( ", " ) );
+        if (!serverGlobalParams.bind_ip.empty()) {
+            boost::split(out, serverGlobalParams.bind_ip, boost::is_any_of(", "));
             return out;
         }
 
@@ -96,12 +98,15 @@ namespace mongo {
         freeifaddrs( addrs );
         addrs = NULL;
 
-        if (logLevel >= 1) {
-            LOG(1) << "getMyAddrs():";
+        if (logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(1))) {
+            LogstreamBuilder builder(logger::globalLogDomain(),
+                                     getThreadName(),
+                                     logger::LogSeverity::Debug(1));
+            builder << "getMyAddrs():";
             for (vector<string>::const_iterator it=out.begin(), end=out.end(); it!=end; ++it) {
-                LOG(1) << " [" << *it << ']';
+                builder << " [" << *it << ']';
             }
-            LOG(1) << endl;
+            builder << endl;
         }
 
         return out;
@@ -114,7 +119,7 @@ namespace mongo {
         hints.ai_socktype = SOCK_STREAM;
         hints.ai_family = (IPv6Enabled() ? AF_UNSPEC : AF_INET);
 
-        static string portNum = BSONObjBuilder::numStr(cmdLine.port);
+        static string portNum = BSONObjBuilder::numStr(serverGlobalParams.port);
 
         vector<string> out;
 
@@ -140,12 +145,15 @@ namespace mongo {
 
         freeaddrinfo(addrs);
 
-        if (logLevel >= 1) {
-            LOG(1) << "getallIPs(\"" << iporhost << "\"):";
+        if (logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(1))) {
+            LogstreamBuilder builder(logger::globalLogDomain(),
+                                     getThreadName(),
+                                     logger::LogSeverity::Debug(1));
+            builder << "getallIPs(\"" << iporhost << "\"):";
             for (vector<string>::const_iterator it=out.begin(), end=out.end(); it!=end; ++it) {
-                LOG(1) << " [" << *it << ']';
+                builder << " [" << *it << ']';
             }
-            LOG(1) << endl;
+            builder << endl;
         }
 
         return out;
@@ -183,9 +191,9 @@ namespace mongo {
     bool HostAndPort::isSelf() const {
 
         int _p = port();
-        int p = _p == -1 ? CmdLine::DefaultDBPort : _p;
+        int p = _p == -1 ? ServerGlobalParams::DefaultDBPort : _p;
 
-        if( p != cmdLine.port ) {
+        if (p != serverGlobalParams.port) {
             // shortcut - ports have to match at the very least
             return false;
         }
@@ -241,8 +249,8 @@ namespace mongo {
                 return false;
             }
 
-            if (!noauth && !cmdLine.keyFile.empty() ) {
-                if (!conn.auth("local", internalSecurity.user, internalSecurity.pwd, errmsg, false)) {
+            if (AuthorizationManager::isAuthEnabled() && isInternalAuthSet()) {
+                if (!authenticateInternalUser(&conn)) {
                     return false;
                 }
             }

@@ -26,7 +26,6 @@ namespace mongo {
     class TransactionCommand : public InformationCommand {
       public:
         virtual bool adminOnly() const { return false; }
-        virtual bool requiresAuth() { return true; }
         virtual void addRequiredPrivileges(const std::string &dbname,
                                            const BSONObj &cmdObj,
                                            std::vector<Privilege> *out) {

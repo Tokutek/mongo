@@ -16,20 +16,64 @@ add_library(index_set STATIC
   )
 add_dependencies(index_set generate_error_codes generate_action_types)
 
-add_library(dbcmdline STATIC
-  cmdline
+add_library(lasterror STATIC
+  lasterror
   )
-target_link_libraries(dbcmdline LINK_PUBLIC
+add_dependencies(lasterror generate_error_codes generate_action_types)
+target_link_libraries(lasterror LINK_PUBLIC
+  network
+  foundation
+  )
+
+# This library exists because some libraries, such as our networking library, need access to server
+# options, but not to the helpers to set them from the command line.  libserver_options_core.a just
+# has the structure for storing the server options, while libserver_options.a has the code to set
+# them via the command line.
+add_library(server_options_core STATIC
+  server_options
+  )
+add_dependencies(server_options_core generate_error_codes generate_action_types)
+target_link_libraries(server_options_core LINK_PUBLIC
   bson
+  )
+
+add_library(server_options STATIC
+  server_options_helpers
+  )
+add_dependencies(server_options generate_error_codes generate_action_types)
+target_link_libraries(server_options LINK_PUBLIC
+  bson
+  network  # temporary crutch that should go away once the networking library has separate options
+  server_options_core
   server_parameters
+  options_parser_init
+  cmdline_utils
+  )
+
+add_library(mongod_options STATIC
+  mongod_options
+  )
+add_dependencies(mongod_options generate_error_codes generate_action_types)
+target_link_libraries(mongod_options LINK_PUBLIC
+  server_options
+  mongocommon
+  serveronly
+  coreserver
+  coredb
+  options_parser_init
   )
 
 add_library(db_common STATIC
   field_ref
+  field_parser
   )
 target_link_libraries(db_common LINK_PUBLIC
   bson
   foundation
+  )
+
+add_library(storage_global_params_impl STATIC
+  storage_global_params_impl
   )
 
 add_library(coredb STATIC
@@ -44,11 +88,11 @@ add_library(coredb STATIC
   commands/isself
   commands/mr_common
   commands/rename_collection_common
-  commands/parameters
   commands/server_status
+  commands/parameters
+  commands/user_management_commands.cpp
   pipeline/pipeline
   dbcommands_generic
-  dbpath
   dbwebserver
   keypattern
   keygenerator
@@ -102,11 +146,14 @@ target_link_libraries(coredb LINK_PUBLIC
   serverauth
   db_common
   mongocommon
-  dbcmdline
   coreserver
   plugins
   server_parameters
   foundation
+  server_options
+  storage_global_params_impl
+  cmdline_utils
+  clientdriver
   ${TokuKV_LIBRARIES}
   )
 
@@ -135,6 +182,7 @@ add_library(serveronly STATIC
   repl/rs_sync
   repl/rs_initialsync
   repl/bgsync
+  repl/replication_server_status
   oplog
   oplog_helpers
   repl_block
@@ -167,6 +215,8 @@ add_library(serveronly STATIC
   ops/update
   ops/update_internal
   ops/insert
+  startup_warnings
+  storage_options
 
   # most commands are only for mongod
   dbcommands
@@ -206,14 +256,13 @@ target_link_libraries(serveronly LINK_PUBLIC
   coreshard
   authmongod
   db_common
-  dbcmdline
+  storage_global_params_impl
   defaultversion
   index_set
   ${TokuKV_LIBRARIES}
   )
 
 add_library(mongodandmongos STATIC
-  connection_factory
   initialize_server_global_state
   server_extra_log_context
   ../util/net/message_server_port
@@ -226,6 +275,7 @@ add_library(coreserver STATIC
   ../util/net/miniwebserver
   stats/counters
   stats/service_stats
+  log_process_details
   )
 add_dependencies(coreserver generate_error_codes generate_action_types)
 target_link_libraries(coreserver LINK_PUBLIC

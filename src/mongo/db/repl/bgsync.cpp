@@ -220,8 +220,8 @@ namespace mongo {
                     boost::unique_lock<boost::mutex> lck(_mutex);
                     dassert(_deque.size() > 0);
                     _deque.pop_front();
-                    bufferCountGauge.increment(-1);
-                    bufferSizeGauge.increment(-curr.objsize());
+                    bufferCountGauge.decrement(1);
+                    bufferSizeGauge.decrement(curr.objsize());
                     
                     // this is a flow control mechanism, with bad numbers
                     // hard coded for now just to get something going.

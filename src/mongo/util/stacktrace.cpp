@@ -14,6 +14,8 @@
  *    limitations under the License.
  */
 
+#include "mongo/platform/basic.h"
+
 #include "mongo/util/stacktrace.h"
 
 #include <cstdlib>
@@ -23,13 +25,13 @@
 #include <vector>
 
 #include "mongo/util/log.h"
+#include "mongo/util/concurrency/mutex.h"
 
 #ifdef _WIN32
 #include <boost/filesystem/operations.hpp>
 #include <boost/smart_ptr/scoped_array.hpp>
 #include <sstream>
 #include <stdio.h>
-#include "mongo/platform/windows_basic.h"
 #include <DbgHelp.h>
 #include "mongo/util/assert_util.h"
 #else
@@ -275,13 +277,13 @@ namespace mongo {
         }
     }
 
-    // Print error message from C runtime followed by stack trace
+    // Print error message from C runtime, then fassert
     int crtDebugCallback(int, char* originalMessage, int*) {
         StringData message(originalMessage);
         log() << "*** C runtime error: "
-              << message.substr(0, message.find('\n')) << std::endl;
-        printStackTrace();
-        return 1;           // 0 == not handled, non-0 == handled
+              << message.substr(0, message.find('\n'))
+              << ", terminating" << std::endl;
+        fassertFailed( 17366 );
     }
 
 }

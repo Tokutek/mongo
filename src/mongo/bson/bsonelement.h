@@ -26,6 +26,8 @@
 
 #include "mongo/bson/bsontypes.h"
 #include "mongo/bson/oid.h"
+#include "mongo/client/export_macros.h"
+#include "mongo/platform/cstdint.h"
 #include "mongo/platform/float_utils.h"
 
 namespace mongo {
@@ -61,7 +63,7 @@ namespace mongo {
         value()
         type()
     */
-    class BSONElement {
+    class MONGO_CLIENT_API BSONElement {
     public:
         /** These functions, which start with a capital letter, throw a UserException if the
             element is not of the required type. Example:
@@ -82,8 +84,8 @@ namespace mongo {
         void OK()                   const { chk(ok()); }     // throw UserException if element DNE
 
         /** @return the embedded object associated with this field.
-            Note the returned object is a reference to within the parent bson object. If that 
-            object is out of scope, this pointer will no longer be valid. Call getOwned() on the 
+            Note the returned object is a reference to within the parent bson object. If that
+            object is out of scope, this pointer will no longer be valid. Call getOwned() on the
             returned BSONObj if you need your own copy.
             throws UserException if the element is not of type object.
         */
@@ -148,11 +150,17 @@ namespace mongo {
             return data + 1;
         }
 
-
+        /**
+         * NOTE: size includes the NULL terminator.
+         */
         int fieldNameSize() const {
             if ( fieldNameSize_ == -1 )
                 fieldNameSize_ = (int)strlen( fieldName() ) + 1;
             return fieldNameSize_;
+        }
+
+        const StringData fieldNameStringData() const {
+            return StringData(fieldName(), fieldNameSize() - 1);
         }
 
         /** raw data of the element's value (so be careful). */
@@ -234,7 +242,7 @@ namespace mongo {
         }
 
         /** Size (length) of a string element.
-            You must assure of type String first.  
+            You must assure of type String first.
             @return string size including terminating null
         */
         int valuestrsize() const {

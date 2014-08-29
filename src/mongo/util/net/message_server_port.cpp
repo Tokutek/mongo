@@ -15,21 +15,21 @@
  *    limitations under the License.
  */
 
-#include "pch.h"
+#include "mongo/pch.h"
 
 #include <boost/thread/thread.hpp>
 
 #ifndef USE_ASIO
 
-#include "message.h"
-#include "message_port.h"
-#include "message_server.h"
-#include "listen.h"
 
-#include "../../db/cmdline.h"
-#include "../../db/lasterror.h"
-#include "../../db/stats/counters.h"
+#include "mongo/db/lasterror.h"
+#include "mongo/db/stats/counters.h"
 #include "mongo/util/concurrency/ticketholder.h"
+#include "mongo/util/concurrency/thread_name.h"
+#include "mongo/util/net/listen.h"
+#include "mongo/util/net/message.h"
+#include "mongo/util/net/message_port.h"
+#include "mongo/util/net/message_server.h"
 #include "mongo/util/net/ssl_manager.h"
 
 #ifdef __linux__  // TODO: consider making this ifndef _WIN32
@@ -178,7 +178,7 @@ namespace mongo {
             }
 
             verify( inPort );
-            inPort->psock->setLogLevel(1);
+            inPort->psock->setLogLevel(logger::LogSeverity::Debug(1));
             scoped_ptr<MessagingPort> p( inPort );
 
             string otherSide;
@@ -190,7 +190,6 @@ namespace mongo {
 
                 otherSide = p->psock->remoteString();
 
-                p->psock->doSSLHandshake();
                 handler->connected( p.get() );
 
                 while ( ! inShutdown() ) {
@@ -198,7 +197,7 @@ namespace mongo {
                     p->psock->clearCounters();
 
                     if ( ! p->recv(m) ) {
-                        if( !cmdLine.quiet ){
+                        if (!serverGlobalParams.quiet) {
                             int conns = Listener::globalTicketHolder.used()-1;
                             const char* word = (conns == 1 ? " connection" : " connections");
                             log() << "end connection " << otherSide << " (" << conns << word << " now open)" << endl;
@@ -227,14 +226,12 @@ namespace mongo {
                 error() << "Uncaught std::exception: " << e.what() << ", terminating" << endl;
                 dbexit( EXIT_UNCAUGHT );
             }
-            catch ( ... ) {
-                error() << "Uncaught exception, terminating" << endl;
-                dbexit( EXIT_UNCAUGHT );
-            }
 
             // Normal disconnect path.
 #ifdef MONGO_SSL
-            SSLManager::cleanupThreadLocals();
+            SSLManagerInterface* manager = getSSLManager();
+            if (manager)
+                manager->cleanupThreadLocals();
 #endif
             handler->disconnected( p.get() );
 

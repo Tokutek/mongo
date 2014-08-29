@@ -35,6 +35,7 @@
 #include "mongo/db/pipeline/pipeline_d.h"
 #include "mongo/db/pipeline/pipeline.h"
 #include "mongo/db/ops/query.h"
+#include "mongo/util/assert_util.h"
 
 namespace mongo {
 
@@ -193,7 +194,7 @@ namespace mongo {
         BSONObj shardBson(shardBuilder.done());
 
         DEV (log() << "\n---- shardBson\n" <<
-             shardBson.jsonString(Strict, 1) << "\n----\n").flush();
+             shardBson.jsonString(Strict, 1) << "\n----\n");
 
         /* for debugging purposes, show what the pipeline now looks like */
         DEV {
@@ -201,7 +202,7 @@ namespace mongo {
             pPipeline->toBson(&pipelineBuilder);
             BSONObj pipelineBson(pipelineBuilder.done());
             (log() << "\n---- pipelineBson\n" <<
-             pipelineBson.jsonString(Strict, 1) << "\n----\n").flush();
+             pipelineBson.jsonString(Strict, 1) << "\n----\n");
         }
 
         /* on the shard servers, create the local pipeline */
@@ -290,6 +291,7 @@ namespace mongo {
         pPipeline->stitch();
 
         if (isCursorCommand(cmdObj)) {
+            uasserted(17364, "aggregation cursor isn't yet supported");
             CursorId id;
             {
                 // Set up cursor

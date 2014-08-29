@@ -18,7 +18,7 @@
 
 #include "mongo/base/string_data.h"
 #include "mongo/db/auth/action_type.h"
-#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/client.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/cursor.h"
@@ -40,7 +40,7 @@ namespace mongo {
             std::string sourceNS = info["ns"].String();
             uassert(16548,
                     mongoutils::str::stream() << "not authorized to create index on " << sourceNS,
-                    cc().getAuthorizationManager()->checkAuthorization(sourceNS,
+                    cc().getAuthorizationSession()->checkAuthorization(sourceNS,
                                                                        ActionType::ensureIndex));
         }
     }

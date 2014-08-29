@@ -32,6 +32,13 @@ int main( int argc, const char **argv ) {
         port = argv[ 2 ];
     }
 
+
+    Status status = client::initialize();
+    if ( !status.isOK() ) {
+        std::cout << "failed to initialize the client driver: " << status.toString() << endl;
+        return EXIT_FAILURE;
+    }
+
     DBClientConnection conn;
     string errmsg;
     if ( ! conn.connect( string( "127.0.0.1:" ) + port , errmsg ) ) {
@@ -46,7 +53,11 @@ int main( int argc, const char **argv ) {
     conn.insert( ns , BSON( "name" << "eliot" << "num" << 17 ) );
     conn.insert( ns , BSON( "name" << "sara" << "num" << 24 ) );
 
-    auto_ptr<DBClientCursor> cursor = conn.query( ns , BSONObj() );
+    std::auto_ptr<DBClientCursor> cursor = conn.query( ns , BSONObj() );
+    if (!cursor.get()) {
+        cout << "query failure" << endl;
+        return EXIT_FAILURE;
+    }
 
     while ( cursor->more() ) {
         BSONObj obj = cursor->next();
@@ -58,6 +69,10 @@ int main( int argc, const char **argv ) {
     Query q = Query("{}").where("this.name == name" , BSON( "name" << "sara" ));
 
     cursor = conn.query( ns , q );
+    if (!cursor.get()) {
+        cout << "query failure" << endl;
+        return EXIT_FAILURE;
+    }
 
     int num = 0;
     while ( cursor->more() ) {
@@ -66,4 +81,6 @@ int main( int argc, const char **argv ) {
         num++;
     }
     MONGO_verify( num == 1 );
+
+    return EXIT_SUCCESS;
 }

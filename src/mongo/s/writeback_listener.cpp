@@ -22,6 +22,7 @@
 #include "writeback_listener.h"
 
 #include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_session.h"
 #include "mongo/s/chunk_version.h"
 #include "mongo/s/client_info.h"
 #include "mongo/s/config.h"
@@ -131,7 +132,7 @@ namespace mongo {
         }
 
         uasserted( 13403 , str::stream() << "didn't get writeback for: " << oid
-                                         << " after: " << t.millis() << " ms"
+                                         << " after: " << t.millis() << "ms"
                                          << " from connection " << ident.toString() );
 
         throw 1; // never gets here
@@ -159,23 +160,22 @@ namespace mongo {
                     needsToReloadShardInfo = false;
                 }
 
-                scoped_ptr<ScopedDbConnection> conn(
-                        ScopedDbConnection::getInternalScopedDbConnection( _addr ) );
+                ScopedDbConnection conn(_addr);
 
                 BSONObj result;
 
                 {
                     BSONObjBuilder cmd;
                     cmd.appendOID( "writebacklisten" , &serverID ); // Command will block for data
-                    if ( ! conn->get()->runCommand( "admin" , cmd.obj() , result ) ) {
+                    if ( ! conn->runCommand( "admin" , cmd.obj() , result ) ) {
                         result = result.getOwned();
                         log() <<  "writebacklisten command failed!  "  << result << endl;
-                        conn->done();
+                        conn.done();
                         continue;
                     }
 
                 }
-                conn->done();
+                conn.done();
 
                 LOG(1) << "writebacklisten result: " << result << endl;
 
@@ -298,9 +298,9 @@ namespace mongo {
                             r.d().reservedField() |= Reserved_FromWriteback;
 
                             ClientInfo * ci = r.getClientInfo();
-                            if (!noauth) {
-                                ci->getAuthorizationManager()->grantInternalAuthorization(
-                                        "_writebackListener");
+                            if (AuthorizationManager::isAuthEnabled()) {
+                                ci->getAuthorizationSession()->grantInternalAuthorization(
+                                        UserName("_writebackListener", "local"));
                             }
                             ci->noAutoSplit();
 

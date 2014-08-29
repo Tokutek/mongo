@@ -25,6 +25,8 @@
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_manager_global.h"
+#include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/commands/find_and_modify.h"
 #include "mongo/db/commands/mr.h"
@@ -489,18 +491,12 @@ namespace mongo {
         class CopyDBCmd : public PublicGridCommand {
         public:
             CopyDBCmd() : PublicGridCommand( "copydb" ) {}
-            virtual bool adminOnly() const {
-                return true;
-            }
             virtual void addRequiredPrivileges(const std::string& dbname,
                                                const BSONObj& cmdObj,
                                                std::vector<Privilege>* out) {
-                // Note: privileges required are currently only granted to old-style users for
-                // backwards compatibility, since we can't properly handle auth checking for the
-                // read from the source DB.
-                ActionSet actions;
-                actions.addAction(ActionType::copyDBTarget);
-                out->push_back(Privilege(dbname, actions)); // NOTE: dbname is always admin
+                // Should never get here because this command shouldn't get registered when auth is
+                // enabled
+                verify(0);
             }
             bool run(const string& dbName, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
                 string todb = cmdObj.getStringField("todb");
@@ -535,9 +531,12 @@ namespace mongo {
             }
         };
         MONGO_INITIALIZER(RegisterCopyDBCommand)(InitializerContext* context) {
-            // Leaked intentionally: a Command registers itself when constructed.
-            // NOTE: this initializer block cannot be removed due to SERVER-9167
-            new CopyDBCmd();
+            if (!AuthorizationManager::isAuthEnabled()) {
+                // Leaked intentionally: a Command registers itself when constructed.
+                new CopyDBCmd();
+            } else {
+                new NotWithAuthCmd("copydb");
+            }
             return Status::OK();
         }
 
@@ -687,13 +686,12 @@ namespace mongo {
                 for ( set<Shard>::iterator i=servers.begin(); i!=servers.end(); i++ ) {
                     BSONObj res;
                     {
-                        scoped_ptr<ScopedDbConnection> conn(
-                                ScopedDbConnection::getScopedDbConnection( i->getConnString() ) );
-                        if ( ! conn->get()->runCommand( dbName , cmdObj , res ) ) {
+                        ScopedDbConnection conn(i->getConnString());
+                        if ( ! conn->runCommand( dbName , cmdObj , res ) ) {
                             errmsg = "failed on shard: " + res.toString();
                             return false;
                         }
-                        conn->done();
+                        conn.done();
                     }
                     
                     BSONObjIterator j( res );
@@ -932,11 +930,10 @@ namespace mongo {
                 set<Shard> shards;
                 cm->getShardsForRange(shards, min, max);
                 for ( set<Shard>::iterator i=shards.begin(), end=shards.end() ; i != end; ++i ) {
-                    scoped_ptr<ScopedDbConnection> conn(
-                            ScopedDbConnection::getScopedDbConnection( i->getConnString() ) );
+                    ScopedDbConnection conn(i->getConnString());
                     BSONObj res;
-                    bool ok = conn->get()->runCommand( conf->getName() , cmdObj , res );
-                    conn->done();
+                    bool ok = conn->runCommand( conf->getName() , cmdObj , res );
+                    conn.done();
 
                     if ( ! ok ) {
                         result.appendElements( res );
@@ -1408,10 +1405,9 @@ namespace mongo {
                 try {
                     // drop collections with tmp results on each shard
                     for ( set<ServerAndQuery>::iterator i=servers.begin(); i!=servers.end(); i++ ) {
-                        scoped_ptr<ScopedDbConnection> conn(
-                                ScopedDbConnection::getScopedDbConnection( i->_server ) );
-                        conn->get()->dropCollection( dbName + "." + shardResultCollection );
-                        conn->done();
+                        ScopedDbConnection conn(i->_server);
+                        conn->dropCollection( dbName + "." + shardResultCollection );
+                        conn.done();
                     }
                 } catch ( std::exception e ) {
                     log() << "Cannot cleanup shard results" << causedBy( e ) << endl;
@@ -1780,7 +1776,7 @@ namespace mongo {
                                                std::vector<Privilege>* out) {
                 // $eval can do pretty much anything, so require all privileges.
                 out->push_back(Privilege(PrivilegeSet::WILDCARD_RESOURCE,
-                                         AuthorizationManager::getAllUserActions()));
+                                         getGlobalAuthorizationManager()->getAllUserActions()));
             }
             virtual bool run(const string& dbName,
                              BSONObj& cmdObj,
@@ -1919,6 +1915,7 @@ namespace mongo {
             Command::appendCommandStatus(anObjBuilder,
                                          false,
                                          str::stream() << "no such cmd: " << commandName);
+            anObjBuilder.append("code", ErrorCodes::CommandNotFound);
             return;
         }
         ClientInfo *client = ClientInfo::get();

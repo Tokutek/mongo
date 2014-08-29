@@ -202,12 +202,12 @@ namespace BasicTests {
                 if( sec == 1 ) 
                     matches++;
                 else
-                    log() << "temp millis: " << t.millis() << endl;
+                    mongo::unittest::log() << "temp millis: " << t.millis() << endl;
                 ASSERT( sec >= 0 && sec <= 2 );
                 t.reset();
             }
             if ( matches < 2 )
-                log() << "matches:" << matches << endl;
+                mongo::unittest::log() << "matches:" << matches << endl;
             ASSERT( matches >= 2 );
 
             sleepmicros( 1527123 );
@@ -265,48 +265,23 @@ namespace BasicTests {
         void run() {
 
             int maxSleepTimeMillis = 1000;
-            int lastSleepTimeMillis = -1;
-            int epsMillis = 100; // Allowable inprecision for timing
 
             Backoff backoff( maxSleepTimeMillis, maxSleepTimeMillis * 2 );
 
-            Timer t;
+            // Double previous sleep duration
+            ASSERT_EQUALS( backoff.getNextSleepMillis( 0,   0, 0 ), 1 );
+            ASSERT_EQUALS( backoff.getNextSleepMillis( 2,   0, 0 ), 4 );
+            ASSERT_EQUALS( backoff.getNextSleepMillis( 256, 0, 0 ), 512 );
 
             // Make sure our backoff increases to the maximum value
-            int maxSleepCount = 0;
-            while( maxSleepCount < 3 ){
-
-                t.reset();
-
-                backoff.nextSleepMillis();
-
-                int elapsedMillis = t.millis();
-
-                log() << "Slept for " << elapsedMillis << endl;
-
-                ASSERT( almostGTE( elapsedMillis, lastSleepTimeMillis, epsMillis ) );
-                lastSleepTimeMillis = elapsedMillis;
-
-                if( almostEq( elapsedMillis, maxSleepTimeMillis, epsMillis ) ) maxSleepCount++;
-            }
+            ASSERT_EQUALS( backoff.getNextSleepMillis( maxSleepTimeMillis - 200, 0, 0 ), maxSleepTimeMillis );
+            ASSERT_EQUALS( backoff.getNextSleepMillis( maxSleepTimeMillis * 2, 0, 0 ), maxSleepTimeMillis );
 
             // Make sure that our backoff gets reset if we wait much longer than the maximum wait
-            sleepmillis( maxSleepTimeMillis * 4 );
+            unsigned long long resetAfterMillis = maxSleepTimeMillis + maxSleepTimeMillis * 2;
+            ASSERT_EQUALS( backoff.getNextSleepMillis( 20, resetAfterMillis, 0), 40 ); // no reset here
+            ASSERT_EQUALS( backoff.getNextSleepMillis( 20, resetAfterMillis + 1, 0), 1 ); // reset expected
 
-            t.reset();
-            backoff.nextSleepMillis();
-
-            ASSERT( almostEq( t.millis(), 0, epsMillis ) );
-
-        }
-
-        bool almostEq( int a, int b, int eps ){
-            return std::abs( a - b ) <= eps;
-        }
-
-        bool almostGTE( int a, int b, int eps ){
-            if( almostEq( a, b, eps ) ) return true;
-            return a > b;
         }
     };
 
@@ -363,11 +338,12 @@ namespace BasicTests {
         void run() {
             ThreadSafeString s;
             s = "eliot";
-            ASSERT_EQUALS( s , "eliot" );
-            ASSERT( s != "eliot2" );
+            ASSERT_EQUALS( s.toString() , "eliot" );
+            ASSERT( s.toString() != "eliot2" );
 
-            ThreadSafeString s2 = s;
-            ASSERT_EQUALS( s2 , "eliot" );
+            ThreadSafeString s2;
+            s2 = s.toString().c_str();
+            ASSERT_EQUALS( s2.toString() , "eliot" );
 
 
             {
@@ -563,68 +539,6 @@ namespace BasicTests {
         }
     };
 
-    class CmdLineParseConfigTest {
-    public:
-        void run() {
-            stringstream ss1;
-            istringstream iss1("");
-            CmdLine::parseConfigFile( iss1, ss1 );
-            stringstream ss2;
-            istringstream iss2("password=\'foo bar baz\'");
-            CmdLine::parseConfigFile( iss2, ss2 );
-            stringstream ss3;
-            istringstream iss3("\t    this = false  \n#that = true\n  #another = whocares\n\n  other = monkeys  ");
-            CmdLine::parseConfigFile( iss3, ss3 );
-
-            ASSERT_EQUALS( ss1.str(), "\n" );
-            ASSERT_EQUALS( ss2.str(), "password=\'foo bar baz\'\n" );
-            ASSERT_EQUALS( ss3.str(), "\n  other = monkeys  \n" );
-        }
-    };
-
-    /** Simple tests for log tees. */
-    class LogTee {
-    public:
-        ~LogTee() {
-            // Clean global tees on test failure.
-            Logstream::get().removeGlobalTee( &_tee );            
-        }
-        void run() {
-            // Attempting to remove a tee before any tees are added is safe.
-            Logstream::get().removeGlobalTee( &_tee );
-
-            // A log is not written to a non global tee.
-            log() << "LogTee test" << endl;
-            assertNumLogs( 0 );
-
-            // A log is written to a global tee.
-            Logstream::get().addGlobalTee( &_tee );
-            log() << "LogTee test" << endl;
-            assertNumLogs( 1 );
-
-            // A log is not written to a tee removed from the global tee list.
-            Logstream::get().removeGlobalTee( &_tee );
-            log() << "LogTee test" << endl;
-            assertNumLogs( 1 );            
-        }
-    private:
-        void assertNumLogs( int expected ) const {
-            ASSERT_EQUALS( expected, _tee.numLogs() );
-        }
-        class Tee : public mongo::Tee {
-        public:
-            Tee() :
-                _numLogs() {
-            }
-            virtual void write( LogLevel level, const string &str ) {
-                ++_numLogs;
-            }
-            int numLogs() const { return _numLogs; }
-        private:
-            int _numLogs;
-        };
-        Tee _tee;
-    };
 
     class All : public Suite {
     public:
@@ -659,9 +573,7 @@ namespace BasicTests {
 
             add< HostAndPortTests >();
             add< RelativePathTest >();
-            add< CmdLineParseConfigTest >();
 
-            add< LogTee >();
         }
     } myall;
 

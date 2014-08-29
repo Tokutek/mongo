@@ -24,6 +24,7 @@
 #include "mongo/db/client.h"
 #include "mongo/db/instance.h"
 #include "mongo/util/assert_util.h"
+#include "mongo/util/options_parser/environment.h"
 #include "mongo/util/text.h"
 #include "mongo/util/winutil.h"
 
@@ -57,7 +58,7 @@ namespace {
 
     void configureService(
             ServiceCallback serviceCallback,
-            const boost::program_options::variables_map& params,
+            const moe::Environment& params,
             const NtServiceDefaultStrings& defaultStrings,
             const std::vector<std::string>& disallowedOptions,
             const std::vector<std::string>& argv
@@ -70,7 +71,7 @@ namespace {
 
         int badOption = -1;
         for (size_t i = 0; i < disallowedOptions.size(); ++i) {
-            if (params.count(disallowedOptions[i]) > 0) {
+            if (params.count(disallowedOptions[i])) {
                 badOption = i;
                 break;
             }
@@ -87,8 +88,9 @@ namespace {
                 log() << "--install cannot be used with --" << disallowedOptions[badOption] << endl;
                 ::_exit( EXIT_BADOPTIONS );
             }
-            if ( ! params.count( "logpath" ) ) {
-                log() << "--install has to be used with --logpath" << endl;
+            if ( !params.count("systemLog.destination") ||
+                 params["systemLog.destination"].as<std::string>() != "file" ) {
+                log() << "--install has to be used with a log file for server output" << endl;
                 ::_exit( EXIT_BADOPTIONS );
             }
             installService = true;
@@ -98,8 +100,9 @@ namespace {
                 log() << "--reinstall cannot be used with --" << disallowedOptions[badOption] << endl;
                 ::_exit( EXIT_BADOPTIONS );
             }
-            if ( ! params.count( "logpath" ) ) {
-                log() << "--reinstall has to be used with --logpath" << endl;
+            if ( !params.count("systemLog.destination") ||
+                 params["systemLog.destination"].as<std::string>() != "file" ) {
+                log() << "--reinstall has to be used with a log file for server output" << endl;
                 ::_exit( EXIT_BADOPTIONS );
             }
             reinstallService = true;
@@ -119,40 +122,46 @@ namespace {
             _startService = true;
         }
 
-        if (params.count("serviceName")) {
+        if (params.count("processManagement.windowsService.serviceName")) {
             if ( badOption != -1 ) {
                 log() << "--serviceName cannot be used with --" << disallowedOptions[badOption] << endl;
                 ::_exit( EXIT_BADOPTIONS );
             }
-            _serviceName = toWideString( params[ "serviceName" ].as<string>().c_str() );
+            _serviceName = toWideString(
+                    params[ "processManagement.windowsService.serviceName" ].as<string>().c_str() );
         }
-        if (params.count("serviceDisplayName")) {
+        if (params.count("processManagement.windowsService.displayName")) {
             if ( badOption != -1 ) {
                 log() << "--serviceDisplayName cannot be used with --" << disallowedOptions[badOption] << endl;
                 ::_exit( EXIT_BADOPTIONS );
             }
-            windowsServiceDisplayName = toWideString( params[ "serviceDisplayName" ].as<string>().c_str() );
+            windowsServiceDisplayName = toWideString(
+                    params[ "processManagement.windowsService.displayName" ].as<string>().c_str() );
         }
-        if (params.count("serviceDescription")) {
+        if (params.count("processManagement.windowsService.description")) {
             if ( badOption != -1 ) {
                 log() << "--serviceDescription cannot be used with --" << disallowedOptions[badOption] << endl;
                 ::_exit( EXIT_BADOPTIONS );
             }
-            windowsServiceDescription = toWideString( params[ "serviceDescription" ].as<string>().c_str() );
+            windowsServiceDescription = toWideString(
+                    params[ "processManagement.windowsService.description" ].as<string>().c_str() );
         }
-        if (params.count("serviceUser")) {
+        if (params.count("processManagement.windowsService.serviceUser")) {
             if ( badOption != -1 ) {
                 log() << "--serviceUser cannot be used with --" << disallowedOptions[badOption] << endl;
                 ::_exit( EXIT_BADOPTIONS );
             }
-            windowsServiceUser = toWideString( params[ "serviceUser" ].as<string>().c_str() );
+            windowsServiceUser = toWideString(
+                    params[ "processManagement.windowsService.serviceUser" ].as<string>().c_str() );
         }
-        if (params.count("servicePassword")) {
+        if (params.count("processManagement.windowsService.servicePassword")) {
             if ( badOption != -1 ) {
                 log() << "--servicePassword cannot be used with --" << disallowedOptions[badOption] << endl;
                 ::_exit( EXIT_BADOPTIONS );
             }
-            windowsServicePassword = toWideString( params[ "servicePassword" ].as<string>().c_str() );
+            windowsServicePassword = toWideString(
+                    params[ "processManagement.windowsService.servicePassword"
+                          ].as<string>().c_str() );
         }
 
         if ( installService || reinstallService ) {

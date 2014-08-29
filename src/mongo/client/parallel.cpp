@@ -746,7 +746,7 @@ namespace mongo {
                               << "compatible with " << vinfo << endl;
                 }
             }
-            catch ( const DBException& dbEx ) {
+            catch ( const DBException& ) {
                 if ( allowShardVersionFailure ) {
 
                     // It's okay if we don't set the version when talking to a secondary, we can
@@ -780,7 +780,7 @@ namespace mongo {
         ShardPtr primary;
 
         string prefix;
-        if (MONGO_unlikely(logLevel >= pc)) {
+        if (MONGO_unlikely(logger::globalLogDomain()->shouldLog(pc))) {
             if( _totalTries > 0 ) {
                 prefix = str::stream() << "retrying (" << _totalTries << " tries)";
             }
@@ -802,7 +802,7 @@ namespace mongo {
             // Try to get either the chunk manager or the primary shard
             config->getChunkManagerOrPrimary( ns, manager, primary );
 
-            if (MONGO_unlikely(logLevel >= pc)) {
+            if (MONGO_unlikely(logger::globalLogDomain()->shouldLog(pc))) {
                 if (manager) {
                     vinfo = str::stream() << "[" << manager->getns() << " @ "
                         << manager->getVersion().toString() << "]";
@@ -830,7 +830,7 @@ namespace mongo {
 
             // Don't use version to get shards here
             todo = _qShards;
-            if (MONGO_unlikely(logLevel >= pc)) {
+            if (MONGO_unlikely(logger::globalLogDomain()->shouldLog(pc))) {
                 vinfo = str::stream() << "[" << _qShards.size() << " shards specified]";
             }
         }
@@ -1677,7 +1677,7 @@ namespace mongo {
     void Future::CommandResult::init(){
         try {
             if ( ! _conn ){
-                _connHolder.reset( ScopedDbConnection::getScopedDbConnection( _server ) );
+                _connHolder.reset( new ScopedDbConnection( _server ) );
                 _conn = _connHolder->get();
             }
 

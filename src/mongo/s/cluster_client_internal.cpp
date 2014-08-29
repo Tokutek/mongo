@@ -20,7 +20,7 @@
 #include <vector>
 
 #include "mongo/client/connpool.h"
-#include "mongo/s/field_parser.h"
+#include "mongo/db/field_parser.h"
 #include "mongo/s/type_changelog.h"
 #include "mongo/s/type_mongos.h"
 #include "mongo/s/type_shard.h"
@@ -42,7 +42,7 @@ namespace mongo {
         //
 
         try {
-            connPtr.reset(ScopedDbConnection::getInternalScopedDbConnection(configLoc, 30));
+            connPtr.reset(new ScopedDbConnection(configLoc, 30));
             ScopedDbConnection& conn = *connPtr;
             scoped_ptr<DBClientCursor> cursor(_safeCursor(conn->query(MongosType::ConfigNS,
                                                                       Query())));
@@ -166,8 +166,7 @@ namespace mongo {
                 BSONObj serverStatus;
 
                 try {
-                    serverConnPtr.reset(ScopedDbConnection::getInternalScopedDbConnection(serverLoc,
-                                                                                          30));
+                    serverConnPtr.reset(new ScopedDbConnection(serverLoc, 30));
                     ScopedDbConnection& serverConn = *serverConnPtr;
 
                     resultOk = serverConn->runCommand("admin",
@@ -212,7 +211,7 @@ namespace mongo {
         scoped_ptr<ScopedDbConnection> connPtr;
 
         try {
-            connPtr.reset(ScopedDbConnection::getInternalScopedDbConnection(configLoc, 30));
+            connPtr.reset(new ScopedDbConnection(configLoc, 30));
 
             ScopedDbConnection& conn = *connPtr;
             scoped_ptr<DBClientCursor> cursor(_safeCursor(conn->query(CollectionType::ConfigNS,
@@ -281,7 +280,7 @@ namespace mongo {
         scoped_ptr<DBClientCursor> cursor;
 
         try {
-            connPtr.reset(ScopedDbConnection::getInternalScopedDbConnection(configLoc, 30));
+            connPtr.reset(new ScopedDbConnection(configLoc, 30));
             ScopedDbConnection& conn = *connPtr;
             scoped_ptr<DBClientCursor> cursor(_safeCursor(conn->query(ChunkType::ConfigNS,
                                                                       BSON(ChunkType::ns(ns)))));
@@ -340,7 +339,7 @@ namespace mongo {
         scoped_ptr<ScopedDbConnection> connPtr;
 
         try {
-            connPtr.reset(ScopedDbConnection::getInternalScopedDbConnection(configLoc, 30));
+            connPtr.reset(new ScopedDbConnection(configLoc, 30));
             ScopedDbConnection& conn = *connPtr;
 
             // TODO: better way here

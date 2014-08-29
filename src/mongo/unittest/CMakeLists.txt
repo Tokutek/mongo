@@ -4,6 +4,12 @@ add_library(unittest STATIC
 add_dependencies(unittest generate_error_codes generate_action_types)
 target_link_libraries(unittest LINK_PUBLIC
   foundation
+# TODO(sverch): 'lasterror' should not be required by 'foundation'.  Even if it is it should be
+# depended on directly rather than here, but we currently have a triangle dependency between
+# 'network', 'foundation' and 'lasterror'.  assert_util.cpp depends on lasterror.cpp which depends
+# on sock.cpp which depends on assert_util.cpp.  Eventually we want to have an assertion library
+# that does not depend on internal server code, and then this can go away.
+  lasterror
   )
 
 add_library(unittest_main STATIC
@@ -19,19 +25,3 @@ add_library(unittest_crutch STATIC
   crutch
   )
 add_dependencies(unittest_crutch generate_error_codes generate_action_types)
-
-if (BUILD_TESTING)
-  foreach (test
-      unittest_test
-      fixture_test
-      )
-    add_executable(${test} ${test})
-    add_dependencies(${test} generate_error_codes generate_action_types)
-    link_recursive_deps(${test}
-      COMBINED_LIBNAME basic_unittest_deps
-      unittest_main
-      unittest_crutch
-      ${TOKUMX_SSL_LIBRARIES}
-      )
-  endforeach ()
-endif ()

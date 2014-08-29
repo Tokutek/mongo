@@ -18,8 +18,8 @@
 
 #pragma once
 
-#include "cursor.h"
-#include "../util/timer.h"
+#include "mongo/db/cursor.h"
+#include "mongo/util/timer.h"
 
 namespace mongo {
     

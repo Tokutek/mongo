@@ -21,6 +21,7 @@
 
 #include "mongo/client/connpool.h"
 #include "mongo/client/dbclientinterface.h"
+#include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/commands.h"
 #include "mongo/s/request.h"
 #include "mongo/s/cursors.h"
@@ -96,9 +97,7 @@ namespace mongo {
                     if( loops < 4 ) versionManager.forceRemoteCheckShardVersionCB( staleNS );
                 }
                 catch ( AssertionException& e ) {
-                    e.getInfo().append( builder , "assertion" , "assertionCode" );
-                    builder.append( "errmsg" , "db assertion failure" );
-                    builder.append( "ok" , 0 );
+                    Command::appendCommandStatus(builder, e.toStatus());
                     BSONObj x = builder.done();
                     replyToQuery(0, r.p(), r.m(), x);
                     return;
@@ -128,13 +127,13 @@ namespace mongo {
             BSONObjBuilder b;
             vector<Shard> shards;
 
-            AuthorizationManager* authManager =
-                    ClientBasic::getCurrent()->getAuthorizationManager();
+            AuthorizationSession* authSession =
+                    ClientBasic::getCurrent()->getAuthorizationSession();
 
             if ( strcmp( ns , "inprog" ) == 0 ) {
                 uassert(16545,
                         "not authorized to run inprog",
-                        authManager->checkAuthorization(AuthorizationManager::SERVER_RESOURCE_NAME,
+                        authSession->checkAuthorization(AuthorizationManager::SERVER_RESOURCE_NAME,
                                                         ActionType::inprog));
 
                 Shard::getAllShards( shards );
@@ -143,9 +142,8 @@ namespace mongo {
 
                 for ( unsigned i=0; i<shards.size(); i++ ) {
                     Shard shard = shards[i];
-                    scoped_ptr<ScopedDbConnection> conn(
-                            ScopedDbConnection::getScopedDbConnection( shard.getConnString() ) );
-                    BSONObj temp = conn->get()->findOne( r.getns() , q.query );
+                    ScopedDbConnection conn(shard.getConnString());
+                    BSONObj temp = conn->findOne( r.getns() , q.query );
                     if ( temp["inprog"].isABSONObj() ) {
                         BSONObjIterator i( temp["inprog"].Obj() );
                         while ( i.more() ) {
@@ -169,7 +167,7 @@ namespace mongo {
                             arr.append( x.obj() );
                         }
                     }
-                    conn->done();
+                    conn.done();
                 }
 
                 arr.done();
@@ -177,7 +175,7 @@ namespace mongo {
             else if ( strcmp( ns , "killop" ) == 0 ) {
                 uassert(16546,
                         "not authorized to run killop",
-                        authManager->checkAuthorization(AuthorizationManager::SERVER_RESOURCE_NAME,
+                        authSession->checkAuthorization(AuthorizationManager::SERVER_RESOURCE_NAME,
                                                         ActionType::killop));
 
                 BSONElement e = q.query["op"];
@@ -201,10 +199,9 @@ namespace mongo {
                         log() << "want to kill op: " << e << endl;
                         Shard s(shard);
 
-                        scoped_ptr<ScopedDbConnection> conn(
-                                ScopedDbConnection::getScopedDbConnection( s.getConnString() ) );
-                        conn->get()->findOne( r.getns() , BSON( "op" << opid ) );
-                        conn->done();
+                        ScopedDbConnection conn(s.getConnString());
+                        conn->findOne( r.getns() , BSON( "op" << opid ) );
+                        conn.done();
                     }
                 }
             }
@@ -212,7 +209,7 @@ namespace mongo {
                 b.append( "err" , "can't do unlock through mongos" );
             }
             else {
-                LOG( LL_WARNING ) << "unknown sys command [" << ns << "]" << endl;
+                warning() << "unknown sys command [" << ns << "]" << endl;
                 return false;
             }
 

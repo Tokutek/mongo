@@ -19,18 +19,18 @@
 
 #include "mongo/pch.h"
 
+#include <boost/filesystem/operations.hpp>
+#include <boost/function.hpp>
+#include <boost/thread/thread.hpp>
 #include <fstream>
-#if !defined(_WIN32)
+#if defined(_WIN32)
+#include <io.h>
+#else
 #include <sys/file.h>
 #endif
 
-#include <boost/function.hpp>
-#include <boost/thread/thread.hpp>
-#include <boost/filesystem/operations.hpp>
-
 #include <db.h>
 
-#include "mongo/util/time_support.h"
 #include "mongo/base/status.h"
 #include "mongo/base/string_data.h"
 
@@ -38,6 +38,7 @@
 
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/databaseholder.h"
 #include "mongo/db/introspect.h"
 #include "mongo/db/repl.h"
@@ -49,11 +50,11 @@
 #include "mongo/db/json.h"
 #include "mongo/db/kill_current_op.h"
 #include "mongo/db/replutil.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/commands/fsync.h"
 #include "mongo/db/index.h"
 #include "mongo/db/jsobjmanipulator.h"
+#include "mongo/db/mongod_options.h"
 #include "mongo/db/relock.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/ops/count.h"
@@ -62,6 +63,7 @@
 #include "mongo/db/ops/update.h"
 #include "mongo/db/ops/insert.h"
 #include "mongo/db/stats/counters.h"
+#include "mongo/db/storage_options.h"
 #include "mongo/db/storage/assert_ids.h"
 #include "mongo/db/storage/env.h"
 
@@ -71,6 +73,7 @@
 #include "mongo/s/d_logic.h"
 #include "mongo/s/stale_exception.h" // for SendStaleConfigException
 #include "mongo/util/fail_point_service.h"
+#include "mongo/util/gcov.h"
 #include "mongo/util/goodies.h"
 #include "mongo/util/mongoutils/str.h"
 #include "mongo/util/time_support.h"
@@ -91,8 +94,6 @@ namespace mongo {
 #define LOGWITHRATELIMIT if( ++nloggedsome < 1000 || nloggedsome % 100 == 0 )
 
     string dbExecCommand;
-
-    bool useHints = true;
 
     KillCurrentOp killCurrentOp;
 
@@ -140,7 +141,7 @@ namespace mongo {
     void inProgCmd( Message &m, DbResponse &dbresponse ) {
         BSONObjBuilder b;
 
-        if (!cc().getAuthorizationManager()->checkAuthorization(
+        if (!cc().getAuthorizationSession()->checkAuthorization(
                 AuthorizationManager::SERVER_RESOURCE_NAME, ActionType::inprog)) {
             b.append("err", "unauthorized");
         }
@@ -186,7 +187,7 @@ namespace mongo {
 
     void killOp( Message &m, DbResponse &dbresponse ) {
         BSONObj obj;
-        if (!cc().getAuthorizationManager()->checkAuthorization(
+        if (!cc().getAuthorizationSession()->checkAuthorization(
                 AuthorizationManager::SERVER_RESOURCE_NAME, ActionType::killop)) {
             obj = fromjson("{\"err\":\"unauthorized\"}");
         }
@@ -224,7 +225,7 @@ namespace mongo {
         try {
             if (!NamespaceString::isCommand(d.getns())) {
                 // Auth checking for Commands happens later.
-                Status status = cc().getAuthorizationManager()->checkAuthForQuery(d.getns());
+                Status status = cc().getAuthorizationSession()->checkAuthForQuery(d.getns());
                 uassert(16550, status.reason(), status.isOK());
             }
             dbresponse.exhaustNS = runQuery(m, q, op, *resp);
@@ -309,8 +310,8 @@ namespace mongo {
 
     // Profile the current op in an alternate transaction
     void lockedDoProfile(const Client& c, int op, CurOp& currentOp) {
-        if ( dbHolder().__isLoaded( nsToDatabase( currentOp.getNS() ) , dbpath ) ) {
-            Client::Context ctx(currentOp.getNS(), dbpath);
+        if ( dbHolder().__isLoaded( nsToDatabase( currentOp.getNS() ) , storageGlobalParams.dbpath ) ) {
+            Client::Context ctx(currentOp.getNS(), storageGlobalParams.dbpath);
             Client::AlternateTransactionStack altStack;
             Client::Transaction txn(DB_SERIALIZABLE);
             profile(c, op, currentOp);
@@ -361,7 +362,7 @@ namespace mongo {
         globalOpCounters.gotOp( op , isCommand );
 
         Client& c = cc();
-        c.getAuthorizationManager()->startRequest();
+        c.getAuthorizationSession()->startRequest();
 
         // initialize the default OpSettings, 
         OpSettings settings;
@@ -380,8 +381,8 @@ namespace mongo {
         OpDebug& debug = currentOp.debug();
         debug.op = op;
 
-        long long logThreshold = cmdLine.slowMS;
-        bool shouldLog = logLevel >= 1;
+        long long logThreshold = serverGlobalParams.slowMS;
+        bool shouldLog = logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(1));
 
         if ( op == dbQuery ) {
             try {
@@ -443,7 +444,7 @@ namespace mongo {
                 }
             }
             catch ( UserException& ue ) {
-                tlog(3) << " Caught Assertion in " << opToString(op) << ", continuing "
+                MONGO_TLOG(3) << " Caught Assertion in " << opToString(op) << ", continuing "
                         << ue.toString() << endl;
                 debug.exceptionInfo = ue.getInfo();
                 if (ue.getCode() == storage::ASSERT_IDS::LockDeadlock) {
@@ -451,7 +452,7 @@ namespace mongo {
                 }
             }
             catch ( AssertionException& e ) {
-                tlog(3) << " Caught Assertion in " << opToString(op) << ", continuing "
+                MONGO_TLOG(3) << " Caught Assertion in " << opToString(op) << ", continuing "
                         << e.toString() << endl;
                 debug.exceptionInfo = e.getInfo();
                 shouldLog = true;
@@ -464,7 +465,7 @@ namespace mongo {
         logThreshold += currentOp.getExpectedLatencyMs();
 
         if ( (shouldLog || debug.executionTime > logThreshold) && !debug.vetoLog(currentOp) ) {
-            mongo::tlog() << debug.report( currentOp ) << endl;
+            MONGO_TLOG(0) << debug.report( currentOp ) << endl;
         }
 
         if ( currentOp.shouldDBProfile( debug.executionTime ) ) {
@@ -498,13 +499,13 @@ namespace mongo {
         uassert( 13004 , str::stream() << "sent negative cursors to kill: " << n  , n >= 1 );
 
         if ( n > 2000 ) {
-            LOG( n < 30000 ? LL_WARNING : LL_ERROR ) << "receivedKillCursors, n=" << n << endl;
+            ( n < 30000 ? warning() : error() ) << "receivedKillCursors, n=" << n << endl;
             verify( n < 30000 );
         }
 
         int found = ClientCursor::eraseIfAuthorized(n, (long long *) x);
 
-        if ( logLevel > 0 || found != n ) {
+        if ( logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(1)) || found != n ) {
             LOG( found == n ? 1 : 0 ) << "killcursors: found " << found << " of " << n << endl;
         }
 
@@ -558,7 +559,7 @@ namespace mongo {
         const bool multi = flags & UpdateOption_Multi;
         const bool broadcast = flags & UpdateOption_Broadcast;
 
-        Status status = cc().getAuthorizationManager()->checkAuthForUpdate(ns, upsert);
+        Status status = cc().getAuthorizationSession()->checkAuthForUpdate(ns, upsert);
         uassert(16538, status.reason(), status.isOK());
 
         OpSettings settings;
@@ -586,7 +587,7 @@ namespace mongo {
         DbMessage d(m);
         const char *ns = d.getns();
 
-        Status status = cc().getAuthorizationManager()->checkAuthForDelete(ns);
+        Status status = cc().getAuthorizationSession()->checkAuthForDelete(ns);
         uassert(16542, status.reason(), status.isOK());
 
         op.debug().ns = ns;
@@ -662,7 +663,7 @@ namespace mongo {
             try {
                 uassert( 16258, str::stream() << "Invalid ns [" << ns << "]", NamespaceString::isValid(ns) );
 
-                Status status = cc().getAuthorizationManager()->checkAuthForGetMore(ns);
+                Status status = cc().getAuthorizationSession()->checkAuthForGetMore(ns);
                 uassert(16543, status.reason(), status.isOK());
 
                 // I (Zardosht), am not crazy about this, but I cannot think of
@@ -923,7 +924,7 @@ namespace mongo {
         StringData coll = nsToCollectionSubstring(ns);
         // Auth checking for index writes happens later.
         if (coll != "system.indexes") {
-            Status status = cc().getAuthorizationManager()->checkAuthForInsert(ns);
+            Status status = cc().getAuthorizationSession()->checkAuthForInsert(ns);
             uassert(16544, status.reason(), status.isOK());
         }
 
@@ -1159,22 +1160,6 @@ namespace mongo {
         return numExitCalls > 0;
     }
 
-    void tryToOutputFatal( const string& s ) {
-        try {
-            rawOut( s );
-            return;
-        }
-        catch ( ... ) {}
-
-        try {
-            cerr << s << endl;
-            return;
-        }
-        catch ( ... ) {}
-
-        // uh - oh, not sure there is anything else we can do...
-    }
-
     static void shutdownServer() {
 
         log() << "shutdown: going to close listening sockets..." << endl;
@@ -1191,7 +1176,7 @@ namespace mongo {
             LOCK_REASON(lockReason, "shutting down");
             Lock::GlobalWrite lk(lockReason);
             log() << "shutdown: going to close databases..." << endl;
-            dbHolderW().closeDatabases(dbpath);
+            dbHolderW().closeDatabases(storageGlobalParams.dbpath);
             log() << "shutdown: going to unload all plugins..." << endl;
             plugins::loader->shutdown();
             log() << "shutdown: going to shutdown TokuMX..." << endl;
@@ -1248,6 +1233,8 @@ namespace mongo {
     /* not using log() herein in case we are already locked */
     NOINLINE_DECL void dbexit( ExitCode rc, const char *why ) {
 
+        flushForGcov();
+
         Client * c = currentClient.get();
         {
             scoped_lock lk( exitMutex );
@@ -1256,25 +1243,19 @@ namespace mongo {
                     // this means something horrible has happened
                     realexit( rc );
                 }
-                stringstream ss;
-                ss << "dbexit: " << why << "; exiting immediately";
-                tryToOutputFatal( ss.str() );
+                log() << "dbexit: " << why << "; exiting immediately";
                 if ( c ) c->shutdown();
                 realexit( rc );
             }
         }
 
-        {
-            stringstream ss;
-            ss << "dbexit: " << why;
-            tryToOutputFatal( ss.str() );
-        }
+        log() << "dbexit: " << why;
 
         try {
             shutdownServer(); // gracefully shutdown instance
         }
         catch ( ... ) {
-            tryToOutputFatal( "shutdown failed with exception" );
+            severe() << "shutdown failed with exception";
         }
 
 #if defined(_DEBUG)
@@ -1293,7 +1274,7 @@ namespace mongo {
             return;
         }
 #endif
-        tryToOutputFatal( "dbexit: really exiting now" );
+        log() << "dbexit: really exiting now";
         if ( c ) c->shutdown();
         realexit( rc );
     }
@@ -1312,7 +1293,7 @@ namespace mongo {
     }
 
     void acquirePathLock() {
-        string name = ( boost::filesystem::path( dbpath ) / "mongod.lock" ).string();
+        string name = (boost::filesystem::path(storageGlobalParams.dbpath) / "mongod.lock").string();
 
 #ifdef _WIN32
         lockFileHandle = CreateFileA( name.c_str(), GENERIC_READ | GENERIC_WRITE,
@@ -1363,7 +1344,7 @@ namespace mongo {
     void DiagLog::openFile() {
         verify( f == 0 );
         stringstream ss;
-        ss << dbpath << "/diaglog." << hex << time(0);
+        ss << storageGlobalParams.dbpath << "/diaglog." << hex << time(0);
         string name = ss.str();
         f = new ofstream(name.c_str(), ios::out | ios::binary);
         if ( ! f->good() ) {

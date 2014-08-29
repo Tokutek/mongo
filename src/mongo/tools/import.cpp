@@ -18,24 +18,25 @@
 */
 
 #include "mongo/pch.h"
+
+#include <boost/algorithm/string.hpp>
+#include <boost/filesystem/operations.hpp>
+#include <fstream>
+#include <iostream>
+
+#include "mongo/base/initializer.h"
 #include "mongo/db/json.h"
 #include "mongo/db/namespacestring.h"
+#include "mongo/tools/mongoimport_options.h"
 #include "mongo/tools/tool.h"
+#include "mongo/util/options_parser/option_section.h"
 #include "mongo/util/text.h"
 #include "mongo/base/initializer.h"
 #include "mongo/client/remote_loader.h"
 
-#include <fstream>
-#include <iostream>
-#include <boost/program_options.hpp>
-#include <boost/algorithm/string.hpp>
-#include <boost/filesystem/operations.hpp>
-
 using namespace mongo;
 using std::string;
 using std::stringstream;
-
-namespace po = boost::program_options;
 
 class Import : public Tool {
 
@@ -43,13 +44,7 @@ class Import : public Tool {
     Type _type;
 
     const char * _sep;
-    bool _ignoreBlanks;
-    bool _headerLine;
-    bool _upsert;
-    bool _doimport;
-    bool _jsonArray;
     bool _doBulkLoad;
-    vector<string> _upsertFields;
     static const int BUF_SIZE;
 
     void csvTokenizeRow(const string& row, vector<string>& tokens) {
@@ -98,7 +93,7 @@ class Import : public Tool {
     }
 
     void _append( BSONObjBuilder& b , const string& fieldName , const string& data ) {
-        if ( _ignoreBlanks && data.size() == 0 )
+        if (mongoImportGlobalParams.ignoreBlanks && data.size() == 0)
             return;
 
         if ( b.appendAsNumber( fieldName , data ) )
@@ -114,7 +109,7 @@ class Import : public Tool {
      * increment buf by this amount.
      */
     int getLine(istream* in, char* buf) {
-        if (_jsonArray) {
+        if (mongoImportGlobalParams.jsonArray) {
             in->read(buf, BUF_SIZE);
             uassert(13295, "JSONArray file too large", (in->rdstate() & ios_base::eofbit));
             buf[ in->gcount() ] = '\0';
@@ -246,13 +241,13 @@ class Import : public Tool {
         unsigned int pos=0;
         for (vector<string>::iterator it = tokens.begin(); it != tokens.end(); ++it) {
             string token = *it;
-            if ( _headerLine ) {
-                _fields.push_back(token);
+            if (mongoImportGlobalParams.headerLine) {
+                toolGlobalParams.fields.push_back(token);
             }
             else {
                 string name;
-                if ( pos < _fields.size() ) {
-                    name = _fields[pos];
+                if (pos < toolGlobalParams.fields.size()) {
+                    name = toolGlobalParams.fields[pos];
                 }
                 else {
                     stringstream ss;
@@ -269,36 +264,12 @@ class Import : public Tool {
     }
 
 public:
-    Import() : Tool( "import" ) {
-        addFieldOptions();
-        add_options()
-        ("ignoreBlanks","if given, empty fields in csv and tsv will be ignored")
-        ("type",po::value<string>() , "type of file to import.  default: json (json,csv,tsv)")
-        ("file",po::value<string>() , "file to import from; if not specified stdin is used" )
-        ("drop", "drop collection first " )
-        ("headerline","first line in input file is a header (CSV and TSV only)")
-        ("upsert", "insert or update objects that already exist" )
-        ("upsertFields", po::value<string>(), "comma-separated fields for the query part of the upsert. You should make sure this is indexed" )
-        ("stopOnError", "stop importing at first error rather than continuing" )
-        ("jsonArray", "load a json array, not one item per line. Currently limited to 16MB." )
-        ;
-        add_hidden_options()
-        ("noimport", "don't actually import. useful for benchmarking parser" )
-        ;
-        addPositionArg( "file" , 1 );
+    Import() : Tool() {
         _type = JSON;
-        _ignoreBlanks = false;
-        _headerLine = false;
-        _upsert = false;
-        _doimport = true;
-        _jsonArray = false;
     }
-    ;
-    virtual void printExtraHelp( ostream & out ) {
-        out << "Import CSV, TSV or JSON data into MongoDB.\n" << endl;
-        out << "When importing JSON documents, each document must be a separate line of the input file.\n";
-        out << "\nExample:\n";
-        out << "  mongoimport --host myhost --db my_cms --collection docs < mydocfile.json\n" << endl;
+
+    virtual void printHelp( ostream & out ) {
+        printMongoImportHelp(&out);
     }
 
     unsigned long long lastErrorFailures;
@@ -322,21 +293,21 @@ public:
     }
 
     int run() {
-        string filename = getParam( "file" );
         long long fileSize = 0;
         int headerRows = 0;
 
         istream * in = &cin;
 
-        ifstream file( filename.c_str() , ios_base::in);
+        ifstream file(mongoImportGlobalParams.filename.c_str(), ios_base::in);
 
-        if ( filename.size() > 0 && filename != "-" ) {
-            if ( ! boost::filesystem::exists( filename ) ) {
-                error() << "file doesn't exist: " << filename << endl;
+        if (mongoImportGlobalParams.filename.size() > 0 &&
+            mongoImportGlobalParams.filename != "-") {
+            if ( ! boost::filesystem::exists(mongoImportGlobalParams.filename) ) {
+                error() << "file doesn't exist: " << mongoImportGlobalParams.filename << endl;
                 return -1;
             }
             in = &file;
-            fileSize = boost::filesystem::file_size( filename );
+            fileSize = boost::filesystem::file_size(mongoImportGlobalParams.filename);
         }
 
         // check if we're actually talking to a machine that can write
@@ -356,66 +327,41 @@ public:
 
         LOG(1) << "ns: " << ns << endl;
 
-        if ( hasParam( "drop" ) ) {
+        if (mongoImportGlobalParams.drop) {
             log() << "dropping: " << ns << endl;
-            conn().dropCollection( ns.c_str() );
+            conn().dropCollection(ns.c_str());
         }
 
-        if ( hasParam( "ignoreBlanks" ) ) {
-            _ignoreBlanks = true;
-        }
-
-        if ( hasParam( "upsert" ) || hasParam( "upsertFields" )) {
-            _upsert = true;
-
-            string uf = getParam("upsertFields");
-            if (uf.empty()) {
-                _upsertFields.push_back("_id");
-            }
-            else {
-                StringSplitter(uf.c_str(), ",").split(_upsertFields);
-            }
-        }
-
-        _doBulkLoad = !_upsert;
+        _doBulkLoad = !mongoImportGlobalParams.upsert;
         if (!_doBulkLoad) {
             warning() << "not using bulk load because either upsert/upsertFields was specified" << endl;
         }
 
-        if ( hasParam( "noimport" ) ) {
-            _doimport = false;
+        if (mongoImportGlobalParams.type == "json")
+            _type = JSON;
+        else if (mongoImportGlobalParams.type == "csv") {
+            _type = CSV;
+            _sep = ",";
+        }
+        else if (mongoImportGlobalParams.type == "tsv") {
+            _type = TSV;
+            _sep = "\t";
+        }
+        else {
+            error() << "don't know what type [" << mongoImportGlobalParams.type << "] is" << endl;
+            return -1;
         }
 
-        if ( hasParam( "type" ) ) {
-            string type = getParam( "type" );
-            if ( type == "json" )
-                _type = JSON;
-            else if ( type == "csv" ) {
-                _type = CSV;
-                _sep = ",";
-            }
-            else if ( type == "tsv" ) {
-                _type = TSV;
-                _sep = "\t";
-            }
-            else {
-                error() << "don't know what type [" << type << "] is" << endl;
-                return -1;
-            }
-        }
-
-        if ( _type == CSV || _type == TSV ) {
-            _headerLine = hasParam( "headerline" );
-            if ( _headerLine ) {
+        if (_type == CSV || _type == TSV) {
+            if (mongoImportGlobalParams.headerLine) {
                 headerRows = 1;
             }
             else {
-                needFields();
+                if (!toolGlobalParams.fieldsSpecified) {
+                    throw UserException(9998, "You need to specify fields or have a headerline to "
+                                              "import this file type");
+                }
             }
-        }
-
-        if (_type == JSON && hasParam("jsonArray")) {
-            _jsonArray = true;
         }
 
         time_t start = time(0);
@@ -437,10 +383,10 @@ public:
             NamespaceString n(ns);
             loader.reset(new RemoteLoader(conn(), n.db, n.coll, vector<BSONObj>(), BSONObj()));
         }
-        while ( _jsonArray || in->rdstate() == 0 ) {
+        while (mongoImportGlobalParams.jsonArray || in->rdstate() == 0) {
             try {
                 BSONObj o;
-                if (_jsonArray) {
+                if (mongoImportGlobalParams.jsonArray) {
                     int bytesProcessed = 0;
                     if (line == buffer.get()) { // Only read on first pass - the whole array must be on one line.
                         bytesProcessed = getLine(in, line);
@@ -460,14 +406,14 @@ public:
                     }
                 }
 
-                if ( _headerLine ) {
-                    _headerLine = false;
+                if (mongoImportGlobalParams.headerLine) {
+                    mongoImportGlobalParams.headerLine = false;
                 }
-                else if (_doimport) {
-                    bool doUpsert = _upsert;
+                else if (mongoImportGlobalParams.doimport) {
+                    bool doUpsert = mongoImportGlobalParams.upsert;
                     BSONObjBuilder b;
-                    if (_upsert) {
-                        for (vector<string>::const_iterator it=_upsertFields.begin(), end=_upsertFields.end(); it!=end; ++it) {
+                    if (mongoImportGlobalParams.upsert) {
+                        for (vector<string>::const_iterator it=mongoImportGlobalParams.upsertFields.begin(), end=mongoImportGlobalParams.upsertFields.end(); it!=end; ++it) {
                             BSONElement e = o.getFieldDotted(it->c_str());
                             if (e.eoo()) {
                                 doUpsert = false;
@@ -481,11 +427,11 @@ public:
                         conn().update(ns, Query(b.obj()), o, true);
                     }
                     else {
-                        conn().insert( ns.c_str() , o );
+                        conn().insert(ns.c_str(), o);
                     }
 
-                    if( num < 10 ) { 
-                        // we absolutely want to check the first and last op of the batch. we do 
+                    if (num < 10) {
+                        // we absolutely want to check the first and last op of the batch. we do
                         // a few more as that won't be too time expensive.
                         checkLastError();
                         lastNumChecked = num;
@@ -499,7 +445,7 @@ public:
                 log() << line << endl;
                 errors++;
 
-                if (hasParam("stopOnError") || _jsonArray)
+                if (mongoImportGlobalParams.stopOnError || mongoImportGlobalParams.jsonArray)
                     break;
             }
 
@@ -532,10 +478,6 @@ public:
     }
 };
 
-int main( int argc , char ** argv, char** envp ) {
-    mongo::runGlobalInitializersOrDie(argc, argv, envp);
-    Import import;
-    return import.main( argc , argv );
-}
-
 const int Import::BUF_SIZE(1024 * 1024 * 16);
+
+REGISTER_MONGO_TOOL(Import);

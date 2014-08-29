@@ -41,19 +41,20 @@
 #include <stdlib.h>
 #include <signal.h>
 
-#include "time.h"
-#include "string.h"
-#include "limits.h"
+#include <time.h>
+#include <string.h>
+#include <limits.h>
+
 
 #define BOOST_FILESYSTEM_VERSION 3
 #include <boost/shared_ptr.hpp>
 #include <boost/smart_ptr.hpp>
-#include <boost/function.hpp>
 #include <boost/bind.hpp>
 #include <boost/version.hpp>
 
 #include "mongo/client/redef_macros.h"
 
+#include "mongo/client/export_macros.h"
 #include "mongo/util/exit_code.h"
 
 namespace mongo {
@@ -68,8 +69,8 @@ namespace mongo {
        you should either use dbexit to shutdown cleanly, or ::exit to tell the system to quit
        if you use this, you'll get a link error since mongo::exit isn't defined
      */
-    void exit( ExitCode returnCode );
-    bool inShutdown();
+    MONGO_CLIENT_API void exit( ExitCode returnCode );
+    MONGO_CLIENT_API bool inShutdown();
 
 }
 

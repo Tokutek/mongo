@@ -21,13 +21,14 @@
 #include "mongo/base/owned_pointer_vector.h"
 #include "mongo/base/status.h"
 #include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/auth/principal.h"
 #include "mongo/db/client.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/repl/connections.h"
+#include "mongo/db/repl/replication_server_status.h"  // replSettings
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/server_parameters.h"
 #include "mongo/platform/bits.h"
@@ -61,7 +62,7 @@ namespace mongo {
 
     void sethbmsg(const string& s, const int level) {
         if (theReplSet) {
-            theReplSet->sethbmsg(s, logLevel);
+            theReplSet->sethbmsg(s, level);
         }
     }
 
@@ -830,7 +831,7 @@ namespace mongo {
         int n = 0;
         for( vector<ReplSetConfig*>::iterator i = cfgs.begin(); i != cfgs.end(); i++ ) {
             ReplSetConfig* cfg = *i;
-            DEV LOG(1) << n+1 << " config shows version " << cfg->version << rsLog;
+            DEV { LOG(1) << n+1 << " config shows version " << cfg->version << rsLog; }
             if( ++n == 1 ) myVersion = cfg->version;
             if( cfg->ok() && cfg->version > v ) {
                 highest = cfg;
@@ -1038,9 +1039,10 @@ namespace mongo {
     }
 
     void replLocalAuth() {
-        if ( noauth )
+        if (!AuthorizationManager::isAuthEnabled())
             return;
-        cc().getAuthorizationManager()->grantInternalAuthorization("_repl");
+        cc().getAuthorizationSession()->grantInternalAuthorization(
+                UserName("_repl", "local"));
     }
 
     // for testing only
@@ -1084,8 +1086,8 @@ namespace mongo {
 
     void ReplSetImpl::changeExpireOplog(uint64_t expireOplogDays, uint64_t expireOplogHours) {
         boost::unique_lock<boost::mutex> lock(_oplogPartitionMutex);
-        cmdLine.expireOplogDays = expireOplogDays;
-        cmdLine.expireOplogHours = expireOplogHours;
+        replSettings.expireOplogDays = expireOplogDays;
+        replSettings.expireOplogHours = expireOplogHours;
         _oplogPartitionCond.notify_all();
     }
 

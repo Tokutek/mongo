@@ -18,7 +18,9 @@
 
 
 #include "mongo/pch.h"
-#include "lockstat.h"
+
+#include "mongo/db/lockstat.h"
+
 #include "mongo/db/jsobj.h"
 
 namespace mongo { 
@@ -42,7 +44,7 @@ namespace mongo {
         for ( int i=0; i < N; i++ ) {
             if ( timeLocked[i].load() == 0 )
                 continue;
-            
+
             if ( ! prefixPrinted ) {
                 builder << "locks(micros)";
                 prefixPrinted = true;

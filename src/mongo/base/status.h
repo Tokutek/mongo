@@ -19,6 +19,7 @@
 #include <string>
 
 #include "mongo/base/error_codes.h"
+#include "mongo/client/export_macros.h"
 #include "mongo/platform/atomic_word.h"
 
 namespace mongo {
@@ -46,10 +47,10 @@ namespace mongo {
      * TODO: generate base/error_codes.h out of a description file
      * TODO: check 'location' duplicates against assert numbers
      */
-    class Status {
+    class MONGO_CLIENT_API Status {
     public:
         // Short-hand for returning an OK status.
-        static Status OK() { return Status(getOKInfo()); }
+        static inline Status OK();
 
         /**
          * Builds an error status given the error code, a textual description of what
@@ -58,9 +59,11 @@ namespace mongo {
          */
         Status(ErrorCodes::Error code, const std::string& reason, int location = 0);
         Status(ErrorCodes::Error code, const char* reason, int location = 0);
-        Status(const Status& other);
-        Status& operator=(const Status& other);
-        ~Status();
+
+        inline Status(const Status& other);
+        inline Status& operator=(const Status& other);
+
+        inline ~Status();
 
         /**
          * Returns true if 'other's error code and location are equal/different to this
@@ -82,11 +85,15 @@ namespace mongo {
         // accessors
         //
 
-        bool isOK() const { return code() == ErrorCodes::OK; }
-        ErrorCodes::Error code() const { return _error->code; }
-        const char* codeString() const { return ErrorCodes::errorString(_error->code); }
-        const std::string& reason() const { return _error->reason; }
-        int location() const { return _error->location; }
+        inline bool isOK() const;
+
+        inline ErrorCodes::Error code() const;
+
+        inline std::string codeString() const;
+
+        inline std::string reason() const;
+
+        inline int location() const;
 
         std::string toString() const;
 
@@ -94,21 +101,22 @@ namespace mongo {
         // Below interface used for testing code only.
         //
 
-        int refCount() const { return _error->refs.load(); }
+        inline AtomicUInt32::WordType refCount() const;
 
     private:
+        inline Status();
+
         struct ErrorInfo {
-            AtomicUInt32 refs;       // reference counter
-            ErrorCodes::Error code;  // error code
-            std::string reason;      // description of error cause
-            int location;            // unique location of the triggering line in the code
+            AtomicUInt32 refs;             // reference counter
+            const ErrorCodes::Error code;  // error code
+            const std::string reason;      // description of error cause
+            const int location;            // unique location of the triggering line in the code
 
-            ErrorInfo(ErrorCodes::Error aCode, const std::string& aReason, int aLocation);
+            static ErrorInfo* create(ErrorCodes::Error code,
+                                     const StringData& reason, int location);
+
+            ErrorInfo(ErrorCodes::Error code, const StringData& reason, int location);
         };
-
-        static ErrorInfo *getOKInfo();
-
-        explicit Status(ErrorInfo *info);
 
         ErrorInfo* _error;
 
@@ -117,23 +125,21 @@ namespace mongo {
          *
          * @param error  ErrorInfo to be incremented
          */
-        static void ref(ErrorInfo* error);
-        static void unref(ErrorInfo* error);
+        static inline void ref(ErrorInfo* error);
+        static inline void unref(ErrorInfo* error);
     };
 
-    static inline bool operator==(const ErrorCodes::Error lhs, const Status& rhs) {
-        return rhs == lhs;
-    }
+    MONGO_CLIENT_API inline bool operator==(const ErrorCodes::Error lhs, const Status& rhs);
 
-    static inline bool operator!=(const ErrorCodes::Error lhs, const Status& rhs) {
-        return rhs != lhs;
-    }
+    MONGO_CLIENT_API inline bool operator!=(const ErrorCodes::Error lhs, const Status& rhs);
 
     //
     // Convenience method for unittest code. Please use accessors otherwise.
     //
 
-    std::ostream& operator<<(std::ostream& os, const Status& status);
-    std::ostream& operator<<(std::ostream& os, ErrorCodes::Error);
+    MONGO_CLIENT_API std::ostream& operator<<(std::ostream& os, const Status& status);
+    MONGO_CLIENT_API std::ostream& operator<<(std::ostream& os, ErrorCodes::Error);
 
 }  // namespace mongo
+
+#include "mongo/base/status-inl.h"

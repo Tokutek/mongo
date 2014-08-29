@@ -1058,9 +1058,9 @@ namespace QueryOptimizerTests {
 
         class QueryMissingNs : public Base {
         public:
-            QueryMissingNs() { log() << "querymissingns starts" << endl; }
+            QueryMissingNs() { mongo::unittest::log() << "querymissingns starts" << endl; }
             ~QueryMissingNs() {
-                log() << "end QueryMissingNs" << endl;
+                mongo::unittest::log() << "end QueryMissingNs" << endl;
             }
             void run() {
                 Message m;

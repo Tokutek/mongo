@@ -27,6 +27,7 @@
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/auth/privilege.h"
 #include "mongo/client/connpool.h"
 #include "mongo/db/commands.h"
@@ -168,16 +169,16 @@ namespace mongo {
 
     CursorCache::~CursorCache() {
         // TODO: delete old cursors?
-        bool print = logLevel > 0;
+        bool print = logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(1));
         if ( _cursors.size() || _refs.size() )
             print = true;
         verify(_refs.size() == _refsNS.size());
         
         if ( print ) 
-            cout << " CursorCache at shutdown - "
-                 << " sharded: " << _cursors.size()
-                 << " passthrough: " << _refs.size()
-                 << endl;
+            log() << " CursorCache at shutdown - "
+                  << " sharded: " << _cursors.size()
+                  << " passthrough: " << _refs.size()
+                  << endl;
     }
 
     ShardedClientCursorPtr CursorCache::get( long long id ) const {
@@ -277,7 +278,7 @@ namespace mongo {
         int n = *x++;
 
         if ( n > 2000 ) {
-            LOG( n < 30000 ? LL_WARNING : LL_ERROR ) << "receivedKillCursors, n=" << n << endl;
+            ( n < 30000 ? warning() : error() ) << "receivedKillCursors, n=" << n << endl;
         }
 
 
@@ -285,14 +286,14 @@ namespace mongo {
         uassert( 13287 , "too many cursors to kill" , n < 30000 );
 
         long long * cursors = (long long *)x;
-        AuthorizationManager* authManager =
-                ClientBasic::getCurrent()->getAuthorizationManager();
+        AuthorizationSession* authSession =
+                ClientBasic::getCurrent()->getAuthorizationSession();
         for ( int i=0; i<n; i++ ) {
             long long id = cursors[i];
             LOG(_myLogLevel) << "CursorCache::gotKillCursors id: " << id << endl;
 
             if ( ! id ) {
-                LOG( LL_WARNING ) << " got cursor id of 0 to kill" << endl;
+                warning() << " got cursor id of 0 to kill" << endl;
                 continue;
             }
 
@@ -302,7 +303,7 @@ namespace mongo {
 
                 MapSharded::iterator i = _cursors.find( id );
                 if ( i != _cursors.end() ) {
-                    if (authManager->checkAuthorization(i->second->getNS(),
+                    if (authSession->checkAuthorization(i->second->getNS(),
                                                         ActionType::killCursors)) {
                         _cursors.erase( i );
                     }
@@ -312,11 +313,11 @@ namespace mongo {
                 MapNormal::iterator refsIt = _refs.find(id);
                 MapNormal::iterator refsNSIt = _refsNS.find(id);
                 if (refsIt == _refs.end()) {
-                    LOG( LL_WARNING ) << "can't find cursor: " << id << endl;
+                    warning() << "can't find cursor: " << id << endl;
                     continue;
                 }
                 verify(refsNSIt != _refsNS.end());
-                if (!authManager->checkAuthorization(refsNSIt->second, ActionType::killCursors)) {
+                if (!authSession->checkAuthorization(refsNSIt->second, ActionType::killCursors)) {
                     continue;
                 }
                 server = refsIt->second;
@@ -327,10 +328,9 @@ namespace mongo {
             LOG(_myLogLevel) << "CursorCache::found gotKillCursors id: " << id << " server: " << server << endl;
 
             verify( server.size() );
-            scoped_ptr<ScopedDbConnection> conn(
-                    ScopedDbConnection::getScopedDbConnection( server ) );
-            conn->get()->killCursor( id );
-            conn->done();
+            ScopedDbConnection conn(server);
+            conn->killCursor( id );
+            conn.done();
         }
     }
 

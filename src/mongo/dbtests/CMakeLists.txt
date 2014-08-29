@@ -1,9 +1,19 @@
+add_library(framework_options STATIC
+  framework_options
+  )
+add_dependencies(framework_options generate_error_codes generate_action_types)
+target_link_libraries(framework_options LINK_PUBLIC
+  options_parser_init
+  )
+
 add_library(testframework STATIC
   framework
+  framework_options_init
   )
 add_dependencies(testframework generate_error_codes generate_action_types)
 target_link_libraries(testframework LINK_PUBLIC
   unittest
+  framework_options
   )
 
 add_library(mocklib STATIC
@@ -15,16 +25,24 @@ add_library(mocklib STATIC
   )
 add_dependencies(mocklib generate_error_codes generate_action_types)
 target_link_libraries(mocklib LINK_PUBLIC
-  mongocommon
+  clientdriver
   )
 
 file(GLOB testfiles *.cpp)
-foreach (testfile ${testfiles})
-  if (testfile MATCHES "framework.cpp$")
-    set(framework_fullpath "${testfile}")
-  endif ()
+foreach (framework_filename
+    framework.cpp
+    framework_options.cpp
+    framework_options_init.cpp
+    framework_options_test.cpp
+    )
+  set(_framework_fullpath)
+  foreach (testfile ${testfiles})
+    if (testfile MATCHES "${framework_filename}$")
+      set(_framework_fullpath "${testfile}")
+    endif ()
+  endforeach ()
+  list(REMOVE_ITEM testfiles ${_framework_fullpath})
 endforeach ()
-list(REMOVE_ITEM testfiles ${framework_fullpath})
 add_executable(smokeTest ${testfiles})
 add_dependencies(smokeTest generate_error_codes generate_action_types install_tdb_h)
 if (NOT APPLE)
@@ -39,9 +57,9 @@ link_recursive_deps(smokeTest
   coredb
   testframework
   gridfs
-  notmongodormongos
   s_upgrade
   mocklib
+  authmocks
   ${TokuKV_LIBRARIES}
   ${TOKUMX_SSL_LIBRARIES}
   )

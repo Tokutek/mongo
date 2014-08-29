@@ -21,14 +21,47 @@
 #include <string>
 #include <vector>
 
-#include "mongo/client/dbclientinterface.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/privilege.h"
+#include "mongo/db/auth/user.h"
+#include "mongo/client/sasl_client_authenticate.h"
 
+static bool authParamsSet = false;
 
 namespace mongo {
+
+    bool isInternalAuthSet() {
+       return authParamsSet; 
+    }
+
+    bool setInternalUserAuthParams(BSONObj authParams) {
+        if (!isInternalAuthSet()) {
+            internalSecurity.authParams = authParams.copy();
+            authParamsSet = true;
+            return true;
+        }
+        else {
+            log() << "Internal auth params have already been set" << endl;
+            return false;
+        }
+    }
+ 
+    bool authenticateInternalUser(DBClientWithCommands* conn){
+        if (!isInternalAuthSet()) {
+            log() << "ERROR: No authentication params set for internal user" << endl;
+            return false;
+        }
+        try {
+            conn->auth(internalSecurity.authParams); 
+            return true;
+        } catch(const UserException& ex) {
+            log() << "can't authenticate to " << conn->toString() << " as internal user, error: "
+                  << ex.what() << endl;
+            return false;
+        }
+    }
 
     bool setUpSecurityKey(const string& filename) {
         struct stat stats;
@@ -98,10 +131,22 @@ namespace mongo {
 
         LOG(1) << "security key: " << str << endl;
 
-        // createPWDigest should really not be a member func
-        DBClientConnection conn;
-        internalSecurity.pwd = conn.createPasswordDigest(internalSecurity.user, str);
+        User::CredentialData credentials;
+        credentials.password = DBClientWithCommands::createPasswordDigest(
+                internalSecurity.user->getName().getUser().toString(), str);
+        internalSecurity.user->setCredentials(credentials);
 
+        int clusterAuthMode = serverGlobalParams.clusterAuthMode.load();
+        if (clusterAuthMode == ServerGlobalParams::ClusterAuthMode_keyFile ||
+            clusterAuthMode == ServerGlobalParams::ClusterAuthMode_sendKeyFile) {
+            setInternalUserAuthParams(
+                    BSON(saslCommandMechanismFieldName << "MONGODB-CR" <<
+                         saslCommandUserSourceFieldName <<
+                         internalSecurity.user->getName().getDB() <<
+                         saslCommandUserFieldName << internalSecurity.user->getName().getUser() <<
+                         saslCommandPasswordFieldName << credentials.password <<
+                         saslCommandDigestPasswordFieldName << false));
+        }
         return true;
     }
 

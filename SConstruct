@@ -183,6 +183,7 @@ add_option( "no-glibc-check" , "don't check for new versions of glibc" , 0 , Fal
 add_option( "mm", "use main memory instead of memory mapped files" , 0 , True )
 add_option( "asio" , "Use Asynchronous IO (NOT READY YET)" , 0 , True )
 add_option( "ssl" , "Enable SSL" , 0 , True )
+add_option( "ssl-fips-capability", "Enable the ability to activate FIPS 140-2 mode", 0, True );
 
 # library choices
 add_option( "usev8" , "use v8 for javascript" , 0 , True )
@@ -226,6 +227,8 @@ add_option( "use-system-boost", "use system version of boost libraries", 0, True
 
 add_option( "use-system-sm", "use system version of spidermonkey library", 0, True )
 add_option( "use-system-v8", "use system version of v8 library", 0, True )
+
+add_option( "use-system-yaml", "use system version of yaml", 0, True )
 
 add_option( "use-system-all" , "use all system libraries", 0 , True )
 
@@ -717,6 +720,7 @@ if nix:
 
     if linux and has_option( "gcov" ):
         env.Append( CXXFLAGS=" -fprofile-arcs -ftest-coverage " )
+        env.Append( CPPDEFINES=["MONGO_GCOV"] )
         env.Append( LINKFLAGS=" -fprofile-arcs -ftest-coverage " )
         env.Append( CPPDEFINES=["_COVERAGE"] );
 
@@ -749,6 +753,8 @@ if has_option( "ssl" ):
     env.Append( CPPDEFINES=["MONGO_SSL"] )
     env.Append( LIBS=["ssl"] )
     env.Append( LIBS=["crypto"] )
+    if has_option("ssl-fips-capability"):
+        env.Append( CPPDEFINES=["MONGO_SSL_FIPS"] )
 
 try:
     umask = os.umask(022)
@@ -993,12 +999,58 @@ def doConfigure(myenv):
     if nix and linux:
         AddToCCFLAGSIfSupported(myenv, "-fno-builtin-memcmp")
 
+    # When using msvc, check for support for __declspec(thread), unless we have been asked
+    # explicitly not to use it. For other compilers, see if __thread works.
+    if using_msvc():
+        def CheckDeclspecThread(context):
+            test_body = """
+            __declspec( thread ) int tsp_int;
+            int main(int argc, char* argv[]) {
+                tsp_int = argc;
+                return 0;
+            }
+            """
+            context.Message('Checking for __declspec(thread)... ')
+            ret = context.TryLink(textwrap.dedent(test_body), ".cpp")
+            context.Result(ret)
+            return ret
+        conf = Configure(myenv, help=False, custom_tests = {
+            'CheckDeclspecThread' : CheckDeclspecThread,
+        })
+        haveDeclSpecThread = conf.CheckDeclspecThread()
+        conf.Finish()
+        if haveDeclSpecThread:
+            myenv.Append(CPPDEFINES=['MONGO_HAVE___DECLSPEC_THREAD'])
+    else:
+        def CheckUUThread(context):
+            test_body = """
+            __thread int tsp_int;
+            int main(int argc, char* argv[]) {
+                tsp_int = argc;
+                return 0;
+            }
+            """
+            context.Message('Checking for __thread... ')
+            ret = context.TryLink(textwrap.dedent(test_body), ".cpp")
+            context.Result(ret)
+            return ret
+        conf = Configure(myenv, help=False, custom_tests = {
+            'CheckUUThread' : CheckUUThread,
+        })
+        haveUUThread = conf.CheckUUThread()
+        conf.Finish()
+        if haveUUThread:
+            myenv.Append(CPPDEFINES=['MONGO_HAVE___THREAD'])
+
     conf = Configure(myenv)
     libdeps.setup_conftests(conf)
 
     if use_system_version_of_library("pcre"):
         conf.FindSysLibDep("pcre", ["pcre"])
         conf.FindSysLibDep("pcrecpp", ["pcrecpp"])
+
+    if use_system_version_of_library("yaml"):
+        conf.FindSysLibDep("yaml", ["yaml"])
 
     if use_system_version_of_library("boost"):
         if not conf.CheckCXXHeader( "boost/filesystem/operations.hpp" ):
@@ -1303,6 +1355,7 @@ module_sconscripts = moduleconfig.get_module_sconscripts(mongo_modules)
 Export("env")
 Export("shellEnv")
 Export("testEnv")
+Export("get_option")
 Export("has_option use_system_version_of_library")
 Export("installSetup")
 Export("usev8")

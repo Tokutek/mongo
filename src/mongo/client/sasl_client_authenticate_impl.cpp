@@ -27,6 +27,7 @@
 #include "mongo/base/status.h"
 #include "mongo/base/string_data.h"
 #include "mongo/bson/util/bson_extract.h"
+#include "mongo/client/auth_helpers.h"
 #include "mongo/client/sasl_client_authenticate.h"
 #include "mongo/client/sasl_client_session.h"
 #include "mongo/platform/cstdint.h"
@@ -56,16 +57,16 @@ namespace {
     /**
      * Gets the password data from "saslParameters" and stores it to "outPassword".
      *
-     * If "saslParameters" indicates that the password needs to be "digested" via
-     * DBClientWithCommands::createPasswordDigest(), this method takes care of that.
+     * If "digestPassword" indicates that the password needs to be "digested" via
+     * auth::createPasswordDigest(), this method takes care of that.
      * On success, the value of "*outPassword" is always the correct value to set
      * as the password on the SaslClientSession.
      *
      * Returns Status::OK() on success, and ErrorCodes::NoSuchKey if the password data is not
      * present in "saslParameters".  Other ErrorCodes returned indicate other errors.
      */
-    Status extractPassword(DBClientWithCommands* client,
-                           const BSONObj& saslParameters,
+    Status extractPassword(const BSONObj& saslParameters,
+                           bool digestPassword,
                            std::string* outPassword) {
 
         std::string rawPassword;
@@ -75,23 +76,15 @@ namespace {
         if (!status.isOK())
             return status;
 
-        bool digest;
-        status = bsonExtractBooleanFieldWithDefault(saslParameters,
-                                                    saslCommandDigestPasswordFieldName,
-                                                    true,
-                                                    &digest);
-        if (!status.isOK())
-            return status;
-
-        if (digest) {
+        if (digestPassword) {
             std::string user;
             status = bsonExtractStringField(saslParameters,
-                                            saslCommandPrincipalFieldName,
+                                            saslCommandUserFieldName,
                                             &user);
             if (!status.isOK())
                 return status;
 
-            *outPassword = client->createPasswordDigest(user, rawPassword);
+            *outPassword = auth::createPasswordDigest(user, rawPassword);
         }
         else {
             *outPassword = rawPassword;
@@ -109,16 +102,18 @@ namespace {
      */
     Status configureSession(SaslClientSession* session,
                             DBClientWithCommands* client,
+                            const std::string& targetDatabase,
                             const BSONObj& saslParameters) {
 
-        std::string value;
+        std::string mechanism;
         Status status = bsonExtractStringField(saslParameters,
                                                saslCommandMechanismFieldName,
-                                               &value);
+                                               &mechanism);
         if (!status.isOK())
             return status;
-        session->setParameter(SaslClientSession::parameterMechanism, value);
+        session->setParameter(SaslClientSession::parameterMechanism, mechanism);
 
+        std::string value;
         status = bsonExtractStringFieldWithDefault(saslParameters,
                                                    saslCommandServiceNameFieldName,
                                                    saslDefaultServiceName,
@@ -136,13 +131,24 @@ namespace {
         session->setParameter(SaslClientSession::parameterServiceHostname, value);
 
         status = bsonExtractStringField(saslParameters,
-                                        saslCommandPrincipalFieldName,
+                                        saslCommandUserFieldName,
                                         &value);
         if (!status.isOK())
             return status;
         session->setParameter(SaslClientSession::parameterUser, value);
 
-        status = extractPassword(client, saslParameters, &value);
+        bool digestPasswordDefault =
+            !(targetDatabase == "$external" && mechanism == "PLAIN") &&
+            !(targetDatabase == "$external" && mechanism == "GSSAPI");
+        bool digestPassword;
+        status = bsonExtractBooleanFieldWithDefault(saslParameters,
+                                                    saslCommandDigestPasswordFieldName,
+                                                    digestPasswordDefault,
+                                                    &digestPassword);
+        if (!status.isOK())
+            return status;
+
+        status = extractPassword(saslParameters, digestPassword, &value);
         if (status.isOK()) {
             session->setParameter(SaslClientSession::parameterPassword, value);
         }
@@ -161,20 +167,20 @@ namespace {
 
         int saslLogLevel = getSaslClientLogLevel(saslParameters);
 
-        SaslClientSession session;
-        Status status = configureSession(&session, client, saslParameters);
-        if (!status.isOK())
-            return status;
-
         std::string targetDatabase;
         try {
-            status = bsonExtractStringFieldWithDefault(saslParameters,
-                                                       saslCommandPrincipalSourceFieldName,
-                                                       saslDefaultDBName,
-                                                       &targetDatabase);
+            Status status = bsonExtractStringFieldWithDefault(saslParameters,
+                                                              saslCommandUserSourceFieldName,
+                                                              saslDefaultDBName,
+                                                              &targetDatabase);
+            if (!status.isOK())
+                return status;
         } catch (const DBException& ex) {
             return ex.toStatus();
         }
+
+        SaslClientSession session;
+        Status status = configureSession(&session, client, targetDatabase, saslParameters);
         if (!status.isOK())
             return status;
 

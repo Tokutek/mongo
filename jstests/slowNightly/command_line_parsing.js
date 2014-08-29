@@ -14,9 +14,13 @@ var m2 = startMongod( "--port", port+2, "--dbpath", "/data/db/" + baseName +"2",
 var m2expected = {
     "parsed" : {
         "config" : "jstests/libs/testconfig",
-        "dbpath" : "/data/db/jstests_slowNightly_command_line_parsing2",
-        "fastsync" : "true",
-        "port" : 31002,
+        "fastsync" : true,
+        "storage" : {
+            "dbPath" : MongoRunner.dataDir + "/jstests_slowNightly_command_line_parsing2",
+        },
+        "net" : {
+            "port" : 31002
+        },
         "setParameter" : [
             "enableTestCommands=1"
             ]
@@ -24,8 +28,28 @@ var m2expected = {
 };
 var m2result = m2.getDB("admin").runCommand( "getCmdLineOpts" );
 
-print("Expected:");
-printjson(m2expected.parsed);
-print("Actual:");
-printjson(m2result.parsed);
-assert( friendlyEqual(m2expected.parsed, m2result.parsed) );
+//remove setParameter as it is variable depending on the way the test is started.
+delete m2result.parsed.setParameter
+assert.docEq( m2expected.parsed, m2result.parsed );
+
+// test JSON config file
+var m3 = startMongod("--port", port+4, "--dbpath", "/data/db/" + baseName +"2",
+                     "--config", "jstests/libs/testconfig");
+
+var m3expected = {
+    "parsed" : {
+        "config" : "jstests/libs/testconfig",
+        "fastsync" : true,
+        "storage" : {
+            "dbPath" : MongoRunner.dataDir + "/jstests_slowNightly_command_line_parsing4",
+        },
+        "net" : {
+            "port" : 31004
+        }
+    }
+};
+var m3result = m3.getDB("admin").runCommand( "getCmdLineOpts" );
+
+//remove setParameter as it is variable depending on the way the test is started.
+delete m3result.parsed.setParameter
+assert.docEq( m3expected.parsed, m3result.parsed );

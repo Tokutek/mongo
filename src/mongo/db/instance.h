@@ -20,16 +20,14 @@
 
 #pragma once
 
-#include "mongo/pch.h"
-
 #include <boost/function.hpp>
 
 #include "mongo/base/status.h"
 #include "mongo/base/string_data.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/db/client.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/curop.h"
+#include "mongo/db/storage_options.h"
 
 namespace mongo {
 
@@ -99,6 +97,11 @@ namespace mongo {
         virtual bool isFailed() const {
             return false;
         }
+
+        virtual bool isStillConnected() {
+            return true;
+        }
+
         virtual string toString() {
             return "DBDirectClient";
         }

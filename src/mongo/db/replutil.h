@@ -20,8 +20,8 @@
 #include "mongo/db/database.h"
 #include "mongo/db/json.h"
 #include "mongo/db/repl.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/repl/rs.h"
+#include "mongo/db/repl/replication_server_status.h"  // replSettings
 
 namespace mongo {
 
@@ -67,7 +67,7 @@ namespace mongo {
     }
 
     inline void notMasterUnless(bool expr) {
-        uassert( 10107 , "not master" , expr );
+        uassert( NotMaster , "not master" , expr );
     }
 
     class ParsedQuery;

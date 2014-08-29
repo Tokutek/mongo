@@ -20,14 +20,17 @@
 
 #include "mongo/client/connpool.h"
 #include "mongo/db/auth/authorization_manager.h"
-#include "mongo/db/auth/auth_external_state_s.h"
-#include "mongo/s/shard.h"
+#include "mongo/db/auth/authorization_manager_global.h"
+#include "mongo/db/auth/authorization_session.h"
+#include "mongo/db/auth/authz_session_external_state_s.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/matcher.h"
+#include "mongo/db/namespacestring.h"
+#include "mongo/s/client_info.h"
 #include "mongo/s/grid.h"
 #include "mongo/s/request.h"
-#include "mongo/s/client_info.h"
-#include "mongo/db/matcher.h"
-#include "mongo/db/commands.h"
-#include "mongo/db/namespacestring.h"
+#include "mongo/s/shard.h"
+#include "mongo/util/concurrency/thread_name.h"
 
 /*
   most a pile of hacks to make linking nicer
@@ -72,9 +75,10 @@ namespace mongo {
                 "Non-null messaging port provided to Client::initThread in a mongos",
                 mp == NULL);
         Client *c = new Client(desc, mp);
-        c->setAuthorizationManager(new AuthorizationManager(new AuthExternalStateMongos()));
         currentClient.reset(c);
         mongo::lastError.initThread();
+        c->setAuthorizationSession(new AuthorizationSession(new AuthzSessionExternalStateMongos(
+                getGlobalAuthorizationManager())));
         return *c;
     }
 
@@ -104,37 +108,13 @@ namespace mongo {
                                          BSONObj& cmdObj,
                                          BSONObjBuilder& result,
                                          bool fromRepl ) {
-        verify(c);
-
         std::string dbname = nsToDatabase(ns);
 
-        // Access control checks
-        if (!noauth) {
-            std::vector<Privilege> privileges;
-            c->addRequiredPrivileges(dbname, cmdObj, &privileges);
-            AuthorizationManager* authManager = client.getAuthorizationManager();
-            if (c->requiresAuth() && (!authManager->checkAuthForPrivileges(privileges).isOK())) {
-                result.append("note", str::stream() << "not authorized for command: " <<
-                                    c->name << " on database " << dbname);
-                appendCommandStatus(result, false, "unauthorized");
-                return;
-            }
-        }
-        if (c->adminOnly() && c->localHostOnlyIfNoAuth(cmdObj) && noauth &&
-                !client.getIsLocalHostConnection()) {
-            log() << "command denied: " << cmdObj.toString() << endl;
-            appendCommandStatus(result,
-                               false,
-                               "unauthorized: this command must run from localhost when running db "
-                               "without auth");
+        Status status = _checkAuthorization(c, &client, dbname, cmdObj, fromRepl);
+        if (!status.isOK()) {
+            appendCommandStatus(result, status);
             return;
         }
-        if (c->adminOnly() && !startsWith(ns, "admin.")) {
-            log() << "command denied: " << cmdObj.toString() << endl;
-            appendCommandStatus(result, false, "access denied - use admin db");
-            return;
-        }
-        // End of access control checks
 
         if (cmdObj.getBoolField("help")) {
             stringstream help;

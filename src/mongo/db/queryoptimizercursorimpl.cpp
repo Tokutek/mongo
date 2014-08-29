@@ -30,8 +30,6 @@
 
 namespace mongo {
     
-    extern bool useHints;
-
     QueryOptimizerCursorImpl* QueryOptimizerCursorImpl::make
             ( auto_ptr<MultiPlanScanner>& mps,
               const QueryPlanSelectionPolicy& planPolicy,
@@ -306,7 +304,7 @@ namespace mongo {
     }
 
     void CursorGenerator::setArgumentsHint() {
-        if ( useHints && _parsedQuery ) {
+        if (storageGlobalParams.useHints && _parsedQuery) {
             _argumentsHint = _parsedQuery->getHint();
         }
     }

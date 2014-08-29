@@ -19,14 +19,14 @@
 
 #include <boost/thread/thread.hpp>
 
-#include "mongo/db/repl/health.h"
-
 #include "mongo/db/commands.h"
 #include "mongo/db/gtid.h"
 #include "mongo/db/instance.h"
 #include "mongo/db/repl.h"
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/repl/connections.h"
+#include "mongo/db/repl/health.h"
+#include "mongo/db/repl/replication_server_status.h"  // replSettings
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/repl/rs_config.h"
 #include "mongo/util/background.h"
@@ -42,7 +42,6 @@ namespace mongo {
     using namespace bson;
 
     extern bool replSetBlind;
-    extern ReplSettings replSettings;
 
     unsigned int HeartbeatInfo::numPings;
 
@@ -96,9 +95,10 @@ namespace mongo {
             }
             {
                 string s = string(cmdObj.getStringField("replSetHeartbeat"));
-                if( cmdLine.ourSetName() != s ) {
+                if (replSettings.ourSetName() != s) {
                     errmsg = "repl set names do not match";
-                    log() << "replSet set names do not match, our cmdline: " << cmdLine._replSet << rsLog;
+                    log() << "replSet set names do not match, our cmdline: " << replSettings.replSet
+                          << rsLog;
                     log() << "replSet s: " << s << rsLog;
                     result.append("mismatch", true);
                     return false;
@@ -278,7 +278,9 @@ namespace mongo {
                 if( ok ) {
                     up(info, mem);
                 }
-                else if (!info["errmsg"].eoo() && info["errmsg"].str() == "unauthorized") {
+                else if (info["code"].numberInt() == ErrorCodes::Unauthorized ||
+                         info["errmsg"].str() == "unauthorized") {
+
                     authIssue(mem);
                 }
                 else {

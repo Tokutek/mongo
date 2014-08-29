@@ -275,8 +275,8 @@ class mongod(object):
             argv += ['--logpath', server_log_file]
         if len(smoke_server_opts) > 0:
             argv += [smoke_server_opts]
-        if self.kwargs.get('use_ssl'):
-            argv += ['--sslOnNormalPorts',
+        if self.kwargs.get('use_ssl') or self.kwargs.get('use_x509'):
+            argv += ['--sslMode', "requireSSL",
                      '--sslPEMKeyFile', 'jstests/libs/server.pem',
                      '--sslCAFile', 'jstests/libs/ca.pem',
                      '--sslWeakCertificateValidation']
@@ -543,7 +543,8 @@ def runTest(test, testnum, result):
         if use_ssl:
             argv += ["--ssl",
                      "--sslPEMKeyFile", "jstests/libs/client.pem",
-                     "--sslCAFile", "jstests/libs/ca.pem"]
+                     "--sslCAFile", "jstests/libs/ca.pem",
+                     "--sslAllowInvalidCertificates"]
         argv += [path]
     elif ext in ["", ".exe"]:
         # Blech.
@@ -675,8 +676,6 @@ def runTest(test, testnum, result):
     if r != 0:
         raise TestExitFailure(path, r)
 
-    print ""
-
 def run_tests(tests):
     # FIXME: some suites of tests start their own mongod, so don't
     # need this.  (So long as there are no conflicts with port,
@@ -748,7 +747,7 @@ def run_tests(tests):
                         test_result["status"] = "skip"
 
                         if quiet:
-                            sys.stdout.write("skip %d %s\n" % (testnum, os.path.basename(path)))
+                            sys.stdout.write("skip %d %s\n" % (tests_run + 1, os.path.basename(path)))
                             sys.stdout.flush()
                         else:
                             print "skipping " + path

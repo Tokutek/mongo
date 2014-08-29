@@ -21,7 +21,6 @@
 #include "mongo/client/dbclientcursor.h"
 
 #include "mongo/client/connpool.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/dbmessage.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/s/shard.h"
@@ -141,14 +140,13 @@ namespace mongo {
         }
         else {
             verify( _scopedHost.size() );
-            scoped_ptr<ScopedDbConnection> conn(
-                    ScopedDbConnection::getScopedDbConnection( _scopedHost ) );
-            conn->get()->call( toSend , *response );
-            _client = conn->get();
+            ScopedDbConnection conn(_scopedHost);
+            conn->call( toSend , *response );
+            _client = conn.get();
             this->batch.m = response;
             dataReceived();
             _client = 0;
-            conn->done();
+            conn.done();
         }
     }
 
@@ -341,15 +339,14 @@ namespace mongo {
             }
             else {
                 verify( _scopedHost.size() );
-                scoped_ptr<ScopedDbConnection> conn(
-                        ScopedDbConnection::getScopedDbConnection( _scopedHost ) );
+                ScopedDbConnection conn(_scopedHost);
 
                 if( DBClientConnection::getLazyKillCursor() )
-                    conn->get()->sayPiggyBack( m );
+                    conn->sayPiggyBack( m );
                 else
-                    conn->get()->say( m );
+                    conn->say( m );
 
-                conn->done();
+                conn.done();
             }
         }
 

@@ -28,10 +28,12 @@
 #include "mongo/base/counter.h"
 #include "mongo/base/init.h"
 #include "mongo/base/status.h"
+#include "mongo/base/units.h"
 #include "mongo/bson/util/builder.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/databaseholder.h"
 #include "mongo/db/client.h"
@@ -57,8 +59,10 @@
 #include "mongo/db/query_optimizer.h"
 #include "mongo/db/ops/count.h"
 #include "mongo/db/ops/insert.h"
+#include "mongo/db/server_options.h"
 #include "mongo/db/stats/counters.h"
 #include "mongo/db/stats/timer_stats.h"
+#include "mongo/db/storage_options.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/s/d_logic.h"
@@ -168,7 +172,7 @@ namespace mongo {
                 if ( cmdObj["j"].trueValue() || cmdObj["fsync"].trueValue()) {
                     // if there's a non-zero log flush period, transactions
                     // do not fsync on commit and so we must do it here.
-                    if (cmdLine.logFlushPeriod != 0) {
+                    if (storageGlobalParams.logFlushPeriod != 0) {
                         storage::log_flush();
                     }
                 }
@@ -176,7 +180,7 @@ namespace mongo {
                 BSONElement e = cmdObj["w"];
                 if ( e.ok() ) {
 
-                    if ( cmdLine.configsvr && (!e.isNumber() || e.numberInt() > 1) ) {
+                    if ( serverGlobalParams.configsvr && (!e.isNumber() || e.numberInt() > 1) ) {
                         // w:1 on config servers should still work, but anything greater than that
                         // should not.
                         result.append( "wnote", "can't use w on config servers" );
@@ -392,7 +396,7 @@ namespace mongo {
 
         bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             // disallow dropping the config database
-            if ( cmdLine.configsvr && ( dbname == "config" ) ) {
+            if (serverGlobalParams.configsvr && (dbname == "config")) {
                 errmsg = "Cannot drop 'config' database if mongod started with --configsvr";
                 return false;
             }
@@ -446,7 +450,7 @@ namespace mongo {
         bool _run(const string& dbname, BSONObj& cmdObj, int i, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             BSONElement e = cmdObj.firstElement();
             result.append("was", cc().database()->profile());
-            result.append("slowms", cmdLine.slowMS );
+            result.append("slowms", serverGlobalParams.slowMS);
 
             int p = (int) e.number();
             bool ok = false;
@@ -461,7 +465,7 @@ namespace mongo {
 
             BSONElement slow = cmdObj["slowms"];
             if ( slow.isNumber() )
-                cmdLine.slowMS = slow.numberInt();
+                serverGlobalParams.slowMS = slow.numberInt();
 
             return ok;
         }
@@ -666,8 +670,9 @@ namespace mongo {
         bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             int was = _diaglog.setLevel( cmdObj.firstElement().numberInt() );
             _diaglog.flush();
-            if ( !cmdLine.quiet )
-                tlog() << "CMD: diagLogging set to " << _diaglog.getLevel() << " from: " << was << endl;
+            if (!serverGlobalParams.quiet) {
+                MONGO_TLOG(0) << "CMD: diagLogging set to " << _diaglog.getLevel() << " from: " << was << endl;
+            }
             result.append( "was" , was );
             return true;
         }
@@ -690,8 +695,9 @@ namespace mongo {
         virtual void help( stringstream& help ) const { help << "drop a collection\n{drop : <collectionName>}"; }
         virtual bool run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
             string nsToDrop = dbname + '.' + cmdObj.firstElement().valuestr();
-            if ( !cmdLine.quiet )
-                tlog() << "CMD: drop " << nsToDrop << endl;
+            if (!serverGlobalParams.quiet) {
+                MONGO_TLOG(0) << "CMD: drop " << nsToDrop << endl;
+            }
             uassert( 10039 ,  "can't drop collection with reserved $ character in name", strchr(nsToDrop.c_str(), '$') == 0 );
             Collection *cl = getCollection(nsToDrop);
             if (cl == 0) {
@@ -807,8 +813,9 @@ namespace mongo {
             BSONElement e = jsobj.firstElement();
             string toDeleteNs = dbname + '.' + e.valuestr();
             Collection *cl = getCollection(toDeleteNs);
-            if ( !cmdLine.quiet )
-                tlog() << "CMD: dropIndexes " << toDeleteNs << endl;
+            if (!serverGlobalParams.quiet) {
+                MONGO_TLOG(0) << "CMD: dropIndexes " << toDeleteNs << endl;
+            }
             if ( cl ) {
                 BSONElement f = jsobj.getField("index");
                 if ( f.type() == String ) {
@@ -914,7 +921,7 @@ namespace mongo {
                 Client::Context ctx(ns);
                 Client::Transaction txn(DB_SERIALIZABLE);
                 Collection *cl = getCollection(ns);
-                tlog() << "CMD: reIndex " << ns << endl;
+                MONGO_TLOG(0) << "CMD: reIndex " << ns << endl;
 
                 if (cl == NULL) {
                     errmsg = "ns not found";
@@ -956,7 +963,6 @@ namespace mongo {
     public:
         CmdRenameCollection() : FileopsCommand( "renameCollection" ) {}
         virtual bool adminOnly() const { return true; }
-        virtual bool requiresAuth() { return true; }
         virtual bool lockGlobally() const { return true; }
         virtual bool logTheOp() {
             return true; // can't log steps when doing fast rename within a db, so always log the op rather than individual steps comprising it.
@@ -1135,8 +1141,8 @@ namespace mongo {
             vector< BSONObj > dbInfos;
 
             set<string> seen;
-            size_t totalUncompressedSize = 0;
-            size_t totalCompressedSize = 0;
+            intmax_t totalUncompressedSize = 0;
+            intmax_t totalCompressedSize = 0;
             for ( vector< string >::iterator i = dbNames.begin(); i != dbNames.end(); ++i ) {
                 BSONObjBuilder b;
                 b.append( "name", *i );
@@ -1144,8 +1150,8 @@ namespace mongo {
                 if (!getenv("TOKUMX_SHOW_NO_SIZES")){
                     LOCK_REASON(lockReason, "listDatabases: getting db size");
                     Client::ReadContext rc( getSisterNS(*i, "system.namespaces"), lockReason );
-                    size_t uncompressedSize = 0;
-                    size_t compressedSize = 0;
+                    intmax_t uncompressedSize = 0;
+                    intmax_t compressedSize = 0;
                     rc.ctx().db()->diskSize(uncompressedSize, compressedSize);
                     b.append( "size", (double) uncompressedSize );
                     b.append( "sizeOnDisk", (double) compressedSize );
@@ -1160,7 +1166,8 @@ namespace mongo {
                 seen.insert( i->c_str() );
             }
 
-            // TODO: erh 1/1/2010 I think this is broken where path != dbpath ??
+            // TODO: erh 1/1/2010 I think this is broken where
+            // path != storageGlobalParams.dbpath ??
             set<string> allShortNames;
             if (!jsobj.hasElement( "onDiskOnly" )) {
                 LOCK_REASON(lockReason, "listDatabases: looking for dbs on disk");
@@ -1198,7 +1205,6 @@ namespace mongo {
     public:
         CmdCloseAllDatabases() : FileopsCommand( "closeAllDatabases" ) {}
         virtual bool adminOnly() const { return true; }
-        virtual bool requiresAuth() { return true; }
         virtual bool lockGlobally() const { return true; }
         virtual bool logTheOp() { return false; }
         virtual void addRequiredPrivileges(const std::string& dbname,
@@ -1210,10 +1216,15 @@ namespace mongo {
         }
         virtual bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             try {
-                dbHolderW().closeDatabases(dbpath);
+                dbHolderW().closeDatabases(storageGlobalParams.dbpath);
                 return true;
-            } catch (DBException &e) {
-                log() << "Caught exception while closing all databases: " << e.what();
+            }
+            catch(DBException&) { 
+                throw;
+            }
+            catch(...) { 
+                log() << "ERROR uncaught exception in command closeAllDatabases" << endl;
+                errmsg = "unexpected uncaught exception";
                 return false;
             }
         }
@@ -1541,7 +1552,6 @@ namespace mongo {
         virtual void help( stringstream &help ) const {
             help << "{whatsmyuri:1}";
         }
-        virtual bool requiresAuth() { return false; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {} // No auth required
@@ -1654,7 +1664,6 @@ namespace mongo {
             help << "w:true write lock. secs:<seconds>";
         }
         // No auth needed because it only works when enabled via command line.
-        virtual bool requiresAuth() { return false; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {}
@@ -1709,7 +1718,6 @@ namespace mongo {
         EmptyCapped() : ModifyCommand( "emptycapped" ) {}
         virtual bool logTheOp() { return true; }
         // No auth needed because it only works when enabled via command line.
-        virtual bool requiresAuth() { return false; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {}
@@ -2094,31 +2102,10 @@ namespace mongo {
 
         std::string dbname = nsToDatabase( cmdns );
 
-        if (c->adminOnly() && c->localHostOnlyIfNoAuth(cmdObj) && noauth &&
-                !client.getIsLocalHostConnection()) {
-            log() << "command denied: " << cmdObj.toString() << endl;
-            appendCommandStatus(result,
-                                false,
-                                "unauthorized: this command must run from localhost when running "
-                                "db without auth");
+        Status status = _checkAuthorization(c, &client, dbname, cmdObj, fromRepl);
+        if (!status.isOK()) {
+            appendCommandStatus(result, status);
             return;
-        }
-
-        if ( c->adminOnly() && ! fromRepl && dbname != "admin" ) {
-            log() << "command denied: " << cmdObj.toString() << endl;
-            appendCommandStatus(result, false, "access denied; use admin db");
-            return;
-        }
-
-        if (!noauth && c->requiresAuth()) {
-            std::vector<Privilege> privileges;
-            c->addRequiredPrivileges(dbname, cmdObj, &privileges);
-            Status status = client.getAuthorizationManager()->checkAuthForPrivileges(privileges);
-            if (!status.isOK()) {
-                log() << "command denied: " << cmdObj.toString() << endl;
-                appendCommandStatus(result, false, status.reason());
-                return;
-            }
         }
 
         if ( cmdObj["help"].trueValue() ) {
@@ -2133,7 +2120,9 @@ namespace mongo {
             return;
         }
 
-        LOG(c->adminOnly() ? 2 : 3) << "command: " << cmdObj << endl;
+        if ( c->adminOnly() ) {
+            LOG( 2 ) << "command: " << cmdObj << endl;
+        }
 
         // before we start this command, check if we can run in a multi statement transaction
         // If we cannot and are in a multi statement transaction, 
@@ -2177,7 +2166,7 @@ namespace mongo {
                 rctx.reset();
                 lk.reset(new Lock::GlobalRead(lockReason));
             }
-            Client::Context ctx(ns, dbpath);
+            Client::Context ctx(ns, storageGlobalParams.dbpath);
             if (!canRunCommand(c, dbname, queryOptions, fromRepl, errmsg, result)) {
                 appendCommandStatus(result, false, errmsg);
                 return;
@@ -2217,7 +2206,7 @@ namespace mongo {
                 return;
             }
 
-            Client::Context ctx(dbname, dbpath);
+            Client::Context ctx(dbname, storageGlobalParams.dbpath);
             scoped_ptr<Client::Transaction> transaction((!fromRepl && c->needsTxn())
                                                         ? new Client::Transaction(c->txnFlags())
                                                         : NULL);
@@ -2247,8 +2236,7 @@ namespace mongo {
     bool _runCommands(const char *ns, const BSONObj &cmdobj, BufBuilder &b, BSONObjBuilder& anObjBuilder, bool fromRepl, int queryOptions) {
         string dbname = nsToDatabase( ns );
 
-        if( logLevel >= 1 )
-            log() << "run command " << ns << ' ' << cmdobj << endl;
+        LOG(1) << "run command " << ns << ' ' << cmdobj << endl;
 
         const char *p = strchr(ns, '.');
         if ( !p ) return false;
@@ -2287,6 +2275,7 @@ namespace mongo {
             Command::appendCommandStatus(anObjBuilder,
                                          false,
                                          str::stream() << "no such cmd: " << e.fieldName());
+            anObjBuilder.append("code", ErrorCodes::CommandNotFound);
             anObjBuilder.append("bad cmd" , cmdobj );
         }
 

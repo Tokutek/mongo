@@ -25,8 +25,7 @@
 #include "mongo/db/client.h"
 #include "mongo/db/interrupt_status_mongod.h"
 #include "mongo/db/pipeline/expression_context.h"
-
-#include "dbtests.h"
+#include "mongo/dbtests/dbtests.h"
 
 namespace DocumentSourceTests {
 

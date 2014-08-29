@@ -21,7 +21,6 @@
 
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/client/distlock.h"
-#include "mongo/db/cmdline.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/s/chunk.h"
 #include "mongo/s/config.h"
@@ -370,7 +369,7 @@ namespace mongo {
             log() << "config servers and shards contacted successfully" << endl;
 
             StringBuilder buf;
-            buf << getHostNameCached() << ":" << cmdLine.port;
+            buf << getHostNameCached() << ":" << serverGlobalParams.port;
             _myid = buf.str();
             _started = time(0);
 
@@ -411,9 +410,7 @@ namespace mongo {
 
             try {
 
-                scoped_ptr<ScopedDbConnection> connPtr(
-                        ScopedDbConnection::getInternalScopedDbConnection(config.toString(), 30));
-                ScopedDbConnection& conn = *connPtr;
+                ScopedDbConnection conn(config.toString(), 30);
 
                 // ping has to be first so we keep things in the config server in sync
                 _ping( conn.conn() );

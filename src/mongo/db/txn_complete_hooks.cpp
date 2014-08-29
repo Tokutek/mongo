@@ -33,7 +33,7 @@ namespace mongo {
                                          bool committed) {
         LOCK_REASON(lockReason, "txn: noting completed inserts");
         Lock::DBRead lk(ns, lockReason);
-        if (dbHolder().__isLoaded(ns, dbpath)) {
+        if (dbHolder().__isLoaded(ns, storageGlobalParams.dbpath)) {
             scoped_ptr<Client::Context> ctx(cc().getContext() == NULL ?
                                             new Client::Context(ns) : NULL);
             // Because this transaction did inserts, we're guaranteed to be the
@@ -76,7 +76,7 @@ namespace mongo {
             // Hold a write lock while trying to close the namespace in the collection map.
             LOCK_REASON(lockReason, "txn: closing created dictionaries during txn abort");
             Lock::DBWrite lk(ns, lockReason);
-            if (dbHolder().__isLoaded(ns, dbpath)) {
+            if (dbHolder().__isLoaded(ns, storageGlobalParams.dbpath)) {
                 scoped_ptr<Client::Context> ctx(cc().getContext() == NULL ?
                                                 new Client::Context(ns) : NULL);
                 // Pass aborting = true to close_ns(), which hints to the implementation
@@ -96,7 +96,7 @@ namespace mongo {
 
             LOCK_REASON(lockReason, "txn: rolling back db creates");
             Lock::DBWrite lk(db, lockReason);
-            if (dbHolder().__isLoaded(db, dbpath)) {
+            if (dbHolder().__isLoaded(db, storageGlobalParams.dbpath)) {
                 scoped_ptr<Client::Context> ctx(cc().getContext() == NULL ?
                                                 new Client::Context(db) : NULL);
                 collectionMap(db)->rollbackCreate();

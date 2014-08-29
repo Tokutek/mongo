@@ -30,6 +30,7 @@
 #include "mongo/db/auth/privilege.h"
 #include "mongo/db/commands.h"
 #include "mongo/util/bson_util.h"
+#include "mongo/util/concurrency/thread_name.h"
 #include "mongo/util/timer.h"
 
 // Modify some config options for the RNG, since they cause MSVC to fail
@@ -388,26 +389,25 @@ namespace mongo {
             for(vector<long long>::iterator i = skew.begin(); i != skew.end(); ++i,s++) {
 
                 ConnectionString server( cluster.getServers()[s] );
-                scoped_ptr<ScopedDbConnection> conn(
-                        ScopedDbConnection::getInternalScopedDbConnection( server.toString() ) );
+                ScopedDbConnection conn(server.toString());
 
                 BSONObj result;
                 try {
-                    bool success = conn->get()->runCommand( string("admin"),
-                                                            BSON( "_skewClockCommand" << 1
-                                                                  << "skew" << *i ),
-                                                            result );
+                    bool success = conn->runCommand( string("admin"),
+                                                     BSON( "_skewClockCommand" << 1
+                                                           << "skew" << *i ),
+                                                     result );
 
                     uassert(13678, str::stream() << "Could not communicate with server " << server.toString() << " in cluster " << cluster.toString() << " to change skew by " << *i, success );
 
                     LOG( logLvl + 1 ) << " Skewed host " << server << " clock by " << *i << endl;
                 }
                 catch(...) {
-                    conn->done();
+                    conn.done();
                     throw;
                 }
 
-                conn->done();
+                conn.done();
 
             }
 

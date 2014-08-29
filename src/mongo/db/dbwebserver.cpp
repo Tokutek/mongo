@@ -21,22 +21,29 @@
 */
 
 #include "mongo/pch.h"
-#include "mongo/util/net/miniwebserver.h"
-#include "mongo/util/mongoutils/html.h"
-#include "mongo/util/md5.hpp"
-#include "mongo/db/auth/authorization_manager.h"
-#include "mongo/db/auth/principal.h"
-#include "mongo/db/auth/privilege.h"
-#include "mongo/db/instance.h"
-#include "mongo/db/stats/snapshots.h"
-#include "mongo/db/commands.h"
-#include "mongo/util/version.h"
-#include "mongo/util/ramlog.h"
-#include "mongo/util/admin_access.h"
+
 #include "mongo/db/dbwebserver.h"
 
-#include "pcrecpp.h"
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <pcrecpp.h>
+
+#include "mongo/base/init.h"
+#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_manager_global.h"
+#include "mongo/db/auth/authorization_session.h"
+#include "mongo/db/auth/principal.h"
+#include "mongo/db/auth/privilege.h"
+#include "mongo/db/commands.h"
+#include "mongo/db/instance.h"
+#include "mongo/db/stats/snapshots.h"
+#include "mongo/util/admin_access.h"
+#include "mongo/util/md5.hpp"
+#include "mongo/util/mongoutils/html.h"
+#include "mongo/util/net/miniwebserver.h"
+#include "mongo/util/ramlog.h"
+#include "mongo/util/version.h"
+#include "mongo/util/version_reporting.h"
+
 
 namespace mongo {
 
@@ -67,19 +74,20 @@ namespace mongo {
             ss << "<pre>";
             ss << mongodVersion() << '\n';
             ss << "git hash: " << gitVersion() << '\n';
+            ss << openSSLVersion("OpenSSL version: ", "\n");
             ss << "sys info: " << sysInfo() << '\n';
-            ss << "uptime: " << time(0)-started << " seconds\n";
+            ss << "uptime: " << time(0)-serverGlobalParams.started << " seconds\n";
             ss << "</pre>";
         }
 
         void _authorizePrincipal(const std::string& principalName, bool readOnly) {
-            Principal* principal = new Principal(PrincipalName(principalName, "local"));
-            ActionSet actions = AuthorizationManager::getActionsForOldStyleUser(
+            Principal* principal = new Principal(UserName(principalName, "local"));
+            ActionSet actions = getGlobalAuthorizationManager()->getActionsForOldStyleUser(
                     "admin", readOnly);
 
-            AuthorizationManager* authorizationManager = cc().getAuthorizationManager();
-            authorizationManager->addAuthorizedPrincipal(principal);
-            Status status = authorizationManager->acquirePrivilege(
+            AuthorizationSession* authorizationSession = cc().getAuthorizationSession();
+            authorizationSession->addAuthorizedPrincipal(principal);
+            Status status = authorizationSession->acquirePrivilege(
                     Privilege(PrivilegeSet::WILDCARD_RESOURCE, actions), principal->getName());
             verify (status == Status::OK());
         }
@@ -174,12 +182,13 @@ namespace mongo {
 
                     DbWebHandler * handler = DbWebHandler::findHandler( url );
                     if ( handler ) {
-                        if ( handler->requiresREST( url ) && ! cmdLine.rest ) {
+                        if (handler->requiresREST(url) && !serverGlobalParams.rest) {
                             _rejectREST( responseMsg , responseCode , headers );
                         }
                         else {
                             string callback = params.getStringField("jsonp");
-                            uassert(13453, "server not started with --jsonp", callback.empty() || cmdLine.jsonp);
+                            uassert(13453, "server not started with --jsonp",
+                                    callback.empty() || serverGlobalParams.jsonp);
 
                             handler->handle( rq , url , params , responseMsg , responseCode , headers , from );
 
@@ -192,7 +201,7 @@ namespace mongo {
                 }
 
 
-                if ( ! cmdLine.rest ) {
+                if (!serverGlobalParams.rest) {
                     _rejectREST( responseMsg , responseCode , headers );
                     return;
                 }
@@ -217,7 +226,7 @@ namespace mongo {
             string dbname;
             {
                 stringstream z;
-                z << cmdLine.binaryName << ' ' << prettyHostName();
+                z << serverGlobalParams.binaryName << ' ' << prettyHostName();
                 dbname = z.str();
             }
             ss << start(dbname) << h2(dbname);
@@ -317,20 +326,15 @@ namespace mongo {
 
     vector<WebStatusPlugin*> * WebStatusPlugin::_plugins = 0;
 
-    // -- basic statuc plugins --
+    // -- basic status plugins --
 
     class LogPlugin : public WebStatusPlugin {
     public:
         LogPlugin() : WebStatusPlugin( "Log" , 100 ), _log(0) {
+            _log = RamLog::get( "global" );
         }
 
-        virtual void init() {
-            _log = RamLog::get( "global" );
-            if ( ! _log ) {
-                _log = new RamLog("global");
-                Logstream::get().addGlobalTee( _log );
-            }
-        }
+        virtual void init() {}
 
         virtual void run( stringstream& ss ) {
             _log->toHTML( ss );
@@ -338,7 +342,12 @@ namespace mongo {
         RamLog * _log;
     };
 
-    LogPlugin * logPlugin = new LogPlugin();
+    MONGO_INITIALIZER(WebStatusLogPlugin)(InitializerContext*) {
+        if (serverGlobalParams.isHttpInterfaceEnabled) {
+            new LogPlugin;
+        }
+        return Status::OK();
+    }
 
     // -- handler framework ---
 
@@ -540,8 +549,8 @@ namespace mongo {
     void webServerThread(const AdminAccess* adminAccess) {
         boost::scoped_ptr<const AdminAccess> adminAccessPtr(adminAccess); // adminAccess is owned here
         Client::initThread("websvr");
-        const int p = cmdLine.port + 1000;
-        DbWebServer mini(cmdLine.bind_ip, p, adminAccessPtr.get());
+        const int p = serverGlobalParams.port + 1000;
+        DbWebServer mini(serverGlobalParams.bind_ip, p, adminAccessPtr.get());
         mini.setupSockets();
         mini.initAndListen();
         cc().shutdown();

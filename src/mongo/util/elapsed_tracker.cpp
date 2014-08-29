@@ -14,7 +14,21 @@
  *
  *    You should have received a copy of the GNU Affero General Public License
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *    As a special exception, the copyright holders give permission to link the
+ *    code of portions of this program with the OpenSSL library under certain
+ *    conditions as described in each individual source file and distribute
+ *    linked combinations including the program with the OpenSSL library. You
+ *    must comply with the GNU Affero General Public License in all respects
+ *    for all of the code used other than as permitted herein. If you modify
+ *    file(s) with this exception, you may extend this exception to your
+ *    version of the file(s), but you are not obligated to do so. If you do not
+ *    wish to do so, delete this exception statement from your version. If you
+ *    delete this exception statement from all source files in the program,
+ *    then also delete it here.
  */
+
+#include "mongo/platform/basic.h"
 
 #include "mongo/util/elapsed_tracker.h"
 
@@ -30,13 +44,15 @@ namespace mongo {
     }
 
     bool ElapsedTracker::intervalHasElapsed() {
-        if ( ( ++_pings % _hitsBetweenMarks ) == 0 ) {
+        if ( ++_pings >= _hitsBetweenMarks ) {
+            _pings = 0;
             _last = Listener::getElapsedTimeMillis();
             return true;
         }
 
         long long now = Listener::getElapsedTimeMillis();
         if ( now - _last > _msBetweenMarks ) {
+            _pings = 0;
             _last = now;
             return true;
         }
@@ -45,6 +61,7 @@ namespace mongo {
     }
 
     void ElapsedTracker::resetLastTime() {
+        _pings = 0;
         _last = Listener::getElapsedTimeMillis();
     }
 

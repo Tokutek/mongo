@@ -21,7 +21,7 @@
 #include "mongo/base/string_data.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
-#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/plugins/loader.h"
@@ -36,7 +36,6 @@ namespace mongo {
         // Be strict for now, relax later if we need to.
         virtual LockType locktype() const { return WRITE; }
         virtual bool lockGlobally() const { return true; }
-        virtual bool requiresAuth() { return true; }
         virtual bool adminOnly() const { return true; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
@@ -89,7 +88,6 @@ namespace mongo {
         // Be strict for now, relax later if we need to.
         virtual LockType locktype() const { return READ; }
         virtual bool lockGlobally() const { return true; }
-        virtual bool requiresAuth() { return true; }
         virtual bool adminOnly() const { return true; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
@@ -117,7 +115,6 @@ namespace mongo {
         // Be strict for now, relax later if we need to.
         virtual LockType locktype() const { return WRITE; }
         virtual bool lockGlobally() const { return true; }
-        virtual bool requiresAuth() { return true; }
         virtual bool adminOnly() const { return true; }
         virtual void help(stringstream &h) const {
             h << "Unload a plugin from mongod." << endl

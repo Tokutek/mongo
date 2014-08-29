@@ -17,10 +17,14 @@
  */
 
 
-#include "pch.h"
-#include "listen.h"
-#include "message_port.h"
+#include "mongo/pch.h"
+
+#include "mongo/util/net/listen.h"
+
 #include "mongo/base/owned_pointer_vector.h"
+#include "mongo/util/net/message_port.h"
+#include "mongo/util/net/ssl_manager.h"
+#include "mongo/util/scopeguard.h"
 
 #ifndef _WIN32
 
@@ -99,33 +103,21 @@ namespace mongo {
         : _port(port), _name(name), _ip(ip), _setupSocketsSuccessful(false),
           _logConnect(logConnect), _elapsedTime(0) {
 #ifdef MONGO_SSL
-        _ssl = NULL;
-        if (cmdLine.sslOnNormalPorts) {
-            const SSLParams params(cmdLine.sslPEMKeyFile, 
-                                   cmdLine.sslPEMKeyPassword,
-                                   cmdLine.sslCAFile,
-                                   cmdLine.sslCRLFile,
-                                   cmdLine.sslWeakCertificateValidation,
-                                   cmdLine.sslFIPSMode);
-            _ssl = new SSLManager(params);
-        }
+        _ssl = getSSLManager();
 #endif
     }
     
     Listener::~Listener() {
         if ( _timeTracker == this )
             _timeTracker = 0;
-#ifdef MONGO_SSL
-        delete _ssl;
-        _ssl = 0;
-#endif
     }
 
     void Listener::setupSockets() {
         checkTicketNumbers();
 
 #if !defined(_WIN32)
-        _mine = ipToAddrs(_ip.c_str(), _port, (!cmdLine.noUnixSocket && useUnixSockets()));
+        _mine = ipToAddrs(_ip.c_str(), _port, (!serverGlobalParams.noUnixSocket &&
+                                               useUnixSockets()));
 #else
         _mine = ipToAddrs(_ip.c_str(), _port, false);
 #endif
@@ -134,6 +126,7 @@ namespace mongo {
             const SockAddr& me = *it;
 
             SOCKET sock = ::socket(me.getType(), SOCK_STREAM, 0);
+            ScopeGuard socketGuard = MakeGuard(&closesocket, sock);
             massert( 15863 , str::stream() << "listen(): invalid socket? " << errnoWithDescription() , sock >= 0 );
 
             if (me.getType() == AF_UNIX) {
@@ -167,7 +160,6 @@ namespace mongo {
                 error() << "listen(): bind() failed " << errnoWithDescription(x) << " for socket: " << me.toString() << endl;
                 if ( x == EADDRINUSE )
                     error() << "  addr already in use" << endl;
-                closesocket(sock);
                 return;
             }
 
@@ -182,13 +174,13 @@ namespace mongo {
             
             if ( ::listen(sock, 128) != 0 ) {
                 error() << "listen(): listen() failed " << errnoWithDescription() << endl;
-                closesocket(sock);
                 return;
             }
 
             ListeningSockets::get()->add( sock );
 
             _socks.push_back(sock);
+            socketGuard.Dismiss();
         }
         
         _setupSocketsSuccessful = true;
@@ -299,7 +291,7 @@ namespace mongo {
 
                 long long myConnectionNumber = globalConnectionNumber.addAndFetch(1);
 
-                if ( _logConnect && ! cmdLine.quiet ){
+                if (_logConnect && !serverGlobalParams.quiet) {
                     int conns = globalTicketHolder.used()+1;
                     const char* word = (conns == 1 ? " connection" : " connections");
                     log() << "connection accepted from " << from.toString() << " #" << myConnectionNumber << " (" << conns << word << " now open)" << endl;
@@ -493,7 +485,7 @@ namespace mongo {
 
             long long myConnectionNumber = globalConnectionNumber.addAndFetch(1);
 
-            if ( _logConnect && ! cmdLine.quiet ){
+            if (_logConnect && !serverGlobalParams.quiet) {
                 int conns = globalTicketHolder.used()+1;
                 const char* word = (conns == 1 ? " connection" : " connections");
                 log() << "connection accepted from " << from.toString() << " #" << myConnectionNumber << " (" << conns << word << " now open)" << endl;
@@ -549,9 +541,6 @@ namespace mongo {
                << " soft:" << limit.rlim_cur
                << " max conn: " << max
                << endl;
-
-        if ( max > MAX_MAX_CONN )
-            max = MAX_MAX_CONN;
 
         return max;
 #endif

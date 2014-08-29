@@ -19,6 +19,7 @@
 
 #include "mongo/client/remote_transaction.h"
 #include "mongo/db/client.h"
+#include "mongo/db/cloner.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/database.h"
 #include "mongo/db/instance.h"
@@ -31,6 +32,7 @@
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/repl/rs_optime.h"
+#include "mongo/db/repl/replication_server_status.h"  // replSettings
 #include "mongo/db/repl/rs_sync.h"
 #include "mongo/db/storage/env.h"
 #include "mongo/util/mongoutils/str.h"

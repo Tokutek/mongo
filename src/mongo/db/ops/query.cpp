@@ -53,11 +53,9 @@ namespace mongo {
         catch ( AssertionException& e ) {
             verify( e.getCode() != SendStaleConfigCode && e.getCode() != RecvStaleConfigCode );
 
-            e.getInfo().append( anObjBuilder , "assertion" , "assertionCode" );
+            Command::appendCommandStatus(anObjBuilder, e.toStatus());
             curop.debug().exceptionInfo = e.getInfo();
         }
-        anObjBuilder.append("errmsg", "db assertion failure");
-        anObjBuilder.append("ok", 0.0);
         BSONObj x = anObjBuilder.done();
         b.appendBuf((void*) x.objdata(), x.objsize());
         return true;
@@ -811,10 +809,13 @@ namespace mongo {
             ccPointer.reset( new ClientCursor( queryOptions, cursor, ns,
                                                jsobj.getOwned(), inMultiStatementTxn ) );
             cursorid = ccPointer->cursorid();
-            DEV tlog(2) << "query has more, cursorid: " << cursorid << endl;
+            DEV { MONGO_TLOG(2) << "query has more, cursorid: " << cursorid << endl; }
             
             if ( !ccPointer->ok() && ccPointer->c()->tailable() ) {
-                DEV tlog() << "query has no more but tailable, cursorid: " << cursorid << endl;
+                DEV {
+                    MONGO_TLOG(0) << "query has no more but tailable, cursorid: " << cursorid <<
+                        endl;
+                }
             }
             
             if( queryOptions & QueryOption_Exhaust ) {
@@ -919,8 +920,7 @@ namespace mongo {
 
         uassert( 16332 , "can't have an empty ns" , ns[0] );
 
-        if( logLevel >= 2 )
-            log() << "runQuery called " << ns << " " << jsobj << endl;
+        LOG(2) << "runQuery called " << ns << " " << jsobj << endl;
 
         curop.debug().ns = ns;
         curop.debug().ntoreturn = pq.getNumToReturn();

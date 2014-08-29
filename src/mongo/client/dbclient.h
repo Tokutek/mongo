@@ -25,6 +25,8 @@
 #error dbclient.h is for C++ driver consumer use only
 #endif
 
+#define LIBMONGOCLIENT_CONSUMER
+
 #include "mongo/client/redef_macros.h"
 
 #include "mongo/pch.h"
@@ -34,7 +36,9 @@
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/client/dbclientinterface.h"
 #include "mongo/client/gridfs.h"
+#include "mongo/client/init.h"
 #include "mongo/client/sasl_client_authenticate.h"
 #include "mongo/client/syncclusterconnection.h"
+#include "mongo/util/net/ssl_options.h"
 
 #include "mongo/client/undef_macros.h"

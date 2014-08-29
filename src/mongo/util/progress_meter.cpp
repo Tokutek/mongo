@@ -19,6 +19,8 @@
 
 #include "mongo/pch.h"
 
+#include <iomanip>
+
 #include "mongo/db/jsobj.h"
 #include "mongo/util/log.h"
 
@@ -56,7 +58,7 @@ namespace mongo {
         
         if ( _total > 0 ) {
             int per = (int)( ( (double)_done * 100.0 ) / (double)_total );
-            Nullstream& out = log();
+            LogstreamBuilder out = log();
             if (_parent != NULL) {
                 out << "\t\t" << treeString() << endl;
             } else {
@@ -111,7 +113,7 @@ namespace mongo {
     }
 
     void ProgressMeter::appendInfo(BSONObjBuilder &b) const {
-        b.append("name", _name);
+        b.append("name", getName());
         b.append("units", _units);
         b.append("done", _done);
         b.append("total", _total);

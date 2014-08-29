@@ -1,3 +1,8 @@
+add_subdirectory(cmdline_utils)
+add_subdirectory(concurrency)
+add_subdirectory(net)
+add_subdirectory(options_parser)
+
 add_library(stacktrace STATIC
   stacktrace
   )
@@ -15,21 +20,47 @@ add_library(foundation STATIC
   text
   time_support
   timer
+  util
+  startup_test
   )
 add_dependencies(foundation generate_error_codes generate_action_types)
 target_link_libraries(foundation LINK_PUBLIC
   stacktrace
   base
+  logger
   platform
+  thread_name
   ${Boost_LIBRARIES}
+  ${TZ_LIBRARIES}
+  )
+
+add_library(synchronization STATIC
+  concurrency/synchronization
+  )
+add_dependencies(synchronization generate_error_codes generate_action_types install_tdb_h)
+
+add_library(background_job STATIC
+  background
+  )
+add_dependencies(background_job generate_error_codes generate_action_types)
+target_link_libraries(background_job LINK_PUBLIC
+  spin_lock
+  )
+
+add_library(version STATIC
+  "${CMAKE_CURRENT_BINARY_DIR}/../buildinfo.cpp"
+  version
+  )
+add_dependencies(version generate_error_codes generate_action_types)
+target_link_libraries(version LINK_PUBLIC
+  bson
+  base
   )
 
 add_library(mongocommon_util STATIC
-  background
   intrusive_counter
-  util
   trace
-  ramlog
+  paths
   progress_meter
   percentage_progress_meter
   concurrency/task
@@ -37,29 +68,28 @@ add_library(mongocommon_util STATIC
   password
   concurrency/rwlockimpl
   histogram
-  concurrency/spin_lock
   text_startuptest
+  signal_win32
   stack_introspect
-  concurrency/synchronization
-  net/sock
-  net/ssl_manager
-  net/httpclient
-  net/message
-  net/message_port
-  net/listen
-  startup_test
-  version
+  version_reporting
   )
 add_dependencies(mongocommon_util generate_error_codes generate_action_types)
 target_link_libraries(mongocommon_util LINK_PUBLIC
   bson
+  background_job
+  fail_point
   foundation
-  mongohasher
   md5
+  mongohasher
+  network
   processinfo
+  spin_lock
   stacktrace
   stringutils
-  fail_point
+  synchronization
+  thread_name
+  version
+  options_parser
   ${PCRE_LIBRARIES}
   murmurhash3
   ${Boost_LIBRARIES}
@@ -69,6 +99,7 @@ target_link_libraries(mongocommon_util LINK_PUBLIC
 add_library(stringutils STATIC
   stringutils
   base64
+  hex
   )
 add_dependencies(stringutils generate_error_codes generate_action_types)
 

@@ -619,9 +619,9 @@ namespace mongo {
                     splitKeys.erase( splitKeys.begin() );
                     verify( c.get() );
 
-                    if ( timer.millis() > cmdLine.slowMS ) {
+                    if ( timer.millis() > serverGlobalParams.slowMS ) {
                         warning() << "Finding the split vector for " <<  ns << " over "<< keyPattern
-                                  << " maxChunkSize: " << maxChunkSize << " numSplits: " << splitKeys.size() 
+                                  << " maxChunkSize: " << maxChunkSize << " numSplits: " << splitKeys.size()
                                   << " lookedAt: " << currCount << " took " << timer.millis() << "ms"
                                   << endl;
                     }
@@ -791,25 +791,23 @@ namespace mongo {
             string shard;
             ChunkInfo origChunk;
             {
-                scoped_ptr<ScopedDbConnection> conn(
-                        ScopedDbConnection::getInternalScopedDbConnection(
-                                shardingState.getConfigServer(), 30));
+                ScopedDbConnection conn(shardingState.getConfigServer(), 30);
 
-                BSONObj x = conn->get()->findOne(ChunkType::ConfigNS,
-                                                 Query(BSON(ChunkType::ns(ns)))
-                                                     .sort(BSON(ChunkType::DEPRECATED_lastmod() << -1)));
+                BSONObj x = conn->findOne(ChunkType::ConfigNS,
+                                          Query(BSON(ChunkType::ns(ns)))
+                                              .sort(BSON(ChunkType::DEPRECATED_lastmod() << -1)));
 
                 maxVersion = ChunkVersion::fromBSON(x, ChunkType::DEPRECATED_lastmod());
 
                 BSONObj currChunk =
-                    conn->get()->findOne(ChunkType::ConfigNS,
-                                         shardId.wrap(ChunkType::name().c_str())).getOwned();
+                    conn->findOne(ChunkType::ConfigNS,
+                                  shardId.wrap(ChunkType::name().c_str())).getOwned();
 
                 verify(currChunk[ChunkType::shard()].type());
                 verify(currChunk[ChunkType::min()].type());
                 verify(currChunk[ChunkType::max()].type());
                 shard = currChunk[ChunkType::shard()].String();
-                conn->done();
+                conn.done();
 
                 BSONObj currMin = currChunk[ChunkType::min()].Obj();
                 BSONObj currMax = currChunk[ChunkType::max()].Obj();
@@ -820,8 +818,8 @@ namespace mongo {
                     result.append( "requestedMin" , min );
                     result.append( "requestedMax" , max );
 
-                    LOG( LL_WARNING ) << "aborted split because " << errmsg << ": " << min << "->" << max
-                                      << " is now " << currMin << "->" << currMax << endl;
+                    warning() << "aborted split because " << errmsg << ": " << min << "->" << max
+                              << " is now " << currMin << "->" << currMax << endl;
                     return false;
                 }
 
@@ -830,8 +828,8 @@ namespace mongo {
                     result.append( "from" , myShard.getName() );
                     result.append( "official" , shard );
 
-                    LOG( LL_WARNING ) << "aborted split because " << errmsg << ": chunk is at " << shard
-                                      << " and not at " << myShard.getName() << endl;
+                    warning() << "aborted split because " << errmsg << ": chunk is at " << shard
+                              << " and not at " << myShard.getName() << endl;
                     return false;
                 }
 
@@ -840,8 +838,8 @@ namespace mongo {
                     maxVersion.addToBSON( result, "officialVersion" );
                     shardingState.getVersion( ns ).addToBSON( result, "myVersion" );
 
-                    LOG( LL_WARNING ) << "aborted split because " << errmsg << ": official " << maxVersion
-                                      << " mine: " << shardingState.getVersion(ns) << endl;
+                    warning() << "aborted split because " << errmsg << ": official " << maxVersion
+                              << " mine: " << shardingState.getVersion(ns) << endl;
                     return false;
                 }
 
@@ -868,8 +866,8 @@ namespace mongo {
             vector<ChunkInfo> newChunks;
 
             try {
-                scoped_ptr<ScopedDbConnection> conn(ScopedDbConnection::getInternalScopedDbConnection(shardingState.getConfigServer(), 30));
-                RemoteTransaction txn(conn->conn(), "serializable");
+                ScopedDbConnection conn(shardingState.getConfigServer(), 30);
+                RemoteTransaction txn(conn.conn(), "serializable");
 
                 // Check the precondition
                 BSONObjBuilder b;
@@ -877,7 +875,7 @@ namespace mongo {
                 BSONObj expect = b.done();
                 Matcher m(expect);
 
-                BSONObj found = conn->get()->findOne(ChunkType::ConfigNS, QUERY(ChunkType::ns(ns)).sort(ChunkType::DEPRECATED_lastmod(), -1));
+                BSONObj found = conn->findOne(ChunkType::ConfigNS, QUERY(ChunkType::ns(ns)).sort(ChunkType::DEPRECATED_lastmod(), -1));
                 if (!m.matches(found)) {
                     // TODO(leif): Make sure that this means the sharding algorithm is broken and we should bounce the server.
                     error() << "splitChunk commit failed: " << ChunkVersion::fromBSON(found[ChunkType::DEPRECATED_lastmod()])
@@ -904,7 +902,7 @@ namespace mongo {
                         n.append(ChunkType::min(), startKey);
                         n.append(ChunkType::max(), endKey);
                         n.append(ChunkType::shard(), shard);
-                        conn->get()->update(ChunkType::ConfigNS, QUERY(ChunkType::name() << Chunk::genID(ns, startKey)), n.done(), true);
+                        conn->update(ChunkType::ConfigNS, QUERY(ChunkType::name() << Chunk::genID(ns, startKey)), n.done(), true);
                     }
                     catch (DBException &e) {
                         warning() << e << endl;
@@ -921,7 +919,7 @@ namespace mongo {
                 splitKeys.pop_back(); // 'max' was used as sentinel
 
                 txn.commit();
-                conn->done();
+                conn.done();
             }
             catch (DBException &e) {
                 stringstream ss;

@@ -132,7 +132,7 @@ namespace mongo {
 
                 LOG(3) << "TTLMonitor thread awake" << endl;
 
-                if ( !ttlMonitorEnabled || cmdLine.gdb ) {
+                if ( !ttlMonitorEnabled || serverGlobalParams.gdb ) {
                     LOG(1) << "TTLMonitor is disabled" << endl;
                     continue;
                 }

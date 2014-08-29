@@ -41,7 +41,7 @@ namespace mongo {
     using namespace mongoutils::html;
     using namespace bson;
 
-    static RamLog * _rsLog = new RamLog( "rs" );
+    static RamLog * _rsLog = RamLog::get("rs");
     Tee *rsLog = _rsLog;
     extern bool replSetBlind; // for testing
 
@@ -301,7 +301,7 @@ namespace mongo {
             s << tr() << td(_self->fullName() + " (me)") <<
               td(_self->id()) <<
               td("1") <<  //up
-              td(ago(started)) <<
+              td(ago(serverGlobalParams.started)) <<
               td("") << // last heartbeat
               td(ToString(_self->config().votes)) <<
               td(ToString(_self->config().priority)) <<
@@ -398,7 +398,7 @@ namespace mongo {
             bb.append("health", 1.0);
             bb.append("state", (int)myState.s);
             bb.append("stateStr", myState.toString());
-            bb.append("uptime", (unsigned)(time(0) - cmdLine.started));
+            bb.append("uptime", (unsigned)(time(0) - serverGlobalParams.started));
             if (!_self->config().arbiterOnly) {
                 GTID lastLive;
                 GTID lastUnapplied;

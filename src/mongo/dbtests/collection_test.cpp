@@ -87,9 +87,9 @@ namespace {
             Client::ReadContext ctx(_ns, mongo::unittest::EMPTY_STRING);
             Client::Transaction txn(DB_SERIALIZABLE);
             auto_ptr<DBClientCursor> cur = _c.query(_ns, BSONObj());
-            LOG(0) << "users:" << endl;
+            mongo::unittest::log() << "users:" << endl;
             while (cur->more()) {
-                LOG(0) << "\t" << cur->next() << endl;
+                mongo::unittest::log() << "\t" << cur->next() << endl;
             }
         }
     };

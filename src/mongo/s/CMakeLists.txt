@@ -1,5 +1,4 @@
 add_library(s_base STATIC
-  field_parser
   mongo_version_range
   type_changelog
   type_chunk
@@ -39,8 +38,8 @@ add_library(s_metadata STATIC
 add_dependencies(s_metadata generate_error_codes generate_action_types)
 target_link_libraries(s_metadata LINK_PUBLIC
   s_base
-  clientandshell
   base
+  clientdriver
   bson
   )
 
@@ -79,9 +78,24 @@ add_library(mongoscore STATIC
   balancer_policy
   writeback_listener
   version_manager
+  version_mongos
+  mongos_persistence_stubs
   )
 add_dependencies(mongoscore generate_error_codes generate_action_types)
 target_link_libraries(mongoscore LINK_PUBLIC
   authmongos
   client_parallel
+  )
+
+add_library(mongos_options STATIC
+  mongos_options
+  )
+add_dependencies(mongos_options generate_error_codes generate_action_types)
+target_link_libraries(mongos_options LINK_PUBLIC
+  mongoscore
+  coreshard
+  mongocommon
+  coreserver
+  coredb
+  options_parser_init
   )

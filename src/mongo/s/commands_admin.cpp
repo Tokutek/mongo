@@ -27,12 +27,12 @@
 #include "mongo/db/commands.h"
 #include "mongo/db/dbmessage.h"
 #include "mongo/db/namespacestring.h"
+#include "mongo/db/field_parser.h"
 #include "mongo/db/stats/counters.h"
 
 #include "mongo/s/chunk.h"
 #include "mongo/s/client_info.h"
 #include "mongo/s/config.h"
-#include "mongo/s/field_parser.h"
 #include "mongo/s/grid.h"
 #include "mongo/s/strategy.h"
 #include "mongo/s/type_chunk.h"
@@ -237,18 +237,17 @@ namespace mongo {
                 BSONArrayBuilder barr;
                 barr.append( shardedColls );
 
-                scoped_ptr<ScopedDbConnection> toconn(
-                        ScopedDbConnection::getScopedDbConnection( s.getConnString() ) );
+                ScopedDbConnection toconn(s.getConnString());
 
                 // TODO ERH - we need a clone command which replays operations from clone start to now
                 //            can just use local.oplog.$main
                 BSONObj cloneRes;
-                bool worked = toconn->get()->runCommand(
+                bool worked = toconn->runCommand(
                     dbname.c_str(),
                     BSON( "clone" << config->getPrimary().getConnString() <<
                           "collsToIgnore" << barr.arr() ),
                     cloneRes );
-                toconn->done();
+                toconn.done();
 
                 if ( ! worked ) {
                     log() << "clone failed" << cloneRes << endl;
@@ -258,9 +257,7 @@ namespace mongo {
 
                 string oldPrimary = config->getPrimary().getConnString();
 
-                scoped_ptr<ScopedDbConnection> fromconn(
-                        ScopedDbConnection::getScopedDbConnection( config->getPrimary()
-                                                                   .getConnString() ) );
+                ScopedDbConnection fromconn(config->getPrimary().getConnString());
 
                 config->setPrimary( s.getConnString() );
 
@@ -270,7 +267,7 @@ namespace mongo {
                     log() << "movePrimary dropping database on " << oldPrimary << ", no sharded collections in " << dbname << endl;
 
                     try {
-                        fromconn->get()->dropDatabase( dbname.c_str() );
+                        fromconn->dropDatabase( dbname.c_str() );
                     }
                     catch( DBException& e ){
                         e.addContext( str::stream() << "movePrimary could not drop the database " << dbname << " on " << oldPrimary );
@@ -296,7 +293,7 @@ namespace mongo {
                         if( el.type() == String ){
                             try {
                                 log() << "movePrimary dropping cloned collection " << el.String() << " on " << oldPrimary << endl;
-                                fromconn->get()->dropCollection( el.String() );
+                                fromconn->dropCollection( el.String() );
                             }
                             catch( DBException& e ){
                                 e.addContext( str::stream() << "movePrimary could not drop the cloned collection " << el.String() << " on " << oldPrimary );
@@ -306,7 +303,7 @@ namespace mongo {
                     }
                 }
 
-                fromconn->done();
+                fromconn.done();
 
                 result << "primary " << s.toString();
 
@@ -450,23 +447,21 @@ namespace mongo {
                     return false;
 
                 //the rest of the checks require a connection to the primary db
-                scoped_ptr<ScopedDbConnection> conn(
-                        ScopedDbConnection::getScopedDbConnection(
-                                        config->getPrimary().getConnString() ) );
+                ScopedDbConnection conn(config->getPrimary().getConnString());
 
                 //check that collection is not capped
-                BSONObj res = conn->get()->findOne( config->getName() + ".system.namespaces",
-                                                    BSON( "name" << ns ) );
+                BSONObj res = conn->findOne( config->getName() + ".system.namespaces",
+                                             BSON( "name" << ns ) );
                 if ( res["options"].type() == Object &&
                      res["options"].embeddedObject()["capped"].trueValue() ) {
                     errmsg = "can't shard capped collection";
-                    conn->done();
+                    conn.done();
                     return false;
                 }
                 if ( res["options"].type() == Object &&
                      res["options"].embeddedObject()["partitioned"].trueValue() ) {
                     errmsg = "can't shard partitioned collection";
-                    conn->done();
+                    conn.done();
                     return false;
                 }
 
@@ -501,7 +496,7 @@ namespace mongo {
                 // 1.  Verify consistency with existing unique indexes
                 BSONObj uniqueQuery = BSON( "ns" << ns << "unique" << true );
                 auto_ptr<DBClientCursor> uniqueQueryResult =
-                                conn->get()->query( indexNS , uniqueQuery );
+                                conn->query( indexNS , uniqueQuery );
 
                 ShardKeyPattern proposedShardKey( proposedKey );
                 while ( uniqueQueryResult->more() ) {
@@ -513,7 +508,7 @@ namespace mongo {
                                                << "and proposed shard key " << proposedKey << ". "
                                                << "Uniqueness can't be maintained unless "
                                                << "shard key is a prefix";
-                        conn->done();
+                        conn.done();
                         return false;
                     }
                 }
@@ -523,7 +518,7 @@ namespace mongo {
 
                 BSONObj allQuery = BSON( "ns" << ns );
                 auto_ptr<DBClientCursor> allQueryResult =
-                                conn->get()->query( indexNS , allQuery );
+                                conn->query( indexNS , allQuery );
 
                 BSONArrayBuilder allIndexes;
                 while ( allQueryResult->more() ) {
@@ -538,7 +533,7 @@ namespace mongo {
                                 stringstream ss;
                                 ss << "key " << currentKey << " is clustering, but a non-clustering key was requested.";
                                 errmsg = ss.str();
-                                conn->done();
+                                conn.done();
                                 return false;
                             }
                         }
@@ -558,7 +553,7 @@ namespace mongo {
                                    << currentKey << ", clustering: false}).";
                                 errmsg = ss.str();
                                 LOG(0) << ss.str() << endl;
-                                conn->done();
+                                conn.done();
                                 return false;
                             }
                         }
@@ -570,7 +565,7 @@ namespace mongo {
                 bool careAboutUnique = cmdObj["unique"].trueValue();
                 if ( hasUsefulIndexForKey && careAboutUnique ) {
                     BSONObj eqQuery = BSON( "ns" << ns << "key" << proposedKey );
-                    BSONObj eqQueryResult = conn->get()->findOne( indexNS, eqQuery );
+                    BSONObj eqQueryResult = conn->findOne( indexNS, eqQuery );
                     if ( eqQueryResult.isEmpty() ) {
                         hasUsefulIndexForKey = false;  // if no exact match, index not useful,
                                                        // but still possible to create one later
@@ -583,7 +578,7 @@ namespace mongo {
                             errmsg = str::stream() << "can't shard collection " << ns << ", "
                                                    << proposedKey << " index not unique, "
                                                    << "and unique index explicitly specified";
-                            conn->done();
+                            conn.done();
                             return false;
                         }
                     }
@@ -596,19 +591,19 @@ namespace mongo {
                     cmd.append( "checkShardingIndex" , ns );
                     cmd.append( "keyPattern" , proposedKey );
                     BSONObj cmdObj = cmd.obj();
-                    if ( ! conn->get()->runCommand( nsToDatabase(ns) , cmdObj , res ) ) {
+                    if ( ! conn.get()->runCommand( nsToDatabase(ns) , cmdObj , res ) ) {
                         errmsg = res["errmsg"].str();
-                        conn->done();
+                        conn.done();
                         return false;
                     }
                 }
                 // 4. if no useful index, and collection is non-empty, fail
-                else if ( conn->get()->count( ns ) != 0 ) {
+                else if ( conn->count( ns ) != 0 ) {
                     errmsg = str::stream() << "please create a clustering index that starts with the "
                                            << "shard key before sharding.";
                     result.append( "proposedKey" , proposedKey );
                     result.appendArray( "curIndexes" , allIndexes.done() );
-                    conn->done();
+                    conn.done();
                     return false;
                 }
                 // 5. If no useful index exists, and collection empty, create one on proposedKey.
@@ -622,7 +617,7 @@ namespace mongo {
                         BSONArrayBuilder b(cmd.subarrayStart("_collectionsExist"));
                         b.append(ns);
                         b.doneFast();
-                        collectionExists = conn->get()->runCommand(config->getName(), cmd.done(), res);
+                        collectionExists = conn->runCommand(config->getName(), cmd.done(), res);
                     }
                     bool onlyId = proposedKey.nFields() == 1 && proposedKey["_id"].ok();
                     bool onlyHashed = proposedKey.nFields() == 1 && StringData(proposedKey.firstElement().valuestrsafe()) == "hashed";
@@ -648,33 +643,33 @@ namespace mongo {
                         LOG(0) << "sharding non-existent collection, creating " << ns << " with a primary key on " << pkObj << endl;
 
                         BSONObj res;
-                        bool createSuccess = conn->get()->runCommand(config->getName(), cmd.done(), res);
+                        bool createSuccess = conn->runCommand(config->getName(), cmd.done(), res);
                         if (!createSuccess) {
                             errmsg = "create failed to create collection on primary shard: " + res["errmsg"].String();
-                            conn->done();
+                            conn.done();
                             return false;
                         }
                     } else {
                         BSONElement ce = cmdObj["clustering"];
                         bool clustering = (ce.ok() ? ce.trueValue() : true);
                         // call ensureIndex with cache=false, see SERVER-1691
-                        bool ensureSuccess = conn->get()->ensureIndex(ns,
-                                                                      proposedKey,
-                                                                      careAboutUnique,
-                                                                      clustering,
-                                                                      "",
-                                                                      false);
+                        bool ensureSuccess = conn->ensureIndex(ns,
+                                                               proposedKey,
+                                                               careAboutUnique,
+                                                               clustering,
+                                                               "",
+                                                               false);
                         if ( ! ensureSuccess ) {
                             errmsg = "ensureIndex failed to create index on primary shard";
-                            conn->done();
+                            conn.done();
                             return false;
                         }
                     }
                 }
 
-                bool isEmpty = ( conn->get()->count( ns ) == 0 );
+                bool isEmpty = ( conn->count( ns ) == 0 );
 
-                conn->done();
+                conn.done();
 
                 // Pre-splitting:
                 // For new collections which use hashed shard keys, we can can pre-split the
@@ -744,7 +739,7 @@ namespace mongo {
                     }
                 }
 
-                tlog() << "CMD: shardcollection: " << cmdObj << endl;
+                MONGO_TLOG(0) << "CMD: shardcollection: " << cmdObj << endl;
 
                 config->shardCollection( ns , proposedKey , careAboutUnique , &initSplits );
 
@@ -769,7 +764,8 @@ namespace mongo {
 
                         BSONObj moveResult;
                         if ( ! chunk->moveAndCommit( to , moveResult ) ) {
-                            warning() << "Couldn't move chunk " << chunk << " to shard "  << to
+                            warning().stream()
+                                      << "Couldn't move chunk " << chunk << " to shard "  << to
                                       << " while sharding collection " << ns << ". Reason: "
                                       <<  moveResult << endl;
                         }
@@ -791,9 +787,10 @@ namespace mongo {
                             if ( ! subSplits.empty() ){
                                 BSONObj splitResult;
                                 if ( ! currentChunk->multiSplit( subSplits , splitResult ) ){
-                                    warning() << "Couldn't split chunk " << currentChunk
-                                              << " while sharding collection " << ns << ". Reason: "
-                                              << splitResult << endl;
+                                    warning().stream()
+                                        << "Couldn't split chunk " << currentChunk
+                                        << " while sharding collection " << ns << ". Reason: "
+                                        << splitResult << endl;
                                 }
                                 subSplits.clear();
                             }
@@ -966,7 +963,7 @@ namespace mongo {
                 }
 
                 verify(chunk.get());
-                log() << "splitting: " << ns << "  shard: " << chunk << endl;
+                log().stream() << "splitting: " << ns << "  shard: " << chunk << endl;
 
                 BSONObj res;
                 bool worked;
@@ -1076,7 +1073,7 @@ namespace mongo {
                     return false;
                 }
 
-                tlog() << "CMD: movechunk: " << cmdObj << endl;
+                MONGO_TLOG(0) << "CMD: movechunk: " << cmdObj << endl;
 
                 BSONObj res;
                 if ( ! c->moveAndCommit(to, res) ) {
@@ -1109,19 +1106,17 @@ namespace mongo {
                 out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
             }
             bool run(const string& , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool) {
-                scoped_ptr<ScopedDbConnection> conn(
-                        ScopedDbConnection::getInternalScopedDbConnection(
-                                configServer.getPrimary().getConnString(), 30));
+                ScopedDbConnection conn(configServer.getPrimary().getConnString(), 30);
 
                 vector<BSONObj> all;
-                auto_ptr<DBClientCursor> cursor = conn->get()->query( ShardType::ConfigNS , BSONObj() );
+                auto_ptr<DBClientCursor> cursor = conn->query( ShardType::ConfigNS , BSONObj() );
                 while ( cursor->more() ) {
                     BSONObj o = cursor->next();
                     all.push_back( o );
                 }
 
                 result.append("shards" , all );
-                conn->done();
+                conn.done();
 
                 return true;
             }
@@ -1166,7 +1161,7 @@ namespace mongo {
 
                     // it's fine if mongods of a set all use default port
                     if ( ! serverAddrs[i].hasPort() ) {
-                        serverAddrs[i].setPort( CmdLine::ShardServerPort );
+                        serverAddrs[i].setPort(ServerGlobalParams::ShardServerPort);
                     }
                 }
 
@@ -1217,10 +1212,7 @@ namespace mongo {
                     return false;
                 }
 
-                scoped_ptr<ScopedDbConnection> connPtr(
-                        ScopedDbConnection::getInternalScopedDbConnection(
-                                configServer.getPrimary().getConnString(), 30));
-                ScopedDbConnection& conn = *connPtr;
+                ScopedDbConnection conn(configServer.getPrimary().getConnString(), 30);
 
                 if (conn->count(ShardType::ConfigNS,
                                 BSON(ShardType::name() << NE << s.getName() <<
@@ -1345,7 +1337,6 @@ namespace mongo {
 
         class IsDbGridCmd : public InformationCommand {
         public:
-            virtual bool requiresAuth() { return false; }
             IsDbGridCmd() : InformationCommand("isdbgrid") { }
             virtual void addRequiredPrivileges(const std::string& dbname,
                                                const BSONObj& cmdObj,
@@ -1359,7 +1350,6 @@ namespace mongo {
 
         class CmdIsMaster : public InformationCommand {
         public:
-            virtual bool requiresAuth() { return false; }
             virtual void help( stringstream& help ) const {
                 help << "test if this is master half of a replica pair";
             }
@@ -1396,7 +1386,6 @@ namespace mongo {
 
         class CmdShardingGetPrevError : public InformationCommand {
         public:
-            virtual bool requiresAuth() { return false; }
             virtual void help( stringstream& help ) const {
                 help << "get previous error (since last reseterror command)";
             }
@@ -1559,11 +1548,9 @@ namespace mongo {
             }
             
             { // get config db from the config servers (first one)
-                scoped_ptr<ScopedDbConnection> conn(
-                        ScopedDbConnection::getInternalScopedDbConnection(
-                                configServer.getPrimary().getConnString(), 30));
+                ScopedDbConnection conn(configServer.getPrimary().getConnString(), 30);
                 BSONObj x;
-                if (conn->get()->simpleCommand("config", &x, "dbstats")) {
+                if (conn->simpleCommand("config", &x, "dbstats")) {
                     BSONObjBuilder b(bb.subobjStart());
                     b.append("name", "config");
                     b.appendBool("empty", false);
@@ -1581,15 +1568,13 @@ namespace mongo {
                 } else {
                     bb.append(BSON( "name" << "config" ));
                 }
-                conn->done();
+                conn.done();
             }
 
             { // get admin db from the config servers (first one)
-                scoped_ptr<ScopedDbConnection> conn(
-                        ScopedDbConnection::getInternalScopedDbConnection(
-                                configServer.getPrimary().getConnString(), 30));
+                ScopedDbConnection conn(configServer.getPrimary().getConnString(), 30);
                 BSONObj x;
-                if (conn->get()->simpleCommand("admin", &x, "dbstats")) {
+                if (conn->simpleCommand("admin", &x, "dbstats")) {
                     BSONObjBuilder b(bb.subobjStart());;
                     b.append("name", "admin");
                     b.appendBool("empty", false);
@@ -1608,7 +1593,7 @@ namespace mongo {
                 else {
                     bb.append(BSON( "name" << "admin" ));
                 }
-                conn->done();
+                conn.done();
             }
 
             bb.done();

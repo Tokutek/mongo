@@ -24,7 +24,7 @@
 #include "mongo/client/connpool.h"
 #include "mongo/client/dbclientcursor.h"
 #include "mongo/db/auth/action_type.h"
-#include "mongo/db/auth/authorization_manager.h"
+#include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/index.h"
 #include "mongo/db/namespacestring.h"
@@ -54,9 +54,9 @@ namespace mongo {
 
             QueryMessage q( r.d() );
 
-            AuthorizationManager* authManager =
-                    ClientBasic::getCurrent()->getAuthorizationManager();
-            Status status = authManager->checkAuthForQuery(q.ns);
+            AuthorizationSession* authSession =
+                    ClientBasic::getCurrent()->getAuthorizationSession();
+            Status status = authSession->checkAuthForQuery(q.ns);
             uassert(16549, status.reason(), status.isOK());
 
             LOG(3) << "shard query: " << q.ns << "  " << q.query << endl;
@@ -171,9 +171,9 @@ namespace mongo {
 
             const char *ns = r.getns();
 
-            AuthorizationManager* authManager =
-                    ClientBasic::getCurrent()->getAuthorizationManager();
-            Status status = authManager->checkAuthForGetMore(ns);
+            AuthorizationSession* authSession =
+                    ClientBasic::getCurrent()->getAuthorizationSession();
+            Status status = authSession->checkAuthForGetMore(ns);
             uassert(16539, status.reason(), status.isOK());
 
             // TODO:  Handle stale config exceptions here from coll being dropped or sharded during op
@@ -202,11 +202,10 @@ namespace mongo {
                 // we used ScopedDbConnection because we don't get about config versions
                 // not deleting data is handled elsewhere
                 // and we don't want to call setShardVersion
-                scoped_ptr<ScopedDbConnection> conn(
-                        ScopedDbConnection::getScopedDbConnection( host ) );
+                ScopedDbConnection conn(host);
 
                 Message response;
-                bool ok = conn->get()->callRead( r.m() , response);
+                bool ok = conn->callRead( r.m() , response);
                 uassert( 10204 , "dbgrid: getmore: error calling db", ok);
 
                 bool hasMore = (response.singleData()->getCursor() != 0);
@@ -216,7 +215,7 @@ namespace mongo {
                 }
 
                 r.reply( response , "" /*conn->getServerAddress() */ );
-                conn->done();
+                conn.done();
                 return;
             }
             else {
@@ -507,9 +506,9 @@ namespace mongo {
 
             const string& ns = r.getns();
 
-            AuthorizationManager* authManager =
-                    ClientBasic::getCurrent()->getAuthorizationManager();
-            Status status = authManager->checkAuthForInsert(ns);
+            AuthorizationSession* authSession =
+                    ClientBasic::getCurrent()->getAuthorizationSession();
+            Status status = authSession->checkAuthForInsert(ns);
             uassert(16540, status.reason(), status.isOK());
 
             int flags = 0;
@@ -581,7 +580,7 @@ namespace mongo {
                                 << "inserting "
                                 << group.inserts.size()
                                 << " documents to shard "
-                                << group.shard
+                                << group.shard->toString()
                                 << " at version "
                                 << (group.manager.get() ?
                                         group.manager->getVersion().toString() :
@@ -1001,9 +1000,9 @@ namespace mongo {
             const BSONObj query = d.nextJsObj();
 
             bool upsert = flags & UpdateOption_Upsert;
-            AuthorizationManager* authManager =
-                    ClientBasic::getCurrent()->getAuthorizationManager();
-            Status status = authManager->checkAuthForUpdate(ns, upsert);
+            AuthorizationSession* authSession =
+                    ClientBasic::getCurrent()->getAuthorizationSession();
+            Status status = authSession->checkAuthForUpdate(ns, upsert);
             uassert(16537, status.reason(), status.isOK());
 
             uassert( 10201 ,  "invalid update" , d.moreJSObjs() );
@@ -1162,9 +1161,9 @@ namespace mongo {
             const string& ns = r.getns();
             int flags = d.pullInt();
 
-            AuthorizationManager* authManager =
-                    ClientBasic::getCurrent()->getAuthorizationManager();
-            Status status = authManager->checkAuthForDelete(ns);
+            AuthorizationSession* authSession =
+                    ClientBasic::getCurrent()->getAuthorizationSession();
+            Status status = authSession->checkAuthForDelete(ns);
             uassert(16541, status.reason(), status.isOK());
 
             uassert( 10203 ,  "bad delete message" , d.moreJSObjs() );
@@ -1231,11 +1230,11 @@ namespace mongo {
                 if (op == dbInsert) {
                     // Insert is the only write op allowed on system.indexes, so it's the only one
                     // we check auth for.
-                    AuthorizationManager* authManager =
-                            ClientBasic::getCurrent()->getAuthorizationManager();
+                    AuthorizationSession* authSession =
+                            ClientBasic::getCurrent()->getAuthorizationSession();
                     uassert(16547,
                             mongoutils::str::stream() << "not authorized to create index on " << ns,
-                            authManager->checkAuthorization(ns, ActionType::ensureIndex));
+                            authSession->checkAuthorization(ns, ActionType::ensureIndex));
                 }
 
                 if ( r.getConfig()->isShardingEnabled() ){

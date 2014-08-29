@@ -1,5 +1,5 @@
 /**
-*    Copyright (C) 2012 10gen Inc.
+*    Copyright (C) 2013 10gen Inc.
 *
 *    This program is free software: you can redistribute it and/or  modify
 *    it under the terms of the GNU Affero General Public License, version 3,
@@ -16,45 +16,43 @@
 
 #pragma once
 
+#include <boost/scoped_ptr.hpp>
+#include <boost/thread/mutex.hpp>
 #include <string>
-#include <vector>
 
 #include "mongo/base/disallow_copying.h"
 #include "mongo/base/status.h"
 #include "mongo/db/auth/action_set.h"
-#include "mongo/db/auth/action_type.h"
-#include "mongo/db/auth/auth_external_state.h"
-#include "mongo/db/auth/principal.h"
-#include "mongo/db/auth/principal_name.h"
-#include "mongo/db/auth/principal_set.h"
-#include "mongo/db/auth/privilege.h"
+#include "mongo/db/auth/authz_manager_external_state.h"
 #include "mongo/db/auth/privilege_set.h"
+#include "mongo/db/auth/user.h"
+#include "mongo/db/auth/user_name.h"
+#include "mongo/db/auth/user_name_hash.h" // TODO(spencer): Including this will slow compilation
+#include "mongo/db/jsobj.h"
+#include "mongo/platform/unordered_map.h"
 
 namespace mongo {
-
-    // --noauth cmd line option
-    extern bool noauth;
 
     /**
      * Internal secret key info.
      */
     struct AuthInfo {
-        AuthInfo();
-        string user;
-        string pwd;
+        User* user;
+        BSONObj authParams;
     };
     extern AuthInfo internalSecurity; // set at startup and not changed after initialization.
 
     /**
-     * Contains all the authorization logic for a single client connection.  It contains a set of
-     * the principals which have been authenticated, as well as a set of privileges that have been
-     * granted by those principals to perform various actions.
-     * An AuthorizationManager object is present within every mongo::Client object, therefore there
-     * is one per thread that corresponds to an incoming client connection.
+     * Contains server/cluster-wide information about Authorization.
      */
     class AuthorizationManager {
         MONGO_DISALLOW_COPYING(AuthorizationManager);
     public:
+
+        // The newly constructed AuthorizationManager takes ownership of "externalState"
+        explicit AuthorizationManager(AuthzManagerExternalState* externalState);
+
+        ~AuthorizationManager();
 
         static const std::string SERVER_RESOURCE_NAME;
         static const std::string CLUSTER_RESOURCE_NAME;
@@ -63,159 +61,168 @@ namespace mongo {
         static const std::string USER_SOURCE_FIELD_NAME;
         static const std::string PASSWORD_FIELD_NAME;
 
+        // TODO: Make the following functions no longer static.
+
+        /**
+         * Sets whether or not we allow old style (pre v2.4) privilege documents for this whole
+         * server.
+         */
         static void setSupportOldStylePrivilegeDocuments(bool enabled);
+
+        /**
+         * Returns true if we allow old style privilege privilege documents for this whole server.
+         */
+        static bool getSupportOldStylePrivilegeDocuments();
+
+        /**
+         * Sets whether or not access control enforcement is enabled for this whole server.
+         */
+        static void setAuthEnabled(bool enabled);
+
+        /**
+         * Returns true if access control is enabled on this server.
+         */
+        static bool isAuthEnabled();
+
+        AuthzManagerExternalState* getExternalState() const;
+
+        // Gets the privilege information document for "userName" on "dbname".
+        //
+        // On success, returns Status::OK() and stores a shared-ownership copy of the document into
+        // "result".
+        Status getPrivilegeDocument(const std::string& dbname,
+                                    const UserName& userName,
+                                    BSONObj* result) const;
+
+        // Returns true if there exists at least one privilege document in the given database.
+        bool hasPrivilegeDocument(const std::string& dbname) const;
+
+        // Creates the given user object in the given database.
+        Status insertPrivilegeDocument(const std::string& dbname, const BSONObj& userObj) const;
+
+        // Updates the given user object with the given update modifier.
+        Status updatePrivilegeDocument(const UserName& user, const BSONObj& updateObj) const;
 
         // Checks to see if "doc" is a valid privilege document, assuming it is stored in the
         // "system.users" collection of database "dbname".
         //
         // Returns Status::OK() if the document is good, or Status(ErrorCodes::BadValue), otherwise.
-        static Status checkValidPrivilegeDocument(const StringData& dbname, const BSONObj& doc);
-
-        // Takes ownership of the externalState.
-        explicit AuthorizationManager(AuthExternalState* externalState);
-        ~AuthorizationManager();
-
-        // Should be called at the beginning of every new request.  This performs the checks
-        // necessary to determine if localhost connections should be given full access.
-        // TODO: try to eliminate the need for this call.
-        void startRequest();
-
-        // Adds "principal" to the authorization manager, and takes ownership of it.
-        void addAuthorizedPrincipal(Principal* principal);
-
-        // Returns the authenticated principal with the given name.  Returns NULL
-        // if no such user is found.
-        // Ownership of the returned Principal remains with _authenticatedPrincipals
-        Principal* lookupPrincipal(const PrincipalName& name);
-
-        // Gets an iterator over the names of all authenticated principals stored in this manager.
-        PrincipalSet::NameIterator getAuthenticatedPrincipalNames();
-
-        // Returns a string representing all logged-in principals on the current session.
-        // WARNING: this string will contain NUL bytes so don't call c_str()!
-        std::string getAuthenticatedPrincipalNamesToken();
-
-        // Removes any authenticated principals whose authorization credentials came from the given
-        // database, and revokes any privileges that were granted via that principal.
-        void logoutDatabase(const std::string& dbname);
-
-        // Grant this connection the given privilege.
-        Status acquirePrivilege(const Privilege& privilege,
-                                const PrincipalName& authorizingPrincipal);
-
-        // Adds a new principal with the given principal name and authorizes it with full access.
-        // Used to grant internal threads full access.
-        void grantInternalAuthorization(const std::string& principalName);
-
-        // Checks if this connection has been authenticated as an internal user.
-        bool hasInternalAuthorization();
-
-        // Checks if this connection has the privileges required to perform the given action
-        // on the given resource.  Contains all the authorization logic including handling things
-        // like the localhost exception.  Returns true if the action may proceed on the resource.
-        // Note: this may acquire a database read lock (for automatic privilege acquisition).
-        bool checkAuthorization(const std::string& resource, ActionType action);
-
-        // Same as above but takes an ActionSet instead of a single ActionType.  Returns true if
-        // all of the actions may proceed on the resource.
-        bool checkAuthorization(const std::string& resource, ActionSet actions);
-
-        // Parses the privilege documents and acquires all privileges that the privilege document
-        // grants
-        Status acquirePrivilegesFromPrivilegeDocument(const std::string& dbname,
-                                                      const PrincipalName& principal,
-                                                      const BSONObj& privilegeDocument);
-
-        // Returns the privilege document with the given user name in the given database. Currently
-        // this information comes from the system.users collection in that database.
-        Status getPrivilegeDocument(const std::string& dbname,
-                                    const PrincipalName& userName,
-                                    BSONObj* result) {
-            return _externalState->getPrivilegeDocument(dbname, userName, result);
-        }
-
-        // Checks if this connection has the privileges necessary to perform a query on the given
-        // namespace.
-        Status checkAuthForQuery(const std::string& ns);
-
-        // Checks if this connection has the privileges necessary to perform an update on the given
-        // namespace.
-        Status checkAuthForUpdate(const std::string& ns, bool upsert);
-
-        // Checks if this connection has the privileges necessary to perform an insert to the given
-        // namespace.
-        Status checkAuthForInsert(const std::string& ns);
-
-        // Checks if this connection has the privileges necessary to perform a delete on the given
-        // namespace.
-        Status checkAuthForDelete(const std::string& ns);
-
-        // Checks if this connection has the privileges necessary to perform a getMore on the given
-        // namespace.
-        Status checkAuthForGetMore(const std::string& ns);
-
-        // Checks if this connection is authorized for the given Privilege.
-        Status checkAuthForPrivilege(const Privilege& privilege);
-
-        // Checks if this connection is authorized for all the given Privileges.
-        Status checkAuthForPrivileges(const vector<Privilege>& privileges);
-
-        // Given a database name and a readOnly flag return an ActionSet describing all the actions
-        // that an old-style user with those attributes should be given.
-        static ActionSet getActionsForOldStyleUser(const std::string& dbname, bool readOnly);
+        Status checkValidPrivilegeDocument(const StringData& dbname, const BSONObj& doc);
 
         // Parses the privilege document and returns a PrivilegeSet of all the Privileges that
         // the privilege document grants.
-        static Status buildPrivilegeSet(const std::string& dbname,
-                                        const PrincipalName& principal,
-                                        const BSONObj& privilegeDocument,
-                                        PrivilegeSet* result);
+        Status buildPrivilegeSet(const std::string& dbname,
+                                 const UserName& user,
+                                 const BSONObj& privilegeDocument,
+                                 PrivilegeSet* result) const;
+
+        // Given a database name and a readOnly flag return an ActionSet describing all the actions
+        // that an old-style user with those attributes should be given.
+        ActionSet getActionsForOldStyleUser(const std::string& dbname, bool readOnly) const;
 
         // Returns an ActionSet of all actions that can be be granted to users.  This does not
         // include internal-only actions.
-        static ActionSet getAllUserActions();
+        ActionSet getAllUserActions() const;
+
+        /**
+         *  Returns the User object for the given userName in the out parameter "acquiredUser".
+         *  If the user cache already has a user object for this user, it increments the refcount
+         *  on that object and gives out a pointer to it.  If no user object for this user name
+         *  exists yet in the cache, reads the user's privilege document from disk, builds up
+         *  a User object, sets the refcount to 1, and gives that out.  The returned user may
+         *  be invalid by the time the caller gets access to it.
+         *  The AuthorizationManager retains ownership of the returned User object.
+         *  On non-OK Status return values, acquiredUser will not be modified.
+         */
+        Status acquireUser(const UserName& userName, User** acquiredUser);
+
+        /**
+         * Decrements the refcount of the given User object.  If the refcount has gone to zero,
+         * deletes the User.  Caller must stop using its pointer to "user" after calling this.
+         */
+        void releaseUser(User* user);
+
+        /**
+         * Inserts the given user directly into the _userCache.  Used to add the internalSecurity
+         * user into the cache at process startup.
+         */
+        void addInternalUser(User* user);
+
+        /**
+         * Initializes the user cache with User objects for every v0 and v1 user document in the
+         * system, by reading the system.users collection of every database.  If this function
+         * returns a non-ok Status, the _userCache should be considered corrupt and must be
+         * discarded.  This function should be called once at startup (only if the system hasn't yet
+         * been upgraded to V2 user data format) and never again after that.
+         * TODO(spencer): This function will temporarily be called every time user data is changed
+         * as part of the transition period to the new User data structures.  This should be changed
+         * once we have all the code necessary to upgrade to the V2 user data format, as at that
+         * point we'll only be able to user V1 user data as read-only.
+         */
+        Status initializeAllV1UserData();
 
     private:
-        // Finds the set of privileges attributed to "principal" in database "dbname",
-        // and adds them to the set of acquired privileges.
-        void _acquirePrivilegesForPrincipalFromDatabase(const std::string& dbname,
-                                                        const PrincipalName& principal);
-
-        // Checks to see if the given privilege is allowed, performing implicit privilege
-        // acquisition if enabled and necessary to resolve the privilege.
-        Status _probeForPrivilege(const Privilege& privilege);
 
         // Parses the old-style (pre 2.4) privilege document and returns a PrivilegeSet of all the
         // Privileges that the privilege document grants.
-        static Status _buildPrivilegeSetFromOldStylePrivilegeDocument(
+        Status _buildPrivilegeSetFromOldStylePrivilegeDocument(
                 const std::string& dbname,
-                const PrincipalName& principal,
+                const UserName& user,
                 const BSONObj& privilegeDocument,
-                PrivilegeSet* result);
+                PrivilegeSet* result) const ;
 
         // Parses extended-form (2.4+) privilege documents and returns a PrivilegeSet of all the
         // privileges that the document grants.
         //
         // The document, "privilegeDocument", is assumed to describe privileges for "principal", and
         // to come from database "dbname".
-        static Status _buildPrivilegeSetFromExtendedPrivilegeDocument(
+        Status _buildPrivilegeSetFromExtendedPrivilegeDocument(
                 const std::string& dbname,
-                const PrincipalName& principal,
+                const UserName& user,
                 const BSONObj& privilegeDocument,
-                PrivilegeSet* result);
+                PrivilegeSet* result) const;
 
-        // Returns a new privilege that has replaced the actions needed to handle special casing
-        // certain namespaces like system.users and system.profile.
-        Privilege _modifyPrivilegeForSpecialCases(const Privilege& privilege);
+        /**
+         * Parses privDoc and initializes the user object with the information extracted from the
+         * privilege document.
+         */
+        Status _initializeUserFromPrivilegeDocument(User* user,
+                                                    const BSONObj& privDoc) const;
+
+        /**
+         * Invalidates all User objects in the cache and removes them from the cache.
+         * Should only be called when already holding _lock.
+         */
+        void _invalidateUserCache_inlock();
+
 
         static bool _doesSupportOldStylePrivileges;
 
-        scoped_ptr<AuthExternalState> _externalState;
+        // True if access control enforcement is enabled on this node (ie it was started with
+        // --auth or --keyFile).
+        // This is a config setting, set at startup and not changing after initialization.
+        static bool _authEnabled;
 
-        // All the privileges that have been acquired by the authenticated principals.
-        PrivilegeSet _acquiredPrivileges;
-        // All principals who have been authenticated on this connection
-        PrincipalSet _authenticatedPrincipals;
+        // Integer that represents what format version the privilege documents in the system are.
+        // The current version is 2.  When upgrading to v2.6 or later from v2.4 or prior, the
+        // version is 1.  After running the upgrade process to upgrade to the new privilege document
+        // format, the version will be 2.
+        int _version;
+
+        scoped_ptr<AuthzManagerExternalState> _externalState;
+
+        /**
+         * Caches User objects with information about user privileges, to avoid the need to
+         * go to disk to read user privilege documents whenever possible.  Every User object
+         * has a reference count - the AuthorizationManager must not delete a User object in the
+         * cache unless its reference count is zero.
+         */
+        unordered_map<UserName, User*> _userCache;
+
+        /**
+         * Protects _userCache.
+         */
+        boost::mutex _lock;
     };
 
 } // namespace mongo

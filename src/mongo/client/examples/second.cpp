@@ -33,9 +33,13 @@ int main( int argc, const char **argv ) {
         port = argv[ 2 ];
     }
 
-    scoped_ptr<ScopedDbConnection> connPtr( ScopedDbConnection::getScopedDbConnection(
-            string( "127.0.0.1:" ) + port ) );
-    ScopedDbConnection& conn = *connPtr;
+    Status status = client::initialize();
+    if ( !status.isOK() ) {
+        std::cout << "failed to initialize the client driver: " << status.toString() << endl;
+        return EXIT_FAILURE;
+    }
+
+    ScopedDbConnection conn(string( "127.0.0.1:" ) + port);
 
     const char * ns = "test.second";
 
@@ -45,6 +49,12 @@ int main( int argc, const char **argv ) {
     conn->insert( ns , BSON( "name" << "sara" << "num" << 24 ) );
 
     std::auto_ptr<DBClientCursor> cursor = conn->query( ns , BSONObj() );
+
+    if (!cursor.get()) {
+        cout << "query failure" << endl;
+        return EXIT_FAILURE;
+    }
+
     cout << "using cursor" << endl;
     while ( cursor->more() ) {
         BSONObj obj = cursor->next();
@@ -54,4 +64,6 @@ int main( int argc, const char **argv ) {
     conn->ensureIndex( ns , BSON( "name" << 1 << "num" << -1 ) );
 
     conn.done();
+
+    return EXIT_SUCCESS;
 }
