@@ -276,7 +276,7 @@ namespace mongo {
             return false;
         }
         verify(mods);
-        if (doFullUpdate(cl, mods) || logOfPreImageRequired(cl)) {
+        if (doFullUpdate(cl, mods) || logOfPreImageRequired(cl) || !cl->fastupdatesOk()) {
             return false;
         }
         verify(!forceLogFullUpdate(cl, mods));
@@ -308,8 +308,9 @@ namespace mongo {
         }
         bool success = updateOneObjectWithMods(cl, pk, updateobj, queryToUse, fastUpdateFlags, fromMigrate, 0, mods);
         verify(success);
-        // TODO: fix third parameter for sharding
-        OplogHelpers::logUpdatePKModsWithRow(ns, pk, BSONObj(), updateobj, queryToUse, fastUpdateFlags, fromMigrate);
+        BSONObjBuilder filledPK(64);
+        fillPKWithFields(pk, cl->getPKIndex().keyPattern(), filledPK);
+        OplogHelpers::logUpdatePKModsWithRow(ns, pk, filledPK.done(), updateobj, queryToUse, fastUpdateFlags, fromMigrate);
         return true;
     }
 

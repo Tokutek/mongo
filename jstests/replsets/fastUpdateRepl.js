@@ -351,6 +351,13 @@ doCustomPKTest = function (signal, txnLimit, startPort, secondaryHasIndex) {
     printjson(lastOp["ops"][0]["q"]);
     assert(friendlyEqual({_id : 4, a : 4}, lastOp["ops"][0]["q"])); // verify no query made it to oplog
 
+    // verify that an update using just the _id is slow, and not fast
+    assert.eq(1, wdb.foo.count({_id : 3})); // sanity check
+    wdb.foo.update({_id : 3}, {$set : { b : "fdsa"}});
+    assertUpdateFast(wdb, localdb); // the update should still be fast
+    lastOp = getLastOp(localdb);
+    printjson(lastOp);
+    assert.eq(1, lastOp["ops"][0]["f"]); // flag should indicate that it was not done by PK
 
     // these set of tests shows that fast updates work on non-expecting scenarios:
 
@@ -560,10 +567,9 @@ doSecondaryKeyTest = function (signal, txnLimit, startPort, secondaryHasIndex) {
     replTest.stopSet(signal);
 };
 
+doCustomPKTest(15, 1000000, 31000, true);
+doCustomPKTest(15, 1000000, 31000, false);
 doIDPKTest(15, 1000000, 31000, true);
 doIDPKTest(15, 1000000, 31000, false);
 doSecondaryKeyTest(15, 1000000, 31000, true);
 doSecondaryKeyTest(15, 1000000, 31000, false);
-doCustomPKTest(15, 1000000, 31000, true);
-doCustomPKTest(15, 1000000, 31000, false);
-

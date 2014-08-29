@@ -205,9 +205,6 @@ namespace mongo {
                                   const bool fromMigrate,
                                   uint64_t flags, bool* indexBitChanged) = 0;
 
-        // currently an unused function
-        virtual bool fastupdatesOk() = 0;
-
         virtual bool updateObjectModsOk() = 0;
 
         // update an object in the namespace by pk, described by the updateObj's $ operators
@@ -569,9 +566,7 @@ namespace mongo {
         // @return true, if fastupdates are ok for this collection.
         //         fastupdates are not ok for this collection if it's sharded
         //         and the primary key does not contain the full shard key.
-        bool fastupdatesOk() {
-            return _cd->fastupdatesOk();
-        }
+        bool fastupdatesOk();
 
         bool updateObjectModsOk() {
             return _cd->updateObjectModsOk();
@@ -796,7 +791,6 @@ namespace mongo {
         // @return true, if fastupdates are ok for this collection.
         //         fastupdates are not ok for this collection if it's sharded
         //         and the primary key does not contain the full shard key.
-        bool fastupdatesOk();
         bool updateObjectModsOk() {
             return true;
         }
@@ -1447,10 +1441,6 @@ namespace mongo {
         virtual void updateObject(const BSONObj &pk, const BSONObj &oldObj, BSONObj &newObj,
                                   const bool fromMigrate,
                                   uint64_t flags, bool* indexBitChanged);
-
-        virtual bool fastupdatesOk() {
-            return _partitions[0]->fastupdatesOk();
-        }
 
         virtual bool updateObjectModsOk() {
             return _partitions[0]->updateObjectModsOk();

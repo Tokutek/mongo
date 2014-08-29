@@ -452,6 +452,18 @@ namespace mongo {
         }
     }
     
+    bool Collection::fastupdatesOk() {
+        // if sharding is enabled, we check to see if the shard key is encapsulated
+        // by the primary key. If it is not, we cannot do a fast update because we
+        // need to know the value of the shard key when performing any write (for
+        // logging changes during a migration)
+        bool ok = true;
+        if (shardingState.needShardChunkManager(_ns)) {
+            ShardChunkManagerPtr chunkManager = shardingState.getShardChunkManager(_ns);
+            ok = chunkManager == NULL || chunkManager->hasShardKey(_pk);
+        }
+        return ok;
+    }
 
     // ------------------------------------------------------------------------
 
@@ -542,10 +554,6 @@ namespace mongo {
             IndexDetailsBase &idx = *_indexes[i];
             idx.close();
         }
-    }
-
-    bool CollectionBase::fastupdatesOk() {
-        return false;
     }
 
     bool CollectionBase::isVisibleFromCurrentTransaction() const {
