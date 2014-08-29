@@ -225,8 +225,7 @@ namespace mongo {
 
         general_options.addOptionChaining("storage.nsSize", "nssize", moe::Int,
                 ".ns file size (in MB) for new databases")
-                                         .hidden()
-                                         .setDefault(moe::Value(16));
+                                         .hidden();
 
         general_options.addOptionChaining("storage.quota.enforced", "quota", moe::Switch,
                 "limits each database to a certain number of files (8 default)")
