@@ -1,6 +1,56 @@
 tokumx news
 ===========
 
+tokumx 1.5.1
+------------
+Release date: TBD
+
+General
+~~~~~~~
+
+    - This release is focused on bug fixes since 1.5.0.
+
+
+Bug fixes
+~~~~~~~~~
+
+    - In versions of TokuMX 1.4.0 through 1.5.0, compound keys with
+      integer values of absolute value larger than 2^52 in all but the
+      last component of the key were ordered incorrectly.  This release
+      fixes that ordering.
+
+      This error only affected compound keys, so hashed keys are
+      unaffected.
+
+      The result of the error is that if there is user data of that size
+      in any but the last field of a key, the key will be ordered
+      incorrectly with respect to other keys in the index.  This can cause
+      queries to return improper results if they do range queries on that
+      index.
+
+      If the affected index is the primary key of a collection, then
+      before upgrading to 1.5.1, you must dump the affected collection,
+      drop it, and restore it after upgrading to 1.5.1.  If the affected
+      index is a secondary key, it can simply be dropped and rebuilt after
+      upgrading to 1.5.1.
+      (https://tokutek.atlassian.net/browse/MX-1140[MX-1140])
+
+    - Lengthened the socket timeout used by secondaries when replicating
+      large transactions.  Accumulation of garbage due to aborted
+      transactions can cause these queries to take a long time, and with a
+      short socket timeout, secondaries could get stuck.  This socket
+      timeout is configurable with the server parameter
+      `soTimeoutForReplLargeTxn`, which defaults to 10 minutes.
+      (https://tokutek.atlassian.net/browse/MX-1207[MX-1207])
+
+    - Fixed an issue where if the system ran out of disk space during
+      application of a transaction on a secondary, it could cause that
+      transaction to be skipped rather than causing the system to report
+      the error.  In this scenario, the secondary now reports the problem
+      and crashes.
+      (https://tokutek.atlassian.net/browse/MX-1235[MX-1235])
+
+
 tokumx 1.5.0
 ------------
 Release date: 2014-06-18
