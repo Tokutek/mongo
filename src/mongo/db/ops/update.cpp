@@ -121,6 +121,14 @@ namespace mongo {
 
     static Counter64 fastupdatesErrors;
     static ServerStatusMetricField<Counter64> fastupdatesIgnoredErrorsDisplay("fastupdates.errors", &fastupdatesErrors);
+    static Counter64 fastupdatesByPKPerformed;
+    static ServerStatusMetricField<Counter64> fastupdatesPerformedPKDisplay("fastupdates.performed.primaryKey", &fastupdatesByPKPerformed);
+    static Counter64 fastupdatesBySecPerformed;
+    static ServerStatusMetricField<Counter64> fastupdatesPerformedSecDisplay("fastupdates.performed.secondaryKey", &fastupdatesBySecPerformed);
+    static Counter64 fastupdatesPKEligible;
+    static ServerStatusMetricField<Counter64> fastupdatesEligiblePKDisplay("fastupdates.eligible.primaryKey", &fastupdatesPKEligible);
+    static Counter64 fastupdatesSecEligible;
+    static ServerStatusMetricField<Counter64> fastupdatesEligibleSecDisplay("fastupdates.eligible.secondaryKey", &fastupdatesSecEligible);
 
     bool ApplyUpdateMessage::applyMods(
         const BSONObj &oldObj,
@@ -263,12 +271,11 @@ namespace mongo {
         Collection *cl,
         const bool upsert,
         ModSet* mods,
-        const bool isOperatorUpdate
+        const bool isOperatorUpdate,
+        bool* eligible
         )
     {
-        if (!cmdLine.fastupdates) {
-            return false;
-        }
+        *eligible = false;
         if (upsert) {
             return false;
         }
@@ -280,6 +287,10 @@ namespace mongo {
             return false;
         }
         verify(!forceLogFullUpdate(cl, mods));
+        *eligible = true;
+        if (!cmdLine.fastupdates) {
+            return false;
+        }
         return true;
     }
 
@@ -290,9 +301,10 @@ namespace mongo {
                             const bool fromMigrate,
                             ModSet* mods,
                             const bool isOperatorUpdate,
-                            const bool oldObjMayNotExist)
+                            const bool oldObjMayNotExist,
+                            bool* eligible)
     {
-        if (!canRunFastUpdate(cl, upsert, mods, isOperatorUpdate)) {
+        if (!canRunFastUpdate(cl, upsert, mods, isOperatorUpdate, eligible)) {
             return false;
         }
         verify(mods);
@@ -328,8 +340,14 @@ namespace mongo {
 
         // try a fast update, if it succeeds, get out, otherwise,
         // proceed with fetching the pre-image
-        if (tryFastUpdate(ns, cl, pk, patternOrig, updateobj, upsert, fromMigrate, mods.get(), isOperatorUpdate, true)) {
+        bool eligibleForFastUpdate = false;        
+        if (tryFastUpdate(ns, cl, pk, patternOrig, updateobj, upsert, fromMigrate, mods.get(), isOperatorUpdate, true, &eligibleForFastUpdate)) {
+            fastupdatesByPKPerformed.increment();
             return UpdateResult(1, isOperatorUpdate, 1, BSONObj());
+        }
+        if (eligibleForFastUpdate) {
+            // track the fact that this update could have been fast if fastupdates were enabled
+            fastupdatesPKEligible.increment();
         }
 
         BSONObj obj;
@@ -410,7 +428,8 @@ namespace mongo {
                 c->advance();
                 continue;
             }
-            bool canBeFast = canRunFastUpdate(cl, upsert, mods.get(), isOperatorUpdate);
+            bool eligibleForFastUpdate = false;
+            bool canBeFast = canRunFastUpdate(cl, upsert, mods.get(), isOperatorUpdate, &eligibleForFastUpdate);
 
             if (!isOperatorUpdate) {
                 verify(!multi); // should be uasserted above
@@ -448,6 +467,7 @@ namespace mongo {
 
             if (canBeFast) {
                 verify(currentObj.isEmpty()); // sanity check
+                bool eligible;
                 bool ranFast = tryFastUpdate(
                     ns,
                     cl,
@@ -458,11 +478,17 @@ namespace mongo {
                     fromMigrate,
                     mods.get(),
                     isOperatorUpdate,
-                    false // old obj must exist in main dictionary
+                    false, // old obj must exist in main dictionary
+                    &eligible
                     );
+                fastupdatesBySecPerformed.increment();
                 verify(ranFast); // must have succeeded because canBeFast is true
             }
             else {
+                if (eligibleForFastUpdate) {
+                    // track the fact that this update could have been fast if fastupdates were enabled
+                    fastupdatesSecEligible.increment();
+                }
                 verify(!currentObj.isEmpty()); // sanity check
                 updateUsingMods(ns, cl, currPK, currentObj, updateobj, mods, &details, fromMigrate);
             }
