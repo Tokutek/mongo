@@ -35,8 +35,23 @@ function dbs_match(a, b) {
     return true;
 };
 
-
-doRollbackTest = function (signal, txnLimit, startPort, preloadFunction, persistentFunction, rollbackFunction, goFatal) {
+// this function is used by many tests to test rollback scenarios. The basics are as follows.
+// A 3 node replica set is started with a primary, secondary, arbiter. Some data is loaded
+// via preloadFunction. Then, we transition the secondary into maintenance mode and load
+// a bunch more data into the primary via persistentFunction. Then, on the secondary that
+// is in maintenance mode, we run _setGod so we can perform writes, via rollbackFunction.
+// The purpose of rollbackFunction is to do work that will be rolled back once we exit
+// maintenance mode. We then either verify that data on the primary and secondary are identical,
+// hence testing rollback, or verify that the secondary transitioned to fatal.
+// Should a test want to check the state of the secondary after rollback
+// has occurred, it can provide a checkAftermath function
+//
+// IMPORTANT POINT: persistentFunction should do a LOT more work than rollbackFunction,
+// otherwise rollback will think that the secondary is ahead and eventually the work done
+// by persistentFunction is rolled back and not the work done by rollbackFunction. So,
+// in all tests, you will see persistentFunction do a lot more work, which causes the GTID
+// of the primary to be ahead of the GTID of the secondary
+doRollbackTest = function (signal, txnLimit, startPort, preloadFunction, persistentFunction, rollbackFunction, goFatal, checkAftermath) {
     var num = 3;
     var host = getHostName();
     var name = "rollback_unit";
@@ -74,6 +89,10 @@ doRollbackTest = function (signal, txnLimit, startPort, preloadFunction, persist
     // take secondary into maintenance mode and put it in God mode so we can do insertions
     assert.commandWorked(conns[1].getDB("admin").runCommand({replSetMaintenance : 1}));
     assert.commandWorked(conns[1].getDB("admin").runCommand({_setGod : 1}));
+    // verify that local.rollback.opdata does not exist, which it should not
+    // because no one has created it yet. preloadFunction, called above,
+    // should not have access to this conns[1]
+    assert.commandFailed(conns[1].getDB("local").runCommand({'_collectionsExist': ['local.rollback.opdata']}));
 
     // crank up some insertions into master, so GTID of master is ahead of whatever we do on slave
     persistentFunction(conns[0]);
@@ -96,6 +115,10 @@ doRollbackTest = function (signal, txnLimit, startPort, preloadFunction, persist
         assert( dbs_match(a,b), "server data sets do not match after rollback, something is wrong");
         assert.commandFailed(conns[1].getDB("local").runCommand({'_collectionsExist': ['local.rollback.gtidset']}));
         assert.commandFailed(conns[1].getDB("local").runCommand({'_collectionsExist': ['local.rollback.docs']}));
+        assert.commandWorked(conns[1].getDB("local").runCommand({'_collectionsExist': ['local.rollback.opdata']}));
+        if (checkAftermath) {
+            checkAftermath(conns[1]);
+        }
     }
     
     print("rollback_unit.js SUCCESS");

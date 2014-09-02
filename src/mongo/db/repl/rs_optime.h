@@ -29,4 +29,5 @@ namespace mongo {
     const char rsVoteInfo[] = "local.replVote";
     const char rsRollbackGTIDSet[] = "local.rollback.gtidset";
     const char rsRollbackDocs[] = "local.rollback.docs";
+    const char rsRollbackOpdata[] = "local.rollback.opdata"; // stores oplog entries that are rolled back
 }

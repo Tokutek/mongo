@@ -32,6 +32,18 @@
 
 namespace mongo {
 
+    // used in rollback
+    // a class used to store oplog data being rolled back to disk
+    // so the user can examine what data is rolled back
+    class RollbackSaveData {
+        uint64_t _rollbackID;
+        uint64_t _seq;
+    public:
+        RollbackSaveData() : _rollbackID(0), _seq(0) { }
+        void initialize();
+        void saveOp(GTID gtid, const BSONObj& op);
+    };
+
     void createOplog();
     void logToReplInfo(GTID minLiveGTID, GTID minUnappliedGTID);
     void logHighestVotedForPrimary(uint64_t hkp);
@@ -49,7 +61,7 @@ namespace mongo {
     void writeEntryToOplogRefs(BSONObj entry);
     void replicateFullTransactionToOplog(BSONObj& o, OplogReader& r, bool* bigTxn);
     void applyTransactionFromOplog(BSONObj entry, RollbackDocsMap* docsMap);
-    void rollbackTransactionFromOplog(BSONObj entry, RollbackDocsMap* docsMap);
+    void rollbackTransactionFromOplog(BSONObj entry, RollbackDocsMap* docsMap, RollbackSaveData* rsSave);
     void purgeEntryFromOplog(BSONObj entry);
 
     // @return the age, in milliseconds, when an oplog entry expires.
@@ -62,5 +74,4 @@ namespace mongo {
     void convertOplogToPartitionedIfNecessary();
 
     void updateApplyBitToEntry(BSONObj entry, bool apply);
-
 }

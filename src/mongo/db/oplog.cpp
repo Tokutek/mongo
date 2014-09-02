@@ -435,16 +435,17 @@ namespace mongo {
     }
     
     // apply all operations in the array
-    static void rollbackOps(std::vector<BSONElement> ops, RollbackDocsMap* docsMap) {
+    static void rollbackOps(std::vector<BSONElement> ops, RollbackDocsMap* docsMap, RollbackSaveData* rsSave, GTID gtid) {
         const size_t numOps = ops.size();
         for(size_t i = 0; i < numOps; ++i) {
             // note that we have to rollback the transaction backwards
             BSONElement* curr = &ops[numOps - i - 1];
             OplogHelpers::rollbackOperationFromOplog(curr->Obj(), docsMap);
+            rsSave->saveOp(gtid, curr->Obj());
         }
     }
 
-    static void rollbackRefOp(BSONObj entry, RollbackDocsMap* docsMap) {
+    static void rollbackRefOp(BSONObj entry, RollbackDocsMap* docsMap, RollbackSaveData* rsSave, GTID gtid) {
         OID oid = entry["ref"].OID();
         LOG(3) << "rollback ref " << entry << " oid " << oid << endl;
         long long seq = LLONG_MAX;
@@ -479,20 +480,21 @@ namespace mongo {
                 break;
             }
             LOG(3) << "apply " << currEntry << " seq=" << seq << endl;
-            rollbackOps(currEntry["ops"].Array(), docsMap);
+            rollbackOps(currEntry["ops"].Array(), docsMap, rsSave, gtid);
             // decrement seq so next query gets the next value
             seq--;
         }
     }
 
-    void rollbackTransactionFromOplog(BSONObj entry, RollbackDocsMap* docsMap) {
+    void rollbackTransactionFromOplog(BSONObj entry, RollbackDocsMap* docsMap, RollbackSaveData* rsSave) {
         bool transactionAlreadyApplied = entry["a"].Bool();
+        GTID gtid = getGTIDFromOplogEntry(entry);
         Client::Transaction transaction(DB_SERIALIZABLE);
         if (transactionAlreadyApplied) {
             if (entry.hasElement("ref")) {
-                rollbackRefOp(entry, docsMap);
+                rollbackRefOp(entry, docsMap, rsSave, gtid);
             } else if (entry.hasElement("ops")) {
-                rollbackOps(entry["ops"].Array(), docsMap);
+                rollbackOps(entry["ops"].Array(), docsMap, rsSave, gtid);
             } else {
                 verify(0);
             }
@@ -789,4 +791,56 @@ namespace mongo {
         }
         transaction.commit();
     }
+
+    void RollbackSaveData::initialize() {
+        // write lock needed to (maybe) drop and recreate the
+        // collection
+        LOCK_REASON(lockReason, "repl: initializing set of committed GTIDs during rollback");
+        Client::WriteContext ctx(rsRollbackOpdata, lockReason);
+        Client::Transaction txn(DB_SERIALIZABLE);
+        string errmsg;
+        Collection* cl = getCollection(rsRollbackOpdata);
+        if (cl == NULL) {
+            bool ret = userCreateNS(rsRollbackOpdata, BSONObj(), errmsg, false);
+            verify(ret);
+            cl = getCollection(rsRollbackOpdata);
+            verify(cl);
+        }
+        // now we have the collection available, let's figure out what _rollbackID is
+        shared_ptr<Cursor> c(Cursor::make(cl, -1));
+        if (c->ok()) {
+            BSONObj last = c->current();
+            BSONObj lastIDObj = last["_id"].Obj();
+            uint64_t lastID = lastIDObj["rid"].numberLong();
+            _rollbackID = lastID+1;
+        }
+        else {
+            _rollbackID = 0;
+        }
+        txn.commit();
+    }
+
+    void RollbackSaveData::saveOp(GTID gtid, const BSONObj& op) {
+        LOCK_REASON(lockReason, "repl: writing data to rollback.opdata");
+        Client::ReadContext ctx(rsRollbackOpdata, lockReason);
+        Collection* cl = getCollection(rsRollbackOpdata);
+        verify(cl);
+    
+        BSONObjBuilder docBuilder;
+        BSONObjBuilder idBuilder(docBuilder.subobjStart("_id"));
+        idBuilder.append("rid", _rollbackID);
+        idBuilder.append("seq", _seq);
+        idBuilder.done();
+        docBuilder.append("gtid", gtid);
+        docBuilder.append("gtidString", gtid.toString());
+        docBuilder.appendDate("time", curTimeMillis64());
+        docBuilder.append("op", op);
+    
+        const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
+        BSONObj doc = docBuilder.obj();
+        cl->insertObject(doc, flags);
+    
+        _seq++;
+    }
+
 }

@@ -221,7 +221,7 @@ namespace mongo {
         }
     }
 
-    void rollbackToGTID(GTID idToRollbackTo, RollbackDocsMap* docsMap) {
+    void rollbackToGTID(GTID idToRollbackTo, RollbackDocsMap* docsMap, RollbackSaveData* rsSave) {
         // at this point, everything should be settled, the applier should
         // have nothing left (and remain that way, because this is the only
         // thread that can put work on the applier). Now we can rollback
@@ -244,7 +244,7 @@ namespace mongo {
                 dassert(GTID::cmp(lastGTID, idToRollbackTo) == 0);
                 break;
             }
-            rollbackTransactionFromOplog(o, docsMap);
+            rollbackTransactionFromOplog(o, docsMap, rsSave);
         }
         log() << "Rolling back to " << idToRollbackTo.toString() << " produced " << \
             docsMap->size() << " documents for which we need to retrieve a snapshot of." << rsLog;
@@ -651,7 +651,9 @@ namespace mongo {
             {
                 RollbackDocsMap docsMap; // stores the documents we need to get images of
                 docsMap.initialize();
-                rollbackToGTID(idToRollbackTo, &docsMap);
+                RollbackSaveData rsSave;
+                rsSave.initialize();
+                rollbackToGTID(idToRollbackTo, &docsMap, &rsSave);
                 if (docsMap.size() == 0) {
                     log() << "Rollback produced no docs in docsMap, exiting early" << rsLog;
                     finishRollback(true);
