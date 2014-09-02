@@ -1,21 +1,37 @@
 // test that fast updates work like normal updates in the common case
 
+fastcollname = "updatefast";
 fastcoll = db.updatefast;
+nonfastcollname = "updatefast2"
 nonfastcoll = db.updatefast2;
 
+
+function changeFastUpdates(val){
+        x = db.runCommand("isdbgrid");
+        if (x.ok) {
+            dbForParam = myShardingTest.getServer("test");
+            assert.commandWorked(dbForParam.getDB('admin').runCommand({ setParameter: 1, fastupdates: val }));            
+        }
+        else {
+            assert.commandWorked(db.getSisterDB('admin').runCommand({ setParameter: 1, fastupdates: val }));
+        }
+}
+
+// make sure that the second test run is with fast updates disabled, because
+// we don't want the mongod to keep fast updates enabled for tests run after this.
 function checkUpdate(initialDocs, query, updateobj, options) {
     function withFastUpdates() {
         fastcoll.remove({});
         fastcoll.insert(initialDocs);
-        assert.commandWorked(db.getSisterDB('admin').runCommand({ setParameter: 1, fastupdates: true }));
+        changeFastUpdates(true);
         fastcoll.update(query, updateobj, options);
-        assert.commandWorked(db.getSisterDB('admin').runCommand({ setParameter: 1, fastupdates: false }));
+        changeFastUpdates(false);
         return fastcoll.find();
     }
-    function withNoFastUpdates(fn) {
+    function withNoFastUpdates() {
         nonfastcoll.remove({});
         nonfastcoll.insert(initialDocs);
-        assert.commandWorked(db.getSisterDB('admin').runCommand({ setParameter: 1, fastupdates: false }));
+        changeFastUpdates(false);
         nonfastcoll.update(query, updateobj, options);
         return nonfastcoll.find();
     }
@@ -25,6 +41,7 @@ function checkUpdate(initialDocs, query, updateobj, options) {
     assert.eq(fastResult.toArray(), nonFastResult.toArray(), "update result differ");
 }
 
+
 [ { key: { _id: 1 }, options: { } },
   { key: { c: 1 }, options: { } },
   { key: { z: 1 }, options: { clustering: true } }
@@ -32,6 +49,9 @@ function checkUpdate(initialDocs, query, updateobj, options) {
     [ { upsert: false }, { upsert: true } ].forEach(function(withUpdateOptions) {
         fastcoll.drop();
         nonfastcoll.drop();
+        assert.commandWorked(db.createCollection(fastcollname));
+        assert.commandWorked(db.createCollection(nonfastcollname));
+        print("created collections");
         fastcoll.ensureIndex(withIndex.key, withIndex.options);
         nonfastcoll.ensureIndex(withIndex.key, withIndex.options);
         print('withIndex: ' + tojson(withIndex));
