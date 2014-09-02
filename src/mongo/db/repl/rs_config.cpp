@@ -41,6 +41,7 @@ namespace mongo {
 
     mongo::mutex ReplSetConfig::groupMx("RS tag group");
     const int ReplSetConfig::DEFAULT_HB_TIMEOUT = 10;
+    const int ReplSetConfig::DEFAULT_ELECTION_BACKOFF_MILLIS = 1000;
 
     static AtomicUInt _warnedAboutVotes = 0;
 
@@ -148,6 +149,11 @@ namespace mongo {
 
         if (_heartbeatTimeout != DEFAULT_HB_TIMEOUT) {
             settings << "heartbeatTimeoutSecs" << _heartbeatTimeout;
+            empty = false;
+        }
+
+        if (_electionBackoffMillis!= DEFAULT_ELECTION_BACKOFF_MILLIS) {
+            settings << "electionBackoffMillis" << _electionBackoffMillis;
             empty = false;
         }
 
@@ -662,6 +668,12 @@ namespace mongo {
                 uassert(16438, "Heartbeat timeout must be non-negative", timeout >= 0);
                 _heartbeatTimeout = timeout;
             }
+            
+            if (settings.hasField("electionBackoffMillis")) {
+                int backoff = settings["electionBackoffMillis"].numberInt();
+                uassert(16438, "Time for election backoff in milliseconds must be non-negative", backoff >= 0);
+                _electionBackoffMillis = backoff;
+            }
 
             // If the config explicitly sets chaining to false, turn it off.
             if (settings.hasField("chainingAllowed") &&
@@ -682,6 +694,10 @@ namespace mongo {
         return _heartbeatTimeout;
     }
 
+    int ReplSetConfig::getElectionBackoffMillis() const {
+        return _electionBackoffMillis;
+    }
+
     static inline void configAssert(bool expr) {
         uassert(13122, "bad repl set config?", expr);
     }
@@ -692,7 +708,8 @@ namespace mongo {
         _ok(false),
         _chainingAllowed(true),
         _majority(-1),
-        _heartbeatTimeout(DEFAULT_HB_TIMEOUT) {
+        _heartbeatTimeout(DEFAULT_HB_TIMEOUT),
+        _electionBackoffMillis(DEFAULT_ELECTION_BACKOFF_MILLIS){
     }
 
 

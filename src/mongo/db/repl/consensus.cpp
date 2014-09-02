@@ -495,7 +495,7 @@ namespace mongo {
             // one guy doesn't ever need to sleep. 
             if (me.id() != 0 && sleepThisRound) {
                 verify( !rs.lockedByMe() ); // bad to go to sleep locked
-                unsigned ms = ((unsigned) rand()) % 1000 + 50;
+                unsigned ms = ((unsigned) rand()) % rs.config().getElectionBackoffMillis() + 50;
                 log() << "replSet tie " << nTies << " sleeping a little " << ms << "ms" << rsLog;
                 sleptLast = true;
                 sleepmillis(ms);
