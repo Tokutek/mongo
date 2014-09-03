@@ -189,10 +189,19 @@ namespace mongo {
         int getHeartbeatTimeout() const;
 
         /**
+         * Get the max amount of time to backoff before kicking off an election (assuming ties exit).
+         * See consensus.cpp, where it is used.
+         */
+        int getElectionBackoffMillis() const;
+
+        /**
          * Default timeout: 10 seconds
          */
         static const int DEFAULT_HB_TIMEOUT;
-
+        /**
+         * Default: 1 second, or 1000 milliseconds
+         */
+        static const int DEFAULT_ELECTION_BACKOFF_MILLIS;
     private:
         ReplSetConfig();
         void init(const HostAndPort& h);
@@ -216,6 +225,12 @@ namespace mongo {
          * The timeout to use for heartbeats
          */
         int _heartbeatTimeout;
+        /**
+         * upper bound for time in milliseconds to wait before running an election: 
+         * 1 second, or 1000 milliseconds. The amount of actual time spent
+         * waiting is a random number from 0 to this value
+         */
+        int _electionBackoffMillis;
 
         /**
          * This is a logical grouping of servers.  It is pointed to by a set of

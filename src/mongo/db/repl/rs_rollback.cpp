@@ -91,7 +91,7 @@ namespace mongo {
         GTID gtid = getGTIDFromBSON("_id", o);
 
         if( !theReplSet->gtidManager->rollbackNeeded(gtid, ts, lastHash)) {
-            log() << "Rollback NOT needed! Our GTID" << gtid << endl;
+            log() << "Rollback NOT needed! " << gtid << endl;
             return false;
         }
 

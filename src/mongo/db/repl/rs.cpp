@@ -144,7 +144,8 @@ namespace mongo {
         changeState(MemberState::RS_PRIMARY);
         log() << "replset assuming primary with value " << primaryToUse << rsLog;
         Client::Transaction txn (DB_SERIALIZABLE);
-        OplogHelpers::logComment(BSON("comment" << "assuming primary"));
+        string ss = str::stream() << "assuming primary: " << _self->fullName();
+        OplogHelpers::logComment(BSON("comment" << ss));
         txn.commit(DB_TXN_NOSYNC);
         return true;
     }

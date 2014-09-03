@@ -12,6 +12,7 @@ doTest = function (signal) {
     config.settings = {};
     config.settings.getLastErrorDefaults = { 'w': 3, 'wtimeout': 20000 };
     config.settings.heartbeatTimeoutSecs = 15;
+    config.settings.electionBackoffMillis = 1500;
 
     replTest.initiate(config);
 
@@ -67,6 +68,7 @@ doTest = function (signal) {
     config = master.getDB("local").system.replset.findOne();
 
     assert.eq(15, config.settings.heartbeatTimeoutSecs);
+    assert.eq(1500, config.settings.electionBackoffMillis);
 
     config.version++;
     config.members[2].priority = 0;
