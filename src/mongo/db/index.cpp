@@ -242,7 +242,7 @@ namespace mongo {
                 verify(_unique);
             }
             _db.reset(new storage::Dictionary(dname, _info, *_descriptor, may_create,
-                                              _info["background"].trueValue(), use_memcmp_magic);
+                                              _info["background"].trueValue(), use_memcmp_magic));
             return true;
         } catch (storage::Dictionary::NeedsCreate) {
             if (cc().upgradingSystemUsers() &&
