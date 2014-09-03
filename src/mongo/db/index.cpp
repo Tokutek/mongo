@@ -234,15 +234,8 @@ namespace mongo {
 
         TOKULOG(1) << "Opening IndexDetails " << dname << endl;
         try {
-            // We use the memcmp magic API only for single-key, ascending _id indexes,
-            // because the _id field is always unique (and therefore we can simply
-            // compare the OID fields if they exist and that will be sufficient)
-            const bool use_memcmp_magic = _keyPattern == BSON("_id" << 1);
-            if (use_memcmp_magic) {
-                verify(_unique);
-            }
             _db.reset(new storage::Dictionary(dname, _info, *_descriptor, may_create,
-                                              _info["background"].trueValue(), use_memcmp_magic);
+                                              _info["background"].trueValue()));
             return true;
         } catch (storage::Dictionary::NeedsCreate) {
             if (cc().upgradingSystemUsers() &&

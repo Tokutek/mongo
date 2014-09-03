@@ -41,8 +41,6 @@ namespace mongo {
 
     namespace storage {
 
-        unsigned char memcmpMagic();
-
         /** Key class for precomputing a small format index key that is denser than a traditional BSONObj. */
         class KeyV1Owned;
 

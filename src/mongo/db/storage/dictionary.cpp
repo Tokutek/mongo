@@ -22,7 +22,6 @@
 #include "mongo/db/server_parameters.h"
 #include "mongo/db/storage/dictionary.h"
 #include "mongo/db/storage/env.h"
-#include "mongo/db/storage/key.h"
 #include "mongo/util/mongoutils/str.h"
 
 namespace mongo {
@@ -114,15 +113,14 @@ namespace mongo {
             
         Dictionary::Dictionary(const string &dname, const BSONObj &info,
                                const mongo::Descriptor &descriptor,
-                               const bool may_create, const bool hot_index,
-                               const bool set_memcmp_magic) :
+                               const bool may_create, const bool hot_index) :
             _dname(dname), _db(NULL) {
             const int r = db_create(&_db, env, 0);
             if (r != 0) {
                 handle_ydb_error(r);
             }
             try {
-                open(descriptor, may_create, hot_index, set_memcmp_magic);
+                open(descriptor, may_create, hot_index);
                 const BSONObj attr = fillDefaultAttributes(info);
                 BSONObjBuilder unusedBuilder;
                 changeAttributes(attr, unusedBuilder);
@@ -141,7 +139,7 @@ namespace mongo {
         }
 
         void Dictionary::open(const mongo::Descriptor &descriptor, const bool may_create,
-                              const bool hot_index, const bool set_memcmp_magic) {
+                              const bool hot_index) {
             // If this is a non-creating open for a read-only (or non-existent)
             // transaction, we can use an alternate stack since there's nothing
             // to roll back and no locktree locks to hold.
@@ -150,13 +148,6 @@ namespace mongo {
                                                                    new Client::AlternateTransactionStack());
             scoped_ptr<Client::Transaction> altTxn(!needAltTxn ? NULL :
                                                    new Client::Transaction(0));
-
-            if (set_memcmp_magic) {
-                const int r = _db->set_memcmp_magic(_db, memcmpMagic());
-                if (r != 0) {
-                    handle_ydb_error_fatal(r);
-                }
-            }
 
             const int db_flags = may_create ? DB_CREATE : 0;
             const int r = _db->open(_db, cc().txn().db_txn(), _dname.c_str(), NULL,

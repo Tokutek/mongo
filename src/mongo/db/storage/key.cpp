@@ -54,10 +54,6 @@ namespace mongo {
             cNOTUSED = 0x80 // but see IsBSON sentinel - this bit not usable without great care
         };
 
-        unsigned char memcmpMagic() {
-            return coid;
-        }
-
         // bindata bson type
         // unused:
         //const unsigned BinDataLenMask = 0xf0;  // lengths are powers of 2 of this value
