@@ -107,7 +107,7 @@ namespace mongo {
             if (_isBox) {
                 return _box.inside(p, 0);
             } else if (_isCircle) {
-                return p.distance(_center) <= _radius;
+                return distance(p, _center) <= _radius;
             } else if (_isPolygon) {
                 return _polygon.contains(p);
             } else {
@@ -134,8 +134,8 @@ namespace mongo {
             if (!i.more()) { return false; }
             BSONElement ye = i.next();
             if (!xe.isNumber() || !ye.isNumber()) { return false; }
-            p->_x = xe.number();
-            p->_y = ye.number();
+            p->x = xe.number();
+            p->y = ye.number();
             return true;
         }
     };

@@ -456,6 +456,8 @@ env.StaticLibrary("coredb", [
                            'db/common',
                            'plugins/plugins',
                            'server_parameters',
+                           'geoparser',
+                           'geoquery',
                            'expressions',
                            'expressions_geo',
                            'expressions_where',
@@ -565,6 +567,9 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "db/index.cpp",
                     "db/scanandorder.cpp",
                     "db/explain.cpp",
+                    # "db/geo/geonear.cpp",
+                    # "db/geo/haystack.cpp",
+                    # "db/geo/s2common.cpp",
                     "db/ops/count.cpp",
                     "db/ops/delete.cpp",
                     "db/ops/query.cpp",
@@ -717,11 +722,26 @@ serverOnlyFiles += [ "s/d_logic.cpp",
 
 env.StaticLibrary("defaultversion", "s/default_version.cpp")
 
+env.StaticLibrary("geometry", [ "db/geo/hash.cpp", "db/geo/shapes.cpp", ], LIBDEPS = [ "bson" ])
+env.StaticLibrary("geoparser", [ "db/geo/geoparser.cpp", ],
+                  LIBDEPS = [ "bson",
+                              "geometry",
+                              '$BUILD_DIR/third_party/s2/s2' ])
+env.StaticLibrary("geoquery", [ "db/geo/geoquery.cpp", ],
+                  LIBDEPS = [ "bson",
+                              "geometry",
+                              '$BUILD_DIR/third_party/s2/s2' ])
+
+env.CppUnitTest("hash_test", [ "db/geo/hash_test.cpp" ], LIBDEPS = ["geometry" ])
+env.CppUnitTest("geoparser_test", [ "db/geo/geoparser_test.cpp" ], LIBDEPS = ["geoparser"])
+
 env.StaticLibrary("serveronly", serverOnlyFiles,
                   LIBDEPS=["coreshard",
                            "db/auth/authmongod",
                            "db/common",
                            "defaultversion",
+                           "geoparser",
+                           "geoquery",
                            "index_set"])
 
 # These files go into mongos and mongod only, not into the shell or any tools.

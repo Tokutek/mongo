@@ -33,6 +33,10 @@ else ()
   message(SEND_ERROR "no js engine chosen (please set JS_ENGINE=v8)")
 endif ()
 
+add_subdirectory(s2)
+set(S2_INCLUDE_DIRS ${S2_INCLUDE_DIRS} PARENT_SCOPE)
+set(S2_LIBRARIES ${S2_LIBRARIES} PARENT_SCOPE)
+
 if (USE_SYSTEM_YAML)
   find_package(YAML REQUIRED)
 else ()

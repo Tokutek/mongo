@@ -695,6 +695,24 @@ if (BUILD_TESTING)
   #target_link_libraries(authorization_manager_test authmocks)
   #target_link_libraries(authorization_session_test authmocks)
 
+  add_executable(hash_test db/geo/hash_test)
+  add_dependencies(hash_test generate_error_codes generate_action_types)
+  link_recursive_deps(hash_test
+    geometry
+    unittest_main
+    unittest_crutch
+    ${TOKUMX_SSL_LIBRARIES}
+    )
+
+  add_executable(geoparser_test db/geo/geoparser_test)
+  add_dependencies(geoparser_test generate_error_codes generate_action_types)
+  link_recursive_deps(geoparser_test
+    geoparser
+    unittest_main
+    unittest_crutch
+    ${TOKUMX_SSL_LIBRARIES}
+    )
+
   foreach (prefix
       expression
       expression_parser
@@ -1114,6 +1132,13 @@ if (BUILD_TESTING)
       authorization_session_test
       )
     add_mongo_test(db/auth ${test} ${test})
+  endforeach ()
+
+  foreach (test
+      hash_test
+      geoparser_test
+      )
+    add_mongo_test(db/geo ${test} ${test})
   endforeach ()
 
   foreach (test
