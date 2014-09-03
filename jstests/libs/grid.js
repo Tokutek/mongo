@@ -14,10 +14,7 @@ function Server (name) {
     this.addr = '127.0.0.1';
     this.dirname = name + nextPort;
     this.args = { port : nextPort++,
-                  noprealloc : '',
-                  smallfiles : '',
-                  rest : '',
-                  oplogSize : 8 }
+                  rest : '' }
 }
 
 // Server -> String <addr:port>

@@ -34,8 +34,8 @@ MongodRunner.prototype.start = function( reuseData ) {
     args.push( "--dbpath" );
     args.push( this.dbpath_ );
     args.push( "--nohttpinterface" );
-    args.push( "--noprealloc" );
-    args.push( "--smallfiles" );
+    // args.push( "--noprealloc" );
+    // args.push( "--smallfiles" );
     if (!this.options_.no_bind) {
       args.push( "--bind_ip" );
       args.push( "127.0.0.1" );
@@ -74,8 +74,8 @@ ToolTest.prototype.startDB = function( coll ){
     var options = {port : this.port,
                    dbpath : this.dbpath,
                    nohttpinterface : "",
-                   noprealloc : "",
-                   smallfiles : "",
+                   // noprealloc : "",
+                   // smallfiles : "",
                    bind_ip : "127.0.0.1"};
 
     Object.extend(options, this.options);
@@ -148,7 +148,7 @@ ReplTest.prototype.getOptions = function( master , extra , putBinaryFirst, norep
     var a = []
     if ( putBinaryFirst )
         a.push( "mongod" )
-    a.push( "--nohttpinterface", "--noprealloc", "--bind_ip" , "127.0.0.1" , "--smallfiles" );
+    a.push( "--nohttpinterface", "--bind_ip" , "127.0.0.1" );
 
     a.push( "--port" );
     a.push( this.getPort( master ) );
@@ -156,8 +156,8 @@ ReplTest.prototype.getOptions = function( master , extra , putBinaryFirst, norep
     a.push( "--dbpath" );
     a.push( this.getPath( master ) );
     
-    if( jsTestOptions().noJournal ) a.push( "--nojournal" )
-    if( jsTestOptions().noJournalPrealloc ) a.push( "--nopreallocj" )
+    // if( jsTestOptions().noJournal ) a.push( "--nojournal" )
+    // if( jsTestOptions().noJournalPrealloc ) a.push( "--nopreallocj" )
     if( jsTestOptions().keyFile ) {
         a.push( "--keyFile" )
         a.push( jsTestOptions().keyFile )

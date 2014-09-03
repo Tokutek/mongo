@@ -4,7 +4,7 @@
 
 var rsOpts = { oplogSize: 10, verbose : 2, useHostname : false };
 var st = new ShardingTest({ keyFile : 'jstests/libs/key1', shards : 2, chunksize : 1, config : 3,
-                            rs : rsOpts, other : { nopreallocj : 1, verbose : 2, useHostname : false }});
+                            rs : rsOpts, other : { verbose : 2, useHostname : false }});
 
 var mongos = st.s;
 var adminDB = mongos.getDB( 'admin' );
