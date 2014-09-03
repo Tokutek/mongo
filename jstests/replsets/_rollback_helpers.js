@@ -35,6 +35,16 @@ function dbs_match(a, b) {
     return true;
 };
 
+function verifyRollbackSuccessful(pri, sec) {
+        // now do verifications
+        var a = pri.getDB("test");
+        var b = sec.getDB("test");
+        assert( dbs_match(a,b), "server data sets do not match after rollback, something is wrong");
+        assert.commandFailed(sec.getDB("local").runCommand({'_collectionsExist': ['local.rollback.gtidset']}));
+        assert.commandFailed(sec.getDB("local").runCommand({'_collectionsExist': ['local.rollback.docs']}));
+        assert.commandWorked(sec.getDB("local").runCommand({'_collectionsExist': ['local.rollback.opdata']}));
+}
+
 // this function is used by many tests to test rollback scenarios. The basics are as follows.
 // A 3 node replica set is started with a primary, secondary, arbiter. Some data is loaded
 // via preloadFunction. Then, we transition the secondary into maintenance mode and load
@@ -108,14 +118,7 @@ doRollbackTest = function (signal, txnLimit, startPort, preloadFunction, persist
     }
     else {
         replTest.awaitReplication();
-
-        // now do verifications
-        var a = conns[0].getDB("test");
-        var b = conns[1].getDB("test");
-        assert( dbs_match(a,b), "server data sets do not match after rollback, something is wrong");
-        assert.commandFailed(conns[1].getDB("local").runCommand({'_collectionsExist': ['local.rollback.gtidset']}));
-        assert.commandFailed(conns[1].getDB("local").runCommand({'_collectionsExist': ['local.rollback.docs']}));
-        assert.commandWorked(conns[1].getDB("local").runCommand({'_collectionsExist': ['local.rollback.opdata']}));
+        verifyRollbackSuccessful(conns[0],conns[1]);
         if (checkAftermath) {
             checkAftermath(conns[1]);
         }

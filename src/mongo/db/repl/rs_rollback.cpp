@@ -43,6 +43,10 @@ namespace mongo {
         RB_SNAPSHOT_APPLIED
     };
 
+    static BSONObj findOneFromConn(DBClientConnection* conn, const string &ns, const Query& query) {
+        return conn->findOne(ns, query, 0, QueryOption_SlaveOk);
+    }
+
     // assumes transaction is created
     void updateRollbackStatus(const BSONObj& status) {
         BSONObj o = status.copy();
@@ -182,7 +186,7 @@ namespace mongo {
         // Note that another way to get this information is to
         // request a heartbeat. That one will technically return
         // a more up to date value for minUnapplied
-        BSONObj res = conn->findOne(rsReplInfo , b.done());
+        BSONObj res = findOneFromConn(conn.get(), rsReplInfo, Query(b.done()));
         GTID minUnapplied = getGTIDFromBSON("GTID", res);
         if (GTID::cmp(minUnapplied, idToRollbackTo) < 0) {
             log() << "Remote server has minUnapplied " << minUnapplied.toString() << \
@@ -299,7 +303,7 @@ namespace mongo {
             const BSONObj pkPattern = cl->getPKIndex().keyPattern();
             BSONObjBuilder pkWithFieldsBuilder;
             fillPKWithFields(curr.pk, pkPattern, pkWithFieldsBuilder);
-            BSONObj remoteImage = conn->findOne(curr.coll, Query(pkWithFieldsBuilder.done()));
+            BSONObj remoteImage = findOneFromConn(conn.get(), curr.coll, Query(pkWithFieldsBuilder.done()));
             if (!remoteImage.isEmpty()) {
                 const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
                 insertOneObject(cl, remoteImage, flags);
@@ -428,7 +432,8 @@ namespace mongo {
                 Query(query.done()).hint(BSON("_id" << 1)),
                 0,
                 0,
-                &fields
+                &fields,
+                QueryOption_SlaveOk
                 ).release()
             );
         // now we have a cursor
@@ -449,7 +454,7 @@ namespace mongo {
     void applyInformationFromRemoteSnapshot(OplogReader& r) {
         shared_ptr<DBClientConnection> conn(r.conn_shared());
         RemoteTransaction rtxn(*conn, "mvcc");
-        BSONObj lastOp = conn->findOne(rsoplog, Query().sort(reverseIDObj));
+        BSONObj lastOp = findOneFromConn(conn.get(), rsoplog, Query().sort(reverseIDObj));
         log() << "lastOp of snapshot " << lastOp << rsLog;
         GTID lastGTID = getGTIDFromBSON("_id", lastOp);
         uint64_t lastHash = lastOp["h"].numberLong();
@@ -458,7 +463,7 @@ namespace mongo {
         // gaps exist
         BSONObjBuilder b;
         b.append("_id", "minUnapplied");
-        BSONObj res = conn->findOne(rsReplInfo , b.done());
+        BSONObj res = findOneFromConn(conn.get(), rsReplInfo , b.done());
         GTID minUnapplied = getGTIDFromBSON("GTID", res);
 
         Client::Transaction txn(DB_SERIALIZABLE);
