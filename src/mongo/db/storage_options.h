@@ -62,6 +62,7 @@ namespace mongo {
             cleanerPeriod(2),
             cleanerIterations(5),
             fsRedzone(5),
+            logFlushPeriod(100),
             directio(false),
             fastupdates(false),
             fastupdatesIgnoreErrors(false),
