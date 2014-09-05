@@ -50,7 +50,6 @@ static const char OP_STR_INSERT[] = "i"; // normal insert
 static const char OP_STR_CAPPED_INSERT[] = "ci"; // insert into capped collection
 static const char OP_STR_UPDATE[] = "u"; // normal update with full pre-image and full post-image
 static const char OP_STR_UPDATE_ROW_WITH_MOD[] = "ur"; // update with full pre-image and mods to generate post-image
-static const char OP_STR_UPDATE_PK_WITH_MOD[] = "up"; // update with just pk and mods to generate post-image
 static const char OP_STR_DELETE[] = "d"; // delete with full pre-image
 static const char OP_STR_CAPPED_DELETE[] = "cd"; // delete from capped collection
 static const char OP_STR_COMMENT[] = "n"; // a no-op
@@ -65,8 +64,7 @@ namespace mongo {
             return mongoutils::str::equals(opstr, OP_STR_INSERT) ||
                 mongoutils::str::equals(opstr, OP_STR_DELETE) ||
                 mongoutils::str::equals(opstr, OP_STR_UPDATE) ||
-                mongoutils::str::equals(opstr, OP_STR_UPDATE_ROW_WITH_MOD) ||
-                mongoutils::str::equals(opstr, OP_STR_UPDATE_PK_WITH_MOD);
+                mongoutils::str::equals(opstr, OP_STR_UPDATE_ROW_WITH_MOD);
         }
 
         bool invalidOpForSharding(const char *opstr) {
@@ -208,7 +206,7 @@ namespace mongo {
                 if (isLocalNs(ns)) {
                     return;
                 }
-                appendOpType(OP_STR_UPDATE_PK_WITH_MOD, &b);
+                appendOpType(OP_STR_UPDATE_ROW_WITH_MOD, &b);
                 appendNsStr(ns, &b);
                 appendMigrate(fromMigrate, &b);
                 b.append(KEY_STR_PK, pk);
@@ -724,12 +722,14 @@ namespace mongo {
                 runUpdateFromOplog(ns, op, docsMap);
             }
             else if (strcmp(opType, OP_STR_UPDATE_ROW_WITH_MOD) == 0) {
-                opCounters->gotUpdate();
-                runUpdateModsWithRowFromOplog(ns, op, docsMap);
-            }
-            else if (strcmp(opType, OP_STR_UPDATE_PK_WITH_MOD) == 0) {
-                opCounters->gotUpdate();
-                runUpdateModsWithPKFromOplog(ns, op, docsMap);
+                if (op[KEY_STR_OLD_ROW].ok()) {
+                    opCounters->gotUpdate();
+                    runUpdateModsWithRowFromOplog(ns, op, docsMap);
+                }
+                else {
+                    opCounters->gotUpdate();
+                    runUpdateModsWithPKFromOplog(ns, op, docsMap);
+                }
             }
             else if (strcmp(opType, OP_STR_DELETE) == 0) {
                 if (!rowInDocsMap(ns, op, KEY_STR_ROW, docsMap)) {
@@ -872,10 +872,12 @@ namespace mongo {
                 rollbackUpdateFromOplog(ns, op, docsMap);
             }
             else if (strcmp(opType, OP_STR_UPDATE_ROW_WITH_MOD) == 0) {
-                rollbackUpdateModsFromOplog(ns, op, docsMap);
-            }
-            else if (strcmp(opType, OP_STR_UPDATE_PK_WITH_MOD) == 0) {
-                rollbackUpdatePKModsFromOplog(ns, op, docsMap);
+                if (op[KEY_STR_OLD_ROW].ok()) {
+                    rollbackUpdateModsFromOplog(ns, op, docsMap);
+                }
+                else {
+                    rollbackUpdatePKModsFromOplog(ns, op, docsMap);
+                }
             }
             else if (strcmp(opType, OP_STR_DELETE) == 0) {
                 rollbackDeleteFromOplog(ns, op, docsMap);

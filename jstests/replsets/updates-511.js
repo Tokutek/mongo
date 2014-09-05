@@ -16,7 +16,7 @@ doNormalUpdates = function(replTest, mfoo, sfoo, slocal, capped ) {
         assert.eq(x["ops"][0]["op"], "u"); // verify that it does NOT have mods
     }
     else {
-        assert(x["ops"][0]["op"] == "ur" || x["ops"][0]["op"] == "up"); // verify that it has mods
+        assert(x["ops"][0]["op"] == "ur"); // verify that it has mods
     }
     // verify data on master
     x = mfoo.foo.find({_id:10}).next();

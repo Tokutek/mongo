@@ -38,10 +38,13 @@ function dbs_match(a, b) {
 
 
 // check last entry is a full update with pre-image and post-image
-verifyLastEntry = function (conn, expectedOp) {
+verifyLastEntry = function (conn, expectedOp, checkSmall) {
     lastEntry = conn.getDB("local").oplog.rs.find().sort({_id:-1}).next();
     printjson(lastEntry);
     assert(lastEntry["ops"][0]["op"] == expectedOp);
+    if (checkSmall) {
+        assert.eq(undefined, lastEntry["ops"][0]["o"]);
+    }
 }
 
 
@@ -142,7 +145,7 @@ doTest = function (signal, txnLimit, startPort, fastup) {
     // un-indexed update
     db.foo.update({_id : 0}, {$inc : {c : 1}});
     replTest.awaitReplication();
-    verifyLastEntry(conns[1], "up");
+    verifyLastEntry(conns[1], "ur", true);
 
     // check data
     assert( dbs_match(db,db2), "server data sets do not match after rollback, something is wrong");
@@ -169,7 +172,7 @@ doTest = function (signal, txnLimit, startPort, fastup) {
     // now do an indexed update
     db.bar.update({_id:0} , { $inc : {a : 100}});
     replTest.awaitReplication();
-    verifyLastEntry(conns[1], "up");
+    verifyLastEntry(conns[1], "ur", true);
     // no verify that we can read the right value out of the index
     conns[1].setSlaveOk();
     plan = conns[1].getDB("foo").bar.find({a : 100}).hint({a:1}).explain();

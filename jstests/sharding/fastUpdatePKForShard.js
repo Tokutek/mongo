@@ -3,7 +3,8 @@ assertUpdateFast = function(wdb, localdb) {
     y = localdb.oplog.rs.find().sort({$natural : -1}).next();
     printjson(y);
     assert(y["ops"][0]["f"] > 0); // means that update was not fast. 1 or 3 is fast
-    assert.eq(y["ops"][0]["op"], "up");
+    assert.eq(y["ops"][0]["op"], "ur");
+    assert.eq(undefined, y["ops"][0]["o"]);
 }
 
 assertUpdateSlow = function(wdb) {
@@ -16,7 +17,8 @@ assertUpdateSlow = function(wdb) {
 assertOplogEntrySlow = function(localdb) {
     y = localdb.oplog.rs.find().sort({$natural : -1}).next();
     assert.eq(y["ops"][0]["f"], 0); // means that update was not fast. 1 or 3 is fast
-    assert.eq(y["ops"][0]["op"], "up");
+    assert.eq(y["ops"][0]["op"], "ur");
+    assert.eq(undefined, y["ops"][0]["o"]);
 }
 
 
