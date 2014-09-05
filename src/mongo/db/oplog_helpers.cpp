@@ -644,11 +644,11 @@ namespace mongo {
             }
             Collection *cl = getCollection(ns);
             uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
-            scoped_ptr<ModSet> mods(new ModSet(updateobj, cl->indexKeys()));
-            if (!updateOneObjectWithMods(cl, pk, updateobj, query, fastUpdateFlags, false, flags, mods.get())) {
+            ModSet mods(updateobj, cl->indexKeys());
+            if (!updateOneObjectWithMods(cl, pk, updateobj, query, fastUpdateFlags, false, flags, &mods)) {
                 BSONObj oldObj;
-                bool ret = cl->findByPK(pk, oldObj);
-                if (!ret) {
+                bool found = cl->findByPK(pk, oldObj);
+                if (!found) {
                     verify(oldObj.isEmpty());
                 }
                 BSONObj newObj;
