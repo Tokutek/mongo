@@ -51,6 +51,7 @@ if (NOT APPLE)
     )
 endif ()
 link_recursive_deps(smokeTest
+  mutable_bson_test_utils
   mongocommon
   serveronly
   coreserver

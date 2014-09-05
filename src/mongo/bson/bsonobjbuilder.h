@@ -221,13 +221,15 @@ namespace mongo {
 
         /** appends a number.  if n < max(int)/2 then uses int, otherwise long long */
         BSONObjBuilder& appendIntOrLL( const StringData& fieldName , long long n ) {
-            long long x = n;
-            if ( x < 0 )
-                x = x * -1;
-            if ( x < ( (std::numeric_limits<int>::max)() / 2 ) ) // extra () to avoid max macro on windows
-                append( fieldName , (int)n );
-            else
+            // extra () to avoid max macro on windows
+            static const long long maxInt = (std::numeric_limits<int>::max)() / 2;
+            static const long long minInt = -maxInt;
+            if ( minInt < n && n < maxInt ) {
+                append( fieldName , static_cast<int>( n ) );
+            }
+            else {
                 append( fieldName , n );
+            }
             return *this;
         }
 
@@ -255,15 +257,20 @@ namespace mongo {
 
         BSONObjBuilder& appendNumber( const StringData& fieldName, long long llNumber ) {
             static const long long maxInt = ( 1LL << 30 );
+            static const long long minInt = -maxInt;
             static const long long maxDouble = ( 1LL << 40 );
+            static const long long minDouble = -maxDouble;
 
-            long long nonNegative = llNumber >= 0 ? llNumber : -llNumber;
-            if ( nonNegative < maxInt )
+            if ( minInt < llNumber && llNumber < maxInt ) {
                 append( fieldName, static_cast<int>( llNumber ) );
-            else if ( nonNegative < maxDouble )
+            }
+            else if ( minDouble < llNumber && llNumber < maxDouble ) {
                 append( fieldName, static_cast<double>( llNumber ) );
-            else
+            }
+            else {
                 append( fieldName, llNumber );
+            }
+
             return *this;
         }
 
@@ -632,6 +639,17 @@ namespace mongo {
             return temp;
         }
 
+        /** Make it look as if "done" has been called, so that our destructor is a no-op. Do
+         *  this if you know that you don't care about the contents of the builder you are
+         *  destroying.
+         *
+         *  Note that it is invalid to call any method other than the destructor after invoking
+         *  this method.
+         */
+        void abandon() {
+            _doneCalled = true;
+        }
+
         void decouple() {
             _b.decouple();    // post done() call version.  be sure jsobj frees...
         }
@@ -810,7 +828,7 @@ namespace mongo {
             return _b.subarrayStart( num() );
         }
 
-        // These should only be used where you really need interface compatability with BSONObjBuilder
+        // These should only be used where you really need interface compatibility with BSONObjBuilder
         // Currently they are only used by update.cpp and it should probably stay that way
         BufBuilder &subobjStart( const StringData& name ) {
             fill( name );
@@ -850,6 +868,8 @@ namespace mongo {
 
         int len() const { return _b.len(); }
         int arrSize() const { return _i; }
+
+        BufBuilder& bb() { return _b.bb(); }
 
     private:
         // These two are undefined privates to prevent their accidental

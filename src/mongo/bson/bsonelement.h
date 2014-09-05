@@ -65,12 +65,12 @@ namespace mongo {
     */
     class MONGO_CLIENT_API BSONElement {
     public:
-        /** These functions, which start with a capital letter, throw a UserException if the
+        /** These functions, which start with a capital letter, throw a MsgAssertionException if the
             element is not of the required type. Example:
 
             std::string foo = obj["foo"].String(); // std::exception if not a std::string type or DNE
         */
-        std::string String()        const { return chk(mongo::String).valuestr(); }
+        std::string String()        const { return chk(mongo::String).str(); }
         StringData Stringdata()     const { return chk(mongo::String).valuestringdatasafe(); }  // disambiguating this from the class makes the capitalization annoying.
         Date_t Date()               const { return chk(mongo::Date).date(); }
         double Number()             const { return chk(isNumber()).number(); }
@@ -80,8 +80,8 @@ namespace mongo {
         bool Bool()                 const { return chk(mongo::Bool).boolean(); }
         std::vector<BSONElement> Array() const; // see implementation for detailed comments
         mongo::OID OID()            const { return chk(jstOID).__oid(); }
-        void Null()                 const { chk(isNull()); } // throw UserException if not null
-        void OK()                   const { chk(ok()); }     // throw UserException if element DNE
+        void Null()                 const { chk(isNull()); } // throw MsgAssertionException if not null
+        void OK()                   const { chk(ok()); }     // throw MsgAssertionException if element DNE
 
         /** @return the embedded object associated with this field.
             Note the returned object is a reference to within the parent bson object. If that
@@ -385,9 +385,6 @@ namespace mongo {
         /** Constructs an empty element */
         BSONElement();
 
-        /** Check that data is internally consistent. */
-        void validate() const;
-
         /** True if this element may contain subobjects. */
         bool mayEncapsulate() const {
             switch ( type() ) {
@@ -463,6 +460,19 @@ namespace mongo {
                 fieldNameSize_ = 0;
                 totalSize = 1;
             }
+        }
+
+        struct FieldNameSizeTag {}; // For disambiguation with ctor taking 'maxLen' above.
+
+        /** Construct a BSONElement where you already know the length of the name. The value
+         *  passed here includes the null terminator. The data pointed to by 'd' must not
+         *  represent an EOO. You may pass -1 to indicate that you don't actually know the
+         *  size.
+         */
+        BSONElement(const char* d, int fieldNameSize, FieldNameSizeTag)
+            : data(d)
+            , fieldNameSize_(fieldNameSize) // internal size includes null terminator
+            , totalSize(-1) {
         }
 
         std::string _asCode() const;

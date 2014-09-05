@@ -24,7 +24,7 @@ function doesRouteToSec( coll, query ) {
 
 var rsOpts = { oplogSize: 10 };
 var st = new ShardingTest({ keyFile: 'jstests/libs/key1', shards: 1,
-    rs: rsOpts, other: { nopreallocj: 1 }});
+    rs: rsOpts});
 
 var mongos = st.s;
 var replTest = st.rs0;

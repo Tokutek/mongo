@@ -102,7 +102,7 @@ ShardingTest = function( testName , numShards , verboseLevel , numMongos , other
         numMongos = params.mongos || 1
         
         keyFile = params.keyFile || otherParams.keyFile || otherParams.extraOptions.keyFile
-        otherParams.nopreallocj = params.nopreallocj || otherParams.nopreallocj
+        // otherParams.nopreallocj = params.nopreallocj || otherParams.nopreallocj
         otherParams.rs = params.rs || ( params.other ? params.other.rs : undefined )
         otherParams.chunksize = params.chunksize || ( params.other ? params.other.chunksize : undefined )
 
@@ -210,8 +210,8 @@ ShardingTest = function( testName , numShards , verboseLevel , numMongos , other
             var setName = testName + "-rs" + i;
             
             rsDefaults = { useHostname : otherParams.useHostname,
-                           noJournalPrealloc : otherParams.nopreallocj, 
-                           oplogSize : 40,
+                           // noJournalPrealloc : otherParams.nopreallocj, 
+                           // oplogSize : 40,
                            pathOpts : Object.merge( pathOpts, { shard : i } )}
             
             rsDefaults = Object.merge( rsDefaults, ShardingTest.rsOptions || {} )
@@ -237,7 +237,7 @@ ShardingTest = function( testName , numShards , verboseLevel , numMongos , other
         }
         else {
             var options = { useHostname : otherParams.useHostname,
-                            noJournalPrealloc : otherParams.nopreallocj,
+                            // noJournalPrealloc : otherParams.nopreallocj,
                             port : 30000 + i,
                             pathOpts : Object.merge( pathOpts, { shard : i } ),
                             dbpath : "$testName$shard",
@@ -296,7 +296,7 @@ ShardingTest = function( testName , numShards , verboseLevel , numMongos , other
         if( otherParams.separateConfig ){
             
             var options = { useHostname : otherParams.useHostname, 
-                            noJournalPrealloc : otherParams.nopreallocj, 
+                            // noJournalPrealloc : otherParams.nopreallocj, 
                             port : 29000 + i,
                             pathOpts : Object.merge( pathOpts, { config : i } ),
                             dbpath : "$testName-config$config",

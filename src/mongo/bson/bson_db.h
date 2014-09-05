@@ -26,7 +26,7 @@
 
 #pragma once
 
-#include "mongo/util/optime.h"
+#include "mongo/bson/optime.h"
 #include "mongo/util/time_support.h"
 
 namespace mongo {

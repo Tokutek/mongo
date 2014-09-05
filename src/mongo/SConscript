@@ -51,6 +51,7 @@ tokulibs = [ltokufractaltree, ltokuportability, 'm', 'dl', 'z']
 
 env.SConscript(['base/SConscript',
                 'db/auth/SConscript',
+                'db/ops/SConscript',
                 'db/SConscript',
                 'logger/SConscript',
                 'platform/SConscript',
@@ -106,14 +107,13 @@ env.CppUnitTest( "md5_test", ["util/md5_test.cpp", "util/md5main.cpp" ],
                  LIBDEPS=["md5"] )
 
 env.StaticLibrary('bson', [
-        'bson/mutable/mutable_bson.cpp',
-        'bson/mutable/mutable_bson_builder.cpp',
-        'bson/mutable/mutable_bson_heap.cpp',
-        'bson/mutable/mutable_bson_internal.cpp',
+        'bson/mutable/document.cpp',
+        'bson/mutable/element.cpp',
         'bson/util/bson_extract.cpp',
         'util/safe_num.cpp',
         'bson/bson_validate.cpp',
         'bson/oid.cpp',
+        "bson/optime.cpp",
         'db/jsobj.cpp',
         'db/json.cpp'
         ], LIBDEPS=[
@@ -128,20 +128,18 @@ env.CppUnitTest('string_map_test', ['util/string_map_test.cpp'],
 
 env.CppUnitTest('partitioned_counter_test', ['util/concurrency/partitioned_counter_test.cpp'])
 
+env.StaticLibrary('mutable_bson_test_utils', [
+        'bson/mutable/mutable_bson_test_utils.cpp'
+        ], LIBDEPS=['bson'])
+
 env.CppUnitTest('builder_test', ['bson/util/builder_test.cpp'],
                 LIBDEPS=['bson'])
 
 env.CppUnitTest('mutable_bson_test', ['bson/mutable/mutable_bson_test.cpp'],
-                 LIBDEPS=['bson'])
-
-env.CppUnitTest('mutable_bson_heap_test', ['bson/mutable/mutable_bson_heap_test.cpp'],
-                 LIBDEPS=['bson'])
-
-env.CppUnitTest('mutable_bson_builder_test', ['bson/mutable/mutable_bson_builder_test.cpp'],
-                LIBDEPS=['bson'])
+                 LIBDEPS=['bson', 'mutable_bson_test_utils'])
 
 env.CppUnitTest('mutable_bson_algo_test', ['bson/mutable/mutable_bson_algo_test.cpp'],
-                LIBDEPS=['bson'])
+                LIBDEPS=['bson', 'mutable_bson_test_utils'])
 
 env.CppUnitTest('safe_num_test', ['util/safe_num_test.cpp'],
                 LIBDEPS=['bson'])
@@ -149,7 +147,13 @@ env.CppUnitTest('safe_num_test', ['util/safe_num_test.cpp'],
 env.CppUnitTest('bson_field_test', ['bson/bson_field_test.cpp'],
                 LIBDEPS=['bson'])
 
+env.CppUnitTest('bson_obj_test', ['bson/bson_obj_test.cpp'],
+                LIBDEPS=['bson'])
+
 env.CppUnitTest('bson_validate_test', ['bson/bson_validate_test.cpp'],
+                LIBDEPS=['bson'])
+
+env.CppUnitTest('bsonobjbuilder_test', ['bson/bsonobjbuilder_test.cpp'],
                 LIBDEPS=['bson'])
 
 env.CppUnitTest('index_set_test', ['db/index_set_test.cpp'],
@@ -412,7 +416,6 @@ env.StaticLibrary("coredb", [
                            ])
 
 coreServerFiles = [ "db/client_basic.cpp",
-                    "db/common.cpp",
                     "util/net/miniwebserver.cpp",
                     "db/stats/counters.cpp",
                     "db/stats/service_stats.cpp",
@@ -839,6 +842,7 @@ test = testEnv.Install(
                          not str(f).endswith('framework_options_test.cpp') ],
                     LIBS=env['LIBS'] + tokulibs,
                     LIBDEPS = [
+                       "mutable_bson_test_utils",
                        "mongocommon",
                        "serveronly",
                        "coreserver",

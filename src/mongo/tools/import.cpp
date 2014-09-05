@@ -124,7 +124,9 @@ class Import : public Tool {
 
             uassert(16329, str::stream() << "read error, or input line too long (max length: "
                     << BUF_SIZE << ")", !(in->rdstate() & ios_base::failbit));
-            LOG(1) << "got line:" << buf << endl;
+            if (logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(1))) {
+                toolInfoLog() << "got line:" << buf << std::endl;
+            }
         }
         uassert( 10263 ,  "unknown error reading file" ,
                  (!(in->rdstate() & ios_base::badbit)) &&
@@ -281,11 +283,11 @@ public:
             if( str::contains(s,"uplicate") ) {
                 // we don't want to return an error from the mongoimport process for
                 // dup key errors
-                log() << s << endl;
+                toolInfoLog() << s << endl;
             }
             else {
                 lastErrorFailures++;
-                log() << "error: " << s << endl;
+                toolInfoLog() << "error: " << s << endl;
                 return false;
             }
         }
@@ -303,7 +305,8 @@ public:
         if (mongoImportGlobalParams.filename.size() > 0 &&
             mongoImportGlobalParams.filename != "-") {
             if ( ! boost::filesystem::exists(mongoImportGlobalParams.filename) ) {
-                error() << "file doesn't exist: " << mongoImportGlobalParams.filename << endl;
+                toolError() << "file doesn't exist: " << mongoImportGlobalParams.filename
+                          << std::endl;
                 return -1;
             }
             in = &file;
@@ -325,16 +328,18 @@ public:
             return -1;
         }
 
-        LOG(1) << "ns: " << ns << endl;
+        if (logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(1))) {
+            toolInfoLog() << "ns: " << ns << endl;
+        }
 
         if (mongoImportGlobalParams.drop) {
-            log() << "dropping: " << ns << endl;
+            toolInfoLog() << "dropping: " << ns << endl;
             conn().dropCollection(ns.c_str());
         }
 
         _doBulkLoad = !mongoImportGlobalParams.upsert;
         if (!_doBulkLoad) {
-            warning() << "not using bulk load because either upsert/upsertFields was specified" << endl;
+            toolError() << "not using bulk load because either upsert/upsertFields was specified" << std::endl;
         }
 
         if (mongoImportGlobalParams.type == "json")
@@ -348,7 +353,8 @@ public:
             _sep = "\t";
         }
         else {
-            error() << "don't know what type [" << mongoImportGlobalParams.type << "] is" << endl;
+            toolError() << "don't know what type [" << mongoImportGlobalParams.type << "] is"
+                      << std::endl;
             return -1;
         }
 
@@ -365,7 +371,9 @@ public:
         }
 
         time_t start = time(0);
-        LOG(1) << "filesize: " << fileSize << endl;
+        if (logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(1))) {
+            toolInfoLog() << "filesize: " << fileSize << endl;
+        }
         ProgressMeter pm( fileSize );
         int num = 0;
         int lastNumChecked = num;
@@ -441,16 +449,19 @@ public:
                 num++;
             }
             catch ( std::exception& e ) {
-                log() << "exception:" << e.what() << endl;
-                log() << line << endl;
+                toolError() << "exception:" << e.what() << std::endl;
+                toolError() << line << std::endl;
                 errors++;
 
                 if (mongoImportGlobalParams.stopOnError || mongoImportGlobalParams.jsonArray)
                     break;
             }
 
-            if ( pm.hit( len + 1 ) ) {
-                log() << "\t\t\t" << num << "\t" << ( num / ( time(0) - start ) ) << "/second" << endl;
+            if (!toolGlobalParams.quiet) {
+                if (pm.hit(len + 1)) {
+                    log() << "\t\t\t" << num << "\t" << (num / (time(0) - start)) << "/second"
+                          << std::endl;
+                }
             }
         }
         if (loader) {
@@ -460,7 +471,7 @@ public:
         // this is for two reasons: to wait for all operations to reach the server and be processed, and this will wait until all data reaches the server,
         // and secondly to check if there were an error (on the last op)
         if( lastNumChecked+1 != num ) { // avoid redundant log message if already reported above
-            log() << "check " << lastNumChecked << " " << num << endl;
+            toolInfoLog() << "check " << lastNumChecked << " " << num << endl;
             checkLastError();
         }
 
@@ -468,12 +479,15 @@ public:
 
         // the message is vague on lastErrorFailures as we don't call it on every single operation. 
         // so if we have a lastErrorFailure there might be more than just what has been counted.
-        log() << (lastErrorFailures ? "tried to import " : "imported ") << ( num - headerRows ) << " objects" << endl;
+        toolInfoLog() << (lastErrorFailures ? "tried to import " : "imported ")
+                      << (num - headerRows) << " objects" << std::endl;
 
         if ( !hadErrors )
             return 0;
 
-        error() << "encountered " << (lastErrorFailures?"at least ":"") << lastErrorFailures+errors <<  " error(s)" << ( lastErrorFailures+errors == 1 ? "" : "s" ) << endl;
+        toolError() << "encountered " << (lastErrorFailures?"at least ":"")
+                  << lastErrorFailures+errors <<  " error(s)"
+                  << (lastErrorFailures+errors == 1 ? "" : "s") << std::endl;
         return -1;
     }
 };

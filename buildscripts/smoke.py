@@ -747,10 +747,10 @@ def run_tests(tests):
                         test_result["status"] = "skip"
 
                         if quiet:
-                            sys.stdout.write("skip %d %s\n" % (tests_run + 1, os.path.basename(path)))
+                            sys.stdout.write("skip %d %s\n" % (tests_run + 1, os.path.basename(test_path)))
                             sys.stdout.flush()
                         else:
-                            print "skipping " + path
+                            print "skipping " + test_path
                             return
                     else:
                         fails.append(test)

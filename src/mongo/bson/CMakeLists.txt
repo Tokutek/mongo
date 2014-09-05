@@ -1,12 +1,11 @@
 add_library(bson STATIC
-  mutable/mutable_bson
-  mutable/mutable_bson_builder
-  mutable/mutable_bson_heap
-  mutable/mutable_bson_internal
+  mutable/document
+  mutable/element
   util/bson_extract
   ../util/safe_num
   bson_validate
   oid
+  optime
   ../db/jsobj
   ../db/json
   )
@@ -21,4 +20,12 @@ target_link_libraries(bson LINK_PUBLIC
 install(FILES bsondemo/bsondemo.cpp
   DESTINATION src/mongo/bson/bsondemo
   COMPONENT tokumx_client_sources
+  )
+
+add_library(mutable_bson_test_utils STATIC
+  mutable/mutable_bson_test_utils
+  )
+add_dependencies(mutable_bson_test_utils generate_error_codes generate_action_types)
+target_link_libraries(mutable_bson_test_utils LINK_PUBLIC
+  bson
   )

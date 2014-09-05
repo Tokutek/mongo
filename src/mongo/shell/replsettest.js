@@ -247,7 +247,7 @@ ReplSetTest.prototype.getOptions = function( n , extra , putBinaryFirst ){
         }
     }
     
-    a.push( "--noprealloc", "--smallfiles" );
+    //a.push( "--noprealloc", "--smallfiles" );
 
     a.push( "--rest" );
 
@@ -262,8 +262,8 @@ ReplSetTest.prototype.getOptions = function( n , extra , putBinaryFirst ){
         a.push( keyFile )
     }        
     
-    if( jsTestOptions().noJournal ) a.push( "--nojournal" )
-    if( jsTestOptions().noJournalPrealloc ) a.push( "--nopreallocj" )
+    //if( jsTestOptions().noJournal ) a.push( "--nojournal" )
+    //if( jsTestOptions().noJournalPrealloc ) a.push( "--nopreallocj" )
     if( jsTestOptions().keyFile && !this.keyFile) {
         a.push( "--keyFile" )
         a.push( jsTestOptions().keyFile )
@@ -588,8 +588,8 @@ ReplSetTest.prototype.getDefaults = function ( n, useReplSet ){
                      oplogSize : this.oplogSize, 
                      keyFile : this.keyFile, 
                      port : this.getPort( n ),
-                     noprealloc : "",
-                     smallfiles : "",
+                     // noprealloc : "",
+                     // smallfiles : "",
                      rest : "",
                      replSet : this.useSeedList ? this.getURL() : this.name,
                      txnMemLimit : this.txnMemLimit,
@@ -601,8 +601,8 @@ ReplSetTest.prototype.getDefaults = function ( n, useReplSet ){
                      oplogSize : this.oplogSize, 
                      keyFile : this.keyFile, 
                      port : this.getPort( n ),
-                     noprealloc : "",
-                     smallfiles : "",
+                     // noprealloc : "",
+                     // smallfiles : "",
                      rest : "",
                      txnMemLimit : this.txnMemLimit,
                      dbpath : "$set-$node" }

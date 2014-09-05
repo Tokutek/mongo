@@ -276,10 +276,45 @@ namespace mongo {
         /** performs a cursory check on the object's size only. */
         bool isValid() const;
 
-        /** @return if the user is a valid user doc
-            criter: isValid() no . or $ field names
+        /** @return ok if it can be stored as a valid embedded doc.
+         *  Not valid if any field name:
+         *      - contains a "."
+         *      - starts with "$"
+         *          -- unless it is a dbref ($ref/$id/[$db]/...)
          */
-        bool okForStorage() const;
+        inline bool okForStorage() const {
+            return _okForStorage(false).isOK();
+        }
+
+        /** Same as above with the following extra restrictions
+         *  Not valid if:
+         *      - "_id" field is a
+         *          -- Regex
+         *          -- Array
+         */
+        inline bool okForStorageAsRoot() const {
+            return _okForStorage(true).isOK();
+        }
+
+        /**
+         * Validates that this can be stored as an embedded document
+         * See details above in okForStorage
+         *
+         * If not valid a user readable status message is returned.
+         */
+        inline Status storageValidEmbedded() const {
+            return _okForStorage(false);
+        }
+
+        /**
+         * Validates that this can be stored as a document (in a collection)
+         * See details above in okForStorageAsRoot
+         *
+         * If not valid a user readable status message is returned.
+         */
+        inline Status storageValid() const {
+            return _okForStorage(true);
+        }
 
         /** @return true if object is empty -- i.e.,  {} */
         bool isEmpty() const { return objsize() <= 5; }
@@ -530,6 +565,8 @@ namespace mongo {
             if ( !isValid() )
                 _assertInvalid();
         }
+
+        Status _okForStorage(bool root) const;
     };
 
     std::ostream& operator<<( std::ostream &s, const BSONObj &o );

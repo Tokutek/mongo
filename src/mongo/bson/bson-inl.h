@@ -315,12 +315,10 @@ dodouble:
 
     /* add all the fields from the object specified to this object */
     inline BSONObjBuilder& BSONObjBuilder::appendElements(BSONObj x) {
-        BSONObjIterator it(x);
-        while ( it.moreWithEOO() ) {
-            BSONElement e = it.next();
-            if ( e.eoo() ) break;
-            append(e);
-        }
+        if (!x.isEmpty())
+            _b.appendBuf(
+                x.objdata() + 4,   // skip over leading length
+                x.objsize() - 5);  // ignore leading length and trailing \0
         return *this;
     }
 
@@ -395,8 +393,8 @@ dodouble:
         if ( haveSubobj() ) {
             verify( _fieldName.rawData() );
             _builder->append( _fieldName, subobj()->done() );
+            _subobj.reset();
         }
-        _subobj.reset();
         _fieldName = nextFieldName;
     }
 
@@ -480,14 +478,14 @@ dodouble:
     }
 
     inline std::string BSONObj::toString( bool isArray, bool full ) const {
-        if ( isEmpty() ) return "{}";
+        if ( isEmpty() ) return (isArray ? "[]" : "{}");
         StringBuilder s;
         toString(s, isArray, full);
         return s.str();
     }
     inline void BSONObj::toString( StringBuilder& s,  bool isArray, bool full, int depth ) const {
         if ( isEmpty() ) {
-            s << "{}";
+            s << (isArray ? "[]" : "{}");
             return;
         }
 
@@ -502,7 +500,6 @@ dodouble:
             int offset = (int) (e.rawdata() - this->objdata());
             massert( 10330 ,  "Element extends past end of object",
                      e.size() + offset <= this->objsize() );
-            e.validate();
             bool end = ( e.size() + offset == this->objsize() );
             if ( e.eoo() ) {
                 massert( 10331 ,  "EOO Before end of object", end );
@@ -515,45 +512,6 @@ dodouble:
             e.toString( s, !isArray, full, depth );
         }
         s << ( isArray ? " ]" : " }" );
-    }
-
-    inline void BSONElement::validate() const {
-        const BSONType t = type();
-
-        switch( t ) {
-        case DBRef:
-        case Code:
-        case Symbol:
-        case mongo::String: {
-            unsigned x = (unsigned) valuestrsize();
-            bool lenOk = x > 0 && x < (unsigned) BSONObjMaxInternalSize;
-            if( lenOk && valuestr()[x-1] == 0 )
-                return;
-            StringBuilder buf;
-            buf <<  "Invalid dbref/code/string/symbol size: " << x;
-            if( lenOk )
-                buf << " strnlen:" << mongo::strnlen( valuestr() , x );
-            msgasserted( 10321 , buf.str() );
-            break;
-        }
-        case CodeWScope: {
-            int totalSize = *( int * )( value() );
-            massert( 10322 ,  "Invalid CodeWScope size", totalSize >= 8 );
-            int strSizeWNull = *( int * )( value() + 4 );
-            massert( 10323 ,  "Invalid CodeWScope string size", totalSize >= strSizeWNull + 4 + 4 );
-            massert( 10324 ,  "Invalid CodeWScope string size",
-                     strSizeWNull > 0 &&
-                     (strSizeWNull - 1) == mongo::strnlen( codeWScopeCode(), strSizeWNull ) );
-            massert( 10325 ,  "Invalid CodeWScope size", totalSize >= strSizeWNull + 4 + 4 + 4 );
-            int objSize = *( int * )( value() + 4 + 4 + strSizeWNull );
-            massert( 10326 ,  "Invalid CodeWScope object size", totalSize == 4 + 4 + strSizeWNull + objSize );
-            // Subobject validation handled elsewhere.
-        }
-        case Object:
-            // We expect Object size validation to be handled elsewhere.
-        default:
-            break;
-        }
     }
 
     inline int BSONElement::size( int maxLen ) const {
@@ -805,11 +763,16 @@ dodouble:
             s << __oid() << "')";
             break;
         case BinData:
-            s << "BinData";
-            if (full) {
+            s << "BinData(" << binDataType() << ", ";
+            {
                 int len;
-                const char* data = binDataClean(len);
-                s << '(' << binDataType() << ", " << toHex(data, len) << ')';
+                const char *data = binDataClean(len);
+                if ( !full && len > 80 ) {
+                    s << toHex(data, 70) << "...)";
+                }
+                else {
+                    s << toHex(data, len) << ")";
+                }
             }
             break;
         case Timestamp:

@@ -113,6 +113,7 @@ set(client_sources
   base/string_data.cpp
   bson/bson_validate.cpp
   bson/oid.cpp
+  bson/optime.cpp
   bson/util/bson_extract.cpp
   client/auth_helpers.cpp
   client/clientAndShell.cpp
@@ -350,12 +351,9 @@ if (BUILD_TESTING)
   foreach (test_source
       util/builder_test
       util/bson_extract_test
-      mutable/mutable_bson_test
-      mutable/mutable_bson_heap_test
-      mutable/mutable_bson_builder_test
-      mutable/mutable_bson_algo_test
       bson_field_test
       bson_validate_test
+      bsonobjbuilder_test
       )
     string(REGEX REPLACE "^.*/" "" test ${test_source})
     add_executable(${test} bson/${test_source})
@@ -363,6 +361,23 @@ if (BUILD_TESTING)
     link_recursive_deps(${test}
       COMBINED_LIBNAME bson_unittest_deps
       bson
+      unittest_main
+      unittest_crutch
+      ${TOKUMX_SSL_LIBRARIES}
+      )
+  endforeach ()
+
+  foreach (test_source
+      mutable/mutable_bson_test
+      mutable/mutable_bson_algo_test
+      )
+    string(REGEX REPLACE "^.*/" "" test ${test_source})
+    add_executable(${test} bson/${test_source})
+    add_dependencies(${test} generate_error_codes generate_action_types)
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME mutable_bson_unittest_deps
+      bson
+      mutable_bson_test_utils
       unittest_main
       unittest_crutch
       ${TOKUMX_SSL_LIBRARIES}
@@ -681,6 +696,35 @@ if (BUILD_TESTING)
   #target_link_libraries(authorization_session_test authmocks)
 
   foreach (test
+      field_checker_test
+      )
+    add_executable(${test} db/ops/${test})
+    add_dependencies(${test} generate_error_codes generate_action_types)
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME simple_ops_unittest_deps
+      unittest_main
+      update
+      unittest_crutch
+      ${TOKUMX_SSL_LIBRARIES}
+      )
+  endforeach ()
+
+  foreach (test
+      path_support_test
+      )
+    add_executable(${test} db/ops/${test})
+    add_dependencies(${test} generate_error_codes generate_action_types)
+    link_recursive_deps(${test}
+      COMBINED_LIBNAME ops_unittest_deps
+      unittest_main
+      update
+      mutable_bson_test_utils
+      unittest_crutch
+      ${TOKUMX_SSL_LIBRARIES}
+      )
+  endforeach ()
+
+  foreach (test
       log_test
       rotatable_file_writer_test
       )
@@ -955,11 +999,10 @@ if (BUILD_TESTING)
       builder_test
       bson_extract_test
       mutable_bson_test
-      mutable_bson_heap_test
-      mutable_bson_builder_test
       mutable_bson_algo_test
       bson_field_test
       bson_validate_test
+      bsonobjbuilder_test
       )
     add_mongo_test(bson ${test} ${test})
   endforeach ()
@@ -1039,6 +1082,13 @@ if (BUILD_TESTING)
       authorization_session_test
       )
     add_mongo_test(db/auth ${test} ${test})
+  endforeach ()
+
+  foreach (test
+      field_checker_test
+      path_support_test
+      )
+    add_mongo_test(db/ops ${test} ${test})
   endforeach ()
 
   foreach (test

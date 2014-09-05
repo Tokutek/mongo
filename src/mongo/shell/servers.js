@@ -169,8 +169,8 @@ MongoRunner.logicalOptions = { runId : true,
                                noReplSet : true,
                                forgetPort : true,
                                arbiter : true,
-                               noJournalPrealloc : true,
-                               noJournal : true,
+                               // noJournalPrealloc : true,
+                               // noJournal : true,
                                binVersion : true,
                                waitForConnect : true }
 
@@ -465,11 +465,11 @@ MongoRunner.mongodOptions = function( opts ){
         opts.logpath = opts.logFile;
     }
     
-    if( jsTestOptions().noJournalPrealloc || opts.noJournalPrealloc )
-        opts.nopreallocj = ""
+    // if( jsTestOptions().noJournalPrealloc || opts.noJournalPrealloc )
+    //     opts.nopreallocj = ""
             
-    if( jsTestOptions().noJournal || opts.noJournal )
-        opts.nojournal = ""
+    // if( jsTestOptions().noJournal || opts.noJournal )
+    //     opts.nojournal = ""
 
     if( jsTestOptions().keyFile && !opts.keyFile) {
         opts.keyFile = jsTestOptions().keyFile
@@ -700,14 +700,14 @@ startMongodTest = function (port, dirname, restart, extraOptions ) {
         {
             port: port,
             dbpath: "/data/db/" + dirname,
-            noprealloc: "",
-            smallfiles: "",
-            oplogSize: "40",
+            // noprealloc: "",
+            // smallfiles: "",
+            // oplogSize: "40",
             nohttpinterface: ""
         };
 
-    if( jsTestOptions().noJournal ) options["nojournal"] = ""
-    if( jsTestOptions().noJournalPrealloc ) options["nopreallocj"] = ""
+    // if( jsTestOptions().noJournal ) options["nojournal"] = ""
+    // if( jsTestOptions().noJournalPrealloc ) options["nopreallocj"] = ""
     if( jsTestOptions().auth ) options["auth"] = ""
     if( jsTestOptions().keyFile && (!extraOptions || !extraOptions['keyFile']) ) options['keyFile'] = jsTestOptions().keyFile
 

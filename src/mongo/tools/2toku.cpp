@@ -96,7 +96,7 @@ class VanillaOplogPlayer : boost::noncopyable {
 
     bool processObj(const BSONObj &obj) {
         if (obj.hasField("$err")) {
-            log() << "error getting oplog: " << obj << endl;
+            toolError() << "error getting oplog: " << obj << std::endl;
             return false;
         }
 
@@ -106,18 +106,18 @@ class VanillaOplogPlayer : boost::noncopyable {
 
         BSONElement &tsElt = fields[0];
         if (!tsElt.ok()) {
-            log() << "oplog format error: " << obj << " missing 'ts' field." << endl;
+            toolError() << "oplog format error: " << obj << " missing 'ts' field." << std::endl;
             return false;
         }
         if (tsElt.type() != Date && tsElt.type() != Timestamp) {
-            log() << "oplog format error: " << obj << " wrong 'ts' field type." << endl;
+            toolError() << "oplog format error: " << obj << " wrong 'ts' field type." << std::endl;
             return false;
         }
         _thisTime = OpTime(tsElt.date());
 
         BSONElement &opElt = fields[1];
         if (!opElt.ok()) {
-            log() << "oplog format error: " << obj << " missing 'op' field." << endl;
+            toolError() << "oplog format error: " << obj << " missing 'op' field." << std::endl;
             return false;
         }
         StringData op = opElt.Stringdata();
@@ -141,7 +141,7 @@ class VanillaOplogPlayer : boost::noncopyable {
             return true;
         }
         if (op != "c" && op != "i" && op != "u" && op != "d") {
-            log() << "oplog format error: " << obj << " has an invalid 'op' field of '" << op << "'." << endl;
+            toolError() << "oplog format error: " << obj << " has an invalid 'op' field of '" << op << "'." << std::endl;
             return false;
         }
 
@@ -151,13 +151,13 @@ class VanillaOplogPlayer : boost::noncopyable {
 
         BSONElement &nsElt = fields[2];
         if (!nsElt.ok()) {
-            log() << "oplog format error: " << obj << " missing 'ns' field." << endl;
+            toolError() << "oplog format error: " << obj << " missing 'ns' field." << std::endl;
             return false;
         }
         StringData ns = nsElt.Stringdata();
         size_t i = ns.find('.');
         if (i == string::npos) {
-            log() << "oplog format error: invalid namespace '" << ns << "' in op " << obj << "." << endl;
+            toolError() << "oplog format error: invalid namespace '" << ns << "' in op " << obj << "." << std::endl;
             return false;
         }
         StringData dbname = ns.substr(0, i);
@@ -165,14 +165,14 @@ class VanillaOplogPlayer : boost::noncopyable {
 
         BSONElement &oElt = fields[3];
         if (!oElt.ok()) {
-            log() << "oplog format error: " << obj << " missing 'o' field." << endl;
+            toolError() << "oplog format error: " << obj << " missing 'o' field." << std::endl;
             return false;
         }
         BSONObj o = obj["o"].Obj();
 
         if (op == "c") {
             if (collname != "$cmd") {
-                log() << "oplog format error: invalid namespace '" << ns << "' for command in op " << obj << "." << endl;
+                toolError() << "oplog format error: invalid namespace '" << ns << "' for command in op " << obj << "." << std::endl;
                 return false;
             }
             BSONObj info;
@@ -185,10 +185,12 @@ class VanillaOplogPlayer : boost::noncopyable {
                 if (((fieldName == "drop" || isDropIndexes) && errmsg == "ns not found") ||
                     (isDropIndexes && (errmsg == "index not found" || errmsg.find("can't find index with key:") == 0))) {
                     // This is actually ok.  We don't mind dropping something that's not there.
-                    LOG(1) << "Tried to replay " << o << ", got " << info << ", ignoring." << endl;
+                    if (logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(1))) {
+                        toolInfoLog() << "Tried to replay " << o << ", got " << info << ", ignoring." << std::endl;
+                    }
                 }
                 else {
-                    log() << "replay of command " << o << " failed: " << info << endl;
+                    toolError() << "replay of command " << o << " failed: " << info << std::endl;
                     return false;
                 }
             }
@@ -224,15 +226,15 @@ class VanillaOplogPlayer : boost::noncopyable {
                                 builder.append(e);
                             }
                         }
-                        warning() << "Detected an ensureIndex with dropDups: true in " << o << "." << endl;
-                        warning() << "This option is not supported in TokuMX, because it deletes arbitrary data." << endl;
-                        warning() << "If it were replayed, it could result in a completely different data set than the source database." << endl;
-                        warning() << "We will attempt to replay it without dropDups, but if that fails, you must restart your migration process." << endl;
+                        toolError() << "Detected an ensureIndex with dropDups: true in " << o << "." << std::endl;
+                        toolError() << "This option is not supported in TokuMX, because it deletes arbitrary data." << std::endl;
+                        toolError() << "If it were replayed, it could result in a completely different data set than the source database." << std::endl;
+                        toolError() << "We will attempt to replay it without dropDups, but if that fails, you must restart your migration process." << std::endl;
                         _conn.insert(nsstr, o);
                         string err = _conn.getLastError(dbname.toString(), false, false);
                         if (!err.empty()) {
-                            log() << "replay of operation " << obj << " failed: " << err << endl;
-                            warning() << "You cannot continue processing this replication stream.  You need to restart the migration process." << endl;
+                            toolError() << "replay of operation " << obj << " failed: " << err << std::endl;
+                            toolError() << "You cannot continue processing this replication stream.  You need to restart the migration process." << std::endl;
                             _running = false;
                             _logAtExit = false;
                             return true;
@@ -247,7 +249,7 @@ class VanillaOplogPlayer : boost::noncopyable {
             else if (op == "u") {
                 BSONElement o2Elt = obj["o2"];
                 if (!o2Elt.ok()) {
-                    log() << "oplog format error: " << obj << " missing 'o2' field." << endl;
+                    toolError() << "oplog format error: " << obj << " missing 'o2' field." << std::endl;
                     return false;
                 }
                 BSONElement &bElt = fields[4];
@@ -262,7 +264,7 @@ class VanillaOplogPlayer : boost::noncopyable {
             }
             string err = _conn.getLastError(dbname.toString(), false, false);
             if (!err.empty()) {
-                log() << "replay of operation " << obj << " failed: " << err << endl;
+                toolError() << "replay of operation " << obj << " failed: " << err << std::endl;
                 return false;
             }
         }
@@ -296,26 +298,26 @@ public:
     void logPosition() const {
         if (_player) {
             if (_player->thisTime() != OpTime()) {
-                log() << "Exiting while processing operation with OpTime " << _player->thisTimeStr() << endl;
+                toolError() << "Exiting while processing operation with OpTime " << _player->thisTimeStr() << std::endl;
             }
             report();
             OpTime t = _player->maxOpTimeSynced();
             string tsString = mongoutils::str::stream() << t.getSecs() << ":" << t.getInc();
-            log() << "Use --ts=" << tsString << " to resume." << endl;
+            toolInfoLog() << "Use --ts=" << tsString << " to resume." << std::endl;
             try {
                 std::ofstream tsFile;
                 tsFile.exceptions(std::ifstream::badbit | std::ifstream::failbit);
                 tsFile.open(_tsFilename, std::ofstream::trunc);
                 tsFile << tsString;
                 tsFile.close();
-                log() << "Saved timestamp to file "
-                      << (boost::filesystem::current_path() / _tsFilename).string() << "." << endl;
-                log() << "I'll automatically use this value next time if you run from this directory "
-                      << "and don't pass --ts." << endl;
+                toolInfoLog() << "Saved timestamp to file "
+                              << (boost::filesystem::current_path() / _tsFilename).string() << "." << std::endl;
+                toolInfoLog() << "I'll automatically use this value next time if you run from this directory "
+                              << "and don't pass --ts." << std::endl;
             }
             catch (std::exception &e) {
-                warning() << "Error saving timestamp to file " << _tsFilename << ": " << e.what() << endl;
-                warning() << "Make sure you save the timestamp somewhere, because I couldn't!" << endl;
+                toolError() << "Error saving timestamp to file " << _tsFilename << ": " << e.what() << std::endl;
+                toolError() << "Make sure you save the timestamp somewhere, because I couldn't!" << std::endl;
             }
         }
     }
@@ -329,13 +331,14 @@ public:
 
     void report() const {
         const OpTime &maxOpTimeSynced = _player->maxOpTimeSynced();
-        LOG(0) << "synced up to " << fmtOpTime(maxOpTimeSynced);
+        LogstreamBuilder l = toolInfoLog();
+        l << "synced up to " << fmtOpTime(maxOpTimeSynced);
         Query lastQuery;
         lastQuery.sort("$natural", -1);
         BSONObj lastFields = BSON("ts" << 1);
         ScopedDbConnection conn(mongo2TokuGlobalParams.from);
         if (!doAuth(conn)) {
-            LOG(0) << endl;
+            l << std::endl;
             conn.done();
             return;
         }
@@ -343,23 +346,23 @@ public:
         conn.done();
         BSONElement tsElt = lastObj["ts"];
         if (!tsElt.ok()) {
-            warning() << "couldn't find last oplog entry on remote host" << endl;
-            LOG(0) << endl;
+            l << std::endl;
+            toolError() << "couldn't find last oplog entry on remote host" << std::endl;
             return;
         }
         OpTime lastOpTime = OpTime(tsElt.date());
-        LOG(0) << ", source has up to " << fmtOpTime(lastOpTime);
+        l << ", source has up to " << fmtOpTime(lastOpTime);
         if (maxOpTimeSynced == lastOpTime) {
-            LOG(0) << ", fully synced." << endl;
+            l << ", fully synced." << std::endl;
         }
         else {
             int diff = lastOpTime.getSecs() - maxOpTimeSynced.getSecs();
             if (diff > 0) {
-                LOG(0) << ", " << (lastOpTime.getSecs() - maxOpTimeSynced.getSecs())
-                       << " seconds behind source." << endl;
+                l << ", " << (lastOpTime.getSecs() - maxOpTimeSynced.getSecs())
+                  << " seconds behind source." << std::endl;
             }
             else {
-                LOG(0) << ", less than 1 second behind source." << endl;
+                l << ", less than 1 second behind source." << std::endl;
             }
         }
         _reportingTimer.reset();
@@ -374,8 +377,8 @@ public:
                                 "mechanism" << mongo2TokuGlobalParams.rauthenticationMechanism));
             } catch (DBException &e) {
                 if (e.getCode() == ErrorCodes::AuthenticationFailed) {
-                    error() << "error authenticating to " << mongo2TokuGlobalParams.rauthenticationDatabase << " on source: "
-                            << e.what() << endl;
+                    toolError() << "error authenticating to " << mongo2TokuGlobalParams.rauthenticationDatabase << " on source: "
+                                << e.what() << std::endl;
                     return false;
                 }
                 throw;
@@ -392,7 +395,7 @@ public:
             Client::initThread( "mongo2toku" );
         }
 
-        LOG(1) << "going to connect" << endl;
+        toolInfoLog() << "going to connect" << std::endl;
 
         ScopedDbConnection conn(mongo2TokuGlobalParams.from);
 
@@ -401,7 +404,7 @@ public:
             return -1;
         }
 
-        LOG(1) << "connected" << endl;
+        toolInfoLog() << "connected" << std::endl;
 
         {
             string tsString = mongo2TokuGlobalParams.ts;
@@ -413,19 +416,19 @@ public:
                     tsFile >> tsString;
                     tsFile.close();
                 } catch (std::exception &e) {
-                    warning() << "Couldn't read OpTime from file " << _tsFilename << ": " << e.what() << endl;
+                    toolError() << "Couldn't read OpTime from file " << _tsFilename << ": " << e.what() << std::endl;
                 }
             }
             if (tsString.empty()) {
-                warning() << "No starting OpTime provided. "
-                          << "Please find the right starting point and run again with --ts." << endl;
+                toolError() << "No starting OpTime provided. "
+                            << "Please find the right starting point and run again with --ts." << std::endl;
                 return -1;
             }
             unsigned secs, i;
             OpTime maxOpTimeSynced;
             int r = sscanf(tsString.c_str(), "%u:%u", &secs, &i);
             if (r != 2) {
-                warning() << "need to specify --ts as <secs>:<inc>" << endl;
+                toolError() << "need to specify --ts as <secs>:<inc>" << std::endl;
                 return -1;
             }
             maxOpTimeSynced = OpTime(secs, i);
@@ -442,16 +445,16 @@ public:
                     try {
                         shouldContinue = attemptQuery(conn, tailingQueryOptions | QueryOption_SlaveOk);
                     } catch (CantFindTimestamp &e) {
-                        log() << "Couldn't find OpTime " << _player->maxOpTimeSyncedStr()
-                              << " with slaveOk = true (couldn't find anything before " << fmtOpTime(e.firstTime())
-                              << "), retrying with slaveOk = false..." << endl;
+                        toolInfoLog() << "Couldn't find OpTime " << _player->maxOpTimeSyncedStr()
+                                      << " with slaveOk = true (couldn't find anything before " << fmtOpTime(e.firstTime())
+                                      << "), retrying with slaveOk = false..." << std::endl;
                         shouldContinue = attemptQuery(conn, tailingQueryOptions);
                     }
                 } catch (CantFindTimestamp &e) {
-                    warning() << "Tried to start at OpTime " << _player->maxOpTimeSyncedStr()
-                              << ", but didn't find anything before " << fmtOpTime(e.firstTime()) << "!" << endl;
-                    warning() << "This may mean your oplog has been truncated past the point you are trying to resume from." << endl;
-                    warning() << "Either retry with a different value of --ts, or restart your migration procedure." << endl;
+                    toolError() << "Tried to start at OpTime " << _player->maxOpTimeSyncedStr()
+                                << ", but didn't find anything before " << fmtOpTime(e.firstTime()) << "!" << std::endl;
+                    toolError() << "This may mean your oplog has been truncated past the point you are trying to resume from." << std::endl;
+                    toolError() << "Either retry with a different value of --ts, or restart your migration procedure." << std::endl;
                     shouldContinue = false;
                 }
 
@@ -462,13 +465,13 @@ public:
             }
         }
         catch (DBException &e) {
-            warning() << "Caught exception " << e.what() << " while processing.  Exiting..." << endl;
+            toolError() << "Caught exception " << e.what() << " while processing.  Exiting..." << std::endl;
             logPosition();
             conn.done();
             return -1;
         }
         catch (...) {
-            warning() << "Caught unknown exception while processing.  Exiting..." << endl;
+            toolError() << "Caught unknown exception while processing.  Exiting..." << std::endl;
             logPosition();
             conn.done();
             return -1;
@@ -493,9 +496,9 @@ public:
             0, 0, &res, queryOptions));
 
         if (!cursor->more()) {
-            log() << "oplog query returned no results, sleeping 10 seconds..." << endl;
+            toolInfoLog() << "oplog query returned no results, sleeping 10 seconds..." << std::endl;
             sleepsecs(10);
-            log() << "retrying" << endl;
+            toolInfoLog() << "retrying" << std::endl;
             return true;
         }
 
@@ -503,7 +506,7 @@ public:
         {
             BSONElement tsElt = firstObj["ts"];
             if (!tsElt.ok()) {
-                log() << "oplog format error: " << firstObj << " missing 'ts' field." << endl;
+                toolInfoLog() << "oplog format error: " << firstObj << " missing 'ts' field." << std::endl;
                 logPosition();
                 return false;
             }
@@ -518,7 +521,9 @@ public:
         while (running && cursor->more()) {
             while (running && cursor->moreInCurrentBatch()) {
                 BSONObj obj = cursor->next();
-                LOG(2) << obj << endl;
+                if (logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(2))) {
+                    toolInfoLog() << obj << std::endl;
+                }
 
                 bool ok = _player->processObj(obj);
                 if (!ok) {
@@ -547,8 +552,8 @@ namespace proc_mgmt {
 
     static void fatal_handler(int sig) {
         signal(sig, SIG_DFL);
-        log() << "Received signal " << sig << "." << endl;
-        warning() << "Dying immediately on fatal signal." << endl;
+        toolInfoLog() << "Received signal " << sig << "." << std::endl;
+        toolError() << "Dying immediately on fatal signal." << std::endl;
         if (theTool != NULL) {
             theTool->logPosition();
         }
@@ -556,8 +561,8 @@ namespace proc_mgmt {
     }
     static void exit_handler(int sig) {
         signal(sig, SIG_DFL);
-        log() << "Received signal " << sig << "." << endl;
-        log() << "Will exit soon." << endl;
+        toolInfoLog() << "Received signal " << sig << "." << std::endl;
+        toolInfoLog() << "Will exit soon." << std::endl;
         OplogTool::running = false;
     }
 

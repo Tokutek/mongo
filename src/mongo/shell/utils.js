@@ -343,8 +343,8 @@ jsTestOptions = function(){
     if( TestData ) {
         return Object.merge(_jsTestOptions,
                             { setParameters : TestData.setParameters,
-                              noJournal : TestData.noJournal,
-                              noJournalPrealloc : TestData.noJournalPrealloc,
+                              // noJournal : TestData.noJournal,
+                              // noJournalPrealloc : TestData.noJournalPrealloc,
                               auth : TestData.auth,
                               keyFile : TestData.keyFile,
                               authUser : "__system",

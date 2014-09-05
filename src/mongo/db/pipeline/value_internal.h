@@ -22,7 +22,7 @@
 #include "bson/bsonmisc.h"
 #include "bson/oid.h"
 #include "util/intrusive_counter.h"
-#include "util/optime.h"
+#include "mongo/bson/optime.h"
 
 
 namespace mongo {

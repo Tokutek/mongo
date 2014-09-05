@@ -139,7 +139,6 @@ var start = function(useHostName) {
         config: numConfigs, 
         separateConfig: true,
         other : { 
-            nopreallocj: 1, 
             useHostName: useHostName 
         } 
     });

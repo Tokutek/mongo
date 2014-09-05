@@ -8,8 +8,7 @@ var dbpath = "/data/db/" + baseName;
 resetDbpath(dbpath);
 
 // Password is correct
-md = startMongod("--nopreallocj",
-                 "--port", port, 
+md = startMongod("--port", port, 
                  "--dbpath", dbpath, 
                  "--sslMode","requireSSL",
                  "--sslPEMKeyFile", "jstests/libs/password_protected.pem",

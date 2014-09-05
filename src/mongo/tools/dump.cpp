@@ -103,7 +103,7 @@ public:
     }
 
     void writeCollectionFile( const string coll , boost::filesystem::path outputFile ) {
-        log() << "\t" << coll << " to " << outputFile.string() << endl;
+        toolInfoLog() << "\t" << coll << " to " << outputFile.string() << std::endl;
 
         FilePtr f (fopen(outputFile.string().c_str(), "wb"));
         uassert(10262, errnoWithPrefix("couldn't open file"), f);
@@ -114,12 +114,12 @@ public:
 
         doCollection(coll, f, &m);
 
-        log() << "\t\t " << m.done() << " objects" << endl;
+        toolInfoLog() << "\t\t " << m.done() << " objects" << std::endl;
     }
 
     void writeMetadataFile( const string coll, boost::filesystem::path outputFile, 
                             map<string, BSONObj> options, multimap<string, BSONObj> indexes, map<string, BSONObj> partitionInfo) {
-        log() << "\tMetadata for " << coll << " to " << outputFile.string() << endl;
+        toolInfoLog() << "\tMetadata for " << coll << " to " << outputFile.string() << std::endl;
 
         bool hasOptions = options.count(coll) > 0;
         bool hasIndexes = indexes.count(coll) > 0;
@@ -160,7 +160,7 @@ public:
     }
 
     void go( const string db , const boost::filesystem::path outdir ) {
-        log() << "DATABASE: " << db << "\t to \t" << outdir.string() << endl;
+        toolInfoLog() << "DATABASE: " << db << "\t to \t" << outdir.string() << std::endl;
 
         boost::filesystem::create_directories( outdir );
 
@@ -197,7 +197,9 @@ public:
 
             // skip namespaces with $ in them only if we don't specify a collection to dump
             if (toolGlobalParams.coll.empty() && name.find(".$") != string::npos) {
-                LOG(1) << "\tskipping collection: " << name << endl;
+                if (logger::globalLogDomain()->shouldLog(logger::LogSeverity::Debug(1))) {
+                    toolInfoLog() << "\tskipping collection: " << name << std::endl;
+                }
                 continue;
             }
 
@@ -213,10 +215,11 @@ public:
             // raise error before writing collection with non-permitted filename chars in the name
             size_t hasBadChars = name.find_first_of("/\0");
             if (hasBadChars != string::npos){
-              error() << "Cannot dump "  << name << ". Collection has '/' or null in the collection name." << endl;
-              continue;
+                toolError() << "Cannot dump "  << name
+                          << ". Collection has '/' or null in the collection name." << std::endl;
+                continue;
             }
-            
+
             if (nsToCollectionSubstring(name) == "system.indexes") {
               // Create system.indexes.bson for compatibility with pre 2.2 mongorestore
               writeCollectionFile( name.c_str() , outdir / ( filename + ".bson" ) );
@@ -238,16 +241,16 @@ public:
 
     int repair() {
         if (toolGlobalParams.dbpath.empty()) {
-            log() << "repair mode only works with --dbpath" << endl;
+            toolInfoLog() << "repair mode only works with --dbpath" << std::endl;
             return -1;
         }
 
         if (toolGlobalParams.db.empty()) {
-            log() << "repair mode only works on 1 db at a time right now" << endl;
+            toolInfoLog() << "repair mode only works on 1 db at a time right now" << std::endl;
             return -1;
         }
 
-        log() << "going to try and recover data from: " << toolGlobalParams.db << endl;
+        toolInfoLog() << "going to try and recover data from: " << toolGlobalParams.db << std::endl;
 
         return _repair(toolGlobalParams.db);
     }    
@@ -258,7 +261,7 @@ public:
 
     int run() {
         if (mongoDumpGlobalParams.repair) {
-            warning() << "repair is a work in progress" << endl;
+            toolError() << "repair is a work in progress" << std::endl;
             return repair();
         }
 
@@ -281,14 +284,16 @@ public:
             else {
                 opLogName = "local.oplog.$main";
                 if ( ! isMaster["ismaster"].trueValue() ) {
-                    log() << "oplog mode is only supported on master or replica set member" << endl;
+                    toolError() << "oplog mode is only supported on master or replica set member"
+                              << std::endl;
                     return -1;
                 }
             }
 
             BSONObj op = conn(true).findOne(opLogName, Query().sort("$natural", -1), 0, QueryOption_SlaveOk);
             if (op.isEmpty()) {
-                log() << "No operations in oplog. Please ensure you are connecting to a master." << endl;
+                toolError() << "No operations in oplog. Please ensure you are connecting to a "
+                            << "master." << std::endl;
                 return -1;
             }
 
@@ -302,7 +307,8 @@ public:
                 return 0;
             }
             else {
-                log() << "You must specify database and collection to print to stdout" << endl;
+                toolError() << "You must specify database and collection to print to stdout"
+                          << std::endl;
                 return -1;
             }
         }
@@ -313,15 +319,16 @@ public:
 
         if (toolGlobalParams.db == "") {
             if (toolGlobalParams.coll != "") {
-                error() << "--db must be specified with --collection" << endl;
+                toolError() << "--db must be specified with --collection" << std::endl;
                 return -1;
             }
 
-            log() << "all dbs" << endl;
+            toolInfoLog() << "all dbs" << std::endl;
 
             BSONObj res = conn( true ).findOne( "admin.$cmd" , BSON( "listDatabases" << 1 ) );
             if ( ! res["databases"].isABSONObj() ) {
-                error() << "output of listDatabases isn't what we expected, no 'databases' field:\n" << res << endl;
+                toolError() << "output of listDatabases isn't what we expected, no 'databases' "
+                          << "field:\n" << res << std::endl;
                 return -2;
             }
             BSONObj dbs = res["databases"].embeddedObjectUserCheck();
@@ -331,7 +338,8 @@ public:
                 string key = *i;
                 
                 if ( ! dbs[key].isABSONObj() ) {
-                    error() << "database field not an object key: " << key << " value: " << dbs[key] << endl;
+                    toolError() << "database field not an object key: " << key << " value: "
+                              << dbs[key] << std::endl;
                     return -3;
                 }
 

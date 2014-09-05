@@ -1,5 +1,3 @@
-// optime.h - OpTime class
-
 /*    Copyright 2009 10gen Inc.
  *    Copyright (C) 2013 Tokutek Inc.
  *
@@ -19,6 +17,12 @@
 #pragma once
 
 #include <boost/thread/condition.hpp>
+#include <iostream>
+#include <sstream>
+
+#include "mongo/util/assert_util.h"
+#include "mongo/util/concurrency/mutex.h"
+#include "mongo/util/time_support.h"
 
 #include "mongo/util/assert_util.h"
 #include "mongo/util/concurrency/mutex.h"
@@ -93,6 +97,9 @@ namespace mongo {
 
         static OpTime getLast(const mongo::mutex::scoped_lock&);
 
+        // Maximum OpTime value.
+        static OpTime max();
+
         // Waits for global OpTime to be different from *this
         void waitForDifferent(unsigned millis);
 
@@ -114,19 +121,19 @@ namespace mongo {
         string toStringLong() const {
             std::stringstream ss;
             ss << time_t_to_String_short(secs) << ' ';
-            ss << hex << secs << ':' << i;
+            ss << std::hex << secs << ':' << i;
             return ss.str();
         }
 
         string toStringPretty() const {
-            stringstream ss;
-            ss << time_t_to_String_short(secs) << ':' << hex << i;
+            std::stringstream ss;
+            ss << time_t_to_String_short(secs) << ':' << std::hex << i;
             return ss.str();
         }
 
         string toString() const {
-            stringstream ss;
-            ss << hex << secs << ':' << i;
+            std::stringstream ss;
+            ss << std::hex << secs << ':' << i;
             return ss.str();
         }
 

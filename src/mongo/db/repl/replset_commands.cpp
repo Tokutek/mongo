@@ -29,6 +29,7 @@
 #include "mongo/db/repl/replication_server_status.h"  // replSettings
 #include "mongo/db/repl/rs.h"
 #include "mongo/db/repl/rs_config.h"
+#include "mongo/db/repl/rs_optime.h"
 #include "mongo/db/repl_block.h"
 #include "mongo/util/mongoutils/html.h"
 

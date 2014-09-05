@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "mongo/bson/optime.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/collection.h"
 #include "mongo/db/oplog.h"
