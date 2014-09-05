@@ -405,9 +405,9 @@ namespace mongo {
     TxnOplog::~TxnOplog() {
     }
 
-    void TxnOplog::appendOp(BSONObj o) {
+    void TxnOplog::appendOp(const BSONObj& o) {
         _seq++;
-        _m.push_back(o);
+        _m.push_back(o.getOwned());
         _mem_size += o.objsize();
         if (_mem_size > _mem_limit) {
             spill();

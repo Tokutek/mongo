@@ -139,7 +139,7 @@ namespace mongo {
         ~TxnOplog();
         
         // Append an op to the txn's oplog list
-        void appendOp(BSONObj o);
+        void appendOp(const BSONObj& o);
         
         // Returns true if the TxnOplog does not contain any ops
         bool empty() const;

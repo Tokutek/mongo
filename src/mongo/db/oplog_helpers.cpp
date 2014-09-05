@@ -89,6 +89,16 @@ namespace mongo {
         static inline bool isLocalNs(const char *ns) {
             return (strncmp(ns, "local.", 6) == 0);
         }
+
+        // small helper function for the logging of many of the write ops below
+        static void logWriteOp(const BSONObj& logObj, bool logForSharding) {
+            if (logTxnOpsForReplication()) {
+                cc().txn().logOpForReplication(logObj);
+            }
+            if (logForSharding) {
+                cc().txn().logOpForSharding(logObj);
+            }
+        }
         
         void logComment(const BSONObj &comment) {
             if (logTxnOpsForReplication()) {
@@ -111,13 +121,8 @@ namespace mongo {
                 appendOpType(OP_STR_INSERT, &b);
                 appendNsStr(ns, &b);
                 b.append(KEY_STR_ROW, row);
-                BSONObj logObj = b.obj();
-                if (logTxnOpsForReplication()) {
-                    cc().txn().logOpForReplication(logObj);
-                }
-                if (logForSharding) {
-                    cc().txn().logOpForSharding(logObj);
-                }
+                BSONObj logObj = b.done();
+                logWriteOp(logObj, logForSharding);
             }
         }
 
@@ -132,7 +137,8 @@ namespace mongo {
                 appendNsStr(ns, &b);
                 b.append(KEY_STR_PK, pk);
                 b.append(KEY_STR_ROW, row);
-                cc().txn().logOpForReplication(b.obj());
+                BSONObj logObj = b.done();
+                logWriteOp(logObj, false);
             }
         }
 
@@ -152,16 +158,10 @@ namespace mongo {
                 appendMigrate(fromMigrate, &b);
                 b.append(KEY_STR_PK, pk);
                 b.append(KEY_STR_OLD_ROW, oldObj);
-                // otherwise we just log the full old row and full new row
                 verify(!newObj.isEmpty());
                 b.append(KEY_STR_NEW_ROW, newObj);
-                BSONObj logObj = b.obj();
-                if (logTxnOpsForReplication()) {
-                    cc().txn().logOpForReplication(logObj);
-                }
-                if (logForSharding) {
-                    cc().txn().logOpForSharding(logObj);
-                }
+                BSONObj logObj = b.done();
+                logWriteOp(logObj, logForSharding);
             }
         }
 
@@ -186,13 +186,8 @@ namespace mongo {
                 b.append(KEY_STR_PK, pk);
                 b.append(KEY_STR_OLD_ROW, oldObj);
                 b.append(KEY_STR_MODS, updateobj);
-                BSONObj logObj = b.obj();
-                if (logTxnOpsForReplication()) {
-                    cc().txn().logOpForReplication(logObj);
-                }
-                if (logForSharding) {
-                    cc().txn().logOpForSharding(logObj);
-                }
+                BSONObj logObj = b.done();
+                logWriteOp(logObj, logForSharding);
             }
         }
 
@@ -220,13 +215,8 @@ namespace mongo {
                 b.append(KEY_STR_MODS, updateobj);
                 b.append(KEY_STR_QUERY, query);
                 b.append(KEY_STR_FLAGS, fastUpdateFlags);
-                BSONObj logObj = b.obj();
-                if (logTxnOpsForReplication()) {
-                    cc().txn().logOpForReplication(logObj);
-                }
-                if (logForSharding) {
-                    cc().txn().logOpForSharding(logObj);
-                }
+                BSONObj logObj = b.done();
+                logWriteOp(logObj, logForSharding);
             }
         }
 
@@ -242,13 +232,8 @@ namespace mongo {
                 appendNsStr(ns, &b);
                 appendMigrate(fromMigrate, &b);
                 b.append(KEY_STR_ROW, row);
-                BSONObj logObj = b.obj();
-                if (logTxnOpsForReplication()) {
-                    cc().txn().logOpForReplication(logObj);
-                }
-                if (logForSharding) {
-                    cc().txn().logOpForSharding(logObj);
-                }
+                BSONObj logObj = b.done();
+                logWriteOp(logObj, logForSharding);
             }
         }
 
@@ -263,7 +248,8 @@ namespace mongo {
                 appendNsStr(ns, &b);
                 b.append(KEY_STR_PK, pk);
                 b.append(KEY_STR_ROW, row);
-                cc().txn().logOpForReplication(b.obj());
+                BSONObj logObj = b.done();
+                logWriteOp(logObj, false);
             }
         }
 
