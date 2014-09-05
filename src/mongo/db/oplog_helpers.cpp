@@ -15,6 +15,7 @@
 */
 
 #include "mongo/pch.h"
+#include "mongo/base/counter.h"
 #include "mongo/db/collection.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/txn_context.h"
@@ -29,6 +30,7 @@
 #include "mongo/db/relock.h"
 #include "mongo/db/ops/count.h"
 #include "mongo/db/query_optimizer.h"
+#include "mongo/db/commands/server_status.h"
 
 // BSON fields for oplog entries
 static const char *KEY_STR_OP_NAME = "op";
@@ -55,6 +57,8 @@ static const char OP_STR_COMMENT[] = "n"; // a no-op
 static const char OP_STR_COMMAND[] = "c"; // command
 
 namespace mongo {
+    static Counter64 slowUpdatesByPKPerformed;
+    static ServerStatusMetricField<Counter64> fastupdatesPerformedPKDisplay("fastupdates.performed.slowOnSecondary", &slowUpdatesByPKPerformed);
 
     namespace OplogHelpers {
         bool shouldLogOpForSharding(const char *opstr) {
@@ -652,6 +656,7 @@ namespace mongo {
                 bool applied = storageUpdateCallback.applyMods(oldObj, updateobj, query, fastUpdateFlags, newObj);
                 if (applied) {
                     updateOneObject(cl, pk, oldObj, newObj, false, flags);
+                    slowUpdatesByPKPerformed.increment();
                 }
             }
         }
