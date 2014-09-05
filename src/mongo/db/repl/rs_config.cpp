@@ -671,7 +671,7 @@ namespace mongo {
             
             if (settings.hasField("electionBackoffMillis")) {
                 int backoff = settings["electionBackoffMillis"].numberInt();
-                uassert(16438, "Time for election backoff in milliseconds must be non-negative", backoff >= 0);
+                uassert(17364, "Time for election backoff in milliseconds must be non-negative", backoff >= 0);
                 _electionBackoffMillis = backoff;
             }
 
