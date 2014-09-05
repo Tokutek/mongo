@@ -625,19 +625,19 @@ namespace mongo {
 
     
     enum toku_compression_method PartitionedIndexDetails::getCompressionMethod() const {
-        return _pc->getPartition(0)->idx(_idxNum).getCompressionMethod();
+        return getIndexDetailsOfPartition(0).getCompressionMethod();
     }
 
     uint32_t PartitionedIndexDetails::getFanout() const {
-        return _pc->getPartition(0)->idx(_idxNum).getFanout();
+        return getIndexDetailsOfPartition(0).getFanout();
     }
 
     uint32_t PartitionedIndexDetails::getPageSize() const {
-        return _pc->getPartition(0)->idx(_idxNum).getPageSize();
+        return getIndexDetailsOfPartition(0).getPageSize();
     }
 
     uint32_t PartitionedIndexDetails::getReadPageSize() const {
-        return _pc->getPartition(0)->idx(_idxNum).getReadPageSize();
+        return getIndexDetailsOfPartition(0).getReadPageSize();
     }
 
     void PartitionedIndexDetails::getStat64(DB_BTREE_STAT64* stats) const {
@@ -647,7 +647,7 @@ namespace mongo {
         ret.bt_verify_time_sec = (uint64_t)-1;
         for (uint64_t i = 0; i < _pc->numPartitions(); i++) {
             DB_BTREE_STAT64 curr;
-            _pc->getPartition(i)->idx(_idxNum).getStat64(&curr);
+            getIndexDetailsOfPartition(i).getStat64(&curr);
             ret.bt_nkeys += curr.bt_nkeys;
             ret.bt_ndata += curr.bt_ndata;
             ret.bt_dsize += curr.bt_dsize;
@@ -670,6 +670,12 @@ namespace mongo {
     // This is a workaround to get going for now
     shared_ptr<storage::Cursor> PartitionedIndexDetails::getCursor(const int flags) const {
         uasserted(17243, "should not call getCursor on a PartitionedIndexDetails");
+    }
+    
+    IndexDetails& PartitionedIndexDetails::getIndexDetailsOfPartition(uint64_t i) const {
+        const int idxNum = _pc->findIndexByName(indexName());
+        verify(idxNum >= 0);
+        return _pc->getPartition(i)->idx(idxNum);
     }
 
 } // namespace mongo

@@ -442,8 +442,7 @@ namespace mongo {
     public:
         PartitionedIndexDetails(const BSONObj &info, PartitionedCollection* pc, int idxNum) : 
             IndexDetails(info),
-            _pc(pc),
-            _idxNum(idxNum)
+            _pc(pc)
         {
         }
         virtual enum toku_compression_method getCompressionMethod() const;
@@ -457,11 +456,10 @@ namespace mongo {
         // This is a workaround to get going for now
         virtual shared_ptr<storage::Cursor> getCursor(const int flags) const;
     private:
+        IndexDetails& getIndexDetailsOfPartition(uint64_t i)  const;
         // This cannot be a shared_ptr, as this is a circular reference
         // _pic has a reference to this as well.
         PartitionedCollection* _pc;
-        int _idxNum;
-
     };
 
 } // namespace mongo

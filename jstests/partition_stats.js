@@ -30,3 +30,4 @@ for (var i = 0; i < st.partitions.length; ++i) {
     assert.eq(st.partitions[i].indexDetails.length, 1);
     assert.eq(st.partitions[i].indexDetails[0].compression, 'quicklz');
 }
+
