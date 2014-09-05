@@ -32,7 +32,7 @@ assert(profileDoc != null);
 testDB.dropDatabase();
 };
 
-var st = new ShardingTest({ shards: { rs0: { oplogSize: 10, verbose: 1, nodes: NODES }}});
+var st = new ShardingTest({ shards: { rs0: { verbose: 1, nodes: NODES }}});
 
 doTest(st, false);
 doTest(st, true);

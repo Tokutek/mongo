@@ -1,6 +1,6 @@
 
 var replTest = new ReplSetTest({ name: 'testSet', nodes: 5 });
-var nodes = replTest.startSet({ oplogSize: "2" });
+var nodes = replTest.startSet();
 replTest.initiate();
 
 jsTestLog("Replica set test initialized, reconfiguring to give one node higher priority");

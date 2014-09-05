@@ -4,7 +4,7 @@
 
 var rt = new ReplTest( "mod_move" );
 
-m = rt.start( true , { oplogSize : 50 } );
+m = rt.start( true );
 
 function block(){
     am.runCommand( { getlasterror : 1 , w : 2 , wtimeout : 3000 } )

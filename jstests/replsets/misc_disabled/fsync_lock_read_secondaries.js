@@ -25,7 +25,7 @@
 // Load utility methods for replica set tests
 load("jstests/replsets/rslib.js");
 
-var replTest = new ReplSetTest({name: 'testSet', nodes: 2, oplogSize: 5});
+var replTest = new ReplSetTest({name: 'testSet', nodes: 2});
 // Start each mongod in the replica set. Returns a list of nodes
 var nodes = replTest.startSet();
 // This will wait for initiation

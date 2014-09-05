@@ -488,7 +488,7 @@ MongoRunner.mongodOptions = function( opts ){
     }
 
     if( opts.noReplSet ) opts.replSet = null
-    if( opts.arbiter ) opts.oplogSize = 1
+    // if( opts.arbiter ) opts.oplogSize = 1
             
     return opts
 }

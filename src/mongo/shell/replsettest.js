@@ -52,7 +52,7 @@ ReplSetTest = function( opts ){
     this.useHostName = opts.useHostName == undefined ? true : opts.useHostName;
     this.host  = this.useHostName ? (opts.host || getHostName()) : 'localhost';
     this.numNodes = opts.nodes || 0;
-    this.oplogSize = opts.oplogSize || 40;
+    // this.oplogSize = opts.oplogSize || 40;
     this.useSeedList = opts.useSeedList || false;
     this.bridged = opts.bridged || false;
     this.ports = [];
@@ -224,8 +224,8 @@ ReplSetTest.prototype.getOptions = function( n , extra , putBinaryFirst ){
     if ( ! extra )
         extra = {};
 
-    if ( ! extra.oplogSize )
-        extra.oplogSize = this.oplogSize;
+    // if ( ! extra.oplogSize )
+    //     extra.oplogSize = this.oplogSize;
 
     var a = []
 
@@ -585,7 +585,7 @@ ReplSetTest.prototype.getHashes = function( db ){
 ReplSetTest.prototype.getDefaults = function ( n, useReplSet ){
     if (useReplSet) {
         var defaults = { useHostName : this.useHostName,
-                     oplogSize : this.oplogSize, 
+                     // oplogSize : this.oplogSize, 
                      keyFile : this.keyFile, 
                      port : this.getPort( n ),
                      // noprealloc : "",
@@ -598,7 +598,7 @@ ReplSetTest.prototype.getDefaults = function ( n, useReplSet ){
     }
     else {
         var defaults = { useHostName : this.useHostName,
-                     oplogSize : this.oplogSize, 
+                     // oplogSize : this.oplogSize, 
                      keyFile : this.keyFile, 
                      port : this.getPort( n ),
                      // noprealloc : "",

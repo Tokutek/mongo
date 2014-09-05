@@ -22,9 +22,7 @@ function doesRouteToSec( coll, query ) {
     return cmdRes.secondary;
 }
 
-var rsOpts = { oplogSize: 10 };
-var st = new ShardingTest({ keyFile: 'jstests/libs/key1', shards: 1,
-    rs: rsOpts});
+var st = new ShardingTest({ keyFile: 'jstests/libs/key1', shards: 1);
 
 var mongos = st.s;
 var replTest = st.rs0;

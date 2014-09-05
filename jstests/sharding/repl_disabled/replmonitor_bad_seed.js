@@ -13,8 +13,7 @@
  * was able to refresh before proceeding to check.
  */
 
-var rsOpt = { oplogSize: 10 };
-var st = new ShardingTest({ shards: 1, rs: rsOpt });
+var st = new ShardingTest({ shards: 1 });
 var mongos = st.s;
 var replTest = st.rs0;
 
@@ -46,7 +45,7 @@ var verifyInsert = function() {
 jsTest.log('Insert to a downed replSet');
 assert.throws(verifyInsert);
 
-replTest.startSet({ oplogSize: 10 });
+replTest.startSet();
 replTest.initiate();
 replTest.awaitSecondaryNodes();
 

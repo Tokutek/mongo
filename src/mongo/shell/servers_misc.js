@@ -142,8 +142,8 @@ ReplTest.prototype.getOptions = function( master , extra , putBinaryFirst, norep
     if ( ! extra )
         extra = {};
 
-    if ( ! extra.oplogSize )
-        extra.oplogSize = "40";
+    // if ( ! extra.oplogSize )
+    //     extra.oplogSize = "40";
         
     var a = []
     if ( putBinaryFirst )

@@ -65,7 +65,7 @@ function ReplicaSet (name, numServers) {
     this.host = '127.0.0.1'
     this.nodes = numServers
     this.startPort = nextPort
-    this.oplogSize = 40
+    // this.oplogSize = 40
     nextPort += numServers
 }
 

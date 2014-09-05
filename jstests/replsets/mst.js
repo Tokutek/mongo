@@ -1,6 +1,6 @@
 // Test a large rollback SERVER-2737
 
-var replTest = new ReplSetTest({ name: 'unicomplex', nodes: 3, oplogSize: 2000 });
+var replTest = new ReplSetTest({ name: 'unicomplex', nodes: 3 });
 var nodes = replTest.nodeList();
 
 var conns = replTest.startSet();

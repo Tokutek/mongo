@@ -35,7 +35,7 @@ function testPrimaryMetrics(primary, opCount, offset) {
     assert(ss.metrics.repl.oplog.insertBytes > 0, "no oplog inserted bytes")
 }
 
-var rt = new ReplSetTest( { name : "server_status_metrics" , nodes: 2, oplogSize: 100 } );
+var rt = new ReplSetTest( { name : "server_status_metrics" , nodes: 2 } );
 rt.startSet()
 rt.initiate()
 

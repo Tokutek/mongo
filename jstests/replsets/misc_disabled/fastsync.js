@@ -40,7 +40,7 @@ var basePath = "/data/db/" + basename;
 var hostname = getHostName();
 
 var pargs = new MongodRunner( ports[ 0 ], basePath + "-p", false, false,
-                              ["--replSet", basename, "--oplogSize", 2],
+                              ["--replSet", basename],
                               {no_bind : true} );
 p = pargs.start();
 
@@ -88,8 +88,7 @@ admin.$cmd.sys.unlock.findOne();
 print("3");
 var startSlave = function(n) {
     var sargs = new MongodRunner( ports[ n ], basePath + "-s"+n, false, false,
-                              ["--replSet", basename, "--fastsync",
-                               "--oplogSize", 2], {no_bind : true} );
+                              ["--replSet", basename, "--fastsync"], {no_bind : true} );
     var reuseData = true;
     var conn = sargs.start(reuseData);
 
@@ -197,7 +196,7 @@ catch(e) {
 sleep(10000);
 
 pargs = new MongodRunner( ports[ 3 ], basePath + "-p", false, false,
-                          ["--replSet", basename, "--oplogSize", 2],
+                          ["--replSet", basename],
                           {no_bind : true} );
 pargs.start(true);
 
