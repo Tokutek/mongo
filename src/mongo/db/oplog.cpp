@@ -435,11 +435,11 @@ namespace mongo {
     }
     
     // apply all operations in the array
-    static void rollbackOps(std::vector<BSONElement> ops, RollbackDocsMap* docsMap, RollbackSaveData* rsSave, GTID gtid) {
+    static void rollbackOps(const std::vector<BSONElement>& ops, RollbackDocsMap* docsMap, RollbackSaveData* rsSave, GTID gtid) {
         const size_t numOps = ops.size();
         for(size_t i = 0; i < numOps; ++i) {
             // note that we have to rollback the transaction backwards
-            BSONElement* curr = &ops[numOps - i - 1];
+            const BSONElement* curr = &ops[numOps - i - 1];
             OplogHelpers::rollbackOperationFromOplog(curr->Obj(), docsMap);
             rsSave->saveOp(gtid, curr->Obj());
         }
@@ -837,7 +837,7 @@ namespace mongo {
         docBuilder.append("op", op);
     
         const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
-        BSONObj doc = docBuilder.obj();
+        BSONObj doc = docBuilder.done();
         cl->insertObject(doc, flags);
     
         _seq++;
