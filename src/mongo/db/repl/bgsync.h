@@ -104,13 +104,18 @@ namespace mongo {
         // Called in produce()
         void handleSlaveDelay(uint64_t opTimestamp);
         // tries to perform a rollback. If the rollback is impossible,
-        // throws a RollbackOplogException
+        // throws a RollbackOplogException, returns how long, in seconds,
+        // the producer should sleep before resuming
         uint32_t runRollback(OplogReader& r, uint64_t oplogTS);
         void getOplogReader(OplogReader* r);
         // Evaluate if the current sync target is still good
         bool shouldChangeSyncTarget();
 
         bool hasCursor();
+        // name has "ForRollback" appended to it to as a reminder
+        // that rollback is the only place that should be calling
+        // this function. As of now, there is no other place that should
+        // call this, and they should instead use shutdown.
         void settleApplierForRollback();
         void verifySettled();
     public:

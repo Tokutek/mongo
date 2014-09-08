@@ -320,9 +320,8 @@ namespace mongo {
         }
         bool success = updateOneObjectWithMods(cl, pk, updateobj, queryToUse, fastUpdateFlags, fromMigrate, 0, mods);
         verify(success);
-        BSONObjBuilder filledPK(64);
-        fillPKWithFields(pk, cl->getPKIndex().keyPattern(), filledPK);
-        OplogHelpers::logUpdatePKModsWithRow(ns, pk, filledPK.done(), updateobj, queryToUse, fastUpdateFlags, fromMigrate);
+        BSONObj filledPK = cl->fillPKWithFields(pk);
+        OplogHelpers::logUpdatePKModsWithRow(ns, pk, filledPK, updateobj, queryToUse, fastUpdateFlags, fromMigrate);
         return true;
     }
 

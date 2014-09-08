@@ -161,7 +161,7 @@ namespace mongo {
             BSONObj& cmdObj,
             int options, string& errmsg,
             BSONObjBuilder& result,
-            bool fromRepl = false )
+            bool fromRepl = false)
         {
             // this test command allows writes to happen on a non-primary
             // the idea currently is to have writes occur to a node that is in

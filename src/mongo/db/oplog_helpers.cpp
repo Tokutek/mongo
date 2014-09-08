@@ -722,12 +722,11 @@ namespace mongo {
                 runUpdateFromOplog(ns, op, docsMap);
             }
             else if (strcmp(opType, OP_STR_UPDATE_ROW_WITH_MOD) == 0) {
+                opCounters->gotUpdate();
                 if (op[KEY_STR_OLD_ROW].ok()) {
-                    opCounters->gotUpdate();
                     runUpdateModsWithRowFromOplog(ns, op, docsMap);
                 }
                 else {
-                    opCounters->gotUpdate();
                     runUpdateModsWithPKFromOplog(ns, op, docsMap);
                 }
             }
@@ -798,27 +797,25 @@ namespace mongo {
             const BSONObj pk = op[KEY_STR_PK].Obj();
             const BSONObj oldObj = op[KEY_STR_OLD_ROW].Obj(); // must exist
             const BSONObj updateobj = op[KEY_STR_MODS].Obj(); // must exist
-            {
-                LOCK_REASON(lockReason, "repl: checking newRow with mods for rollback");
-                Client::ReadContext ctx(ns, lockReason);
-                Collection *cl = getCollection(ns);
-                scoped_ptr<ModSet> mods(new ModSet(updateobj, cl->indexKeys()));
-                auto_ptr<ModSetState> mss = mods->prepare(oldObj);
-                BSONObj newObj = mss->createNewFromMods();
-                if (!cl->isPKHidden()) {
-                    docsMap->addDoc(ns, pk);
-                    const BSONObj newPK = cl->getValidatedPKFromObject(newObj);
-                    docsMap->addDoc(ns, newPK);
-                }
-                else {
-                    runUpdateFromOplogWithLock(
-                        ns,
-                        pk,
-                        newObj,
-                        oldObj,
-                        NULL
-                        );                
-                }
+            LOCK_REASON(lockReason, "repl: checking newRow with mods for rollback");
+            Client::ReadContext ctx(ns, lockReason);
+            Collection *cl = getCollection(ns);
+            ModSet mods(updateobj, cl->indexKeys());
+            auto_ptr<ModSetState> mss = mods.prepare(oldObj);
+            BSONObj newObj = mss->createNewFromMods();
+            if (!cl->isPKHidden()) {
+                docsMap->addDoc(ns, pk);
+                const BSONObj newPK = cl->getValidatedPKFromObject(newObj);
+                docsMap->addDoc(ns, newPK);
+            }
+            else {
+                runUpdateFromOplogWithLock(
+                    ns,
+                    pk,
+                    newObj,
+                    oldObj,
+                    NULL
+                    );                
             }
         }
 
@@ -967,7 +964,7 @@ namespace mongo {
         return strcmp(ns, id["ns"].String().c_str()) == 0;
     }
 
-    void RollbackDocsMap::addDoc(const char* ns, const BSONObj pk) {
+    void RollbackDocsMap::addDoc(const StringData &ns, const BSONObj& pk) {
         // this function should be called from repl with a transaction already created
         LOCK_REASON(lockReason, "repl rollback: RollbackDocsMap::addDoc");
         Client::ReadContext ctx(rsRollbackDocs, lockReason);
@@ -997,7 +994,7 @@ namespace mongo {
         return ret;
     }
 
-    void RollbackDocsMap::startIterator() {
+    RollbackDocsMapIterator::RollbackDocsMapIterator() {
         LOCK_REASON(lockReason, "repl rollback: starting iterator of rollback docs");
         Client::ReadContext ctx(rsRollbackDocs, lockReason);
         BSONObjBuilder queryBuilder;
@@ -1016,10 +1013,10 @@ namespace mongo {
             _current = BSONObj();
         }
     }
-    bool RollbackDocsMap::ok() {
+    bool RollbackDocsMapIterator::ok() {
         return !_current.isEmpty();
     }
-    void RollbackDocsMap::advance() {
+    void RollbackDocsMapIterator::advance() {
         verify(ok());
         LOCK_REASON(lockReason, "repl rollback: advancing iterator of rollback docs");
         Client::ReadContext ctx(rsRollbackDocs, lockReason);
@@ -1037,7 +1034,7 @@ namespace mongo {
         }
     }
 
-    DocID RollbackDocsMap::current() {
+    DocID RollbackDocsMapIterator::current() {
         verify(ok());
         return DocID(_current["ns"].String().c_str(), _current["pk"].Obj());
     }

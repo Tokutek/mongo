@@ -375,7 +375,7 @@ namespace mongo {
             catchupTransaction.commit(0);
         }
         while (unappliedTransactions.size() > 0) {
-            BSONObj curr = unappliedTransactions.front();
+            const BSONObj& curr = unappliedTransactions.front();
             applyTransactionFromOplog(curr, NULL);            
             unappliedTransactions.pop_front();
         }
@@ -526,8 +526,7 @@ namespace mongo {
         if (needGapsFilled) {
             _fillGaps(&r);
         }
-        GTID dummy;
-        applyMissingOpsInOplog(dummy);
+        applyMissingOpsInOplog(GTID());
 
         sethbmsg("initial sync done",0);
 

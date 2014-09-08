@@ -60,8 +60,8 @@ namespace mongo {
     bool gtidExistsInOplog(GTID gtid);
     void writeEntryToOplogRefs(BSONObj entry);
     void replicateFullTransactionToOplog(BSONObj& o, OplogReader& r, bool* bigTxn);
-    void applyTransactionFromOplog(BSONObj entry, RollbackDocsMap* docsMap);
-    void rollbackTransactionFromOplog(BSONObj entry, RollbackDocsMap* docsMap, RollbackSaveData* rsSave);
+    void applyTransactionFromOplog(const BSONObj& entry, RollbackDocsMap* docsMap);
+    void rollbackTransactionFromOplog(const BSONObj& entry, RollbackDocsMap* docsMap, RollbackSaveData* rsSave);
     void purgeEntryFromOplog(BSONObj entry);
 
     // @return the age, in milliseconds, when an oplog entry expires.

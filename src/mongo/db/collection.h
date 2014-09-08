@@ -40,7 +40,7 @@ namespace mongo {
     class MultiKeyTracker;
     class QueryPattern;
 
-    void fillPKWithFields(const BSONObj pk, const BSONObj pkPattern, BSONObjBuilder& result);
+    BSONObj fillPKWithFields(const BSONObj &pk, const BSONObj &pkPattern);
 
     // Gets a collection - opens it if necessary, but does not create.
     Collection *getCollection(const StringData& ns);
@@ -535,6 +535,8 @@ namespace mongo {
         BSONObj getSimplePKFromQuery(const BSONObj &query, const BSONObj& pk) const {
             return _cd->getSimplePKFromQuery(query, pk);
         }
+        
+        BSONObj fillPKWithFields(const BSONObj &pk);
 
         //
         // Write interface

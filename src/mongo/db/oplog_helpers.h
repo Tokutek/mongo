@@ -24,14 +24,14 @@ namespace mongo {
     // objects used for rollback
     class DocID {
     public:
-        const string coll;
+        const string coll; // fully qualified namespace (database_name.collection_name)
         const BSONObj pk;
-        DocID(const char* ns, const BSONObj& primaryKey) : coll(ns), pk(primaryKey.copy()){
+        DocID(const char* ns, const BSONObj& primaryKey) : coll(ns), pk(primaryKey.getOwned()){
         }
     };
 
     struct DocIDCmp {
-        bool operator()( const DocID& l, const DocID& r ) const {
+        bool operator()(const DocID& l, const DocID& r) const {
             int stringCmp = l.coll.compare(r.coll);
             if (stringCmp != 0) {
                 return stringCmp < 0;
@@ -48,10 +48,14 @@ namespace mongo {
         static void dropDocsMap();
         bool docExists(const char* ns, const BSONObj pk) const;
         bool docsForNSExists(const char* ns) const;
-        void addDoc(const char* ns, const BSONObj pk);
+        void addDoc(const StringData &ns, const BSONObj& pk);
         long long size();
+    };
 
-        void startIterator();
+    class RollbackDocsMapIterator {
+        BSONObj _current;
+    public:
+        RollbackDocsMapIterator();
         bool ok();
         void advance();
         DocID current();

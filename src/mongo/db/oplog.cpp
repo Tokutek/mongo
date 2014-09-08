@@ -339,11 +339,11 @@ namespace mongo {
     }
 
     // apply all operations in the array
-    static void applyOps(std::vector<BSONElement> ops, RollbackDocsMap* docsMap) {
+    static void applyOps(const std::vector<BSONElement>& ops, RollbackDocsMap* docsMap) {
         const size_t numOps = ops.size();
         for(size_t i = 0; i < numOps; ++i) {
-            BSONElement* curr = &ops[i];
-            OplogHelpers::applyOperationFromOplog(curr->Obj(), docsMap);
+            const BSONElement& curr = ops[i];
+            OplogHelpers::applyOperationFromOplog(curr.Obj(), docsMap);
         }
     }
 
@@ -353,7 +353,7 @@ namespace mongo {
     // did not work, so it a sequence of point queries.  
     // TODO verify that the query plan is a indexed lookup.
     // TODO verify that the query plan does not fetch too many docs and then only process one of them.
-    void applyRefOp(BSONObj entry, RollbackDocsMap* docsMap) {
+    void applyRefOp(const BSONObj& entry, RollbackDocsMap* docsMap) {
         OID oid = entry["ref"].OID();
         LOG(3) << "apply ref " << entry << " oid " << oid << endl;
         long long seq = 0; // note that 0 is smaller than any of the seq numbers
@@ -399,7 +399,7 @@ namespace mongo {
     // TODO: possibly improve performance of this. We create and destroy a
     // context for each operation. Find a way to amortize it out if necessary
     //
-    void applyTransactionFromOplog(BSONObj entry, RollbackDocsMap* docsMap) {
+    void applyTransactionFromOplog(const BSONObj& entry, RollbackDocsMap* docsMap) {
         bool transactionAlreadyApplied = entry["a"].Bool();
         if (!transactionAlreadyApplied) {
             Client::Transaction transaction(DB_SERIALIZABLE);
@@ -437,15 +437,15 @@ namespace mongo {
     // apply all operations in the array
     static void rollbackOps(const std::vector<BSONElement>& ops, RollbackDocsMap* docsMap, RollbackSaveData* rsSave, GTID gtid) {
         const size_t numOps = ops.size();
-        for(size_t i = 0; i < numOps; ++i) {
+        for (size_t i = 0; i < numOps; ++i) {
             // note that we have to rollback the transaction backwards
-            const BSONElement* curr = &ops[numOps - i - 1];
-            OplogHelpers::rollbackOperationFromOplog(curr->Obj(), docsMap);
-            rsSave->saveOp(gtid, curr->Obj());
+            const BSONElement& curr = ops[numOps - i - 1];
+            OplogHelpers::rollbackOperationFromOplog(curr.Obj(), docsMap);
+            rsSave->saveOp(gtid, curr.Obj());
         }
     }
 
-    static void rollbackRefOp(BSONObj entry, RollbackDocsMap* docsMap, RollbackSaveData* rsSave, GTID gtid) {
+    static void rollbackRefOp(const BSONObj& entry, RollbackDocsMap* docsMap, RollbackSaveData* rsSave, GTID gtid) {
         OID oid = entry["ref"].OID();
         LOG(3) << "rollback ref " << entry << " oid " << oid << endl;
         long long seq = LLONG_MAX;
@@ -486,7 +486,7 @@ namespace mongo {
         }
     }
 
-    void rollbackTransactionFromOplog(BSONObj entry, RollbackDocsMap* docsMap, RollbackSaveData* rsSave) {
+    void rollbackTransactionFromOplog(const BSONObj& entry, RollbackDocsMap* docsMap, RollbackSaveData* rsSave) {
         bool transactionAlreadyApplied = entry["a"].Bool();
         GTID gtid = getGTIDFromOplogEntry(entry);
         Client::Transaction transaction(DB_SERIALIZABLE);

@@ -46,8 +46,8 @@ namespace mongo {
 
     static void removeFromNamespacesCatalog(const StringData &ns);
     static void removeFromIndexesCatalog(const StringData &ns, const StringData &name);
-
-    void fillPKWithFields(const BSONObj pk, const BSONObj pkPattern, BSONObjBuilder& result) {
+    BSONObj fillPKWithFieldsWithPattern(const BSONObj &pk, const BSONObj &pkPattern) {
+        BSONObjBuilder result(64);
         BSONObjIterator patternIT(pkPattern); 
         BSONObjIterator pkIT(pk);
         while (pkIT.more()) {
@@ -57,6 +57,7 @@ namespace mongo {
             pkIT.next();
         }
         massert(17339, str::stream() << "There should be no more PK fields available for pk " << pk, !pkIT.more());
+        return result.obj();
     }
 
     CollectionMap *collectionMap(const StringData &ns) {
@@ -437,6 +438,13 @@ namespace mongo {
             }
         }
         return false;
+    }
+
+    
+    BSONObj Collection::fillPKWithFields(const BSONObj &pkValue) {
+        // first parameter is an instance of a specific primary key
+        // second parameter is the key pattern (like {_id : 1}
+        return fillPKWithFieldsWithPattern(pkValue, _pk);
     }
 
     // inserts an object into this namespace, taking care of secondary indexes if they exist
@@ -3381,10 +3389,9 @@ namespace mongo {
             // field names back. Probably not the most efficient code,
             // but it does not need to be. This function probably is not called
             // very often
-            BSONObjBuilder filledPivot;
-            fillPKWithFields(curr["max"].Obj(), _pk, filledPivot);
+            BSONObj filledPivot = fillPKWithFieldsWithPattern(curr["max"].Obj(), _pk);
             BSONObjBuilder currWithFilledPivot;
-            cloneBSONWithFieldChanged(currWithFilledPivot, curr, "max", filledPivot.done(), false);
+            cloneBSONWithFieldChanged(currWithFilledPivot, curr, "max", filledPivot, false);
             b.append(currWithFilledPivot.obj());
         }
         // note that we cannot just return numPartitions() for this
