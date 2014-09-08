@@ -313,7 +313,7 @@ namespace mongo {
 
     class RollbackGTIDSetBuilder {
         GTID _minUnappliedGTID;
-        removeExistingGTIDSet() {
+        static void removeExistingGTIDSet() {
             string errmsg;
             Collection* cl = getCollection(rsRollbackGTIDSet);
             if (cl != NULL) {
@@ -331,7 +331,7 @@ namespace mongo {
             Client::WriteContext ctx(rsRollbackGTIDSet, lockReason);
             string errmsg;
             removeExistingGTIDSet();            
-            Collection cl = getOrCreateCollection(rsRollbackGTIDSet, false);
+            Collection* cl = getOrCreateCollection(rsRollbackGTIDSet, false);
             verify(cl);
             BSONObjBuilder docBuilder;
             docBuilder.append("_id", "minUnapplied");
