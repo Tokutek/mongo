@@ -385,6 +385,7 @@ add_subdirectory(src/third_party)
 include_directories(
   ${Boost_INCLUDE_DIRS}
   ${PCRE_INCLUDE_DIRS}
+  ${S2_INCLUDE_DIRS}
   ${YAML_INCLUDE_DIRS}
   ${TokuKV_INCLUDE_DIRS}
   ${TokuBackup_INCLUDE_DIRS}

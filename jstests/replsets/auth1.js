@@ -158,7 +158,7 @@ master.runCommand({getlasterror:1, w:3, wtimeout:60000});
 
 
 print("add member with wrong key");
-var conn = new MongodRunner(port[3], "/data/db/"+name+"-3", null, null, ["--replSet","rs_auth1","--rest","--oplogSize","2", "--keyFile", path+"key2"], {no_bind : true});
+var conn = new MongodRunner(port[3], "/data/db/"+name+"-3", null, null, ["--replSet","rs_auth1","--rest", "--keyFile", path+"key2"], {no_bind : true});
 conn.start();
 
 
@@ -191,7 +191,7 @@ stopMongod(port[3]);
 
 
 print("start back up with correct key");
-conn = new MongodRunner(port[3], "/data/db/"+name+"-3", null, null, ["--replSet","rs_auth1","--rest","--oplogSize","2", "--keyFile", path+"key1"], {no_bind : true});
+conn = new MongodRunner(port[3], "/data/db/"+name+"-3", null, null, ["--replSet","rs_auth1","--rest", "--keyFile", path+"key1"], {no_bind : true});
 conn.start();
 
 wait(function() {

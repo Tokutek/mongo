@@ -14,7 +14,7 @@ doTest = function(signal, extraOpts) {
     var rt = new ReplTest( "repl2tests" );
 
     // implicit small oplog makes slave get out of sync
-    m = rt.start( true, { oplogSize : "1" } );
+    m = rt.start( true );
     s = rt.start(false, extraOpts);
 
     am = m.getDB("foo").a

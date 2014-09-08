@@ -29,7 +29,7 @@ ports = allocatePorts( 3 );
 basePath = "/data/db/" + basename;
 hostname = getHostName();
 
-s = startMongodTest (ports[2], basename, false, {replSet : basename, oplogSize : 2} );
+s = startMongodTest (ports[2], basename, false, {replSet : basename} );
 
 var config = replTest.getReplSetConfig();
 config.version = 2;

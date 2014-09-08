@@ -23,6 +23,7 @@
 #include "util/intrusive_counter.h"
 #include "db/clientcursor.h"
 #include "db/jsobj.h"
+#include "db/matcher.h"
 #include "db/pipeline/document.h"
 #include "db/pipeline/expression.h"
 #include "mongo/db/pipeline/expression_context.h"
@@ -41,7 +42,6 @@ namespace mongo {
     class ExpressionFieldPath;
     class ExpressionObject;
     class DocumentSourceLimit;
-    class Matcher;
 
     class DocumentSource :
         public IntrusiveCounterUnsigned,

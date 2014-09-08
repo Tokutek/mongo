@@ -695,6 +695,65 @@ if (BUILD_TESTING)
   #target_link_libraries(authorization_manager_test authmocks)
   #target_link_libraries(authorization_session_test authmocks)
 
+  add_executable(hash_test db/geo/hash_test)
+  add_dependencies(hash_test generate_error_codes generate_action_types)
+  link_recursive_deps(hash_test
+    geometry
+    unittest_main
+    unittest_crutch
+    ${TOKUMX_SSL_LIBRARIES}
+    )
+
+  add_executable(geoparser_test db/geo/geoparser_test)
+  add_dependencies(geoparser_test generate_error_codes generate_action_types)
+  link_recursive_deps(geoparser_test
+    geoparser
+    unittest_main
+    unittest_crutch
+    ${TOKUMX_SSL_LIBRARIES}
+    )
+
+  add_executable(path_test db/matcher/path_test)
+  add_dependencies(path_test generate_error_codes generate_action_types)
+  link_recursive_deps(path_test
+    path
+    unittest_main
+    unittest_crutch
+    ${TOKUMX_SSL_LIBRARIES}
+    )
+
+  foreach (prefix
+      expression
+      expression_parser
+      )
+    add_executable(${prefix}_test
+      db/matcher/${prefix}_test
+      db/matcher/${prefix}_leaf_test
+      db/matcher/${prefix}_tree_test
+      db/matcher/${prefix}_array_test
+      )
+    add_dependencies(${prefix}_test generate_error_codes generate_action_types)
+    link_recursive_deps(${prefix}_test
+      COMBINED_LIBNAME expressions_unittest_deps
+      expressions
+      unittest_main
+      unittest_crutch
+      ${TOKUMX_SSL_LIBRARIES}
+      )
+  endforeach ()
+
+  add_executable(expression_geo_test
+    db/matcher/expression_geo_test
+    db/matcher/expression_parser_geo_test
+    )
+  add_dependencies(expression_geo_test generate_error_codes generate_action_types)
+  link_recursive_deps(expression_geo_test
+    expressions_geo
+    unittest_main
+    unittest_crutch
+    ${TOKUMX_SSL_LIBRARIES}
+    )
+
   foreach (test
       field_checker_test
       )
@@ -1082,6 +1141,22 @@ if (BUILD_TESTING)
       authorization_session_test
       )
     add_mongo_test(db/auth ${test} ${test})
+  endforeach ()
+
+  foreach (test
+      hash_test
+      geoparser_test
+      )
+    add_mongo_test(db/geo ${test} ${test})
+  endforeach ()
+
+  foreach (test
+      path_test
+      expression_test
+      expression_parser_test
+      expression_geo_test
+      )
+    add_mongo_test(db/matcher ${test} ${test})
   endforeach ()
 
   foreach (test

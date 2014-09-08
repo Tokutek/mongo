@@ -1,4 +1,6 @@
 add_subdirectory(auth)
+add_subdirectory(geo)
+add_subdirectory(matcher)
 add_subdirectory(ops)
 
 add_library(mongohasher STATIC
@@ -97,7 +99,8 @@ add_library(coredb STATIC
   dbwebserver
   keypattern
   keygenerator
-  matcher
+  matcher.cpp
+  matcher/matcher
   spillable_vector
   txn_context
   gtid
@@ -150,6 +153,11 @@ target_link_libraries(coredb LINK_PUBLIC
   coreserver
   plugins
   server_parameters
+  geoparser
+  geoquery
+  expressions
+  expressions_geo
+  expressions_where
   foundation
   server_options
   storage_global_params_impl
@@ -210,6 +218,9 @@ add_library(serveronly STATIC
   index
   scanandorder
   explain
+  # geo/geonear
+  # geo/haystack
+  # geo/s2common
   ops/count
   ops/delete
   ops/query

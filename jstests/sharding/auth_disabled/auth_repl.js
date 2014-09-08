@@ -1,5 +1,5 @@
 var replTest = new ReplSetTest({ nodes: 3, useHostName : false, keyFile: 'jstests/libs/key1' });
-replTest.startSet({ oplogSize: 10 });
+replTest.startSet();
 replTest.initiate();
 replTest.awaitSecondaryNodes();
 

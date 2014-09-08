@@ -39,7 +39,7 @@ doTest = function( signal ) {
    * syncDelay.
    */
   var conn = MongoRunner.runMongod({port : 31008, dbpath : name + "-sd", useHostname: true,
-                                    replSet: name, oplogSize : 128});
+                                    replSet: name});
   conn.setSlaveOk();
   
   config = master.getSisterDB("local").system.replset.findOne();

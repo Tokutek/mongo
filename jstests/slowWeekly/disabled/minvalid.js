@@ -3,7 +3,7 @@
 // their stored minvalid
 
 var name = "minvalid"
-var replTest = new ReplSetTest({name: name, nodes: 1, oplogSize:1});
+var replTest = new ReplSetTest({name: name, nodes: 1});
 var host = getHostName();
 
 var nodes = replTest.startSet();

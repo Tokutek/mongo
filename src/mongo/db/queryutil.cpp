@@ -1062,7 +1062,9 @@ namespace mongo {
             // This means remove '{}' with options '{$atomic:true}' and without this
             // early return, we would interpet it as remove '{$atomic:true}' with
             // options {}, which is incorrect.
-            if ( str::equals( matchFieldName, "$atomic" ) ) {
+            // We do the same thing for $isolated.
+            if ( str::equals( matchFieldName, "$atomic" ) ||
+                 str::equals( matchFieldName, "$isolated" ) ) {
                 return;
             }
         }

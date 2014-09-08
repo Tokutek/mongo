@@ -19,7 +19,7 @@ load("jstests/replsets/rslib.js");
 
 print("starting the replica set")
 
-var replTest = new ReplSetTest({ name: 'tool_replset', nodes: 2, oplogSize: 5 });
+var replTest = new ReplSetTest({ name: 'tool_replset', nodes: 2 });
 var nodes = replTest.startSet();
 replTest.initiate();
 var master = replTest.getMaster();

@@ -20,7 +20,7 @@ function pause(s) {
 doTest = function (signal) {
 
     var replTest = new ReplSetTest({ name: 'testSet', nodes: 3 });
-    var nodes = replTest.startSet({ oplogSize: "40" });
+    var nodes = replTest.startSet();
     print("\nsync1.js ********************************************************************** part 0");
     replTest.initiate();
 

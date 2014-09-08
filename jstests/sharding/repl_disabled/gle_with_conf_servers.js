@@ -20,7 +20,7 @@ function writeToConfigTest(){
  */
 function configTest( configCount ){
     var st = new ShardingTest({ shards: 1, config: configCount,
-          rs: { oplogSize: 10 }, other: { chunkSize: 1 }});
+          other: { chunkSize: 1 }});
      
     var mongos = st.s;
     var testDB = mongos.getDB( 'test' );
