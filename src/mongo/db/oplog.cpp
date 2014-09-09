@@ -341,7 +341,7 @@ namespace mongo {
     // apply all operations in the array
     static void applyOps(const std::vector<BSONElement>& ops, RollbackDocsMap* docsMap, const bool inRollback) {
         const size_t numOps = ops.size();
-        for(size_t i = 0; i < numOps; ++i) {
+        for (size_t i = 0; i < numOps; ++i) {
             const BSONElement& curr = ops[i];
             OplogHelpers::applyOperationFromOplog(curr.Obj(), docsMap, inRollback);
         }

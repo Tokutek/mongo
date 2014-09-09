@@ -363,7 +363,6 @@ namespace mongo {
         }
 
         try {
-            // this method may actually run rollback, yes, the name is bad
             uint64_t ts;
             if (isRollbackRequired(r, &ts)) {
                 // sleep 2 seconds and try again. (The 2 is arbitrary).

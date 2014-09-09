@@ -956,30 +956,24 @@ namespace mongo {
         LOCK_REASON(lockReason, "repl rollback: initializing RollbackDocsMap");
         Client::WriteContext ctx(rsRollbackDocs, lockReason);
         Client::Transaction transaction(DB_SERIALIZABLE);
-        string errmsg;
-        Collection* cl = getCollection(rsRollbackDocs);
-        if (cl != NULL) {
-            BSONObjBuilder result;
-            cl->drop(errmsg,result);
-            cl = NULL;
-        }
-        bool ret = userCreateNS(rsRollbackDocs, BSONObj(), errmsg, false);
-        verify(ret);
-        // sanity check that we get the collection
-        cl = getCollection(rsRollbackDocs);
+        RollbackDocsMap::_dropDocsMap();
+        Collection* cl = getOrCreateCollection(rsRollbackDocs, false);
         verify(cl);
         transaction.commit();
     }
 
-    void RollbackDocsMap::dropDocsMap() {
-        LOCK_REASON(lockReason, "repl rollback: dropping RollbackDocsMap");
-        Client::WriteContext ctx(rsRollbackDocs, lockReason);
+    void RollbackDocsMap::_dropDocsMap() {
         string errmsg;
         Collection* cl = getCollection(rsRollbackDocs);
         if (cl != NULL) {
             BSONObjBuilder result;
             cl->drop(errmsg,result);
         }
+    }
+    void RollbackDocsMap::dropDocsMap() {
+        LOCK_REASON(lockReason, "repl rollback: dropping RollbackDocsMap");
+        Client::WriteContext ctx(rsRollbackDocs, lockReason);
+        _dropDocsMap();
     }
 
     bool RollbackDocsMap::docExists(const char* ns, const BSONObj pk) const {
@@ -987,16 +981,7 @@ namespace mongo {
         LOCK_REASON(lockReason, "repl rollback: RollbackDocsMap::docExists");
         Client::ReadContext ctx(rsRollbackDocs, lockReason);
         BSONObj result;
-        Collection* cl = getCollection(rsRollbackDocs);
-        verify(cl);
-        BSONObjBuilder docBuilder;
-        BSONObjBuilder idBuilder(docBuilder.subobjStart(""));
-        idBuilder.append("ns", ns);
-        idBuilder.append("pk", pk);
-        idBuilder.done();
-        bool ret = cl->findByPK(docBuilder.done(), result);
-        return ret;
-
+        return Collection::findOne(rsRollbackDocs, BSON("_id" << BSON("ns" << ns << "pk" << pk)), result, true);
     }
 
     bool RollbackDocsMap::docsForNSExists(const char* ns) const {

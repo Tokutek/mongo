@@ -24,24 +24,15 @@ namespace mongo {
     // objects used for rollback
     class DocID {
     public:
-        const string coll; // fully qualified namespace (database_name.collection_name)
+        const string ns; // fully qualified namespace (database_name.collection_name)
         const BSONObj pk;
-        DocID(const char* ns, const BSONObj& primaryKey) : coll(ns), pk(primaryKey.getOwned()){
-        }
-    };
-
-    struct DocIDCmp {
-        bool operator()(const DocID& l, const DocID& r) const {
-            int stringCmp = l.coll.compare(r.coll);
-            if (stringCmp != 0) {
-                return stringCmp < 0;
-            }
-            return l.pk.woCompare(r.pk) < 0;
+        DocID(const char* nsParam, const BSONObj& primaryKey) : ns(nsParam), pk(primaryKey.getOwned()){
         }
     };
 
     class RollbackDocsMap {
         BSONObj _current;
+        static void _dropDocsMap();
     public:
         RollbackDocsMap() {}
         void initialize();

@@ -36,11 +36,18 @@ namespace mongo {
     void incRBID();
     void applyMissingOpsInOplog(GTID minUnappliedGTID, const bool inRollback);
 
+    // this enum represents possible values stored in local.replInfo during
+    // rollback, under the "rollbackStatus" document. The existence of this
+    // document implies that a rollback is in progress. It's possible
+    // to resume a rollback that is in some of these states. We save this
+    // state because we don't want to depend on rollback succeeding in "one shot".
+    // A lot can go wrong, like a connection dying.
     enum rollback_state {
-        RB_NOT_STARTED = 0,
-        RB_STARTING,
-        RB_DOCS_REMOVED,
-        RB_SNAPSHOT_APPLIED
+        RB_NOT_STARTED = 0, // this means that we have not started a rollback
+        RB_STARTING, // means we have started rolling back oplog entries. We cannot recover from this state
+        RB_DOCS_REMOVED, // documents have been removed, but a remove snapshot's version has not been applied
+        RB_SNAPSHOT_APPLIED // remote snapshot of documents has been applied, but we have yet to sync forward to a safe point
+        // After syncing forward, via replicateForwardToGTID, we are done with rollback
     };
 
     static BSONObj findOneFromConn(DBClientConnection* conn, const string &ns, const Query& query) {
@@ -62,14 +69,12 @@ namespace mongo {
         LOCK_REASON(lockReason, "repl rollback: getting rollback status from replInfo");
         Client::ReadContext ctx(rsReplInfo, lockReason);
         Client::Transaction txn(DB_READ_UNCOMMITTED);
-        Collection* cl= getCollection(rsReplInfo);
-        verify(cl);
-        bool found = cl->findByPK(BSON ("" << ROLLBACK_ID), o);
+        bool found = Collection::findOne(rsReplInfo, BSON("_id" << ROLLBACK_ID), o, true);
         txn.commit();
         return found;
     }
 
-    void clearRollbackStatus(const BSONObj status) {
+    void clearRollbackStatus(const BSONObj& status) {
         LOCK_REASON(lockReason, "repl rollback: clearing rollback status");
         Client::ReadContext ctx(rsReplInfo, lockReason);
         Collection* cl= getCollection(rsReplInfo);
@@ -218,11 +223,9 @@ namespace mongo {
             );
         // now force an update of the repl info thread
         theReplSet->forceUpdateReplInfo();
-        {
-            Client::Transaction txn(DB_SERIALIZABLE);
-            updateRollbackStatus(BSON("_id" << ROLLBACK_ID << "state" << RB_STARTING<< "info" << "starting rollback"));
-            txn.commit(DB_TXN_NOSYNC);
-        }
+        Client::Transaction txn(DB_SERIALIZABLE);
+        updateRollbackStatus(BSON("_id" << ROLLBACK_ID << "state" << RB_STARTING<< "info" << "starting rollback"));
+        txn.commit(DB_TXN_NOSYNC);
     }
 
     void rollbackToGTID(GTID idToRollbackTo, RollbackDocsMap* docsMap, RollbackSaveData* rsSave) {
@@ -259,12 +262,12 @@ namespace mongo {
         RollbackDocsMapIterator docsMap;
         size_t numDocs = 0;
         log() << "Removing documents from collections for rollback." << rsLog;
-        while(docsMap.ok()) {
+        for (RollbackDocsMapIterator it; it.ok(); it.advance()){
             numDocs++;
-            DocID curr = docsMap.current();
+            DocID curr = it.current();
             LOCK_REASON(lockReason, "repl: deleting a doc during rollback");
-            Client::ReadContext ctx(curr.coll, lockReason);
-            Collection* cl = getCollection(curr.coll);
+            Client::ReadContext ctx(curr.ns, lockReason);
+            Collection* cl = getCollection(curr.ns);
             verify(cl);
             BSONObj currDoc;
             LOG(2) << "Finding by pk of " << curr.pk << rsLog;
@@ -272,7 +275,6 @@ namespace mongo {
             if (found) {
                 deleteOneObject(cl, curr.pk, currDoc, Collection::NO_LOCKTREE);
             }
-            docsMap.advance();
         }
         log() << "Done removing " << numDocs << " documents from collections for rollback." << rsLog;
         updateRollbackStatus(BSON("_id" << ROLLBACK_ID << "state" << RB_DOCS_REMOVED<< \
@@ -285,27 +287,25 @@ namespace mongo {
     // applies it locally
     void applySnapshotOfDocsMap(shared_ptr<DBClientConnection> conn) {
         size_t numDocs = 0;
-        RollbackDocsMapIterator docsMap;
         log() << "Applying documents to collections for rollback." << rsLog;
-        while(docsMap.ok()) {
+        for (RollbackDocsMapIterator it; it.ok(); it.advance()){
             numDocs++;
-            DocID curr = docsMap.current();
+            DocID curr = it.current();
             LOCK_REASON(lockReason, "repl: appling snapshot of doc during rollback");
-            Client::ReadContext ctx(curr.coll, lockReason);
-            Collection* cl = getCollection(curr.coll);
+            Client::ReadContext ctx(curr.ns, lockReason);
+            Collection* cl = getCollection(curr.ns);
             if (cl->isPKHidden()) {
-                log() << "Collection " << curr.coll << " has a hidden PK, yet it has \
+                log() << "Collection " << curr.ns << " has a hidden PK, yet it has \
                     a document for which we want to apply a snapshot of: " << \
                     curr.pk << rsLog;
                 throw RollbackOplogException("Collection for which we are applying a document has a hidden PK");
             }
             BSONObj pkWithFields = cl->fillPKWithFields(curr.pk);
-            BSONObj remoteImage = findOneFromConn(conn.get(), curr.coll, Query(pkWithFields));
+            BSONObj remoteImage = findOneFromConn(conn.get(), curr.ns, Query(pkWithFields));
             if (!remoteImage.isEmpty()) {
                 const uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
                 insertOneObject(cl, remoteImage, flags);
             }
-            docsMap.advance();
         }
         log() << "Done applying remote images of " << numDocs << " documents to collections for rollback." << rsLog;
     }
@@ -323,16 +323,13 @@ namespace mongo {
             }
         }
     public:
-        RollbackGTIDSetBuilder() { }
-        void initialize(GTID minUnapplied) {
+        RollbackGTIDSetBuilder(GTID minUnapplied) { 
             // write lock needed to (maybe) drop and recreate the
             // collection
             LOCK_REASON(lockReason, "repl: initializing set of committed GTIDs during rollback");
             Client::WriteContext ctx(rsRollbackGTIDSet, lockReason);
-            string errmsg;
             removeExistingGTIDSet();            
             Collection* cl = getOrCreateCollection(rsRollbackGTIDSet, false);
-            verify(cl);
             BSONObjBuilder docBuilder;
             docBuilder.append("_id", "minUnapplied");
             docBuilder.append("gtid", minUnapplied);
@@ -367,7 +364,6 @@ namespace mongo {
             return _minUnappliedGTID;
         }
         void initialize() {
-            string errmsg;
             LOCK_REASON(lockReason, "repl rollback: initializing RollbackGTIDSet");
             Client::ReadContext ctx(rsRollbackGTIDSet, lockReason);
             Client::Transaction transaction(DB_READ_UNCOMMITTED);
@@ -418,15 +414,12 @@ namespace mongo {
         uint64_t numGTIDs = 0;
         // we have gotten the minUnapplied and lastGTID on the remote server,
         // now let's look at the oplog from that point on to learn what the gaps are
-        BSONObjBuilder q;
-        addGTIDToBSON("$gte", minUnapplied, q);
-        BSONObjBuilder query;
-        query.append("_id", q.done());
+        BSONObj query = BSON("_id" << BSON("$gte" << minUnapplied));
         const BSONObj fields = BSON("_id" << 1 << "a" << 1);
         shared_ptr<DBClientCursor> cursor(
             conn->query(
                 rsoplog,
-                Query(query.done()).hint(BSON("_id" << 1)),
+                Query(query).hint(BSON("_id" << 1)),
                 0,
                 0,
                 &fields,
@@ -464,8 +457,7 @@ namespace mongo {
         GTID minUnapplied = getGTIDFromBSON("GTID", res);
 
         Client::Transaction txn(DB_SERIALIZABLE);
-        RollbackGTIDSetBuilder appliedGTIDsBuilder;
-        appliedGTIDsBuilder.initialize(minUnapplied);
+        RollbackGTIDSetBuilder appliedGTIDsBuilder(minUnapplied);
         createAppliedGTIDSet(minUnapplied, conn, &appliedGTIDsBuilder);
         // apply snapshot of each doc in docsMap
         applySnapshotOfDocsMap(conn);
@@ -644,24 +636,21 @@ namespace mongo {
                 &rollbackPointTS,
                 &rollbackPointHash
                 );
-            
-            shared_ptr<DBClientConnection> conn(r.conn_shared());
+
             if (!canStartRollback(r, idToRollbackTo)) {
                 return 2;
             }
             startRollback(idToRollbackTo, rollbackPointTS, rollbackPointHash);
-            {
-                RollbackDocsMap docsMap; // stores the documents we need to get images of
-                docsMap.initialize();
-                RollbackSaveData rsSave;
-                rsSave.initialize();
-                rollbackToGTID(idToRollbackTo, &docsMap, &rsSave);
-                if (docsMap.size() == 0) {
-                    log() << "Rollback produced no docs in docsMap, exiting early" << rsLog;
-                    finishRollback(true);
-                    theReplSet->leaveRollbackState();
-                    return 0;
-                }
+            RollbackDocsMap docsMap; // stores the documents we need to get images of
+            docsMap.initialize();
+            RollbackSaveData rsSave;
+            rsSave.initialize();
+            rollbackToGTID(idToRollbackTo, &docsMap, &rsSave);
+            if (docsMap.size() == 0) {
+                log() << "Rollback produced no docs in docsMap, exiting early" << rsLog;
+                finishRollback(true);
+                theReplSet->leaveRollbackState();
+                return 0;
             }
             // at this point docsMap has the list of documents (identified by collection and pk)
             // that we need to get a snapshot of
