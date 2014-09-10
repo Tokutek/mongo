@@ -49,7 +49,7 @@ namespace mongo {
     // if true, updates must log the full pre-image and post-image in the oplog,
     // and cannot log mods in its place
     bool forceLogFullUpdate(Collection* cl, ModSet* useMods) {
-        return useMods->hasDynamicArray() || cl->isCapped();
+        return useMods->hasDynamicArray() || cl->isCapped() || NamespaceString::isSystem(cl->ns());
     }
 
     bool logOfPreImageRequired(Collection* cl) {
