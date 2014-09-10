@@ -15,11 +15,10 @@
 */
 
 #include <vector>
+
 #include "mongo/db/jsobj.h"
 #include "mongo/db/commands.h"
-#include "mongo/db/btreecursor.h"
 #include "mongo/db/cursor.h"
-#include "mongo/db/diskloc.h"
 #include "mongo/db/matcher.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/geo/s2common.h"
@@ -37,39 +36,35 @@ namespace mongo {
         virtual ~S2NearCursor(); 
         virtual CoveredIndexMatcher *matcher() const;
 
-        virtual bool supportYields()  { return true; }
-        virtual bool supportGetMore() { return true; }
         virtual bool isMultiKey() const { return true; }
         virtual bool autoDedup() const { return false; }
         virtual bool modifiedKeys() const { return true; }
-        virtual bool getsetdup(DiskLoc loc) { return false; }
-        virtual string toString() { return "S2NearCursor"; }
-        BSONObj indexKeyPattern() { return _keyPattern; }
+        virtual bool getsetdup(const BSONObj &pk) { return false; }
+        virtual string toString() const { return "S2NearCursor"; }
+        BSONObj indexKeyPattern() const { return _keyPattern; }
         virtual bool ok();
-        virtual Record* _current();
         virtual BSONObj current();
-        virtual DiskLoc currLoc();
+        virtual BSONObj currPK() const;
         virtual bool advance();
         virtual BSONObj currKey() const;
-        virtual DiskLoc refLoc();
-        virtual void noteLocation();
-        virtual void checkLocation();
-        virtual long long nscanned();
-        virtual void explainDetails(BSONObjBuilder& b);
+        virtual long long nscanned() const;
+        virtual void explainDetails(BSONObjBuilder& b) const;
 
         double currentDistance() const;
     private:
         // We use this to cache results of the search.  Results are sorted to have decreasing
-        // distance, and callers are interested in loc and key.
+        // distance, and callers are interested in pk and key.
         struct Result {
-            Result(const DiskLoc &dl, const BSONObj &ck, double dist) : loc(dl), key(ck),
-                                                                        distance(dist) { }
+            Result(const BSONObj &_pk, const BSONObj &ck, const BSONObj &o, double dist) :
+                pk(_pk.getOwned()), key(ck.getOwned()), obj(o.getOwned()), distance(dist) {
+            }
             bool operator<(const Result& other) const {
                 // We want increasing distance, not decreasing, so we reverse the <.
                 return distance > other.distance;
             }
-            DiskLoc loc;
+            BSONObj pk;
             BSONObj key;
+            BSONObj obj;
             double distance;
         };
 
@@ -104,8 +99,6 @@ namespace mongo {
         S2IndexingParams _params;
         // We have to pass this to the FieldRangeVector ctor (in modified form).
         BSONObj _keyPattern;
-        // We also pass this to the FieldRangeVector ctor.
-        IndexSpec _specForFRV;
 
         // Geo-related variables.
         // What's the max distance (arc length) we're willing to look for results?
@@ -119,14 +112,14 @@ namespace mongo {
         // annulus and find no results.
         double _radiusIncrement;
         // What have we returned already?
-        unordered_set<DiskLoc, DiskLoc::Hasher> _returned;
+        set<BSONObj> _returned;
 
         struct Stats {
             Stats() : _nscanned(0), _matchTested(0), _geoMatchTested(0), _numShells(0),
-                      _keyGeoSkip(0), _returnSkip(0), _btreeDups(0), _inAnnulusTested(0),
+                      _keyGeoSkip(0), _returnSkip(0), _indexDups(0), _inAnnulusTested(0),
                       _numReturned(0) {}
             // Stat counters/debug information goes below.
-            // How many items did we look at in the btree?
+            // How many items did we look at in the index?
             long long _nscanned;
             // How many did we try to match?
             long long _matchTested;
@@ -137,7 +130,7 @@ namespace mongo {
             // How many did we skip due to key-geo check?
             long long _keyGeoSkip;
             long long _returnSkip;
-            long long _btreeDups;
+            long long _indexDups;
             long long _inAnnulusTested;
             long long _numReturned;
         };

@@ -32,12 +32,23 @@ namespace mongo {
     static const int ScanAndOrderMemoryLimitExceededAssertionCode = 10128;
 
     class KeyType : boost::noncopyable {
+        shared_ptr<KeyGenerator> keyGeneratorForPattern(const BSONObj &pattern) {
+            vector<const char *> fieldNames;
+            for (BSONObjIterator it = pattern.begin(); it.more(); ) {
+                const BSONElement &e = it.next();
+                fieldNames.push_back(e.fieldName());
+            };
+            // We know that a vanilla key generator is okay here because
+            // scan-and-order is not allowed on 'special' sort orders.
+            // That means sort({ x: 1 }) is ok but sort({ y: '2d' }) is not
+            return shared_ptr<KeyGenerator>(new KeyGenerator(fieldNames, false));
+        }
     public:
         BSONObj _keyPattern;
         FieldRangeVector _keyCutter;
         KeyType(const BSONObj &pattern, const FieldRangeSet &frs) :
             _keyPattern(pattern),
-            _keyCutter(frs, _keyPattern, 1) {
+            _keyCutter(frs, _keyPattern, keyGeneratorForPattern(pattern), 1) {
             verify(!_keyPattern.isEmpty());
         }
 

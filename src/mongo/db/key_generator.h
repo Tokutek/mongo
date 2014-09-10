@@ -19,54 +19,31 @@
 
 #pragma once
 
+#include <vector>
+
 #include "mongo/pch.h"
-#include "mongo/db/hasher.h"
 #include "mongo/db/jsobj.h"
 
 namespace mongo {
 
-    // Generates keys for a hashed index.
-    class HashKeyGenerator {
-    public:
-        HashKeyGenerator(const char *hashedField,
-                         const HashSeed &seed, const HashVersion &hashVersion,
-                         const bool sparse) :
-            _hashedField(hashedField),
-            _seed(seed), _hashVersion(hashVersion),
-            _sparse(sparse) {
-        }
-
-        void getKeys(const BSONObj &obj, BSONObjSet &keys);
-
-    private:
-        static long long int makeSingleKey(const BSONElement &e,
-                                           const HashSeed &seed,
-                                           const HashVersion &v = 0);
-
-        const char *_hashedField;
-        const HashSeed &_seed;
-        const HashVersion &_hashVersion;
-        const bool _sparse;
-
-        friend class HashedIndex;
-    };
-
     // Generates keys for a standard index.
-    class KeyGenerator {
+    class KeyGenerator : boost::noncopyable {
     public:
         KeyGenerator(const vector<const char *> &fieldNames,
                      const bool sparse) :
             _fieldNames(fieldNames),
             _sparse(sparse) {
         }
+        virtual ~KeyGenerator() { }
 
-        void getKeys(const BSONObj &obj, BSONObjSet &keys) const;
+        virtual void getKeys(const BSONObj &obj, BSONObjSet &keys) const;
 
-        // One-time key generating function, because the implementation modifies fieldNames.
-        static void getKeys(const BSONObj &obj, vector<const char *> &fieldNames,
-                            const bool sparse, BSONObjSet &keys);
+        // Needed for some strange code in geo.
+        virtual void getGeoLocs(const BSONObj &obj, vector<BSONObj> &locs) const {
+            msgasserted(0, "bug: called getKeys with vector arg on non-2d index");
+        }
+
     private:
-
         /**
          * @param arrayNestedArray - set if the returned element is an array nested directly within arr.
          */
@@ -91,6 +68,7 @@ namespace mongo {
                               const BSONObj &obj, const bool sparse, BSONObjSet &keys, int numNotFound = 0,
                               const BSONObj &array = BSONObj() );
 
+    protected:
         vector<const char *> _fieldNames;
         const bool _sparse;
     };

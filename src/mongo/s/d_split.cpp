@@ -349,11 +349,11 @@ namespace mongo {
             // Problem is that getKeyAfterBytes is templated, so we cannot virtualize it
             //
             //
-            const IndexDetailsBase* idxBase = dynamic_cast<const IndexDetailsBase *>(_idx);
-            massert(17237, "bug: failed to dynamically cast IndexDetails to IndexDetailsBase", idxBase != NULL);
+            const IndexInterface *ii = dynamic_cast<const IndexInterface *>(_idx);
+            massert(17237, "bug: failed to dynamically cast IndexDetails to IndexInterface", ii != NULL);
             {
                 IsTooBigCallback cb(*this);
-                idxBase->getKeyAfterBytes(_chunkMin, maxChunkSize, cb);
+                ii->getKeyAfterBytes(_chunkMin, maxChunkSize, cb);
             }
             if (!_chunkTooBig) {
                 return;
@@ -378,7 +378,7 @@ namespace mongo {
                         _useCursor = false;
                     }
                     else {
-                        idxBase->getKeyAfterBytes(_chunkMin, targetChunkSize, cb);
+                        ii->getKeyAfterBytes(_chunkMin, targetChunkSize, cb);
                     }
                 }
             }

@@ -18,26 +18,20 @@
 
 #include <vector>
 
-#include "mongo/db/auth/action_set.h"
-#include "mongo/db/auth/action_type.h"
-#include "mongo/db/auth/privilege.h"
-#include "mongo/db/namespace-inl.h"
+#include "mongo/db/collection.h"
+#include "mongo/db/cursor.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/index.h"
-#include "mongo/util/startup_test.h"
+#include "mongo/db/index/2d.h"
 #include "mongo/db/commands.h"
-#include "mongo/db/pdfile.h"
-#include "mongo/db/btreecursor.h"
-#include "mongo/db/curop-inl.h"
 #include "mongo/db/matcher.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/geo/core.h"
 #include "mongo/db/geo/geonear.h"
 #include "mongo/db/geo/hash.h"
 #include "mongo/db/geo/shapes.h"
-#include "mongo/util/timer.h"
 
-// Note: we use indexinterface herein to talk to the btree code. In the future it would be nice to 
+// Note: we use indexinterface herein to talk to the index code. In the future it would be nice to 
 //       be able to use the V1 key class (see key.h) instead of toBson() which has some cost.
 //       toBson() is new with v1 so this could be slower than it used to be?  a quick profiling
 //       might make sense.
@@ -47,12 +41,12 @@ namespace mongo {
     class GeoKeyNode { 
         GeoKeyNode();
     public:
-        GeoKeyNode(DiskLoc bucket, int keyOfs, DiskLoc r, BSONObj k)
-            : _bucket(bucket), _keyOfs(keyOfs), recordLoc(r), _key(k) { }
-        const DiskLoc _bucket;
-        const int _keyOfs;
-        const DiskLoc recordLoc;
+        GeoKeyNode(const BSONObj &pk, const BSONObj &k, const BSONObj &o)
+            : _pk(pk.getOwned()), _key(k.getOwned()), _obj(o.getOwned()) {
+        }
+        const BSONObj _pk;
         const BSONObj _key;
+        const BSONObj _obj;
     };
 
     enum GeoDistType {
@@ -66,280 +60,31 @@ namespace mongo {
                                     cos(deg2rad(max(-89.0, y - maxDistDegrees))));
     }
 
-    const string GEO2DNAME = "2d";
-
-    class Geo2dType : public IndexType {
-    public:
-        virtual ~Geo2dType() { }
-
-        Geo2dType(const IndexPlugin *plugin, const IndexSpec* spec) : IndexType(plugin, spec) {
-            BSONObjIterator i(spec->keyPattern);
-            while (i.more()) {
-                BSONElement e = i.next();
-                if (e.type() == String && GEO2DNAME == e.valuestr()) {
-                    uassert(13022, "can't have 2 geo field", _geo.size() == 0);
-                    uassert(13023, "2d has to be first in index", _other.size() == 0);
-                    _geo = e.fieldName();
-                } else {
-                    int order = 1;
-                    if (e.isNumber()) {
-                        order = static_cast<int>(e.Number());
-                    }
-                    _other.push_back(make_pair(e.fieldName(), order));
-                }
-            }
-            uassert(13024, "no geo field specified", _geo.size());
-
-            double bits =  configValueWithDefault(spec, "bits", 26); // for lat/long, ~ 1ft
-            uassert(13028, "bits in geo index must be between 1 and 32", bits > 0 && bits <= 32);
-
-            GeoHashConverter::Parameters params;
-            params.bits = static_cast<unsigned>(bits);
-            params.max = configValueWithDefault(spec, "max", 180.0);
-            params.min = configValueWithDefault(spec, "min", -180.0);
-            double numBuckets = (1024 * 1024 * 1024 * 4.0);
-            params.scaling = numBuckets / (params.max - params.min);
-
-            _geoHashConverter.reset(new GeoHashConverter(params));
-        }
-
-        // XXX: what does this do
-        virtual BSONObj fixKey(const BSONObj& in) {
-            if (in.firstElement().type() == BinData)
-                return in;
-
-            BSONObjBuilder b(in.objsize() + 16);
-
-            if (in.firstElement().isABSONObj())
-                _geoHashConverter->hash(in.firstElement().embeddedObject()).appendToBuilder(&b, "");
-            else if (in.firstElement().type() == String)
-                GeoHash(in.firstElement().valuestr()).appendToBuilder(&b, "");
-            else if (in.firstElement().type() == RegEx)
-                GeoHash(in.firstElement().regex()).appendToBuilder(&b, "");
-            else
-                return in;
-
-            BSONObjIterator i(in);
-            i.next();
-            while (i.more())
-                b.append(i.next());
-            return b.obj();
-        }
-
-        /** Finds the key objects to put in an index */
-        virtual void getKeys(const BSONObj& obj, BSONObjSet& keys) const {
-            getKeys(obj, &keys, NULL);
-        }
-
-        /** Finds all locations in a geo-indexed object */
-        // TODO:  Can we just return references to the locs, if they won't change?
-        void getKeys(const BSONObj& obj, vector<BSONObj>& locs) const {
-            getKeys(obj, NULL, &locs);
-        }
-
-        /** Finds the key objects and/or locations for a geo-indexed object */
-        void getKeys(const BSONObj &obj, BSONObjSet* keys, vector<BSONObj>* locs) const {
-            BSONElementMSet bSet;
-
-            // Get all the nested location fields, but don't return individual elements from
-            // the last array, if it exists.
-            obj.getFieldsDotted(_geo.c_str(), bSet, false);
-
-            if (bSet.empty())
-                return;
-
-            for (BSONElementMSet::iterator setI = bSet.begin(); setI != bSet.end(); ++setI) {
-                BSONElement geo = *setI;
-
-                GEODEBUG("Element " << geo << " found for query " << _geo.c_str());
-
-                if (geo.eoo() || !geo.isABSONObj())
-                    continue;
-
-                //
-                // Grammar for location lookup:
-                // locs ::= [loc,loc,...,loc]|{<k>:loc,<k>:loc,...,<k>:loc}|loc
-                // loc  ::= { <k1> : #, <k2> : # }|[#, #]|{}
-                //
-                // Empty locations are ignored, preserving single-location semantics
-                //
-
-                BSONObj embed = geo.embeddedObject();
-                if (embed.isEmpty())
-                    continue;
-
-                // Differentiate between location arrays and locations
-                // by seeing if the first element value is a number
-                bool singleElement = embed.firstElement().isNumber();
-
-                BSONObjIterator oi(embed);
-
-                while (oi.more()) {
-                    BSONObj locObj;
-
-                    if (singleElement) {
-                        locObj = embed;
-                    } else {
-                        BSONElement locElement = oi.next();
-
-                        uassert(13654, str::stream() << "location object expected, location "
-                                                       "array not in correct format",
-                                locElement.isABSONObj());
-
-                        locObj = locElement.embeddedObject();
-                        if(locObj.isEmpty())
-                            continue;
-                    }
-
-                    BSONObjBuilder b(64);
-
-                    // Remember the actual location object if needed
-                    if (locs)
-                        locs->push_back(locObj);
-
-                    // Stop if we don't need to get anything but location objects
-                    if (!keys) {
-                        if (singleElement) break;
-                        else continue;
-                    }
-
-                    _geoHashConverter->hash(locObj, &obj).appendToBuilder(&b, "");
-
-                    // Go through all the other index keys
-                    for (vector<pair<string, int> >::const_iterator i = _other.begin();
-                         i != _other.end(); ++i) {
-                        // Get *all* fields for the index key
-                        BSONElementSet eSet;
-                        obj.getFieldsDotted(i->first, eSet);
-
-                        if (eSet.size() == 0)
-                            b.appendAs(_spec->missingField(), "");
-                        else if (eSet.size() == 1)
-                            b.appendAs(*(eSet.begin()), "");
-                        else {
-                            // If we have more than one key, store as an array of the objects
-                            BSONArrayBuilder aBuilder;
-
-                            for (BSONElementSet::iterator ei = eSet.begin(); ei != eSet.end();
-                                 ++ei) {
-                                aBuilder.append(*ei);
-                            }
-
-                            b.append("", aBuilder.arr());
-                        }
-                    }
-                    keys->insert(b.obj());
-                    if(singleElement) break;
-                }
-            }
-        }
-
-        const IndexDetails* getDetails() const {
-            return _spec->getDetails();
-        }
-
-        virtual shared_ptr<Cursor> newCursor(const BSONObj& query, const BSONObj& order,
-                                             int numWanted) const;
-
-        virtual IndexSuitability suitability( const FieldRangeSet& queryConstraints ,
-                                              const BSONObj& order ) const {
-            BSONObj query = queryConstraints.originalQuery();
-
-            BSONElement e = query.getFieldDotted(_geo.c_str());
-            switch (e.type()) {
-            case Object: {
-                BSONObj sub = e.embeddedObject();
-                switch (sub.firstElement().getGtLtOp()) {
-                case BSONObj::opNEAR:
-                    return OPTIMAL;
-                case BSONObj::opWITHIN: {
-                    // Don't return optimal if it's $within: {$geometry: ... }
-                    // because we will error out in that case, but the matcher
-                    // or 2dsphere index may handle it.
-                    BSONElement elt = sub.firstElement();
-                    if (Object == elt.type()) {
-                        BSONObjIterator it(elt.embeddedObject());
-                        while (it.more()) {
-                            BSONElement elt = it.next();
-                            if (mongoutils::str::equals("$geometry", elt.fieldName())) {
-                                return USELESS;
-                            }
-                        }
-                    }
-                    return OPTIMAL;
-                }
-                default:
-                    // We can try to match if there's no other indexing defined,
-                    // this is assumed a point
-                    return HELPFUL;
-                }
-            }
-            case Array:
-                // We can try to match if there's no other indexing defined,
-                // this is assumed a point
-                return HELPFUL;
-            default:
-                return USELESS;
-            }
-        }
-
-        const GeoHashConverter& getConverter() const { return *_geoHashConverter; }
-
-        // XXX: make private with a getter
-        string _geo;
-        vector<pair<string, int> > _other;
-    private:
-        double configValueWithDefault(const IndexSpec* spec, const string& name, double def) {
-            BSONElement e = spec->info[name];
-            if (e.isNumber()) {
-                return e.numberDouble();
-            }
-            return def;
-        }
-
-        scoped_ptr<GeoHashConverter> _geoHashConverter;
-    };
-
-    class Geo2dPlugin : public IndexPlugin {
-    public:
-        Geo2dPlugin() : IndexPlugin(GEO2DNAME) { }
-
-        virtual IndexType* generate(const IndexSpec* spec) const {
-            return new Geo2dType(this, spec);
-        }
-    } geo2dplugin;
-
-    void __forceLinkGeoPlugin() {
-        geo2dplugin.getName();
-    }
-    
     class GeoHopper;
 
     class GeoPoint {
     public:
-        GeoPoint() : _distance(-1), _exact(false), _dirty(false) { }
+        GeoPoint() : _distance(-1), _exact(false) { }
 
         //// Distance not used ////
 
         GeoPoint(const GeoKeyNode& node)
-            : _key(node._key), _loc(node.recordLoc), _o(node.recordLoc.obj()),
-              _distance(-1), _exact(false), _dirty(false), _bucket(node._bucket),
-              _pos(node._keyOfs) { }
+            : _key(node._key.getOwned()), _pk(node._pk.getOwned()), _o(node._obj.getOwned()), _distance(-1), _exact(false) { }
 
         //// Immediate initialization of distance ////
 
         GeoPoint(const GeoKeyNode& node, double distance, bool exact)
-            : _key(node._key), _loc(node.recordLoc), _o(node.recordLoc.obj()), _distance(distance), _exact(exact), _dirty(false) {
+            : _key(node._key.getOwned()), _pk(node._pk.getOwned()), _o(node._obj.getOwned()), _distance(distance), _exact(exact) {
         }
 
         GeoPoint(const GeoPoint& pt, double distance, bool exact)
-            : _key(pt.key()), _loc(pt.loc()), _o(pt.obj()), _distance(distance), _exact(exact), _dirty(false) {
+            : _key(pt.key().getOwned()), _pk(pt.pk().getOwned()), _o(pt.obj().getOwned()), _distance(distance), _exact(exact) {
         }
 
         bool operator<(const GeoPoint& other) const {
             if(_distance != other._distance) return _distance < other._distance;
             if(_exact != other._exact) return _exact < other._exact;
-            return _loc < other._loc;
+            return _pk < other._pk;
         }
 
         double distance() const {
@@ -354,13 +99,8 @@ namespace mongo {
             return _key;
         }
 
-        bool hasLoc() const {
-            return _loc.isNull();
-        }
-
-        DiskLoc loc() const {
-            verify(! _dirty);
-            return _loc;
+        const BSONObj &pk() const {
+            return _pk;
         }
 
         BSONObj obj() const {
@@ -376,119 +116,26 @@ namespace mongo {
         }
 
         bool isCleanAndEmpty() {
-            return isEmpty() && ! isDirty();
+            return isEmpty();
         }
 
         string toString() const {
             return str::stream() << "Point from " << _key << " - " << _o << " dist : " << _distance << (_exact ? " (ex)" : " (app)");
         }
 
-
-        // TODO:  Recover from yield by finding all the changed disk locs here, modifying the _seenPts array.
-        // Not sure yet the correct thing to do about _seen.
-        // Definitely need to re-find our current max/min locations too
-        bool unDirty(const Geo2dType* g, DiskLoc& oldLoc){
-
-            verify(_dirty);
-            verify(! _id.isEmpty());
-
-            oldLoc = _loc;
-            _loc = DiskLoc();
-
-            // Fast undirty
-            IndexInterface& ii = g->getDetails()->idxInterface();
-            // Check this position and the one immediately preceding
-            for(int i = 0; i < 2; i++){
-                if(_pos - i < 0) continue;
-
-                // log() << "bucket : " << _bucket << " pos " << _pos << endl;
-
-                BSONObj key;
-                DiskLoc loc;
-                ii.keyAt(_bucket, _pos - i, key, loc);
-
-                // log() << "Loc: " << loc << " Key : " << key << endl;
-
-                if(loc.isNull()) continue;
-
-                if(key.binaryEqual(_key) && loc.obj()["_id"].wrap("").binaryEqual(_id)){
-                    _pos = _pos - i;
-                    _loc = loc;
-                    _dirty = false;
-                    _o = loc.obj();
-                    return true;
-                }
-            }
-
-            // Slow undirty
-            scoped_ptr<BtreeCursor> cursor(BtreeCursor::make(nsdetails(g->getDetails()->parentNS()),
-                                            *(g->getDetails()), _key, _key, true, 1));
-
-            int count = 0;
-            while(cursor->ok()){
-                count++;
-                if(cursor->current()["_id"].wrap("").binaryEqual(_id)){
-                    _bucket = cursor->getBucket();
-                    _pos = cursor->getKeyOfs();
-                    _loc = cursor->currLoc();
-                    _o = _loc.obj();
-                    break;
-                }
-                else{
-                    LOG(CDEBUG + 1) << "Key doesn't match : " << cursor->current()["_id"] << " saved : " << _id << endl;
-                }
-                cursor->advance();
-            }
-
-            if(! count) { LOG(CDEBUG) << "No key found for " << _key << endl; }
-
-            _dirty = false;
-
-            return _loc == oldLoc;
-        }
-
-        bool isDirty(){
-            return _dirty;
-        }
-
-        bool makeDirty(){
-            if(! _dirty){
-                verify(! obj()["_id"].eoo());
-                verify(! _bucket.isNull());
-                verify(_pos >= 0);
-
-                if(_id.isEmpty()){
-                    _id = obj()["_id"].wrap("").getOwned();
-                }
-                _o = BSONObj();
-                _key = _key.getOwned();
-                _pt = _pt.getOwned();
-                _dirty = true;
-
-                return true;
-            }
-
-            return false;
-        }
-
         BSONObj _key;
-        DiskLoc _loc;
+        BSONObj _pk;
         BSONObj _o;
         BSONObj _pt;
 
         double _distance;
         bool _exact;
-
-        BSONObj _id;
-        bool _dirty;
-        DiskLoc _bucket;
-        int _pos;
     };
 
     // GeoBrowse subclasses this
     class GeoAccumulator {
     public:
-        GeoAccumulator(const Geo2dType * g, const BSONObj& filter, bool uniqueDocs, bool needDistance)
+        GeoAccumulator(const TwoDIndex * g, const BSONObj& filter, bool uniqueDocs, bool needDistance)
             : _g(g),
               _lookedAt(0),
               _matchesPerfd(0),
@@ -522,16 +169,16 @@ namespace mongo {
             Point keyP(_g->getConverter().unhashToPoint(node._key.firstElement()));
             KeyResult keyOk = approxKeyCheck(keyP, keyD);
             if (keyOk == BAD) {
-                GEODEBUG("\t\t\t\t bad distance : " << node.recordLoc.obj()  << "\t" << keyD);
+                GEODEBUG("\t\t\t\t bad distance : " << node._obj << "\t" << keyD);
                 return;
             }
-            GEODEBUG("\t\t\t\t good distance : " << node.recordLoc.obj()  << "\t" << keyD);
+            GEODEBUG("\t\t\t\t good distance : " << node._obj << "\t" << keyD);
 
             ////
             // Check for match using other key (and potentially doc) criteria
             ////
             // Remember match results for each object
-            map<DiskLoc, bool>::iterator match = _matched.find(node.recordLoc);
+            map<BSONObj, bool>::iterator match = _matched.find(node._pk.getOwned());
             bool newDoc = match == _matched.end();
             if(newDoc) {
 
@@ -540,7 +187,7 @@ namespace mongo {
                 // matcher
                 MatchDetails details;
                 if (_matcher.get()) {
-                    bool good = _matcher->matchesWithSingleKeyIndex(node._key, node.recordLoc, &details);
+                    bool good = _matcher->matchesWithSingleKeyIndex(node._key, node._obj, &details);
 
                     _matchesPerfd++;
 
@@ -548,20 +195,20 @@ namespace mongo {
                         _objectsLoaded++;
 
                     if (! good) {
-                        GEODEBUG("\t\t\t\t didn't match : " << node.recordLoc.obj()["_id"]);
-                        _matched[ node.recordLoc ] = false;
+                        GEODEBUG("\t\t\t\t didn't match : " << node._obj["_id"]);
+                        _matched[ node._pk.getOwned() ] = false;
                         return;
                     }
                 }
 
-                _matched[ node.recordLoc ] = true;
+                _matched[ node._pk.getOwned() ] = true;
 
                 if (! details.hasLoadedRecord()) // don't double count
                     _objectsLoaded++;
 
             }
             else if(!((*match).second)) {
-                GEODEBUG("\t\t\t\t previously didn't match : " << node.recordLoc.obj()["_id"]);
+                GEODEBUG("\t\t\t\t previously didn't match : " << node._obj["_id"]);
                 return;
             }
 
@@ -579,7 +226,7 @@ namespace mongo {
                                   vector<BSONObj> &locsForNode, bool allPoints = false) {
             // Find all the location objects from the keys
             vector<BSONObj> locs;
-            _g->getKeys(obj, allPoints ? locsForNode : locs);
+            _g->getKeyGenerator()->getGeoLocs(obj, allPoints ? locsForNode : locs);
             ++_pointsLoaded;
 
             if (allPoints) return;
@@ -607,8 +254,8 @@ namespace mongo {
 
         long long found() const { return _found; }
 
-        const Geo2dType * _g;
-        map<DiskLoc, bool> _matched;
+        const TwoDIndex * _g;
+        map<BSONObj, bool> _matched;
         shared_ptr<CoveredIndexMatcher> _matcher;
 
         long long _lookedAt;
@@ -621,12 +268,11 @@ namespace mongo {
         bool _needDistance;
     };
 
-    struct BtreeLocation {
-        BtreeLocation() { }
+    struct IndexLocation {
+        IndexLocation() { }
 
-        scoped_ptr<BtreeCursor> _cursor;
+        shared_ptr<Cursor> _cursor;
         scoped_ptr<FieldRangeSet> _frs;
-        scoped_ptr<IndexSpec> _spec;
 
         BSONObj key() {
             return _cursor->currKey();
@@ -645,7 +291,7 @@ namespace mongo {
 
             if(all){
                 totalFound++;
-                GeoKeyNode n(_cursor->getBucket(), _cursor->getKeyOfs(), _cursor->currLoc(), _cursor->currKey());
+                GeoKeyNode n(_cursor->currPK(), _cursor->currKey(), _cursor->current());
                 all->add(n);
             }
             _cursor->advance();
@@ -653,26 +299,17 @@ namespace mongo {
             return true;
         }
 
-        void save(){
-            _cursor->noteLocation();
-        }
-
-        void restore(){
-            _cursor->checkLocation();
-        }
-
         string toString() {
             stringstream ss;
-            ss << "bucket: " << _cursor->getBucket().toString() << " pos: " << _cursor->getKeyOfs() <<
-               (_cursor->ok() ? (str::stream() << " k: " << _cursor->currKey() << " o : " << _cursor->current()["_id"]) : (string)"[none]") << endl;
+            ss << (_cursor->ok() ? (str::stream() << " k: " << _cursor->currKey() << " o : " << _cursor->current()["_id"]) : (string)"[none]") << endl;
             return ss.str();
         }
 
         // Returns the min and max keys which bound a particular location.
         // The only time these may be equal is when we actually equal the location
         // itself, otherwise our expanding algorithm will fail.
-        static bool initial(const IndexDetails& id, const Geo2dType * spec,
-                             BtreeLocation& min, BtreeLocation&  max,
+        static bool initial(const IndexDetails& id, const TwoDIndex * spec,
+                             IndexLocation& min, IndexLocation&  max,
                              GeoHash start,
                              int & found, GeoAccumulator * hopper) {
 
@@ -686,12 +323,12 @@ namespace mongo {
             // log() << "MinQuery: " << minQuery << endl;
             // log() << "MaxQuery: " << maxQuery << endl;
 
-            min._frs.reset(new FieldRangeSet(spec->getDetails()->parentNS().c_str(),
+            min._frs.reset(new FieldRangeSet(spec->parentNS().c_str(),
                                   minQuery,
                                   true,
                                   false));
 
-            max._frs.reset(new FieldRangeSet(spec->getDetails()->parentNS().c_str(),
+            max._frs.reset(new FieldRangeSet(spec->parentNS().c_str(),
                                   maxQuery,
                                   true,
                                   false));
@@ -705,30 +342,22 @@ namespace mongo {
             }
             BSONObj iSpec = bob.obj();
 
-            min._spec.reset(new IndexSpec(iSpec));
-            max._spec.reset(new IndexSpec(iSpec));
+            shared_ptr<FieldRangeVector> frvMin(new FieldRangeVector(*(min._frs), iSpec, spec->getKeyGenerator(), -1));
+            shared_ptr<FieldRangeVector> frvMax(new FieldRangeVector(*(max._frs), iSpec, spec->getKeyGenerator(), 1));
 
-            shared_ptr<FieldRangeVector> frvMin(new FieldRangeVector(*(min._frs), *(min._spec), -1));
-            shared_ptr<FieldRangeVector> frvMax(new FieldRangeVector(*(max._frs), *(max._spec), 1));
+            min._cursor = 
+                IndexCursor::make(getCollection(spec->parentNS()),
+                                  id,
+                                  frvMin,
+                                  0,
+                                  -1);
 
-            min._cursor.reset(
-                            BtreeCursor::make(nsdetails(spec->getDetails()->parentNS()),
-                                              *(spec->getDetails()),
-                                              frvMin,
-                                              0,
-                                              -1)
-                   );
-
-            max._cursor.reset(
-                           BtreeCursor::make(nsdetails(spec->getDetails()->parentNS()),
-                                             *(spec->getDetails()),
-                                             frvMax,
-                                             0,
-                                             1)
-                  );
-
-            // if(hopper) min.checkCur(found, hopper);
-            // if(hopper) max.checkCur(found, hopper);
+            max._cursor =
+                IndexCursor::make(getCollection(spec->parentNS()),
+                                  id,
+                                  frvMax,
+                                  0,
+                                  1);
 
             return min._cursor->ok() || max._cursor->ok();
         }
@@ -737,39 +366,24 @@ namespace mongo {
 
     class GeoCursorBase : public Cursor {
     public:
-
         static const shared_ptr< CoveredIndexMatcher > emptyMatcher;
 
-        GeoCursorBase(const Geo2dType * spec)
-            : _spec(spec), _id(_spec->getDetails()) {
-
+        GeoCursorBase(const TwoDIndex * spec)
+            : _spec(spec), _id(_spec) {
         }
 
-        virtual DiskLoc refLoc() { return DiskLoc(); }
-
-        virtual BSONObj indexKeyPattern() {
+        virtual BSONObj indexKeyPattern() const {
             return _spec->keyPattern();
         }
 
-        virtual void noteLocation() {
-            // no-op since these are meant to be safe
-        }
-
-        /* called before query getmore block is iterated */
-        virtual void checkLocation() {
-            // no-op since these are meant to be safe
-        }
-
-        virtual bool supportGetMore() { return false; }
-        virtual bool supportYields() { return false; }
-
-        virtual bool getsetdup(DiskLoc loc) { return false; }
+        virtual bool getsetdup(const BSONObj &pk) { return false; }
         virtual bool modifiedKeys() const { return true; }
         virtual bool isMultiKey() const { return false; }
 
         virtual bool autoDedup() const { return false; }
 
-        const Geo2dType * _spec;
+        // TODO: What do we do about this _spec? What goes in its place?
+        const TwoDIndex * _spec;
         const IndexDetails * _id;
     };
 
@@ -792,9 +406,9 @@ namespace mongo {
             DONE
         } _state;
 
-        GeoBrowse(const Geo2dType * g, string type, BSONObj filter = BSONObj(), bool uniqueDocs = true, bool needDistance = false)
+        GeoBrowse(const TwoDIndex * g, string type, BSONObj filter = BSONObj(), bool uniqueDocs = true, bool needDistance = false)
             : GeoCursorBase(g), GeoAccumulator(g, filter, uniqueDocs, needDistance),
-              _type(type), _filter(filter), _firstCall(true), _noted(false), _nscanned(), _nDirtied(0), _nChangedOnYield(0), _nRemovedOnYield(0), _centerPrefix(0, 0, 0) {
+              _type(type), _filter(filter), _firstCall(true), _noted(false), _nscanned(), _nDirtied(0), _centerPrefix(0, 0, 0) {
 
             // Set up the initial expand state
             _state = START;
@@ -803,21 +417,18 @@ namespace mongo {
 
         }
 
-        virtual string toString() {
+        virtual string toString() const {
             return (string)"GeoBrowse-" + _type;
         }
 
         virtual bool ok() {
 
-            bool filled = false;
-
             LOG(CDEBUG) << "Checking cursor, in state " << (int) _state << ", first call " << _firstCall <<
-                             ", empty : " << _cur.isEmpty() << ", dirty : " << _cur.isDirty() << ", stack : " << _stack.size() << endl;
+                             ", empty : " << _cur.isEmpty() << ", stack : " << _stack.size() << endl;
 
             bool first = _firstCall;
             if (_firstCall) {
                 fillStack(maxPointsHeuristic);
-                filled = true;
                 _firstCall = false;
             }
             if (! _cur.isCleanAndEmpty() || _stack.size()) {
@@ -825,7 +436,6 @@ namespace mongo {
                     ++_nscanned;
                 }
 
-                if(_noted && filled) noteLocation();
                 return true;
             }
 
@@ -834,19 +444,16 @@ namespace mongo {
                 LOG(CDEBUG) << "Refilling stack..." << endl;
 
                 fillStack(maxPointsHeuristic);
-                filled = true;
 
                 if (! _cur.isCleanAndEmpty()) {
                     if (first) {
                         ++_nscanned;
                     }
 
-                    if(_noted && filled) noteLocation();
                     return true;
                 }
             }
 
-            if(_noted && filled) noteLocation();
             return false;
         }
 
@@ -863,150 +470,24 @@ namespace mongo {
             if (! moreToDo())
                 return false;
 
-            bool filled = false;
             while (_cur.isCleanAndEmpty() && moreToDo()){
                 fillStack(maxPointsHeuristic);
-                filled = true;
             }
 
-            if(_noted && filled) noteLocation();
             return ! _cur.isCleanAndEmpty() && ++_nscanned;
         }
 
-        virtual void noteLocation() {
-            _noted = true;
-
-            LOG(CDEBUG) << "Noting location with " << _stack.size() << (_cur.isEmpty() ? "" : " + 1 ") << " points " << endl;
-
-            // Make sure we advance past the point we're at now,
-            // since the current location may move on an update/delete
-            // if(_state == DOING_EXPAND){
-            //     if(_min.hasPrefix(_prefix)){ _min.advance(-1, _foundInExp, this); }
-            //    if(_max.hasPrefix(_prefix)){ _max.advance( 1, _foundInExp, this); }
-            // }
-
-            // Remember where our _max, _min are
-            _min.save();
-            _max.save();
-
-            LOG(CDEBUG) << "Min " << _min.toString() << endl;
-            LOG(CDEBUG) << "Max " << _max.toString() << endl;
-
-            // Dirty all our queued stuff
-            for(list<GeoPoint>::iterator i = _stack.begin(); i != _stack.end(); i++){
-
-                LOG(CDEBUG) << "Undirtying stack point with id " << i->_id << endl;
-
-                if(i->makeDirty()) _nDirtied++;
-                verify(i->isDirty());
-            }
-
-            // Check current item
-            if(! _cur.isEmpty()){
-                if(_cur.makeDirty()) _nDirtied++;
-            }
-
-            // Our cached matches become invalid now
-            _matched.clear();
-        }
-
-        void fixMatches(DiskLoc oldLoc, DiskLoc newLoc){
-            map<DiskLoc, bool>::iterator match = _matched.find(oldLoc);
-            if(match != _matched.end()){
+        void fixMatches(const BSONObj &oldPK, const BSONObj &newPK) {
+            map<BSONObj, bool>::iterator match = _matched.find(oldPK);
+            if (match != _matched.end()) {
                 bool val = match->second;
-                _matched.erase(oldLoc);
-                _matched[ newLoc ] = val;
+                _matched.erase(oldPK);
+                _matched[newPK] = val;
             }
         }
 
-        /* called before query getmore block is iterated */
-        virtual void checkLocation() {
-
-            LOG(CDEBUG) << "Restoring location with " << _stack.size() << (! _cur.isDirty() ? "" : " + 1 ") << " points " << endl;
-
-            // We can assume an error was thrown earlier if this database somehow disappears
-
-            // Recall our _max, _min
-            _min.restore();
-            _max.restore();
-
-            LOG(CDEBUG) << "Min " << _min.toString() << endl;
-            LOG(CDEBUG) << "Max " << _max.toString() << endl;
-
-            // If the current key moved, we may have been advanced past the current point - need to check this
-            // if(_state == DOING_EXPAND){
-            //    if(_min.hasPrefix(_prefix)){ _min.advance(-1, _foundInExp, this); }
-            //    if(_max.hasPrefix(_prefix)){ _max.advance( 1, _foundInExp, this); }
-            //}
-
-            // Undirty all the queued stuff
-            // Dirty all our queued stuff
-            list<GeoPoint>::iterator i = _stack.begin();
-            while(i != _stack.end()){
-
-                LOG(CDEBUG) << "Undirtying stack point with id " << i->_id << endl;
-
-                DiskLoc oldLoc;
-                if(i->unDirty(_spec, oldLoc)){
-                    // Document is in same location
-                    LOG(CDEBUG) << "Undirtied " << oldLoc << endl;
-
-                    i++;
-                }
-                else if(! i->loc().isNull()){
-
-                    // Re-found document somewhere else
-                    LOG(CDEBUG) << "Changed location of " << i->_id << " : " << i->loc() << " vs " << oldLoc << endl;
-
-                    _nChangedOnYield++;
-                    fixMatches(oldLoc, i->loc());
-                    i++;
-                }
-                else {
-
-                    // Can't re-find document
-                    LOG(CDEBUG) << "Removing document " << i->_id << endl;
-
-                    _nRemovedOnYield++;
-                    _found--;
-                    verify(_found >= 0);
-
-                    // Can't find our key again, remove
-                    i = _stack.erase(i);
-                }
-            }
-
-            if(_cur.isDirty()){
-                LOG(CDEBUG) << "Undirtying cur point with id : " << _cur._id << endl;
-            }
-
-            // Check current item
-            DiskLoc oldLoc;
-            if(_cur.isDirty() && ! _cur.unDirty(_spec, oldLoc)){
-                if(_cur.loc().isNull()){
-
-                    // Document disappeared!
-                    LOG(CDEBUG) << "Removing cur point " << _cur._id << endl;
-
-                    _nRemovedOnYield++;
-                    advance();
-                }
-                else{
-
-                    // Document moved
-                    LOG(CDEBUG) << "Changed location of cur point " << _cur._id << " : " << _cur.loc() << " vs " << oldLoc << endl;
-
-                    _nChangedOnYield++;
-                    fixMatches(oldLoc, _cur.loc());
-                }
-            }
-
-            _noted = false;
-        }
-
-        virtual Record* _current() { verify(ok()); LOG(CDEBUG + 1) << "_current " << _cur._loc.obj()["_id"] << endl; return _cur._loc.rec(); }
-        virtual BSONObj current() { verify(ok()); LOG(CDEBUG + 1) << "current " << _cur._o << endl; return _cur._o; }
-        virtual DiskLoc currLoc() { verify(ok()); LOG(CDEBUG + 1) << "currLoc " << _cur._loc << endl; return _cur._loc; }
+        virtual BSONObj current() { LOG(CDEBUG + 1) << "current " << _cur._o << endl; return _cur._o; }
+        virtual BSONObj currPK() const { LOG(CDEBUG + 1) << "currPK " << _cur._pk << endl; return _cur._pk; }
         virtual BSONObj currKey() const { return _cur._key; }
 
         virtual CoveredIndexMatcher* matcher() const {
@@ -1018,8 +499,6 @@ namespace mongo {
         virtual bool moreToDo() {
             return _state != DONE;
         }
-
-        virtual bool supportGetMore() { return true; }
 
         // XXX: make private, move into geohashconverter
         Box makeBox(const GeoHash &hash) const {
@@ -1053,13 +532,13 @@ namespace mongo {
                 // Get the very first hash point, if required
                 if(! isNeighbor)
                     _prefix = expandStartHash();
-                GEODEBUG("initializing btree");
+                GEODEBUG("initializing index");
 
 #ifdef GEODEBUGGING
                 log() << "Initializing from b-tree with hash of " << _prefix << " @ " << Box(_g, _prefix) << endl;
 #endif
 
-                if (! BtreeLocation::initial(*_id, _spec, _min, _max, _prefix, _foundInExp, this)) {
+                if (! IndexLocation::initial(*_id, _spec, _min, _max, _prefix, _foundInExp, this)) {
                     _state = isNeighbor ? DONE_NEIGHBOR : DONE;
                 } else {
                     _state = DOING_EXPAND;
@@ -1288,7 +767,7 @@ namespace mongo {
 
             // Final check for new doc
             // OK to touch, since we're probably returning this object now
-            if(remembered(node.recordLoc.obj())) return 0;
+            if(remembered(node._obj)) return 0;
 
             if(_uniqueDocs && ! onBounds) {
                 //log() << "Added ind to " << _type << endl;
@@ -1304,7 +783,7 @@ namespace mongo {
                 bool expensiveExact = expensiveExactCheck();
 
                 vector< BSONObj > locs;
-                getPointsFor(node._key, node.recordLoc.obj(), locs, true);
+                getPointsFor(node._key, node._obj, locs, true);
                 for(vector< BSONObj >::iterator i = locs.begin(); i != locs.end(); ++i){
 
                     double d = -1;
@@ -1338,21 +817,19 @@ namespace mongo {
             return found;
         }
 
-        virtual long long nscanned() {
+        virtual long long nscanned() const {
             if (_firstCall) {
-                ok();
+                // Forgive me.
+                const_cast<GeoBrowse *>(this)->ok();
             }
             return _nscanned;
         }
 
-        virtual void explainDetails(BSONObjBuilder& b){
+        virtual void explainDetails(BSONObjBuilder& b) const {
             b << "lookedAt" << _lookedAt;
             b << "matchesPerfd" << _matchesPerfd;
             b << "objectsLoaded" << _objectsLoaded;
             b << "pointsLoaded" << _pointsLoaded;
-            b << "pointsSavedForYield" << _nDirtied;
-            b << "pointsChangedOnYield" << _nChangedOnYield;
-            b << "pointsRemovedOnYield" << _nRemovedOnYield;
         }
 
         virtual BSONObj prettyIndexBounds() const {
@@ -1387,8 +864,6 @@ namespace mongo {
 
         long long _nscanned;
         long long _nDirtied;
-        long long _nChangedOnYield;
-        long long _nRemovedOnYield;
 
         // The current box we're expanding (-1 is first/center box)
         int _neighbor;
@@ -1406,20 +881,19 @@ namespace mongo {
         Box _centerBox;
 
         // Start and end of our search range in the current box
-        BtreeLocation _min;
-        BtreeLocation _max;
+        IndexLocation _min;
+        IndexLocation _max;
 
         shared_ptr<GeoHash> _expPrefix;
         mutable vector<GeoHash> _expPrefixes;
 
     };
 
-
     class GeoHopper : public GeoBrowse {
     public:
         typedef multiset<GeoPoint> Holder;
 
-        GeoHopper(const Geo2dType * g,
+        GeoHopper(const TwoDIndex * g,
                   unsigned max,
                   const Point& n,
                   const BSONObj& filter = BSONObj(),
@@ -1500,7 +974,7 @@ namespace mongo {
             if(_uniqueDocs){
 
                 // Lookup old point with same doc
-                map< DiskLoc, Holder::iterator >::iterator oldPointIt = _seenPts.find(newPoint.loc());
+                map< BSONObj, Holder::iterator >::iterator oldPointIt = _seenPts.find(newPoint.pk().getOwned());
 
                 if(oldPointIt != _seenPts.end()){
                     const GeoPoint& oldPoint = *(oldPointIt->second);
@@ -1516,7 +990,7 @@ namespace mongo {
             }
 
             Holder::iterator newIt = _points.insert(newPoint);
-            if(_uniqueDocs) _seenPts[ newPoint.loc() ] = newIt;
+            if(_uniqueDocs) _seenPts[ newPoint.pk().getOwned() ] = newIt;
 
             GEODEBUG("\t\tInserted new point " << newPoint.toString() << " approx : " << keyD);
 
@@ -1562,7 +1036,7 @@ namespace mongo {
 
             if(_uniqueDocs){
                 for(Holder::iterator i = startErase; i != _points.end(); ++i)
-                    _seenPts.erase(i->loc());
+                    _seenPts.erase(i->pk());
             }
 
             _points.erase(startErase, _points.end());
@@ -1581,17 +1055,14 @@ namespace mongo {
         double _distError;
         double _farthest;
 
-        // Safe to use currently since we don't yield in $near searches.  If we do start to yield, we may need to
-        // replace dirtied disklocs in our holder / ensure our logic is correct.
-        map< DiskLoc, Holder::iterator > _seenPts;
-
+        map< BSONObj, Holder::iterator > _seenPts;
     };
 
 
 
     class GeoSearch : public GeoHopper {
     public:
-        GeoSearch(const Geo2dType * g,
+        GeoSearch(const TwoDIndex * g,
                   const Point& startPt,
                   int numWanted = 100,
                   BSONObj filter = BSONObj(),
@@ -1606,7 +1077,6 @@ namespace mongo {
              _type(type)
         {
 
-           verify(g->getDetails());
             _nscanned = 0;
             _found = 0;
 
@@ -1633,7 +1103,7 @@ namespace mongo {
             already seen point.
         */
     private:
-        set< pair<DiskLoc,int> > _seen;
+        set< pair<BSONObj,int> > _seen;
     public:
 
         void exec() {
@@ -1645,7 +1115,7 @@ namespace mongo {
              * 1) use geohash prefix to find X items
              * 2) compute max distance from want to an item
              * 3) find optimal set of boxes that complete circle
-             * 4) use regular btree cursors to scan those boxes
+             * 4) use regular index cursors to scan those boxes
              */
 
 #ifdef GEODEBUGGING
@@ -1769,12 +1239,12 @@ namespace mongo {
 
                 if(_uniqueDocs && (nearestPt.distance() < 0 || d < nearestPt.distance())){
                     nearestPt._distance = d;
-                    nearestPt._pt = *i;
+                    nearestPt._pt = i->getOwned();
                     continue;
                 }
                 else if(! _uniqueDocs){
                     GeoPoint exactPt(pt, d, true);
-                    exactPt._pt = *i;
+                    exactPt._pt = i->getOwned();
                     GEODEBUG("Inserting exact pt " << exactPt.toString() << " for " << pt.toString() << " exact : " << d << " is less? " << (exactPt < pt) << " bits : " << _g->_bits);
                     points.insert(exactPt);
                     exactPt < pt ? before++ : after++;
@@ -1955,9 +1425,8 @@ namespace mongo {
             return _cur != _end;
         }
 
-        virtual Record* _current() { verify(ok()); return _cur->_loc.rec(); }
         virtual BSONObj current() { verify(ok()); return _cur->_o; }
-        virtual DiskLoc currLoc() { verify(ok()); return _cur->_loc; }
+        virtual BSONObj currPK() const { return _cur->_pk; }
         virtual bool advance() {
             if(ok()){
                 _cur++;
@@ -1968,7 +1437,7 @@ namespace mongo {
         }
         virtual BSONObj currKey() const { return _cur->_key; }
 
-        virtual string toString() {
+        virtual string toString() const {
             return "GeoSearchCursor";
         }
 
@@ -1982,7 +1451,7 @@ namespace mongo {
             return BSON(_s->_g->_geo << temp.toString());
         }
 
-        virtual long long nscanned() { return _nscanned; }
+        virtual long long nscanned() const { return _nscanned; }
 
         virtual CoveredIndexMatcher* matcher() const {
             if(_s->_matcher.get()) return _s->_matcher.get();
@@ -1999,7 +1468,7 @@ namespace mongo {
 
     class GeoCircleBrowse : public GeoBrowse {
     public:
-        GeoCircleBrowse(const Geo2dType * g, const BSONObj& circle, BSONObj filter = BSONObj(),
+        GeoCircleBrowse(const TwoDIndex * g, const BSONObj& circle, BSONObj filter = BSONObj(),
                         const string& type = "$center", bool uniqueDocs = true)
             : GeoBrowse(g, "circle", filter, uniqueDocs) {
 
@@ -2121,7 +1590,7 @@ namespace mongo {
 
     class GeoBoxBrowse : public GeoBrowse {
     public:
-        GeoBoxBrowse(const Geo2dType * g, const BSONObj& box, BSONObj filter = BSONObj(),
+        GeoBoxBrowse(const TwoDIndex * g, const BSONObj& box, BSONObj filter = BSONObj(),
                      bool uniqueDocs = true)
             : GeoBrowse(g, "box", filter, uniqueDocs) {
 
@@ -2155,7 +1624,7 @@ namespace mongo {
             ok();
         }
 
-        void fixBox(const Geo2dType* g, Box& box) {
+        void fixBox(const TwoDIndex* g, Box& box) {
             if(box._min.x > box._max.x)
                 swap(box._min.x, box._max.x);
             if(box._min.y > box._max.y)
@@ -2207,7 +1676,7 @@ namespace mongo {
 
     class GeoPolygonBrowse : public GeoBrowse {
     public:
-        GeoPolygonBrowse(const Geo2dType* g, const BSONObj& polyPoints,
+        GeoPolygonBrowse(const TwoDIndex* g, const BSONObj& polyPoints,
                          BSONObj filter = BSONObj(), bool uniqueDocs = true)
             : GeoBrowse(g, "polygon", filter, uniqueDocs) {
 
@@ -2265,32 +1734,35 @@ namespace mongo {
         GeoHash _start;
     };
 
-    shared_ptr<Cursor> Geo2dType::newCursor(const BSONObj& query, const BSONObj& order,
-                                            int numWanted) const {
+    // We implement this here because all of the 2d geo code is in this file.
+    // It makes it so that index/2d.cpp's implementation of TwoDIndex::newCursor
+    // doesn't have to make all of this 2d stuff externally visible in order to work.
+    shared_ptr<Cursor> new2DCursor(const TwoDIndex *idx, const string &geo, const BSONObj& query,
+                                   const BSONObj& order, int numWanted) {
         if (numWanted < 0)
             numWanted = numWanted * -1;
         else if (numWanted == 0)
             numWanted = 100;
 
         // false means we want to filter OUT geoFieldsToNuke, not filter to include only that.
-        BSONObj filteredQuery = query.filterFieldsUndotted(BSON(_geo << ""), false);
+        BSONObj filteredQuery = query.filterFieldsUndotted(BSON(geo << ""), false);
 
         BSONObjIterator i(query);
         while (i.more()) {
             BSONElement e = i.next();
 
-            if (_geo != e.fieldName())
+            if (geo != e.fieldName())
                 continue;
 
             if (e.type() == Array) {
                 // If we get an array query, assume it is a location, and do a $within { $center :
                 // [[x, y], 0] } search
                 BSONObj circle = BSON("0" << e.embeddedObjectUserCheck() << "1" << 0);
-                shared_ptr<Cursor> c(new GeoCircleBrowse(this, circle, filteredQuery, "$center", true));
+                shared_ptr<Cursor> c(new GeoCircleBrowse(idx, circle, filteredQuery, "$center", true));
                 return c;
             }
             else if (e.type() == Object) {
-                // TODO:  Filter out _geo : { $special... } field so it doesn't get matched
+                // TODO:  Filter out geo : { $special... } field so it doesn't get matched
                 // accidentally, if matcher changes
 
                 switch (e.embeddedObject().firstElement().getGtLtOp()) {
@@ -2329,7 +1801,7 @@ namespace mongo {
                     bool uniqueDocs = false;
                     if(! n["$uniqueDocs"].eoo()) uniqueDocs = n["$uniqueDocs"].trueValue();
 
-                    shared_ptr<GeoSearch> s(new GeoSearch(this, Point(e), numWanted, filteredQuery,
+                    shared_ptr<GeoSearch> s(new GeoSearch(idx, Point(e), numWanted, filteredQuery,
                                                           maxDistance, type, uniqueDocs));
                     s->exec();
                     shared_ptr<Cursor> c;
@@ -2351,19 +1823,19 @@ namespace mongo {
 
                     if (startsWith(type,  "$center")) {
                         uassert(13059, "$center has to take an object or array", e.isABSONObj());
-                        shared_ptr<Cursor> c(new GeoCircleBrowse(this, e.embeddedObjectUserCheck(), 
+                        shared_ptr<Cursor> c(new GeoCircleBrowse(idx, e.embeddedObjectUserCheck(), 
                                                                  filteredQuery, type, uniqueDocs));
                         return c;
                     }
                     else if (type == "$box") {
                         uassert(13065, "$box has to take an object or array", e.isABSONObj());
-                        shared_ptr<Cursor> c(new GeoBoxBrowse(this, e.embeddedObjectUserCheck(),
+                        shared_ptr<Cursor> c(new GeoBoxBrowse(idx, e.embeddedObjectUserCheck(),
                                                               filteredQuery, uniqueDocs));
                         return c;
                     }
                     else if (startsWith(type, "$poly")) {
                         uassert(14029, "$polygon has to take an object or array", e.isABSONObj());
-                        shared_ptr<Cursor> c(new GeoPolygonBrowse(this, e.embeddedObjectUserCheck(),
+                        shared_ptr<Cursor> c(new GeoPolygonBrowse(idx, e.embeddedObjectUserCheck(),
                                                                   filteredQuery, uniqueDocs));
                         return c;
                     }
@@ -2375,14 +1847,14 @@ namespace mongo {
                     // Otherwise... assume the object defines a point, and we want to do a
                     // zero-radius $within $center
 
-                    shared_ptr<Cursor> c(new GeoCircleBrowse(this, BSON("0" << e.embeddedObjectUserCheck() << "1" << 0), filteredQuery));
+                    shared_ptr<Cursor> c(new GeoCircleBrowse(idx, BSON("0" << e.embeddedObjectUserCheck() << "1" << 0), filteredQuery));
 
                     return c;
                 }
             }
         }
 
-        throw UserException(13042, (string)"missing geo field (" + _geo + ") in : " + query.toString());
+        throw UserException(13042, (string)"missing geo field (" + geo + ") in : " + query.toString());
     }
 
     // ------
@@ -2390,8 +1862,7 @@ namespace mongo {
     // ------
     bool run2DGeoNear(const IndexDetails &id, const BSONObj& cmdObj,
                       const GeoNearArguments &parsedArgs, string& errmsg, BSONObjBuilder& result) {
-        Geo2dType * g = (Geo2dType*)id.getSpec().getType();
-        verify(&id == g->getDetails());
+        TwoDIndex * g = dynamic_cast<TwoDIndex*>(const_cast<IndexDetails *>(&id));
 
         uassert(13046, "'near' param missing/invalid", !cmdObj["near"].eoo());
         const Point n(cmdObj["near"]);
@@ -2441,7 +1912,7 @@ namespace mongo {
 
         BSONObjBuilder stats(result.subobjStart("stats"));
         stats.append("time", cc().curop()->elapsedMillis());
-        stats.appendNumber("btreelocs", gs._nscanned);
+        stats.appendNumber("indexlocs", gs._nscanned);
         stats.appendNumber("nscanned", gs._lookedAt);
         stats.appendNumber("objectsLoaded", gs._objectsLoaded);
         stats.append("avgDistance", totalDistance / x);
@@ -2451,9 +1922,9 @@ namespace mongo {
         return true;
     }
 
-    class GeoWalkCmd : public Command {
+    class GeoWalkCmd : public QueryCommand {
     public:
-        GeoWalkCmd() : Command("geoWalk") {}
+        GeoWalkCmd() : QueryCommand("geoWalk") {}
         virtual LockType locktype() const { return READ; }
         bool slaveOk() const { return true; }
         bool slaveOverrideOk() const { return true; }
@@ -2467,25 +1938,21 @@ namespace mongo {
         bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             string ns = dbname + "." + cmdObj.firstElement().valuestr();
 
-            NamespaceDetails * d = nsdetails(ns);
-            if (! d) {
+            Collection * cl = getCollection(ns);
+            if (! cl) {
                 errmsg = "can't find ns";
                 return false;
             }
 
             int geoIdx = -1;
             {
-                NamespaceDetails::IndexIterator ii = d->ii();
-                while (ii.more()) {
-                    IndexDetails& id = ii.next();
-                    if (id.getSpec().getTypeName() == GEO2DNAME) {
-                        if (geoIdx >= 0) {
-                            errmsg = "2 geo indexes :(";
-                            return false;
-                        }
-                        geoIdx = ii.pos() - 1;
-                    }
+                vector<int> idxs;
+                cl->findIndexByType("2d", idxs);
+                if (idxs.size() > 1) {
+                    errmsg = "2 geo indexes :(";
+                    return false;
                 }
+                geoIdx = idxs[0];
             }
 
             if (geoIdx < 0) {
@@ -2494,239 +1961,26 @@ namespace mongo {
             }
 
 
-            IndexDetails& id = d->idx(geoIdx);
-            Geo2dType * g = (Geo2dType*)id.getSpec().getType();
-            verify(&id == g->getDetails());
+            IndexDetails& id = cl->idx(geoIdx);
+            TwoDIndex *g = dynamic_cast<TwoDIndex *>(const_cast<IndexDetails *>(&id));
 
             int max = 100000;
 
-            auto_ptr<BtreeCursor> bc(BtreeCursor::make(d, id, BSONObj(), BSONObj(), true, 1));
-            BtreeCursor &c = *bc;
-            while (c.ok() && max--) {
-                GeoHash h(c.currKey().firstElement());
+            shared_ptr<Cursor> c = Cursor::make(cl, id, BSONObj(), BSONObj(), true, 1);
+            while (c->ok() && max--) {
+                GeoHash h(c->currKey().firstElement());
                 int len;
                 cout << "\t" << h.toString()
-                     << "\t" << c.current()[g->_geo]
+                     << "\t" << c->current()[g->_geo]
                      << "\t" << hex << h.getHash()
-                     << "\t" << hex << ((long long*)c.currKey().firstElement().binData(len))[0]
-                     << "\t" << c.current()["_id"]
+                     << "\t" << hex << ((long long*)c->currKey().firstElement().binData(len))[0]
+                     << "\t" << c->current()["_id"]
                      << endl;
-                c.advance();
+                c->advance();
             }
 
             return true;
         }
     } geoWalkCmd;
 
-    struct GeoUnitTest : public StartupTest {
-        int round(double d) {
-            return (int)(.5 + (d * 1000));
-        }
-
-#define GEOHEQ(a,b) if (a.toString() != b){ cout << "[" << a.toString() << "] != [" << b << "]" << endl; verify(a == GeoHash(b)); }
-
-        void run() {
-            verify(!GeoHash::isBitSet(0, 0));
-            verify(!GeoHash::isBitSet(0, 31));
-            verify(GeoHash::isBitSet(1, 31));
-
-            IndexSpec i(BSON("loc" << "2d"));
-            Geo2dType g(&geo2dplugin, &i);
-            const GeoHashConverter &conv = g.getConverter();
-
-            {
-                double x = 73.01212;
-                double y = 41.352964;
-                BSONObj in = BSON("x" << x << "y" << y);
-                GeoHash h = conv.hash(in);
-                BSONObj out = conv.unhashToBSONObj(h);
-                verify(round(x) == round(out["x"].number()));
-                verify(round(y) == round(out["y"].number()));
-                verify(round(in["x"].number()) == round(out["x"].number()));
-                verify(round(in["y"].number()) == round(out["y"].number()));
-            }
-            {
-                double x = -73.01212;
-                double y = 41.352964;
-                BSONObj in = BSON("x" << x << "y" << y);
-                GeoHash h = conv.hash(in);
-                BSONObj out = conv.unhashToBSONObj(h);
-                verify(round(x) == round(out["x"].number()));
-                verify(round(y) == round(out["y"].number()));
-                verify(round(in["x"].number()) == round(out["x"].number()));
-                verify(round(in["y"].number()) == round(out["y"].number()));
-            }
-            {
-                GeoHash h("0000");
-                h.move(0, 1);
-                GEOHEQ(h, "0001");
-                h.move(0, -1);
-                GEOHEQ(h, "0000");
-
-                h = GeoHash("0001");
-                h.move(0, 1);
-                GEOHEQ(h, "0100");
-                h.move(0, -1);
-                GEOHEQ(h, "0001");
-
-                h = GeoHash("0000");
-                h.move(1, 0);
-                GEOHEQ(h, "0010");
-            }
-            {
-                Box b(5, 5, 2);
-                verify("(5,5) -->> (7,7)" == b.toString());
-            }
-            {
-                GeoHash a = conv.hash(1, 1);
-                GeoHash b = conv.hash(4, 5);
-                verify(5 == (int)(conv.distanceBetweenHashes(a, b)));
-                a = conv.hash(50, 50);
-                b = conv.hash(42, 44);
-                verify(round(10) == round(conv.distanceBetweenHashes(a, b)));
-            }
-            {
-                GeoHash x("0000");
-                verify(0 == x.getHash());
-                x = GeoHash(0, 1, 32);
-                GEOHEQ(x, "0000000000000000000000000000000000000000000000000000000000000001")
-                    
-                verify(GeoHash("1100").hasPrefix(GeoHash("11")));
-                verify(!GeoHash("1000").hasPrefix(GeoHash("11")));
-            }
-            {
-                GeoHash x("1010");
-                GEOHEQ(x, "1010");
-                GeoHash y = x + "01";
-                GEOHEQ(y, "101001");
-            }
-            {
-                GeoHash a = conv.hash(5, 5);
-                GeoHash b = conv.hash(5, 7);
-                GeoHash c = conv.hash(100, 100);
-                BSONObj oa = a.wrap();
-                BSONObj ob = b.wrap();
-                BSONObj oc = c.wrap();
-                verify(oa.woCompare(ob) < 0);
-                verify(oa.woCompare(oc) < 0);
-            }
-            {
-                GeoHash x("000000");
-                x.move(-1, 0);
-                GEOHEQ(x, "101010");
-                x.move(1, -1);
-                GEOHEQ(x, "010101");
-                x.move(0, 1);
-                GEOHEQ(x, "000000");
-            }
-            {
-                GeoHash prefix("110011000000");
-                GeoHash entry( "1100110000011100000111000001110000011100000111000001000000000000");
-                verify(!entry.hasPrefix(prefix));
-                entry = GeoHash("1100110000001100000111000001110000011100000111000001000000000000");
-                verify(entry.toString().find(prefix.toString()) == 0);
-                verify(entry.hasPrefix(GeoHash("1100")));
-                verify(entry.hasPrefix(prefix));
-            }
-            {
-                GeoHash a = conv.hash(50, 50);
-                GeoHash b = conv.hash(48, 54);
-                verify(round(4.47214) == round(conv.distanceBetweenHashes(a, b)));
-            }
-            {
-                Box b(Point(29.762283, -95.364271), Point(29.764283000000002, -95.36227099999999));
-                verify(b.inside(29.763, -95.363));
-                verify(! b.inside(32.9570255, -96.1082497));
-                verify(! b.inside(32.9570255, -96.1082497, .01));
-            }
-            {
-                GeoHash a("11001111");
-                verify(GeoHash("11") == a.commonPrefix(GeoHash("11")));
-                verify(GeoHash("11") == a.commonPrefix(GeoHash("11110000")));
-            }
-            {
-                int N = 10000;
-#if 0  // XXX: we want to make sure the two unhash versions both work, but private.
-                {
-                    Timer t;
-                    for (int i = 0; i < N; i++) {
-                        unsigned x = (unsigned)rand();
-                        unsigned y = (unsigned)rand();
-                        GeoHash h(x, y);
-                        unsigned a, b;
-                        h.unhash(&a, &b);
-                        verify(a == x);
-                        verify(b == y);
-                    }
-                    //cout << "slow: " << t.millis() << endl;
-                }
-#endif
-                {
-                    Timer t;
-                    for (int i=0; i<N; i++) {
-                        unsigned x = (unsigned)rand();
-                        unsigned y = (unsigned)rand();
-                        GeoHash h(x, y);
-                        unsigned a, b;
-                        h.unhash(&a, &b);
-                        verify(a == x);
-                        verify(b == y);
-                    }
-                    //cout << "fast: " << t.millis() << endl;
-                }
-
-            }
-
-            {
-                // see http://en.wikipedia.org/wiki/Great-circle_distance#Worked_example
-                {
-                    Point BNA (-86.67, 36.12);
-                    Point LAX (-118.40, 33.94);
-
-                    double dist1 = spheredist_deg(BNA, LAX);
-                    double dist2 = spheredist_deg(LAX, BNA);
-
-                    // target is 0.45306
-                    verify(0.45305 <= dist1 && dist1 <= 0.45307);
-                    verify(0.45305 <= dist2 && dist2 <= 0.45307);
-                }
-                {
-                    Point BNA (-1.5127, 0.6304);
-                    Point LAX (-2.0665, 0.5924);
-
-                    double dist1 = spheredist_rad(BNA, LAX);
-                    double dist2 = spheredist_rad(LAX, BNA);
-
-                    // target is 0.45306
-                    verify(0.45305 <= dist1 && dist1 <= 0.45307);
-                    verify(0.45305 <= dist2 && dist2 <= 0.45307);
-                }
-                {
-                    Point JFK (-73.77694444, 40.63861111);
-                    Point LAX (-118.40, 33.94);
-
-                    const double EARTH_RADIUS_KM = 6371;
-                    const double EARTH_RADIUS_MILES = EARTH_RADIUS_KM * 0.621371192;
-                    double dist = spheredist_deg(JFK, LAX) * EARTH_RADIUS_MILES;
-                    verify(dist > 2469 && dist < 2470);
-                }
-                {
-                    Point BNA (-86.67, 36.12);
-                    Point LAX (-118.40, 33.94);
-                    Point JFK (-73.77694444, 40.63861111);
-                    verify(spheredist_deg(BNA, BNA) < 1e-6);
-                    verify(spheredist_deg(LAX, LAX) < 1e-6);
-                    verify(spheredist_deg(JFK, JFK) < 1e-6);
-
-                    Point zero (0, 0);
-                    Point antizero (0,-180);
-
-                    // these were known to cause NaN
-                    verify(spheredist_deg(zero, zero) < 1e-6);
-                    verify(fabs(M_PI-spheredist_deg(zero, antizero)) < 1e-6);
-                    verify(fabs(M_PI-spheredist_deg(antizero, zero)) < 1e-6);
-                }
-            }
-        }
-    } geoUnitTest;
 }

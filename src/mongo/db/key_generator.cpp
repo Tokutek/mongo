@@ -18,52 +18,21 @@
 */
 
 #include "mongo/pch.h"
-#include "mongo/db/hasher.h"
-#include "mongo/db/keygenerator.h"
+#include "mongo/db/key_generator.h"
 #include "mongo/db/storage/assert_ids.h"
 #include "mongo/util/stringutils.h"
 #include "mongo/util/mongoutils/str.h"
-#include "mongo/util/text.h"
 
 namespace mongo {
 
-    /* Takes a BSONElement, seed and hashVersion, and outputs the
-     * 64-bit hash used for this index
-     * E.g. if the element is {a : 3} this outputs v1-hash(3)
-     * */
-    long long int HashKeyGenerator::makeSingleKey(const BSONElement &e,
-                                                  const HashSeed &seed,
-                                                  const HashVersion &v) {
-        massert( 16245, "Only HashVersion 0 has been defined", v == 0 );
-        return BSONElementHasher::hash64( e , seed );
-    }
-
-    void HashKeyGenerator::getKeys(const BSONObj &obj, BSONObjSet &keys) {
-        const char *hashedFieldPtr = _hashedField;
-        const BSONElement &fieldVal = obj.getFieldDottedOrArray( hashedFieldPtr );
-        uassert( storage::ASSERT_IDS::CannotHashArrays,
-                 "Error: hashed indexes do not currently support array values",
-                 fieldVal.type() != Array );
-
-        if (!fieldVal.eoo()) {
-            BSONObj key = BSON("" << makeSingleKey(fieldVal, _seed, _hashVersion));
-            keys.insert(key);
-        } else if (!_sparse) {
-            BSONObj key = BSON("" << makeSingleKey(nullElt, _seed, _hashVersion));
-            keys.insert(key);
-        }
-    }
+    // Basic key generator
+    // --------------------------------------------------------------------- //
 
     void KeyGenerator::getKeys(const BSONObj &obj, BSONObjSet &keys) const {
         vector<const char *> fieldNames(_fieldNames);
-        getKeys(obj, fieldNames, _sparse, keys);
-    }     
-
-    void KeyGenerator::getKeys(const BSONObj &obj, vector<const char *> &fieldNames,
-                               const bool sparse, BSONObjSet &keys) {
         vector<BSONElement> fixed( fieldNames.size() );
-        _getKeys( fieldNames , fixed , obj, sparse, keys );
-        if ( keys.empty() && ! sparse ) {
+        _getKeys( fieldNames , fixed , obj, _sparse, keys );
+        if ( keys.empty() && ! _sparse ) {
             BSONObjBuilder nullKey(128);
             for (size_t i = 0; i < fieldNames.size(); i++) {
                 nullKey.appendNull("");
@@ -185,5 +154,5 @@ namespace mongo {
             }
         }
     }
-
+    
 } // namespace mongo

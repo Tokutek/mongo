@@ -32,8 +32,10 @@ namespace mongo {
         // set a descriptor for the given dictionary.
         static void set_db_descriptor(DB *db, const Descriptor &descriptor,
                                       const bool hot_index) {
+            scoped_array<char> buf;
+            DBT desc = descriptor.dbt(buf);
+
             const int flags = DB_UPDATE_CMP_DESCRIPTOR | (hot_index ? DB_IS_HOT_INDEX : 0);
-            DBT desc = descriptor.dbt();
             const int r = db->change_descriptor(db, cc().txn().db_txn(), &desc, flags);
             if (r != 0) {
                 handle_ydb_error_fatal(r);

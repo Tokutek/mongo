@@ -18,27 +18,39 @@
 
 #include "mongo/pch.h"
 #include "mongo/db/descriptor.h"
-#include "mongo/db/keygenerator.h"
+#include "mongo/db/index/2d_descriptor.h"
+#include "mongo/db/index/hashed_descriptor.h"
+#include "mongo/db/index/haystack_descriptor.h"
+#include "mongo/db/index/s2_descriptor.h"
+#include "mongo/db/key_generator.h"
 
 namespace mongo {
 
     Descriptor::Descriptor(const BSONObj &keyPattern,
-                           const bool hashed,
-                           const int hashSeed,
+                           const Type type,
                            const bool sparse,
                            const bool clustering) :
-        _data(NULL), _size(serializedSize(keyPattern)), _dataOwned(new char[_size]) {
+        _data(NULL), _size(serializedSizeCurrentVersion(keyPattern)), _dataOwned(new char[_size]) {
         _data = _dataOwned.get();
 
         // Create a header and write it first.
-        Header h(Ordering::make(keyPattern),
-                 hashed, sparse, clustering, hashSeed, keyPattern.nFields());
-        memcpy(_dataOwned.get(), &h, sizeof(Header));
+        verify(static_cast<unsigned int>(type) < 255);
+        const uint32_t nFields = keyPattern.nFields();
+        verify(nFields > 0);
+
+        // The field names have size equal to total size, minus the header,
+        // minus the size of the array of offsets into the field names.
+        const int32_t fieldsLength = _size - HeaderSize - (4 * nFields);
+        verify(fieldsLength > 0);
+
+        Header h(Ordering::make(keyPattern), type, sparse, clustering,
+                 nFields, static_cast<uint32_t>(fieldsLength));
+        memcpy(_dataOwned.get(), &h, HeaderSize);
 
         // The offsets array is based after the header. It is an array of
         // size h.numFields, where each element is sizeof(uint32_t) bytes.
         // The fields array is based after the offsets array.
-        uint32_t *const offsetsBase = reinterpret_cast<uint32_t *>(_dataOwned.get() + sizeof(Header));
+        uint32_t *const offsetsBase = reinterpret_cast<uint32_t *>(_dataOwned.get() + HeaderSize);
         char *const fieldsBase = reinterpret_cast<char *>(&offsetsBase[h.numFields]);
 
         // Write each field's offset and value into each array, respectively.
@@ -55,15 +67,34 @@ namespace mongo {
         verify(fieldsBase + offset == _data + _size);
     }
 
-    Descriptor::Descriptor(const char *data, const size_t size) :
-        _data(data), _size(size) {
-        verify(_data != NULL);
-        // Strictly greater, since there should be at least one field.
-        verify(_size > (size_t) FixedSize);
+    void Descriptor::getFromDBT(const DBT *dbt, scoped_ptr<Descriptor> &ptr) {
+        const char *data = reinterpret_cast<char *>(dbt->data);
+        size_t size = dbt->size;
+
+        Descriptor desc(data, size);
+        switch (desc.type()) {
+        case Basic:
+            ptr.reset(new Descriptor(data, size));
+            break;
+        case Hashed:
+            ptr.reset(new HashedDescriptor(data, size));
+            break;
+        case S2:
+            ptr.reset(new S2Descriptor(data, size));
+            break;
+        case Haystack:
+            ptr.reset(new HaystackDescriptor(data, size));
+            break;
+        case TwoD:
+            ptr.reset(new TwoDDescriptor(data, size));
+            break;
+        default:
+            abort();
+        }
     }
 
-    size_t Descriptor::serializedSize(const BSONObj &keyPattern) {
-        size_t size = FixedSize;
+    size_t Descriptor::serializedSizeCurrentVersion(const BSONObj &keyPattern) {
+        size_t size = HeaderSize;
         for (BSONObjIterator o(keyPattern); o.more(); ++o) {
             const BSONElement &e = *o;
             // Each field will take up 4 bytes in the offset array
@@ -71,27 +102,13 @@ namespace mongo {
             size += 4;
             size += strlen(e.fieldName()) + 1;
         }
-        verify(size > (size_t) FixedSize);
+        verify(size > HeaderSize);
         return size;
-    }
-
-    bool Descriptor::operator==(const Descriptor &rhs) const {
-        return _size == rhs._size && memcmp(_data, rhs._data, _size) == 0;
-    }
-
-    int Descriptor::version() const {
-        const Header &h(*reinterpret_cast<const Header *>(_data));
-        return h.version;
-    }
-
-    const Ordering &Descriptor::ordering() const {
-        const Header &h(*reinterpret_cast<const Header *>(_data));
-        return h.ordering;
     }
 
     void Descriptor::fieldNames(vector<const char *> &fields) const {
         const Header &h(*reinterpret_cast<const Header *>(_data));
-        const uint32_t *const offsetsBase = reinterpret_cast<const uint32_t *>(_data + sizeof(Header));
+        const uint32_t *const offsetsBase = reinterpret_cast<const uint32_t *>(_data + _headerSize());
         const char *const fieldsBase = reinterpret_cast<const char *>(offsetsBase + h.numFields);
         fields.resize(h.numFields);
         for (uint32_t i = 0; i < h.numFields; i++) {
@@ -111,23 +128,19 @@ namespace mongo {
         return b.obj();
     }
 
-    DBT Descriptor::dbt() const {
-        return storage::dbt_make(_data, _size);
+    DBT Descriptor::dbt(scoped_array<char> &buf) const {
+        buf.reset(new char[_size]);
+        memcpy(&buf[0], _data, _size);
+        return storage::dbt_make(buf.get(), _size);
     }
 
     void Descriptor::generateKeys(const BSONObj &obj, BSONObjSet &keys) const {
         const Header &h(*reinterpret_cast<const Header *>(_data));
         vector<const char *> fields;
         fieldNames(fields);
-        if (h.hashed) {
-            // If we ever add new hash versions in the future, we'll need to add
-            // a hashVersion field to the descriptor and up the descriptor version.
-            const HashVersion hashVersion = 0;
-            HashKeyGenerator generator(fields[0], h.hashSeed, hashVersion, h.sparse);
-            generator.getKeys(obj, keys);
-        } else {
-            KeyGenerator::getKeys(obj, fields, h.sparse, keys);
-        }
+
+        KeyGenerator generator(fields, h.sparse);
+        generator.getKeys(obj, keys);
     }
 
 } // namespace mongo

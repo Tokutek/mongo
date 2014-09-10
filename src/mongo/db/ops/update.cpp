@@ -425,7 +425,7 @@ namespace mongo {
         for (shared_ptr<Cursor> c = getOptimizedCursor(ns, patternOrig); c->ok(); ) {
             cc().curop()->debug().nscanned++;
             BSONObj currPK = c->currPK();
-            if (c->getsetdup(currPK)) {
+            if (c->getsetdup(currPK) && c->autoDedup()) {
                 c->advance();
                 continue;
             }
@@ -451,22 +451,28 @@ namespace mongo {
                 currentObj = c->current();
             }
             if (multi) {
-                // Advance past the document to be modified - SERVER-5198,
                 // First, get owned copies of currPK/currObj, which live in the cursor.
                 currPK = currPK.getOwned();
                 if (!canBeFast) {
                     currentObj = currentObj.getOwned();
                 }
-                while (c->ok() && currPK == c->currPK()) {
-                    c->advance();
-                }
+                if (c->autoDedup()) {
+                    // Advance past the document to be modified - SERVER-5198,
+                    while (c->ok() && currPK == c->currPK()) {
+                        c->advance();
+                    }
 
-                // Multi updates need to do their own deduplication because updates may modify the
-                // keys the cursor is in the process of scanning over.
-                if ( seenObjects.count(currPK) ) {
-                    continue;
+                    // Multi updates need to do their own deduplication because updates may modify the
+                    // keys the cursor is in the process of scanning over.
+                    if ( seenObjects.count(currPK) ) {
+                        continue;
+                    } else {
+                        seenObjects.insert(currPK);
+                    }
                 } else {
-                    seenObjects.insert(currPK);
+                    // Just move to the next doc, do not automatically dedup.
+                    // This is apparently correct for geo indexes.
+                    c->advance();
                 }
             }
 

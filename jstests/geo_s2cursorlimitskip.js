@@ -46,10 +46,22 @@ assert(cursor.hasNext())
 insertRandomPoints(secondPointCount, 2.01, 3.0);
 assert.eq(cursor.count(), initialPointCount + secondPointCount)
 
-for(var k = 0; k < initialPointCount + secondPointCount - smallBit; k++){
-    assert(cursor.hasNext())
-    var tmpPoint = cursor.next();
+if (false) {
+    // This portion of the test would fail in tokumx since cursors
+    // have snapshot isolation and therefore would not see the 
+    // inserts perfomed by the other shell.
+    for(var k = 0; k < initialPointCount + secondPointCount - smallBit; k++){
+        assert(cursor.hasNext())
+        var tmpPoint = cursor.next();
+    }
+} else {
+    // .. so instead we check that initialPointCount - smallBit has results
+    for(var k = 0; k < initialPointCount - smallBit; k++){
+        assert(cursor.hasNext())
+        var tmpPoint = cursor.next();
+    }
 }
+
 // Shouldn't be any more points to look at now.
 assert(!cursor.hasNext())
 

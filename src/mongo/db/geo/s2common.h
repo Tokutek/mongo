@@ -14,7 +14,6 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "mongo/db/diskloc.h"
 #include "mongo/db/geo/geoparser.h"
 #include "third_party/s2/s2.h"
 #include "third_party/s2/s2regioncoverer.h"
