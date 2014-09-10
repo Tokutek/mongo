@@ -32,7 +32,8 @@ namespace mongo {
         public:
             Dictionary(const string &dname, const BSONObj &info,
                        const mongo::Descriptor &descriptor,
-                       const bool may_create, const bool hot_index);
+                       const bool may_create, const bool hot_index,
+                       const bool set_memcmp_magic = false);
             ~Dictionary();
 
             // @param change the parameters described by the info object
@@ -50,7 +51,8 @@ namespace mongo {
 
         private:
             void open(const mongo::Descriptor &descriptor,
-                      const bool may_create, const bool hot_index);
+                      const bool may_create, const bool hot_index,
+                      const bool set_memcmp_magic);
 
             const string _dname;
             DB *_db;
