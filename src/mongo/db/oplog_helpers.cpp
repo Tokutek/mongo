@@ -578,11 +578,11 @@ namespace mongo {
             // attempt to update the object using mods. If not possible, then
             // do the more heavyweight method of using a full pre-image followed
             // by a full post image
-            if (!updateOneObjectWithMods(cl, pk, updateobj, BSONObj(), 0, false, 0, mods.get())) {
+            if (!updateOneObjectWithMods(cl, pk, updateobj, BSONObj(), 0, false, flags, mods.get())) {
                 if (mods->isIndexed() <= 0) {
                     flags |= Collection::KEYS_UNAFFECTED_HINT;
                 }
-                updateOneObject(cl, pk, oldObj, newObj, false, 0);
+                updateOneObject(cl, pk, oldObj, newObj, false, flags);
             }
         }
 
