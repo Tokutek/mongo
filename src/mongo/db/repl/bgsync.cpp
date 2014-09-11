@@ -168,7 +168,7 @@ namespace mongo {
                     try {
                         numTries++;
                         TimerHolder timer(&applyBatchStats);
-                        applyTransactionFromOplog(curr, NULL);
+                        applyTransactionFromOplog(curr, NULL, false);
                         opsAppliedStats.increment();
                         applied = true;
                     }

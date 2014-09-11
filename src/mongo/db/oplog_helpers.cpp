@@ -671,7 +671,7 @@ namespace mongo {
             }
         }
 
-        static void runCommandFromOplog(const char *ns, const BSONObj &op, RollbackDocsMap* docsMap) {
+        static void runCommandFromOplog(const char *ns, const BSONObj &op, RollbackDocsMap* docsMap, bool inRollback) {
             BufBuilder bb;
             BSONObjBuilder ob;
 
@@ -680,27 +680,32 @@ namespace mongo {
             bool ret = _runCommands(ns, command, bb, ob, true, 0);
             massert(17220, str::stream() << "Command " << op.str() << " failed under runCommandFromOplog: " << ob.done(), ret);
 
-            // for now, every command should thrown an exception if run during
-            // rollback. Soon, we will make this finer grained. For example, dropping
-            // an index should not be an issue, whereas dropping or creating a
-            // collection should remove all instances in docsMap for the associated
-            // collection.
-            if (docsMap != NULL) {
+            if (inRollback || docsMap != NULL) {
                 Command* c = getCommand(command);
                 massert(17359, "Could not get command", c);
                 std::string dbname = nsToDatabase(ns);
-                c->handleRollbackForward(dbname, command, docsMap);
+                c->handleRollbackForward(dbname, command, docsMap, inRollback);
             }
         }
 
         // apply an operation that comes from the oplog
-        // If docsMap is non-NULL, that means we are running during rollback
+        // if inRollback is true, that means we are running in rollback
+        // If inRollback is true and docsMap is non-NULL, that means
+        // we are running during rollback
         // and that there may be documents to ignore. It is the responsibility of
         // each case below to handle the fact that we are running during rollback
         // and act accordingly. For instance, some inserts may ignore the operation
         // because the document is in the docsMap, while a command may throw
         // a RollbackOplogException because it cannot be run during rollback
-        void applyOperationFromOplog(const BSONObj& op, RollbackDocsMap* docsMap) {
+        //
+        // If inRollback is true but docsMap is false, then that means we are running
+        // in rollback, but are past the phase where we we applied snapshot
+        // versions of documents in the docsMap, and are now playing forward
+        // without the docsMap. We need to handle the case where the usage
+        // of some commands (e.g. rename) may mean our rollback algorithm is unreliable.
+        // As a result, inRollback is passed in so we can handle that case.
+        // See jira ticket 1270
+        void applyOperationFromOplog(const BSONObj& op, RollbackDocsMap* docsMap, bool inRollback) {
             LOG(6) << "applying op: " << op << endl;
             OpCounters* opCounters = &replOpCounters;
             const char *names[] = { 
@@ -746,7 +751,7 @@ namespace mongo {
             }
             else if (strcmp(opType, OP_STR_COMMAND) == 0) {
                 opCounters->gotCommand();
-                runCommandFromOplog(ns, op, docsMap);
+                runCommandFromOplog(ns, op, docsMap, inRollback);
             }
             else if (strcmp(opType, OP_STR_COMMENT) == 0) {
                 // no-op

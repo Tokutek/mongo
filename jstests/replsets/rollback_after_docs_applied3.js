@@ -40,7 +40,6 @@ preloadMoreData = function(conn) {
 var shouldFail = false;
 
 doSetup = function(conn) {
-    // this should put us in the rollback state of RB_STARTING, which we cannot recover from
     x = conn.getDB("local").oplog.rs.find().sort({_id : -1}).next();
     lastGTID = x["_id"];
     pri = lastGTID.GTIDPri();
@@ -93,6 +92,7 @@ doSetup = function(conn) {
             conn.getDB("local").rollback.gtidset.insert({_id : GTID(pri, sec+i)});
         }
     }
+    conn.getDB("local").createCollection("rollback.opdata"); // dummy to get test passing
 };
 
 doRollbackTest( 15, 1000000, 31000, preloadData, preloadMoreData, doSetup, false );

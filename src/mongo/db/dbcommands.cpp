@@ -387,7 +387,7 @@ namespace mongo {
         virtual void help( stringstream& help ) const {
             help << "drop (delete) this database";
         }
-        virtual void handleRollbackForward(const string& db, const BSONObj& cmdObj, RollbackDocsMap* docsMap) const { }
+        virtual void handleRollbackForward(const string& db, const BSONObj& cmdObj, RollbackDocsMap* docsMap, bool inRollback) const { }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {
@@ -689,7 +689,7 @@ namespace mongo {
     public:
         CmdDrop() : FileopsCommand("drop") { }
         virtual bool logTheOp() { return true; }
-        virtual void handleRollbackForward(const string& db, const BSONObj& cmdObj, RollbackDocsMap* docsMap) const { }
+        virtual void handleRollbackForward(const string& db, const BSONObj& cmdObj, RollbackDocsMap* docsMap, bool inRollback) const { }
         virtual bool adminOnly() const { return false; }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
@@ -778,10 +778,10 @@ namespace mongo {
             help << "create a collection explicitly\n"
                 "{ create: <ns>[, capped: <bool>, size: <collSizeInBytes>, max: <nDocs>] }";
         }
-        virtual void handleRollbackForward(const string& db, const BSONObj& cmdObj, RollbackDocsMap* docsMap) const { 
+        virtual void handleRollbackForward(const string& db, const BSONObj& cmdObj, RollbackDocsMap* docsMap, bool inRollback) const { 
             string ns = db + '.' + cmdObj.firstElement().valuestr();
             LOG(2) << "checking if doc exists for " << ns << endl;
-            if (docsMap->docsForNSExists(ns.c_str())) {
+            if (docsMap && docsMap->docsForNSExists(ns.c_str())) {
                 throw RollbackOplogException ("creating a collection that has documents in docsMap, cannot continue rollback");
             }
         }
@@ -822,7 +822,7 @@ namespace mongo {
             actions.addAction(ActionType::dropIndexes);
             out->push_back(Privilege(parseNs(dbname, cmdObj), actions));
         }
-        virtual void handleRollbackForward(const string& db, const BSONObj& cmdObj, RollbackDocsMap* docsMap) const { }
+        virtual void handleRollbackForward(const string& db, const BSONObj& cmdObj, RollbackDocsMap* docsMap, bool inRollback) const { }
         bool run(const string& dbname, BSONObj& jsobj, int, string& errmsg, BSONObjBuilder& anObjBuilder, bool /*fromRepl*/) {
             BSONElement e = jsobj.firstElement();
             string toDeleteNs = dbname + '.' + e.valuestr();
@@ -1832,7 +1832,7 @@ namespace mongo {
                 "optionally provide pivot for last current partition\n." <<
                 "Example: {addPartition : \"foo\"} or {addPartition: \"foo\", newMax: {_id: 1000}}";
         }
-        virtual void handleRollbackForward(const string& db, const BSONObj& cmdObj, RollbackDocsMap* docsMap) const { }
+        virtual void handleRollbackForward(const string& db, const BSONObj& cmdObj, RollbackDocsMap* docsMap, bool inRollback) const { }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {
@@ -1911,7 +1911,7 @@ namespace mongo {
         virtual void help( stringstream& help ) const {
             help << "Internal.\n";
         }
-        virtual void handleRollbackForward(const string& db, const BSONObj& cmdObj, RollbackDocsMap* docsMap) const { }
+        virtual void handleRollbackForward(const string& db, const BSONObj& cmdObj, RollbackDocsMap* docsMap, bool inRollback) const { }
         virtual void addRequiredPrivileges(const std::string& dbname,
                                            const BSONObj& cmdObj,
                                            std::vector<Privilege>* out) {

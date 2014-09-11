@@ -34,7 +34,7 @@ namespace mongo {
     #define ROLLBACK_ID "rollbackStatus"
 
     void incRBID();
-    void applyMissingOpsInOplog(GTID minUnappliedGTID);
+    void applyMissingOpsInOplog(GTID minUnappliedGTID, bool inRollback);
 
     enum rollback_state {
         RB_NOT_STARTED = 0,
@@ -576,7 +576,7 @@ namespace mongo {
                 }
                 if (applyTransaction) {
                     RollbackDocsMap docsMap;
-                    applyTransactionFromOplog(curr, preSnapshot ? &docsMap : NULL);
+                    applyTransactionFromOplog(curr, preSnapshot ? &docsMap : NULL, true);
                 }
                 if (GTID::cmp(currGTID, lastGTID) == 0) {
                     break; // we are done
@@ -676,7 +676,7 @@ namespace mongo {
         log() << "Applying missing ops for rollback" << rsLog;
         RollbackGTIDSet appliedGTIDs;
         appliedGTIDs.initialize();
-        applyMissingOpsInOplog(appliedGTIDs.getMinUnapplied());
+        applyMissingOpsInOplog(appliedGTIDs.getMinUnapplied(), true);
         log() << "Done applying missing ops for rollback" << rsLog;
         
         // while we were applying the remote images above, a collection may have been dropped

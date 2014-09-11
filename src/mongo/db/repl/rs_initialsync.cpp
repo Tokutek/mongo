@@ -326,7 +326,7 @@ namespace mongo {
         catchupTransaction.commit(0);
     }
 
-    void applyMissingOpsInOplog(GTID minUnappliedGTID) {
+    void applyMissingOpsInOplog(GTID minUnappliedGTID, bool inRollback) {
         std::deque<BSONObj> unappliedTransactions;
         {
             // accumulate a list of transactions that are unapplied
@@ -376,7 +376,7 @@ namespace mongo {
         }
         while (unappliedTransactions.size() > 0) {
             const BSONObj& curr = unappliedTransactions.front();
-            applyTransactionFromOplog(curr, NULL);            
+            applyTransactionFromOplog(curr, NULL, inRollback);            
             unappliedTransactions.pop_front();
         }
     }
@@ -526,7 +526,7 @@ namespace mongo {
         if (needGapsFilled) {
             _fillGaps(&r);
         }
-        applyMissingOpsInOplog(GTID());
+        applyMissingOpsInOplog(GTID(), false);
 
         sethbmsg("initial sync done",0);
 

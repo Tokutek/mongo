@@ -339,11 +339,11 @@ namespace mongo {
     }
 
     // apply all operations in the array
-    static void applyOps(const std::vector<BSONElement>& ops, RollbackDocsMap* docsMap) {
+    static void applyOps(const std::vector<BSONElement>& ops, RollbackDocsMap* docsMap, bool inRollback) {
         const size_t numOps = ops.size();
         for(size_t i = 0; i < numOps; ++i) {
             const BSONElement& curr = ops[i];
-            OplogHelpers::applyOperationFromOplog(curr.Obj(), docsMap);
+            OplogHelpers::applyOperationFromOplog(curr.Obj(), docsMap, inRollback);
         }
     }
 
@@ -353,7 +353,7 @@ namespace mongo {
     // did not work, so it a sequence of point queries.  
     // TODO verify that the query plan is a indexed lookup.
     // TODO verify that the query plan does not fetch too many docs and then only process one of them.
-    void applyRefOp(const BSONObj& entry, RollbackDocsMap* docsMap) {
+    void applyRefOp(const BSONObj& entry, RollbackDocsMap* docsMap, bool inRollback) {
         OID oid = entry["ref"].OID();
         LOG(3) << "apply ref " << entry << " oid " << oid << endl;
         long long seq = 0; // note that 0 is smaller than any of the seq numbers
@@ -374,7 +374,7 @@ namespace mongo {
                 break;
             }
             LOG(3) << "apply " << entry << " seq=" << seq << endl;
-            applyOps(entry["ops"].Array(), docsMap);
+            applyOps(entry["ops"].Array(), docsMap, inRollback);
         }
     }
 
@@ -399,14 +399,14 @@ namespace mongo {
     // TODO: possibly improve performance of this. We create and destroy a
     // context for each operation. Find a way to amortize it out if necessary
     //
-    void applyTransactionFromOplog(const BSONObj& entry, RollbackDocsMap* docsMap) {
+    void applyTransactionFromOplog(const BSONObj& entry, RollbackDocsMap* docsMap, bool inRollback) {
         bool transactionAlreadyApplied = entry["a"].Bool();
         if (!transactionAlreadyApplied) {
             Client::Transaction transaction(DB_SERIALIZABLE);
             if (entry.hasElement("ref")) {
-                applyRefOp(entry, docsMap);
+                applyRefOp(entry, docsMap, inRollback);
             } else if (entry.hasElement("ops")) {
-                applyOps(entry["ops"].Array(), docsMap);
+                applyOps(entry["ops"].Array(), docsMap, inRollback);
             } else {
                 verify(0);
             }

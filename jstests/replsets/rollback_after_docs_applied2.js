@@ -35,7 +35,6 @@ preloadMoreData = function(conn) {
 };
 
 doSetup = function(conn) {
-    // this should put us in the rollback state of RB_STARTING, which we cannot recover from
     conn.getDB("local").replInfo.insert({
         _id : "rollbackStatus", state : NumberInt(3),
         info : "supposedly applied docs",
@@ -55,6 +54,7 @@ doSetup = function(conn) {
     conn.getDB("local").rollback.docs.insert({_id : { ns : "test.foo", pk : { "" : 5} }});
     // make GTIDSet
     conn.getDB("local").rollback.gtidset.insert({_id : "minUnapplied", gtid : GTID(1,0)});
+    conn.getDB("local").createCollection("rollback.opdata"); // dummy to get test passing
 };
 
 doRollbackTest( 15, 1000000, 31000, preloadData, preloadMoreData, doSetup, false );
