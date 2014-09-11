@@ -326,7 +326,7 @@ namespace mongo {
         catchupTransaction.commit(0);
     }
 
-    void applyMissingOpsInOplog(GTID minUnappliedGTID, bool inRollback) {
+    void applyMissingOpsInOplog(GTID minUnappliedGTID, const bool inRollback) {
         std::deque<BSONObj> unappliedTransactions;
         {
             // accumulate a list of transactions that are unapplied

@@ -90,7 +90,7 @@ namespace mongo {
         void logUnsupportedOperation(const char *ns);
         // Used by secondaries to process oplog entries
 
-        void applyOperationFromOplog(const BSONObj& op, RollbackDocsMap* docsMap, bool inRollback);
+        void applyOperationFromOplog(const BSONObj& op, RollbackDocsMap* docsMap, const bool inRollback);
 
         void rollbackOperationFromOplog(const BSONObj& op, RollbackDocsMap* docsMap);
 

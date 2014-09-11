@@ -34,7 +34,7 @@ namespace mongo {
     #define ROLLBACK_ID "rollbackStatus"
 
     void incRBID();
-    void applyMissingOpsInOplog(GTID minUnappliedGTID, bool inRollback);
+    void applyMissingOpsInOplog(GTID minUnappliedGTID, const bool inRollback);
 
     enum rollback_state {
         RB_NOT_STARTED = 0,

@@ -561,7 +561,8 @@ namespace mongo {
             const BSONObj &pk,
             const BSONObj &oldObj,
             const BSONObj &updateobj,
-            const RollbackDocsMap* docsMap
+            const RollbackDocsMap* docsMap,
+            const bool inRollback
             )
         {
             Collection *cl = getCollection(ns);
@@ -578,7 +579,32 @@ namespace mongo {
             // attempt to update the object using mods. If not possible, then
             // do the more heavyweight method of using a full pre-image followed
             // by a full post image
-            if (!updateOneObjectWithMods(cl, pk, updateobj, BSONObj(), 0, false, flags, mods.get())) {
+            //
+            // a little bit of trickery here with fastUpdateFlagsToUse
+            // if we are in rollback, and docsMap is NULL,
+            // that means we are in the phase of rollback
+            // where we are replicating forward, we have gone past
+            // lastGTID, and are approaching lastGTIDAfterSnapshot.
+            // reference rs_rollback.cpp to understand those variables.
+            // In such a case, if there was a fileop such as a drop collection, that
+            // comes after this op but before the drop, this update may
+            // be updating a non-existent document, because the snapshot
+            // we took during rollback was after the drop (which is not MVCC).
+            // Therefore, if we don't pass in these update flags, we will crash
+            // the server because we are updating a non-existent doc when
+            // we expected a doc to exist.
+            //
+            // We want to avoid this possible crash.
+            //
+            // This only needs to be done for these updates, because other updates,
+            // inserts, and deletes will send simple insert/delete messages, which cannot
+            // crash.
+            // 
+            uint32_t fastUpdateFlagsToUse = 0;
+            if (inRollback && docsMap == NULL) {
+                fastUpdateFlagsToUse |= (UpdateFlags::NO_OLDOBJ_OK | UpdateFlags::FAST_UPDATE_PERFORMED);
+            }
+            if (!updateOneObjectWithMods(cl, pk, updateobj, BSONObj(), fastUpdateFlagsToUse, false, flags, mods.get())) {
                 if (mods->isIndexed() <= 0) {
                     flags |= Collection::KEYS_UNAFFECTED_HINT;
                 }
@@ -586,7 +612,13 @@ namespace mongo {
             }
         }
 
-        static void runUpdateModsWithRowFromOplog(const char *ns, const BSONObj &op, const RollbackDocsMap* docsMap) {
+        static void runUpdateModsWithRowFromOplog(
+            const char *ns,
+            const BSONObj &op,
+            const RollbackDocsMap* docsMap,
+            const bool inRollback
+            )
+        {
             const char *names[] = {
                 KEY_STR_PK,
                 KEY_STR_OLD_ROW,
@@ -604,12 +636,12 @@ namespace mongo {
             try {
                 LOCK_REASON(lockReason, "repl: applying update");
                 Client::ReadContext ctx(ns, lockReason);
-                runUpdateModsWithRowWithLock(ns, pk, oldObj, updateobj, docsMap);
+                runUpdateModsWithRowWithLock(ns, pk, oldObj, updateobj, docsMap, inRollback);
             }
             catch (RetryWithWriteLock &e) {
                 LOCK_REASON(lockReason, "repl: applying update with write lock");
                 Client::WriteContext ctx(ns, lockReason);
-                runUpdateModsWithRowWithLock(ns, pk, oldObj, updateobj, docsMap);
+                runUpdateModsWithRowWithLock(ns, pk, oldObj, updateobj, docsMap, inRollback);
             }
         }
 
@@ -619,7 +651,8 @@ namespace mongo {
             const BSONObj &updateobj,
             const BSONObj &query,
             const uint32_t fastUpdateFlags,
-            const RollbackDocsMap* docsMap
+            const RollbackDocsMap* docsMap,
+            const bool inRollback
             )
         {
             bool pkExistsInDocsMap = docsMap && docsMap->docExists(ns, pk);
@@ -629,7 +662,14 @@ namespace mongo {
             Collection *cl = getCollection(ns);
             uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
             ModSet mods(updateobj, cl->indexKeys());
-            if (!updateOneObjectWithMods(cl, pk, updateobj, query, fastUpdateFlags, false, flags, &mods)) {
+            uint32_t fastUpdateFlagsToUse = fastUpdateFlags;
+            // a little bit of trickery here. Reference comments in
+            // runUpdateModsWithRowWithLock on top of this same
+            // code to understand what is going on here.
+            if (inRollback && docsMap == NULL) {
+                fastUpdateFlagsToUse |= (UpdateFlags::NO_OLDOBJ_OK | UpdateFlags::FAST_UPDATE_PERFORMED);
+            }
+            if (!updateOneObjectWithMods(cl, pk, updateobj, query, fastUpdateFlagsToUse, false, flags, &mods)) {
                 BSONObj oldObj;
                 bool found = cl->findByPK(pk, oldObj);
                 if (!found) {
@@ -645,7 +685,12 @@ namespace mongo {
             }
         }
 
-        static void runUpdateModsWithPKFromOplog(const char *ns, const BSONObj &op, const RollbackDocsMap* docsMap) {
+        static void runUpdateModsWithPKFromOplog(
+            const char *ns,
+            const BSONObj &op,
+            const RollbackDocsMap* docsMap,
+            const bool inRollback)
+        {
             const char *names[] = {
                 KEY_STR_PK,
                 KEY_STR_MODS,
@@ -662,16 +707,16 @@ namespace mongo {
             try {
                 LOCK_REASON(lockReason, "repl: applying update");
                 Client::ReadContext ctx(ns, lockReason);
-                runUpdateModsWithPKWithLock(ns, pk, updateobj, query, fastUpdateFlags, docsMap);
+                runUpdateModsWithPKWithLock(ns, pk, updateobj, query, fastUpdateFlags, docsMap, inRollback);
             }
             catch (RetryWithWriteLock &e) {
                 LOCK_REASON(lockReason, "repl: applying update with write lock");
                 Client::WriteContext ctx(ns, lockReason);
-                runUpdateModsWithPKWithLock(ns, pk, updateobj, query, fastUpdateFlags, docsMap);
+                runUpdateModsWithPKWithLock(ns, pk, updateobj, query, fastUpdateFlags, docsMap, inRollback);
             }
         }
 
-        static void runCommandFromOplog(const char *ns, const BSONObj &op, RollbackDocsMap* docsMap, bool inRollback) {
+        static void runCommandFromOplog(const char *ns, const BSONObj &op, RollbackDocsMap* docsMap, const bool inRollback) {
             BufBuilder bb;
             BSONObjBuilder ob;
 
@@ -705,7 +750,7 @@ namespace mongo {
         // of some commands (e.g. rename) may mean our rollback algorithm is unreliable.
         // As a result, inRollback is passed in so we can handle that case.
         // See jira ticket 1270
-        void applyOperationFromOplog(const BSONObj& op, RollbackDocsMap* docsMap, bool inRollback) {
+        void applyOperationFromOplog(const BSONObj& op, RollbackDocsMap* docsMap, const bool inRollback) {
             LOG(6) << "applying op: " << op << endl;
             OpCounters* opCounters = &replOpCounters;
             const char *names[] = { 
@@ -729,10 +774,10 @@ namespace mongo {
             else if (strcmp(opType, OP_STR_UPDATE_ROW_WITH_MOD) == 0) {
                 opCounters->gotUpdate();
                 if (op[KEY_STR_OLD_ROW].ok()) {
-                    runUpdateModsWithRowFromOplog(ns, op, docsMap);
+                    runUpdateModsWithRowFromOplog(ns, op, docsMap, inRollback);
                 }
                 else {
-                    runUpdateModsWithPKFromOplog(ns, op, docsMap);
+                    runUpdateModsWithPKFromOplog(ns, op, docsMap, inRollback);
                 }
             }
             else if (strcmp(opType, OP_STR_DELETE) == 0) {

@@ -165,7 +165,7 @@ namespace mongo {
         virtual bool maintenanceOk() const { return true; /* assumed true prior to commit */ }
 
         // called if we encounter this command during rollback when running forward
-        virtual void handleRollbackForward(const string& db, const BSONObj& cmdObj, RollbackDocsMap* docsMap, bool inRollback) const {
+        virtual void handleRollbackForward(const string& db, const BSONObj& cmdObj, RollbackDocsMap* docsMap, const bool inRollback) const {
             throw RollbackOplogException(str::stream() << "Cannot apply command during rollback op: " << cmdObj);
         }
 

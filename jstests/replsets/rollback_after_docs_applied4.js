@@ -13,7 +13,7 @@ preloadData = function(conn) {
     conn.getDB("test").foo.ensureIndex({a:1});
     // do some insertions
     for (var i = 0; i < 10; i++) {
-        conn.getDB("test").foo.insert({_id : i, state : 0});
+        conn.getDB("test").foo.insert({_id : i, a: i, state : 0});
     }
 }
 
@@ -33,6 +33,8 @@ preloadMoreData = function(conn) {
         conn.getDB("test").foo.renameCollection("bar");
     }
     else {
+        conn.getDB("test").foo.update({_id : 1} , {state : "hard set"});
+        conn.getDB("test").foo.update({_id : 3} , {$inc : {a : 4}} );
         conn.getDB("test").foo.drop();
         conn.getDB("test").createCollection("foo");
     }
@@ -55,7 +57,23 @@ doSetup = function(conn) {
     // now let's figure out what we are actually removing
     // need to do two things, remove docs we care about,
     // and put them in local.rollback.docs
+    startLastGTID = conn.getDB("local").oplog.rs.find().sort({$natural:-1}).next()._id;
 
+    conn.getDB("test").foo.remove({_id : 1}) ;
+    lastGTID = conn.getDB("local").oplog.rs.find().sort({$natural:-1}).next()._id;
+    conn.getDB("local").oplog.rs.remove({_id : lastGTID});
+    conn.getDB("test").foo.remove({_id : 3}) ;
+    lastGTID = conn.getDB("local").oplog.rs.find().sort({$natural:-1}).next()._id;
+    conn.getDB("local").oplog.rs.remove({_id : lastGTID});
+    conn.getDB("test").foo.remove({_id : 5}) ;
+    lastGTID = conn.getDB("local").oplog.rs.find().sort({$natural:-1}).next()._id;
+    conn.getDB("local").oplog.rs.remove({_id : lastGTID});
+
+    // by removing these three documents, we are simulating the fact that
+    // rollback got the snapshot of these docs after the fileop occurred
+
+    lastGTID = conn.getDB("local").oplog.rs.find().sort({$natural:-1}).next()._id;
+    assert(friendlyEqual(lastGTID, startLastGTID));
     // now insert them into local.rollback.docs
     conn.getDB("local").rollback.docs.insert({_id : { ns : "test.foo", pk : { "" : 1} }});
     conn.getDB("local").rollback.docs.insert({_id : { ns : "test.foo", pk : { "" : 3} }});

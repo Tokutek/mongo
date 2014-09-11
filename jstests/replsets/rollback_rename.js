@@ -9,7 +9,7 @@ var filename;
 //}
 
 preloadData = function(conn) {
-    conn.getDB("test").createCollection("foo");
+    conn.getDB("test").createCollection("foo", {partitioned : 1});
     conn.getDB("test").foo.ensureIndex({a:1});
     // do some insertions
     for (var i = 0; i < 10; i++) {
@@ -45,6 +45,12 @@ doDropForwardPhase = function(conn) {
     assert(conn.getDB("test").foo.drop());
 }
 
+doDropDatabaseForwardPhase = function(conn) {
+    preloadMoreData(conn);
+    conn.getDB("test").foo.ensureIndex({a:1});
+    assert.commandWorked(conn.getDB("test").dropDatabase());
+}
+
 doCreateForwardPhase = function(conn) {
     preloadMoreData(conn);
     conn.getDB("test").foo.ensureIndex({a:1});
@@ -52,6 +58,7 @@ doCreateForwardPhase = function(conn) {
     assert(conn.getDB("test").foo.drop());
     assert.commandWorked(conn.getDB("test").createCollection("foo"));
 }
+
 
 doCreateForwardPhase2 = function(conn) {
     preloadMoreData(conn);
@@ -62,10 +69,25 @@ doCreateForwardPhase2 = function(conn) {
     assert.commandWorked(conn.getDB("test").createCollection("zzz"));
 }
 
+doAddPartitionForwardPhase = function(conn) {
+    preloadMoreData(conn);
+    assert.commandWorked(conn.getDB("test").foo.addPartition());
+}
+
+doDropPartitionForwardPhase = function(conn) {
+    preloadMoreData(conn);
+    assert.commandWorked(conn.getDB("test").foo.addPartition());
+    assert.commandWorked(conn.getDB("test").foo.dropPartition(0));
+}
+
+
 doSimpleUpdate = function(conn) {
     conn.getDB("test").foo.update({_id : 5}, {$set : {state : "Shall go fatal!"}});
 };
 
+doRollbackTest( 15, 1000000, 31000, preloadData, doDropPartitionForwardPhase, doSimpleUpdate, true );
+doRollbackTest( 15, 1000000, 31000, preloadData, doDropDatabaseForwardPhase, doSimpleUpdate, false );
+doRollbackTest( 15, 1000000, 31000, preloadData, doAddPartitionForwardPhase, doSimpleUpdate, false );
 doRollbackTest( 15, 1000000, 31000, preloadData, preloadMoreData, doRename, true );
 doRollbackTest( 15, 1000000, 31000, preloadData, doRenameForwardPhase, doSimpleUpdate, true );
 doRollbackTest( 15, 1000000, 31000, preloadData, doDropIndexForwardPhase, doSimpleUpdate, false );
