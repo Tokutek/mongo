@@ -381,7 +381,8 @@ namespace mongo {
                 out->push_back(Privilege(AuthorizationManager::CLUSTER_RESOURCE_NAME, actions));
             }
 
-            bool createShartitionedCollection(const BSONObj& cmdObj, string& errmsg, ScopedDbConnection* conn, DBConfigPtr config) {
+            // create a sharded and partitioned collection
+            bool createPartitionedCollection(const BSONObj& cmdObj, string& errmsg, ScopedDbConnection* conn, DBConfigPtr config) {
                 const string ns = cmdObj.firstElement().valuestrsafe();
                 BSONObj proposedPartitionKey = cmdObj.getObjectField("partitionKey");
                 BSONObj proposedShardKey = cmdObj.getObjectField("key");
@@ -663,7 +664,7 @@ namespace mongo {
                     bool onlyHashed = proposedKey.nFields() == 1 && StringData(proposedKey.firstElement().valuestrsafe()) == "hashed";
                     bool partitioned = cmdObj["partitionKey"].ok();
                     if (!collectionExists && partitioned) {
-                        bool created = createShartitionedCollection(cmdObj, errmsg, conn.get(), config);
+                        bool created = createPartitionedCollection(cmdObj, errmsg, conn.get(), config);
                         if (!created) {
                             return false;
                         }
