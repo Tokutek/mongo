@@ -1,4 +1,4 @@
-// Test that fastupdates get written to the migrate log properly
+// Test that fastUpdates get written to the migrate log properly
 
 // start up a new sharded cluster
 var st = new ShardingTest({ shards : 2, mongos : 1 });
@@ -31,13 +31,13 @@ s.adminCommand( { enablesharding : dbname } );
 s.adminCommand( { shardcollection : ns , key: { _id : 1 }, numInitialChunks: 1 } );
 var primary = st.getServer(dbname);
 var nonPrimary = st.getOther(primary);
-assert.commandWorked(primary.adminCommand({ setParameter: 1, fastupdates: true }));
-assert.commandWorked(nonPrimary.adminCommand({ setParameter: 1, fastupdates: true }));
+assert.commandWorked(primary.adminCommand({ setParameter: 1, fastUpdates: true }));
+assert.commandWorked(nonPrimary.adminCommand({ setParameter: 1, fastUpdates: true }));
 
 // start a parallel shell that does an $inc by _id (the pk here) every 10 documents
 join = startParallelShell("db = db.getSiblingDB('" + dbname + "'); sleep(500); print('Doing update'); for (i = 0; i < 50000; i += 10) { if (i % 10000 == 0) { print(\"update \" + i); } db." + coll + ".update({ _id: i }, {'$inc': {'c': 1} }); assert.eq(null, db.getLastError()); } print('Update finished');", st.s0.port);
 
-// migrate while fastupdates are happening
+// migrate while fastUpdates are happening
 var moveResult =  s.adminCommand( { moveChunk : ns ,
                                     find : { _id : 1 } ,
                                     to : st.getOther( st.getServer( dbname ) ).name } );

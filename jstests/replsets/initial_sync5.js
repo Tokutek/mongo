@@ -123,7 +123,7 @@ doTest = function (signal, txnLimit, startPort) {
     undo_and_redo_entries(replTest, conns, txnLimit, undoInsert);
 /*
     print("updating 30 documents on master with $inc optimization");
-    assert.commandWorked(a.getSisterDB('admin').runCommand({ setParameter: 1, fastupdates: true }))
+    assert.commandWorked(a.getSisterDB('admin').runCommand({ setParameter: 1, fastUpdates: true }))
     for (i=0; i < 30; i++) {
         a.foo.update({_id:10}, {$inc:{a:1}});
     }

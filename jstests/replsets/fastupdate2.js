@@ -55,10 +55,10 @@ slaveConns[0].setSlaveOk();
 secondary = replTest.liveNodes.slaves[0].getDB(name);
 
 // primary can fastupdate c since it is unindexed
-assert.commandWorked(primary.adminCommand({ setParameter: 1, fastupdates: true }));
+assert.commandWorked(primary.adminCommand({ setParameter: 1, fastUpdates: true }));
 primary.x.update({ _id: 0 }, { $inc: { c: 1 } });
 replTest.awaitReplication();
-assert.commandWorked(primary.adminCommand({ setParameter: 1, fastupdates: false }));
+assert.commandWorked(primary.adminCommand({ setParameter: 1, fastUpdates: false }));
 
 // primary should be able to find { c: 1 } or { z: 500 } using _id or z index
 assert.eq(1, primary.x.find({ c: 1 }).hint({ _id: 1 }).itcount());

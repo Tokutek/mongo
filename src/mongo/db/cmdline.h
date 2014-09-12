@@ -140,8 +140,6 @@ namespace mongo {
         string tmpDir;
         string gdbPath;
         BytesQuantity<uint64_t> txnMemLimit;
-        bool fastupdates;
-        bool fastupdatesIgnoreErrors;
 
         string pluginsDir;
         vector<string> plugins;
@@ -191,7 +189,7 @@ namespace mongo {
         logAppend(false), logWithSyslog(false),
         directio(false), gdb(false), cacheSize(0), locktreeMaxMemory(0), loaderMaxMemory(0), loaderCompressTmp(true), checkpointPeriod(60), cleanerPeriod(2),
         cleanerIterations(5), lockTimeout(4000), fsRedzone(5), logDir(""), tmpDir(""), gdbPath(""),
-        txnMemLimit(1ULL<<20), fastupdates(false), fastupdatesIgnoreErrors(false), pluginsDir(), plugins()
+        txnMemLimit(1ULL<<20), pluginsDir(), plugins()
     {
         started = time(0);
 

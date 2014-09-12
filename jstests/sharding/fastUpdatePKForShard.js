@@ -47,7 +47,7 @@ assertOplogEntrySlow(localdb);
 
 // now let's turn on fast updates, do all the above things, and verify that they are indeed fast
 // this is a sanity check to verify that the setParameter works
-assert.commandWorked(primary.adminCommand({ setParameter: 1, fastupdates: true }));
+assert.commandWorked(primary.adminCommand({ setParameter: 1, fastUpdates: true }));
 db.foo.update({_id : 0}, { $set : {a : 100}});
 assertUpdateFast(db, localdb);
 db.foo.drop();

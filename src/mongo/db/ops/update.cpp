@@ -114,21 +114,23 @@ namespace mongo {
         uassert(12522, "$ operator made object too large", obj.objsize() <= BSONObjMaxUserSize);
     }
 
-    ExportedServerParameter<bool> _fastupdatesParameter(
-            ServerParameterSet::getGlobal(), "fastupdates", &cmdLine.fastupdates, true, true);
-    ExportedServerParameter<bool> _fastupdatesIgnoreErrorsParameter(
-            ServerParameterSet::getGlobal(), "fastupdatesIgnoreErrors", &cmdLine.fastupdatesIgnoreErrors, true, true);
+    static bool fastUpdatesEnabled = false;
+    ExportedServerParameter<bool> _fastUpdatesParameter(
+            ServerParameterSet::getGlobal(), "fastUpdates", &fastUpdatesEnabled, true, true);
+    static bool fastUpdatesIgnoreErrors = false;
+    ExportedServerParameter<bool> _fastUpdatesIgnoreErrorsParameter(
+            ServerParameterSet::getGlobal(), "fastUpdatesIgnoreErrors", &fastUpdatesIgnoreErrors, true, true);
 
-    static Counter64 fastupdatesErrors;
-    static ServerStatusMetricField<Counter64> fastupdatesIgnoredErrorsDisplay("fastupdates.errors", &fastupdatesErrors);
-    static Counter64 fastupdatesByPKPerformed;
-    static ServerStatusMetricField<Counter64> fastupdatesPerformedPKDisplay("fastupdates.performed.primaryKey", &fastupdatesByPKPerformed);
-    static Counter64 fastupdatesBySecPerformed;
-    static ServerStatusMetricField<Counter64> fastupdatesPerformedSecDisplay("fastupdates.performed.secondaryKey", &fastupdatesBySecPerformed);
-    static Counter64 fastupdatesPKEligible;
-    static ServerStatusMetricField<Counter64> fastupdatesEligiblePKDisplay("fastupdates.eligible.primaryKey", &fastupdatesPKEligible);
-    static Counter64 fastupdatesSecEligible;
-    static ServerStatusMetricField<Counter64> fastupdatesEligibleSecDisplay("fastupdates.eligible.secondaryKey", &fastupdatesSecEligible);
+    static Counter64 fastUpdatesErrors;
+    static ServerStatusMetricField<Counter64> fastUpdatesIgnoredErrorsDisplay("fastUpdates.errors", &fastUpdatesErrors);
+    static Counter64 fastUpdatesByPKPerformed;
+    static ServerStatusMetricField<Counter64> fastUpdatesPerformedPKDisplay("fastUpdates.performed.primaryKey", &fastUpdatesByPKPerformed);
+    static Counter64 fastUpdatesBySecPerformed;
+    static ServerStatusMetricField<Counter64> fastUpdatesPerformedSecDisplay("fastUpdates.performed.secondaryKey", &fastUpdatesBySecPerformed);
+    static Counter64 fastUpdatesPKEligible;
+    static ServerStatusMetricField<Counter64> fastUpdatesEligiblePKDisplay("fastUpdates.eligible.primaryKey", &fastUpdatesPKEligible);
+    static Counter64 fastUpdatesSecEligible;
+    static ServerStatusMetricField<Counter64> fastUpdatesEligibleSecDisplay("fastUpdates.eligible.secondaryKey", &fastUpdatesSecEligible);
 
     bool ApplyUpdateMessage::applyMods(
         const BSONObj &oldObj,
@@ -173,19 +175,19 @@ namespace mongo {
             // be an indication that data is out of sync with the primary.
             if (fastUpdateFlags & UpdateFlags::FAST_UPDATE_PERFORMED) {
                 // Applying an update message in this fashion _always_ ignores errors.
-                // That is the risk you take when using --fastupdates.
+                // That is the risk you take when using --fastUpdates.
                 //
                 // We will print such errors to the server's error log no more than once per 5 seconds.
-                if (!cmdLine.fastupdatesIgnoreErrors && _loggingTimer.millisReset() > 5000) {
+                if (!fastUpdatesIgnoreErrors && _loggingTimer.millisReset() > 5000) {
                     problem() << "* Failed to apply \"--fastupdate\" updateobj message! "
                                  "This means an update operation that appeared successful actually failed." << endl;
                     problem() << "* It probably should not be happening in production. To ignore these errors, "
-                                 "set the server parameter fastupdatesIgnoreErrors=true" << endl;
+                                 "set the server parameter fastUpdatesIgnoreErrors=true" << endl;
                     problem() << "*    doc: " << oldObj << endl;
                     problem() << "*    updateobj: " << msg << endl;
                     problem() << "*    exception: " << ex.what() << endl;
                 }
-                fastupdatesErrors.increment(1);
+                fastUpdatesErrors.increment(1);
                 return false;
             }
             throw;
@@ -288,7 +290,7 @@ namespace mongo {
         }
         verify(!forceLogFullUpdate(cl, mods));
         *eligible = true;
-        if (!cmdLine.fastupdates) {
+        if (!fastUpdatesEnabled) {
             return false;
         }
         return true;
@@ -341,12 +343,12 @@ namespace mongo {
         // proceed with fetching the pre-image
         bool eligibleForFastUpdate = false;        
         if (tryFastUpdate(ns, cl, pk, patternOrig, updateobj, upsert, fromMigrate, mods.get(), isOperatorUpdate, true, &eligibleForFastUpdate)) {
-            fastupdatesByPKPerformed.increment();
+            fastUpdatesByPKPerformed.increment();
             return UpdateResult(1, isOperatorUpdate, 1, BSONObj());
         }
         if (eligibleForFastUpdate) {
-            // track the fact that this update could have been fast if fastupdates were enabled
-            fastupdatesPKEligible.increment();
+            // track the fact that this update could have been fast if fastUpdates were enabled
+            fastUpdatesPKEligible.increment();
         }
 
         BSONObj obj;
@@ -480,13 +482,13 @@ namespace mongo {
                     false, // old obj must exist in main dictionary
                     &eligible
                     );
-                fastupdatesBySecPerformed.increment();
+                fastUpdatesBySecPerformed.increment();
                 verify(ranFast); // must have succeeded because canBeFast is true
             }
             else {
                 if (eligibleForFastUpdate) {
-                    // track the fact that this update could have been fast if fastupdates were enabled
-                    fastupdatesSecEligible.increment();
+                    // track the fact that this update could have been fast if fastUpdates were enabled
+                    fastUpdatesSecEligible.increment();
                 }
                 verify(!currentObj.isEmpty()); // sanity check
                 updateUsingMods(ns, cl, currPK, currentObj, updateobj, mods, &details, fromMigrate);

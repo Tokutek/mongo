@@ -57,7 +57,7 @@ static const char OP_STR_COMMAND[] = "c"; // command
 
 namespace mongo {
     static Counter64 slowUpdatesByPKPerformed;
-    static ServerStatusMetricField<Counter64> fastupdatesPerformedPKDisplay("fastupdates.performed.slowOnSecondary", &slowUpdatesByPKPerformed);
+    static ServerStatusMetricField<Counter64> fastupdatesPerformedPKDisplay("fastUpdates.performed.slowOnSecondary", &slowUpdatesByPKPerformed);
 
     namespace OplogHelpers {
         bool shouldLogOpForSharding(const char *opstr) {

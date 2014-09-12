@@ -80,7 +80,7 @@ doTest = function (signal, txnLimit, startPort, fastup) {
     }, "Arbiter failed to initialize.");
 
     if (fastup) {
-        assert.commandWorked(conns[0].getDB("admin").runCommand({ setParameter: 1, fastupdates: true }));
+        assert.commandWorked(conns[0].getDB("admin").runCommand({ setParameter: 1, fastUpdates: true }));
     }
 
     // make our collections

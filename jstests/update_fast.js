@@ -10,10 +10,10 @@ function changeFastUpdates(val){
         x = db.runCommand("isdbgrid");
         if (x.ok) {
             dbForParam = myShardingTest.getServer("test");
-            assert.commandWorked(dbForParam.getDB('admin').runCommand({ setParameter: 1, fastupdates: val }));            
+            assert.commandWorked(dbForParam.getDB('admin').runCommand({ setParameter: 1, fastUpdates: val }));            
         }
         else {
-            assert.commandWorked(db.getSisterDB('admin').runCommand({ setParameter: 1, fastupdates: val }));
+            assert.commandWorked(db.getSisterDB('admin').runCommand({ setParameter: 1, fastUpdates: val }));
         }
 }
 

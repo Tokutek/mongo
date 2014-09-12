@@ -117,7 +117,7 @@ doIDPKTest = function (signal, txnLimit, startPort, secondaryHasIndex) {
 
     // now let's turn on fast updates, do all the above things, and verify that they are indeed fast
     // this is a sanity check to verify that the setParameter works
-    assert.commandWorked(wdb.adminCommand({ setParameter: 1, fastupdates: true }));
+    assert.commandWorked(wdb.adminCommand({ setParameter: 1, fastUpdates: true }));
     wdb.foo.update({_id : 0}, { $set : {a : 100}});
     assertUpdateFast(wdb, localdb);    
     replTest.awaitReplication();
@@ -128,7 +128,7 @@ doIDPKTest = function (signal, txnLimit, startPort, secondaryHasIndex) {
     replTest.awaitReplication();
     assert( dbs_match(wdb,swdb), "server data sets do not match after rollback, something is wrong");
 
-    // now we've tested that the fastupdates parameter works and that an update is fast only
+    // now we've tested that the fastUpdates parameter works and that an update is fast only
     // if the flag is set. Now let's get to testing fast updates
 
     // these set of tests verify that operations that result in no changes are still fast and perform
@@ -289,7 +289,7 @@ doCustomPKTest = function (signal, txnLimit, startPort, secondaryHasIndex) {
 
     // now let's turn on fast updates, do all the above things, and verify that they are indeed fast
     // this is a sanity check to verify that the setParameter works
-    assert.commandWorked(wdb.adminCommand({ setParameter: 1, fastupdates: true }));
+    assert.commandWorked(wdb.adminCommand({ setParameter: 1, fastUpdates: true }));
     wdb.foo.update({_id : 0, a : 0}, { $set : {b : 100}});
     assertUpdateFast(wdb, localdb);
     replTest.awaitReplication();
@@ -300,7 +300,7 @@ doCustomPKTest = function (signal, txnLimit, startPort, secondaryHasIndex) {
     replTest.awaitReplication();
     assert( dbs_match(wdb,swdb), "server data sets do not match after rollback, something is wrong");
 
-    // now we've tested that the fastupdates parameter works and that an update is fast only
+    // now we've tested that the fastUpdates parameter works and that an update is fast only
     // if the flag is set. Now let's get to testing fast updates
 
     // these set of tests verify that operations that result in no changes are still fast and perform
@@ -467,7 +467,7 @@ doSecondaryKeyTest = function (signal, txnLimit, startPort, secondaryHasIndex) {
 
     // now let's turn on fast updates, do all the above things, and verify that they are indeed fast
     // this is a sanity check to verify that the setParameter works
-    assert.commandWorked(wdb.adminCommand({ setParameter: 1, fastupdates: true }));
+    assert.commandWorked(wdb.adminCommand({ setParameter: 1, fastUpdates: true }));
     wdb.foo.update({a : 1}, { $set : {b : 100}});
     assertUpdateSlow(wdb, localdb); // this should result in no update, because we couldn't find a pk that matches
     replTest.awaitReplication();
@@ -478,7 +478,7 @@ doSecondaryKeyTest = function (signal, txnLimit, startPort, secondaryHasIndex) {
     replTest.awaitReplication();
     assert( dbs_match(wdb,swdb), "server data sets do not match after rollback, something is wrong");
 
-    // now we've tested that the fastupdates parameter works and that an update is fast only
+    // now we've tested that the fastUpdates parameter works and that an update is fast only
     // if the flag is set. Now let's get to testing fast updates
 
     // these set of tests verify that operations that result in no changes are still fast and perform
