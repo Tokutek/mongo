@@ -139,7 +139,11 @@ namespace mongo {
         const uint32_t fastUpdateFlags,
         BSONObj& newObj
         ) 
-    {            
+    {
+        // first, a check that only the flags we support
+        // are listed here. We don't want a future version's flag to somehow
+        // erroneously make it here (e.g., a future upsert flag)
+        verify(fastUpdateFlags < UpdateFlags::MAX);
         if (oldObj.isEmpty()) {
             // if this update message is allowed to not have an old obj
             // we simply return false, otherwise, we uassert

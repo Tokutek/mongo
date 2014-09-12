@@ -659,6 +659,10 @@ namespace mongo {
             if (pkExistsInDocsMap) {
                 return;
             }
+            // a sanity check that no unsupported update flags
+            // are listed here. We also do this check in
+            // ApplyUpdateMessage::applyMods
+            verify(fastUpdateFlags < UpdateFlags::MAX);
             Collection *cl = getCollection(ns);
             uint64_t flags = Collection::NO_UNIQUE_CHECKS | Collection::NO_LOCKTREE;
             ModSet mods(updateobj, cl->indexKeys());
