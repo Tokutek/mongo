@@ -40,17 +40,17 @@ namespace mongo {
 
         // The field names have size equal to total size, minus the header,
         // minus the size of the array of offsets into the field names.
-        const int32_t fieldsLength = _size - HeaderSize - (4 * nFields);
+        const int32_t fieldsLength = _size - sizeof(Header) - (4 * nFields);
         verify(fieldsLength > 0);
 
         Header h(Ordering::make(keyPattern), type, sparse, clustering,
                  nFields, static_cast<uint32_t>(fieldsLength));
-        memcpy(_dataOwned.get(), &h, HeaderSize);
+        memcpy(_dataOwned.get(), &h, sizeof(Header));
 
         // The offsets array is based after the header. It is an array of
         // size h.numFields, where each element is sizeof(uint32_t) bytes.
         // The fields array is based after the offsets array.
-        uint32_t *const offsetsBase = reinterpret_cast<uint32_t *>(_dataOwned.get() + HeaderSize);
+        uint32_t *const offsetsBase = reinterpret_cast<uint32_t *>(_dataOwned.get() + sizeof(Header));
         char *const fieldsBase = reinterpret_cast<char *>(&offsetsBase[h.numFields]);
 
         // Write each field's offset and value into each array, respectively.
@@ -94,7 +94,7 @@ namespace mongo {
     }
 
     size_t Descriptor::serializedSizeCurrentVersion(const BSONObj &keyPattern) {
-        size_t size = HeaderSize;
+        size_t size = sizeof(Header);
         for (BSONObjIterator o(keyPattern); o.more(); ++o) {
             const BSONElement &e = *o;
             // Each field will take up 4 bytes in the offset array
@@ -102,11 +102,12 @@ namespace mongo {
             size += 4;
             size += strlen(e.fieldName()) + 1;
         }
-        verify(size > HeaderSize);
+        verify(size > sizeof(Header));
         return size;
     }
 
     void Descriptor::fieldNames(vector<const char *> &fields) const {
+        // We use _headerSize() over sizeof(Header) since the header may be <= v1
         const Header &h(*reinterpret_cast<const Header *>(_data));
         const uint32_t *const offsetsBase = reinterpret_cast<const uint32_t *>(_data + _headerSize());
         const char *const fieldsBase = reinterpret_cast<const char *>(offsetsBase + h.numFields);

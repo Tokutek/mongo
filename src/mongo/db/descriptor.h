@@ -181,13 +181,13 @@ namespace mongo {
         // important: we use descriptor->size == sizeof(Ordering) to detect
         //            descriptors that have a layout format from before descriptors
         //            had a version at all.
-        static const int HeaderSize = sizeof(Header);
-        static const int HeaderSizeV1 = sizeof(Header) - sizeof(uint32_t); // no fieldsLenth
-        BOOST_STATIC_ASSERT(HeaderSize != sizeof(Ordering));
-        BOOST_STATIC_ASSERT(HeaderSize == 20);
+        BOOST_STATIC_ASSERT(sizeof(Header) != sizeof(Ordering));
+        BOOST_STATIC_ASSERT(sizeof(Header) == 20);
 
         size_t _headerSize() const {
-            return version() <= 1 ? HeaderSizeV1 : HeaderSize;
+            // Headers at version 1 and below did not have the 4 byte `fieldsLength'
+            // field that exists in the current header (see struct Header)
+            return version() <= 1 ? sizeof(Header) - sizeof(uint32_t) : sizeof(Header);
         }
 
         uint32_t _fieldsLength() const {
