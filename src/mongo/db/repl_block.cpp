@@ -45,7 +45,7 @@ namespace mongo {
         // bleh, don't like this clause
         //
         //
-        if (remoteGTID == GTID_MAX) {
+        if (remoteGTID == GTID_MAX || myGTID.isInitial()) {
             return REPL_SUCCESS;
         }
         // if our primary is less than the remote's primary, that means

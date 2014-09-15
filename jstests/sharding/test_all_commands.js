@@ -143,7 +143,6 @@ var commands = [
     'replSetSyncFrom',
     'replSetTest',
     'replTrimOplog',
-    'replUndoOplogEntry',
     'resetError',
     'reseterror',
     'rollbackTransaction',

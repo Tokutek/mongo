@@ -40,15 +40,18 @@ assert.commandWorked(db.createCollection("foo"));
 db.foo.insert({_id : 0, a : 0});
 //update of non-existent key should not work
 db.foo.update({_id : 1}, { $set : {a : 1}});
+db.getLastError();
 assertUpdateSlow(db);
 // now let's do an update that works, verify that it is slow
 db.foo.update({_id : 0}, { $set : {a : 1}});
+db.getLastError();
 assertOplogEntrySlow(localdb);
 
 // now let's turn on fast updates, do all the above things, and verify that they are indeed fast
 // this is a sanity check to verify that the setParameter works
 assert.commandWorked(primary.adminCommand({ setParameter: 1, fastUpdates: true }));
 db.foo.update({_id : 0}, { $set : {a : 100}});
+db.getLastError();
 assertUpdateFast(db, localdb);
 db.foo.drop();
 
@@ -56,8 +59,10 @@ db.foo.drop();
 assert.commandWorked(db.createCollection("foo"));
 db.foo.ensureIndex({b : 1});
 db.foo.insert({_id : 0, a : 0, b : 0});
+db.getLastError();
 assert.commandWorked(db.adminCommand({ shardCollection: 'foo.foo', key: { b : 1 }, clustering: false}));
 db.foo.update({_id : 0}, { $inc : {a : 102}});
+db.getLastError();
 assertOplogEntrySlow(localdb); // verify the slow update, because the shard key, b, is not included in the pk
 db.foo.drop();
 
@@ -72,6 +77,7 @@ db.foo.drop();
 assert.commandWorked(db.adminCommand({ shardCollection: 'foo.foo', key: { _id : "hashed" }, clustering: false}));
 db.foo.insert({_id : 0, a : 0});
 db.foo.update({_id : 0}, { $inc : {a : 100}});
+db.getLastError();
 x = db.foo.find({_id : 0}).next();
 assert.eq(x.a, 100);
 assertUpdateFast(db, localdb);

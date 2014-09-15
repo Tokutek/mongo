@@ -139,6 +139,7 @@ files.forEach(function(x) {
             'partition_secondary_index|' +
             'partition_sorted_cursor|' +
             'partition_stats|' +
+            'partition_stats2|' +
             'part_coll_simple|' +
             'part_convert|' +
             'pk_unique_check_param|' +

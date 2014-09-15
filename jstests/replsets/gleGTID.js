@@ -29,6 +29,8 @@ doTest = function (signal, startPort, txnLimit) {
     assert.soon(function() {var x = conns[2].getDB("admin").runCommand({replSetGetStatus:1}); return x["members"][2]["highestKnownPrimaryInReplSet"] > 10});
     assert.soon(function() {var x = conns[2].getDB("admin").runCommand({replSetGetStatus:1}); return x["members"][1]["highestKnownPrimaryInReplSet"] > 10});
     assert.soon(function() {var x = conns[2].getDB("admin").runCommand({replSetGetStatus:1}); return x["members"][0]["highestKnownPrimaryInReplSet"] > 10});
+    // make sure that 0 becomes master again
+    assert.soon(function() {var x = conns[2].getDB("admin").runCommand({replSetGetStatus:1}); return x["members"][0]["state"] == 1});
 
 
     //assert.soon( function() {
@@ -49,10 +51,13 @@ doTest = function (signal, startPort, txnLimit) {
 
     // now do some gle tests
     var x = testdb.runCommand({ getLastError: 1, wtimeout : 5000, wgtid : GTID(pri, 0), w: 'majority' });
+    printjson(x);
     assert.eq(x.err, null);
     var x = testdb.runCommand({ getLastError: 1, wtimeout : 5000, wgtid : GTID(pri, 100000), w: 'majority' });
+    printjson(x);
     assert.eq(x.err, "timeout");
     var x = testdb.runCommand({ getLastError: 1, wtimeout : 5000, wgtid : GTID(pri-1, 100000), w: 'majority' });
+    printjson(x);
     assert.eq(x.err, "failover");
 
     print("gleGTID.js SUCCESS");

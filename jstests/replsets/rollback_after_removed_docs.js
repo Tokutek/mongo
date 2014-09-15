@@ -53,6 +53,7 @@ doSetup = function(conn) {
     conn.getDB("local").rollback.docs.insert({_id : { ns : "test.foo", pk : { "" : 1} }});
     conn.getDB("local").rollback.docs.insert({_id : { ns : "test.foo", pk : { "" : 3} }});
     conn.getDB("local").rollback.docs.insert({_id : { ns : "test.foo", pk : { "" : 5} }});
+    conn.getDB("local").createCollection("rollback.opdata"); // dummy to get test passing
 };
 
 doRollbackTest( 15, 1000000, 31000, preloadData, preloadMoreData, doSetup, false );
