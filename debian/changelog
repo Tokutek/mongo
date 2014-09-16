@@ -1,6 +1,6 @@
-tokumx (1.6.0-pre-) UNRELEASED; urgency=low
+tokumx (2.0.0-pre-) UNRELEASED; urgency=low
 
-  * see http://github.com/Tokutek/mongo/releases/1.6.0
+  * see http://github.com/Tokutek/mongo/releases/tokumx-2.0.0
 
  -- Leif Walsh <leif.walsh@gmail.com>  Mon, 08 Sep 2014 23:07:43 +0000
 
