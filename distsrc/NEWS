@@ -1,6 +1,133 @@
 tokumx news
 ===========
 
+tokumx 2.0.0
+------------
+Release date: TBD
+
+General
+~~~~~~~
+
+    - This release is focused on new features and improvements since
+      1.5.1: geospatial features, Ark elections, fast updates, and
+      simultaneously partitioned and sharded collections.
+
+
+Highlights
+~~~~~~~~~~
+
+    - Geospatial indexing and queries have been added and are compatible
+      with those in MongoDB 2.4.
+
+    - The election algorithm used for replication failover has been
+      replaced with Ark, which prevents elections from rolling back writes
+      acknowledged with majority Write Concern, and makes failovers
+      faster.
+
+    - Fast updates are a new update mechanism that avoids a preliminary
+      query during an update operation, when possible, boosting the speed
+      of update operations by up to 10x.
+
+    - Partitioned collections may now be sharded, in a restricted form
+      useful for many time-series workloads with a suitable shard key.
+
+
+New features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    - All geospatial indexing and query features of MongoDB 2.4 have been
+      added to TokuMX.
+      (https://tokutek.atlassian.net/browse/MX-166[MX-166])
+
+    - Replication elections now use Ark, a consensus algorithm similar to
+      Raft, to elect a new primary node during failover.
+
+      This reduces the downtime experienced by clients due to failed
+      failover elections.
+
+      This also ensures that writes acknowledged with majority Write
+      Concern will never be rolled back by any later failover.
+      (https://tokutek.atlassian.net/browse/MX-765[MX-765])
+
+    - Previously, updates performed a query to read the existing document,
+      then made changes to the relevant indexes.  In Fractal Tree indexes,
+      the query is typically much slower than the changes made by an
+      update.
+
+      TokuMX 2.0 transparently optimizes updates of the right form to
+      avoid the query phase.  For updates by primary key (or `_id` by
+      default) that don't modify any secondary indexes, this can result in
+      a dramatic speedup.
+
+      Please see the documentation for full details.
+      (https://tokutek.atlassian.net/browse/MX-932[MX-932])
+
+    - Reduced the amount of data written to disk when applying replicated
+      operations on secondaries.
+      (https://tokutek.atlassian.net/browse/MX-1133[MX-1133])
+
+    - Replication rollback has been changed so that oplog entries are
+      significantly smaller for update and delete operations.
+      (https://tokutek.atlassian.net/browse/MX-1223[MX-1223],
+      https://tokutek.atlassian.net/browse/MX-1238[MX-1238])
+
+    - Partitioned collections may now be sharded, with several
+      restrictions:
+
+       - The collection must be created by the `shardCollection` command,
+         and at that time, both the shard key and partition key must be
+         provided.  The partition key will be used as the primary key.
+
+       - The balancer will not move chunks for a sharded and partitioned
+         collection.  Users may manually move chunks with
+         `sh.moveChunk()`, however this is only recommended for empty
+         chunks, as a collection initialization step.
+
+       - Chunks are not automatically split, though users may manually
+         split chunks with `sh.splitAt()`, which is recommended as a
+         collection initialization step.
+
+      Please see the documentation for full details.
+      (https://tokutek.atlassian.net/browse/MX-1232[MX-1232])
+
+    - Optimized the comparison function used to compare ObjectIDs.  This
+      results in a modest performance improvement for non-covered
+      queries.  (https://tokutek.atlassian.net/browse/MX-1251[MX-1251])
+
+    - Replication rollback now writes information about the operations
+      that were rolled back to a separate collection,
+      `local.rollback.opdata`.
+
+      Please see the documentation for full details.
+      (https://tokutek.atlassian.net/browse/MX-1258[MX-1258])
+
+    - After a successful primary election, the new primary writes a
+      comment in its oplog noting the result of the election.  This entry
+      now includes the primary's hostname.
+      (https://tokutek.atlassian.net/browse/MX-1260[MX-1260])
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Reduced delays in replication state changes caused by unnecessary
+      coupling between replication subsystems.
+      (https://tokutek.atlassian.net/browse/MX-1136[MX-1136])
+
+    - Partitioned collection administrative commands (`addPartition`,
+      `dropPartition`, and `getPartitionInfo`) are now passed from
+      `mongos` through to `mongod`.
+      (https://tokutek.atlassian.net/browse/MX-1139[MX-1139])
+
+    - Fixed an issue that caused `collStats` to fail on a partitioned
+      collection after dropping an index.
+      (https://tokutek.atlassian.net/browse/MX-1262[MX-1262])
+
+    - Fixed `mongorestore`'s behavior when restoring a partitioned
+      collection, to properly restore the partition layout as well.
+      (https://tokutek.atlassian.net/browse/MX-1269[MX-1269])
+
+
 tokumx 1.5.1
 ------------
 Release date: 2014-09-10
