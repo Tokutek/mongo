@@ -1549,6 +1549,7 @@ namespace mongo {
 
         // functions for adding/dropping partitions
         void dropPartition(uint64_t id);
+        void dropPartitionsLEQ(const BSONObj &pivot);
         void addPartition();
         void manuallyAddPartition(const BSONObj& newPivot, const BSONObj &partitionInfo);
         void getPartitionInfo(uint64_t* numPartitions, BSONArray* partitionArray) const;
