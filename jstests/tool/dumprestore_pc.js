@@ -7,12 +7,12 @@ doTest = function (dbName, recreateBeforeRestore) {
     db = t.db;
 
     db.createCollection("foo", {partitioned:1});
-    db.foo.addPartition({_id:100});
-    db.foo.addPartition({_id:200});
-    db.foo.addPartition({_id:300});
+    db.foo.addPartition({_id:new Date(1000000)});
+    db.foo.addPartition({_id:new Date(2000000)});
+    db.foo.addPartition({_id:new Date(3000000)});
     db.foo.dropPartition(0);
     for (var i = 0; i < 400; i++) {
-        db.foo.insert({_id : i});
+        db.foo.insert({_id : new Date(10000*i)});
     }
     expectedCount = 400;
 

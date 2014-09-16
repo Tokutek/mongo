@@ -3285,14 +3285,23 @@ namespace mongo {
             // but it does not need to be. This function probably is not called
             // very often
             BSONObj curr = it->Obj();
-            BSONObj pivot = curr["max"].Obj();
-            BSONObjBuilder strippedPivot;
-            for (BSONObjIterator it(pivot); it.more(); it.next()) {
-                BSONElement pivotElement = *it;
-                strippedPivot.appendAs(pivotElement, "");
-            }
             BSONObjBuilder currWithFilledPivot;
-            cloneBSONWithFieldChanged(currWithFilledPivot, curr, "max", strippedPivot.done(), false);
+            // if this is the last partition, we don't want
+            // to blindly add what is passed in, as it may be malformed
+            // (see jira issue 1269). So, we replace the pivot with what we know
+            // it must be.
+            if (it+1 == partitionInfo.end()) {
+                cloneBSONWithFieldChanged(currWithFilledPivot, curr, "max", getUpperBound(), false);
+            }
+            else {
+                BSONObjBuilder strippedPivot;
+                BSONObj pivot = curr["max"].Obj();
+                for (BSONObjIterator it(pivot); it.more(); it.next()) {
+                    BSONElement pivotElement = *it;
+                    strippedPivot.appendAs(pivotElement, "");
+                }
+                cloneBSONWithFieldChanged(currWithFilledPivot, curr, "max", strippedPivot.done(), false);
+            }
             appendPartition(currWithFilledPivot.obj());
         }
         sanityCheck();
