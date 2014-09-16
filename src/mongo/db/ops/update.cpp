@@ -182,7 +182,8 @@ namespace mongo {
                 // That is the risk you take when using --fastUpdates.
                 //
                 // We will print such errors to the server's error log no more than once per 5 seconds.
-                if (!fastUpdatesIgnoreErrors && _loggingTimer.millisReset() > 5000) {
+                if (!fastUpdatesIgnoreErrors && _loggingTimer.millis() > 5000) {
+                    _loggingTimer.reset();
                     problem() << "* Failed to apply \"--fastupdate\" updateobj message! "
                                  "This means an update operation that appeared successful actually failed." << endl;
                     problem() << "* It probably should not be happening in production. To ignore these errors, "
