@@ -118,6 +118,7 @@ doRollbackTest = function (signal, txnLimit, startPort, preloadFunction, persist
     }
     else {
         replTest.awaitReplication();
+        assert.soon(function() { return conns[1].getDB("admin").isMaster().secondary; });
         verifyRollbackSuccessful(conns[0],conns[1]);
         if (checkAftermath) {
             checkAftermath(conns[1]);
