@@ -85,7 +85,7 @@ namespace mongo {
 
         // Store the index in the _indexes array so that others know an
         // index with this name / key pattern exists and is being built.
-        _idx = IndexDetailsBase::make(_info);
+        _idx = IndexInterface::make(_info);
         _cl->_indexes.push_back(_idx);
         _cl->_indexBuildInProgress = true;
 
@@ -157,7 +157,7 @@ namespace mongo {
     void CollectionBase::ColdIndexer::build() {
         Lock::assertWriteLocked(_cl->_ns);
         if (_isSecondaryIndex) {
-            IndexDetailsBase::Builder builder(*_idx);
+            IndexInterface::Builder builder(*_idx);
 
             IndexDetails::Stats idxStats = _cl->getPKIndex().getStats();
             ProgressMeter pm(idxStats.count, 3, 1000, "estimated documents",

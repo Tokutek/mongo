@@ -53,12 +53,42 @@ namespace mongo {
             !_orDedupConstraints.empty();
     }
 
+    // Very ugly.
+    //
+    // This is essentially a copy/paste of CoveredIndexMatcher::matchesCurrent except 
+    // that we know ahread of time that a MatchDetails must exist and that keyUsable = true
+    // (and of course that the object-to-match is already loaded / avail, due to limitations
+    // in the way the geo code is organized)
+    bool CoveredIndexMatcher::matchesWithSingleKeyIndex(const BSONObj &key, const BSONObj &obj,
+                                                        MatchDetails *details) const {
+        dassert( key.isValid() );
+        verify( details );
+
+        details->resetOutput();
+        if ( !_keyMatcher.matches(key, details ) ) {
+            return false;
+        }
+        bool needRecordForDetails = details && details->needRecord();
+        if ( !_needRecord && !needRecordForDetails ) {
+            return true;
+        }
+        details->setLoadedRecord( true );
+        return _docMatcher->matches( obj, details ) && !isOrClauseDup( obj );
+    }
+
     bool CoveredIndexMatcher::matchesCurrent( Cursor * cursor , MatchDetails * details ) const {
-        const bool keyUsable = !cursor->indexKeyPattern().isEmpty() && !cursor->isMultiKey();
+        bool keyUsable = true;
+        if ( cursor->indexKeyPattern().isEmpty() ) { // unindexed cursor
+            keyUsable = false;
+        }
+        else if ( cursor->isMultiKey() ) {
+            keyUsable =
+                _keyMatcher.singleSimpleCriterion() &&
+                ( ! _docMatcher || _docMatcher->singleSimpleCriterion() );
+        }
+
         const BSONObj key = cursor->currKey();
         dassert( key.isValid() );
-
-        LOG(5) << "CoveredIndexMatcher::matches() " << key.toString() << ", keyUsable " << keyUsable << endl;
 
         if ( details )
             details->resetOutput();
@@ -77,12 +107,14 @@ namespace mongo {
             details->setLoadedRecord( true );
 
         // Couldn't match off key, need to read full document.
-        const BSONObj obj = cursor->current();
-        bool res = _docMatcher->matches( obj, details ) && !isOrClauseDup( obj );
+        BSONObj obj = cursor->current();
+        bool res =
+            _docMatcher->matches( obj, details ) &&
+            !isOrClauseDup( obj );
         LOG(5) << "CoveredIndexMatcher _docMatcher->matches() returns " << res << endl;
         return res;
     }
-
+    
     bool CoveredIndexMatcher::isOrClauseDup( const BSONObj &obj ) const {
         for( vector<shared_ptr<FieldRangeVector> >::const_iterator i = _orDedupConstraints.begin();
             i != _orDedupConstraints.end(); ++i ) {

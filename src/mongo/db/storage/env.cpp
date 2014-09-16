@@ -155,7 +155,8 @@ namespace mongo {
             }
             try {
                 const DBT *desc = &dest_db->cmp_descriptor->dbt;
-                Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
+                scoped_ptr<Descriptor> descriptor;
+                Descriptor::getFromDBT(desc, descriptor);
 
                 const Key sPK(src_key);
                 dassert(sPK.pk().isEmpty());
@@ -168,7 +169,7 @@ namespace mongo {
 
                 // Generate keys for a secondary index.
                 BSONObjSet keys;
-                descriptor.generateKeys(obj, keys);
+                descriptor->generateKeys(obj, keys);
                 dbt_array_clear_and_resize(dest_keys, keys.size());
                 for (BSONObjSet::const_iterator i = keys.begin(); i != keys.end(); i++) {
                     const Key sKey(*i, &pk);

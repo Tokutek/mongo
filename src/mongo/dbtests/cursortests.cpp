@@ -54,7 +54,7 @@ namespace CursorTests {
                         s.range( "a" ) |= s2.range( "a" );
                     }
                 }
-                return new FieldRangeVector( s, BSON( "a" << 1 ), direction );
+                return new FieldRangeVector( s, BSON( "a" << 1 ), shared_ptr<KeyGenerator>(), direction );
             }
             DBDirectClient _c;
         private:
@@ -175,7 +175,7 @@ namespace CursorTests {
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 Client::WriteContext ctx( ns(), mongo::unittest::EMPTY_STRING );
                 FieldRangeSet frs( ns(), spec, true, true );
-                boost::shared_ptr< FieldRangeVector > frv( new FieldRangeVector( frs, idx(), direction() ) );
+                boost::shared_ptr< FieldRangeVector > frv( new FieldRangeVector( frs, idx(), shared_ptr<KeyGenerator>(), direction() ) );
                 {
                     Collection *d = getCollection(ns());
                     int i = d->findIndexByKeyPattern(idx());
@@ -302,7 +302,7 @@ namespace CursorTests {
                 // of 'a' in the index and check for an index key with that value for 'a' and 'b'
                 // equal to 30.
                 FieldRangeSet frs( ns(), BSON( "b" << 30 ), true, true );
-                boost::shared_ptr<FieldRangeVector> frv( new FieldRangeVector( frs, idxPattern, 1 ) );
+                boost::shared_ptr<FieldRangeVector> frv( new FieldRangeVector( frs, idxPattern, shared_ptr<KeyGenerator>(), 1 ) );
                 Client::Transaction transaction(DB_SERIALIZABLE);
                 Client::WriteContext ctx( ns(), mongo::unittest::EMPTY_STRING );
                 {
