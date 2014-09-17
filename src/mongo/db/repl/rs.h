@@ -79,7 +79,7 @@ namespace mongo {
         void summarizeMember(stringstream& s) const;
         // If we could sync from this member.  This doesn't tell us anything about the quality of
         // this member, just if they are a possible sync target.
-        bool syncable() const;
+        bool syncable(bool initialSync) const;
         void recvHeartbeat() {
             _lastHeartbeatRecv = time(0);
         }
@@ -376,7 +376,7 @@ namespace mongo {
         /**
          * Find the closest member (using ping time) with a higher latest GTID.
          */
-        const Member* getMemberToSyncTo();
+        const Member* getMemberToSyncTo(bool initialSync);
         void veto(const string& host, unsigned secs=10);
         bool gotForceSync();
         void goToRollbackState();
