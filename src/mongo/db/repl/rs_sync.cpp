@@ -173,7 +173,7 @@ namespace mongo {
 
     bool ReplSetImpl::shouldChangeSyncTarget(const uint64_t& targetOpTime) const {
         for (Member *m = _members.head(); m; m = m->next()) {
-            if (m->syncable() && targetOpTime + (maxSyncSourceLagSecs*1000) < m->hbinfo().opTime) {
+            if (m->syncable(false) && targetOpTime + (maxSyncSourceLagSecs*1000) < m->hbinfo().opTime) {
                 return true;
             }
         }

@@ -145,15 +145,20 @@ namespace mongo {
         return true;
     }
 
-    bool Member::syncable() const {
+    // input parameter states whether we wish to initial sync or not
+    // needing to initial sync requires having the indexes be built.
+    // Normal replication does not. Note that in the future, we may
+    // need to further distinguish between normal replication and rollback,
+    // but at the moment, we do not.
+    bool Member::syncable(bool initialSync) const {
         bool buildIndexes = theReplSet ? theReplSet->buildIndexes() : true;
         return hbinfo().up() &&
-            (config().buildIndexes || !buildIndexes) &&
+            (!initialSync || config().buildIndexes || !buildIndexes) &&
             state().readable() &&
             (hbinfo().oplogVersion <= ReplSetConfig::OPLOG_VERSION);
     }
 
-    const Member* ReplSetImpl::getMemberToSyncTo() {
+    const Member* ReplSetImpl::getMemberToSyncTo(bool initialSync) {
         lock lk(this);
         GTID lastGTID = gtidManager->getLiveState();
 
@@ -215,7 +220,7 @@ namespace mongo {
         // This loop attempts to set 'closest'.
         for (int attempts = 0; attempts < 2; ++attempts) {
             for (Member *m = _members.head(); m; m = m->next()) {
-                if (!m->syncable()) {
+                if (!m->syncable(initialSync)) {
                      continue;
                 }
 
@@ -401,7 +406,7 @@ namespace mongo {
         string sourceHostname;
         // only bother making a connection if we need to connect for some reason
         if (needGapsFilled) {
-            source = getMemberToSyncTo();
+            source = getMemberToSyncTo(true);
             if (!source) {
                 sethbmsg("initial sync need a member to be primary or secondary to do our initial sync", 0);
                 sleepsecs(15);

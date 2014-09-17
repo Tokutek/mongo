@@ -53,6 +53,10 @@ doTest = function( signal ) {
   indexes = slave[1].stats().indexes;
   assert.eq(indexes, 3);
 
+  assert.commandWorked(master.createCollection("foo", {primaryKey : {a : 1, _id : 1}}));
+  replTest.awaitReplication();
+  assert(friendlyEqual(slave[1].foo.getIndexes(), master.foo.getIndexes()));
+
   replTest.stopSet(15);
 }
 

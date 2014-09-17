@@ -547,7 +547,7 @@ namespace mongo {
         const Member* target = NULL;
 
         verify(r->conn() == NULL);
-        while ((target = theReplSet->getMemberToSyncTo()) != NULL) {
+        while ((target = theReplSet->getMemberToSyncTo(false)) != NULL) {
             string current = target->fullName();
 
             if (!r->connect(current)) {
