@@ -35,6 +35,7 @@ add_library(s2 STATIC
   s2regionintersection
   s2regionunion
   )
+add_dependencies(s2 generate_error_codes)
 target_link_libraries(s2 LINK_PUBLIC
   s2_base
   s2_strings
