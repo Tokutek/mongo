@@ -59,7 +59,7 @@ namespace mongo {
 
         shared_ptr<Cursor> newCursor(const BSONObj& query, const BSONObj& order,
                                      int numWanted) const {
-            msgasserted(17363, "bug: newCursor called on a haystack index");
+            msgasserted(17373, "bug: newCursor called on a haystack index");
         }
 
         void searchCommand(Collection* cl,

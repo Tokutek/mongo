@@ -60,7 +60,7 @@ namespace mongo {
     }
 
     static int hash(double bucketSize, const BSONElement& e) {
-        uassert(13322, "geo field is not a number", e.isNumber());
+        uassert(17370, "geo field is not a number", e.isNumber());
         return hash(bucketSize, e.numberDouble());
     }
 

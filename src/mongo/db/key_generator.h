@@ -40,7 +40,7 @@ namespace mongo {
 
         // Needed for some strange code in geo.
         virtual void getGeoLocs(const BSONObj &obj, vector<BSONObj> &locs) const {
-            msgasserted(0, "bug: called getKeys with vector arg on non-2d index");
+            msgasserted(17368, "bug: called getKeys with vector arg on non-2d index");
         }
 
     private:

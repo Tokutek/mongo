@@ -71,7 +71,7 @@ namespace mongo {
                 _otherFields.push_back(*it);
             }
         }
-        massert(17364, "bug: haystack descriptor did not find the geo field", !_geoField.empty());
+        massert(17372, "bug: haystack descriptor did not find the geo field", !_geoField.empty());
     }
 
     DBT HaystackDescriptor::dbt(scoped_array<char> &buf) const {

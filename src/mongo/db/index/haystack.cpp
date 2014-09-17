@@ -52,7 +52,7 @@ namespace mongo {
         BSONElement e = _info["bucketSize"];
         uassert(13321, "need bucketSize", e.isNumber());
         _bucketSize = e.numberDouble();
-        uassert(16455, "bucketSize cannot be zero", _bucketSize != 0.0);
+        uassert(17371, "bucketSize cannot be zero", _bucketSize != 0.0);
 
         // Example:
         // db.foo.ensureIndex({ pos : "geoHaystack", type : 1 }, { bucketSize : 1 })

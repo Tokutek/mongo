@@ -54,7 +54,7 @@ namespace mongo {
         uassert(16689, "finestIndexedLevel must be >= coarsestIndexedLevel",
                 _params.finestIndexedLevel >= _params.coarsestIndexedLevel);
         const BSONElement &indexVersionElt = info["2dsphereIndexVersion"];
-        massert(17289,
+        massert(17369,
                 str::stream() << "unsupported geo index version { "
                               << indexVersionElt
                               << " }, only support versions: [1]",
