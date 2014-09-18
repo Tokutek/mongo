@@ -1,7 +1,13 @@
-// Test that a long index names don't break the server
+// Test that neither bogus nor long index names break the server.
 
 t = db.index_name;
 t.drop();
+
+assert.throws(t.ensureIndex({ a: 1 }, { name: "" }));
+assert.throws(t.ensureIndex({ a: 1 }, { name: 1 }));
+assert.throws(t.ensureIndex({ a: 1 }, { name: 1.7 }));
+assert.throws(t.ensureIndex({ a: 1 }, { name: { bad: 1 } }));
+assert.throws(t.ensureIndex({ a: 1 }, { name: [ { bad: "name" } ] }));
 
 n = "n";
 for (var k = 0; k < 16; k++) {
