@@ -220,13 +220,15 @@ namespace mongo {
         _clustering(info["clustering"].trueValue()) {
         verify(!_info.isEmpty());
         verify(!_keyPattern.isEmpty());
+        if (isIdIndex() && !unique()) {
+            uasserted(17365, "_id index cannot be non-unique");
+        }
     }
 
     IndexDetailsBase::IndexDetailsBase(const BSONObj& info) :
         IndexDetails(info),
         _descriptor(new Descriptor(_keyPattern, false, 0, _sparse, _clustering)) {
     }
-
 
     // Open the dictionary. Creates it if necessary.
     bool IndexDetailsBase::open(const bool may_create) {

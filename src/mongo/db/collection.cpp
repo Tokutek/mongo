@@ -396,9 +396,6 @@ namespace mongo {
     void Collection::checkAddIndexOK(const BSONObj &info) {
         Lock::assertWriteLocked(_ns);
 
-        const StringData &name = info["name"].Stringdata();
-        const BSONObj &keyPattern = info["key"].Obj();
-
         massert(16922, "dropDups is not supported, we should have stripped it out earlier",
                        !info["dropDups"].trueValue());
 
@@ -406,10 +403,12 @@ namespace mongo {
                        nIndexesBeingBuilt() == nIndexes());
 
         uassert(12523, "no index name specified",
-                        info["name"].ok());
+                        info["name"].type() == String && info["name"].Stringdata() != "");
+
         uassert(12505, str::stream() << "add index fails, too many indexes for " <<
-                       name << " key:" << keyPattern.toString(),
+                       info["name"].Stringdata() << " key: " << info["key"].Obj(),
                        nIndexes() < Collection::NIndexesMax);
+
         _cd->addIndexOK();
     }
 
