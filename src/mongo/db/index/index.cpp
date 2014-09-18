@@ -102,6 +102,9 @@ namespace mongo {
         _clustering(info["clustering"].trueValue()) {
         verify(!_info.isEmpty());
         verify(!_keyPattern.isEmpty());
+        if (isIdIndex() && !unique()) {
+            uasserted(17365, "_id index cannot be non-unique");
+        }
 
         // Create a standard key generator for this index
         vector<const char *> fieldNames;
