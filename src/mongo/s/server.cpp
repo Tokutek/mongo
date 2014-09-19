@@ -23,6 +23,7 @@
 
 #include "mongo/base/initializer.h"
 #include "mongo/db/initialize_server_global_state.h"
+#include "mongo/db/audit.h"
 #include "../util/net/message.h"
 #include "../util/startup_test.h"
 #include "../client/connpool.h"
@@ -591,6 +592,7 @@ void mongo::exitCleanly( ExitCode code ) {
 
 void mongo::dbexit( ExitCode rc, const char *why ) {
     dbexitCalled = true;
+    audit::logShutdown(ClientBasic::getCurrent());
 #if defined(_WIN32)
     if ( rc == EXIT_WINDOWS_SERVICE_STOP ) {
         log() << "dbexit: exiting because Windows service was stopped" << endl;

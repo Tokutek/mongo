@@ -1,4 +1,7 @@
 add_subdirectory(auth)
+if (TOKUMX_ENTERPRISE)
+  add_subdirectory(audit)
+endif()
 
 add_library(mongohasher STATIC
   hasher
@@ -49,6 +52,7 @@ add_library(geoquery STATIC
 target_link_libraries(geoquery LINK_PUBLIC geometry s2) 
 
 add_library(coredb STATIC
+  audit.cpp
   client_transaction
   opsettings
   commands.cpp
@@ -135,6 +139,10 @@ target_link_libraries(coredb LINK_PUBLIC
   foundation
   ${TokuKV_LIBRARIES}
   )
+
+if (TOKUMX_ENTERPRISE)
+  target_link_libraries(coredb LINK_PUBLIC audit_enterprise)
+endif()
 
 add_library(serveronly STATIC
   curop

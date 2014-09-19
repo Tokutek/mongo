@@ -20,6 +20,7 @@
 
 #include "mongo/base/owned_pointer_vector.h"
 #include "mongo/base/status.h"
+#include "mongo/db/audit.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/principal.h"
 #include "mongo/db/client.h"
@@ -1009,6 +1010,13 @@ namespace mongo {
         newConfig.saveConfigLocally(comment);
 
         try {
+            // Put this before the locking, since there may be side 
+            // perf.side effects that need to be audited by the user.
+            BSONObj oldConfForAudit = config().asBson();
+            BSONObj newConfForAudit = newConfig.asBson();
+            audit::logReplSetReconfig(ClientBasic::getCurrent(),
+                                      &oldConfForAudit,
+                                      &newConfForAudit);
             boost::unique_lock<boost::mutex> lock(stateChangeMutex);
             log() << "stopping replication because we have a new config" << endl;
             stopReplication();

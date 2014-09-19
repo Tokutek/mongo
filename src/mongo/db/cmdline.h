@@ -125,6 +125,10 @@ namespace mongo {
 #endif
         
         // TokuMX variables
+        std::string auditDestination; // Output type: enables auditing functionality.
+        std::string auditFormat;      // Output format
+        std::string auditFilter;      // JSON query filter on events, users, etc.
+        std::string auditPath;        // Event destination file path and name. 
         bool directio;
         bool gdb;
         BytesQuantity<uint64_t> cacheSize;

@@ -20,6 +20,7 @@
 #include "mongo/client/connpool.h"
 #include "mongo/client/dbclientcursor.h"
 
+#include "mongo/db/audit.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
@@ -355,7 +356,7 @@ namespace mongo {
                     return false;
                 
                 log() << "enabling sharding on: " << dbname << endl;
-
+                audit::logEnableSharding(ClientBasic::getCurrent(), dbname);
                 config->enableSharding();
 
                 return true;
@@ -788,6 +789,7 @@ namespace mongo {
 
                 tlog() << "CMD: shardcollection: " << cmdObj << endl;
 
+                audit::logShardCollection(ClientBasic::getCurrent(), ns, proposedKey, careAboutUnique);
                 config->shardCollection( ns , proposedKey , careAboutUnique , &initSplits );
 
                 result << "collectionsharded" << ns;
@@ -1224,6 +1226,7 @@ namespace mongo {
                     maxSize = cmdObj[ ShardType::maxSize() ].numberLong();
                 }
 
+                audit::logAddShard(ClientBasic::getCurrent(), name, servers.toString(), maxSize);
                 if ( ! grid.addShard( &name , servers , maxSize , errmsg ) ) {
                     log() << "addshard request " << cmdObj << " failed: " << errmsg << endl;
                     return false;
@@ -1346,6 +1349,7 @@ namespace mongo {
                 long long dbCount = conn->count( DatabaseType::ConfigNS , primaryDoc );
                 if ( ( chunkCount == 0 ) && ( dbCount == 0 ) ) {
                     log() << "going to remove shard: " << s.getName() << endl;
+                    audit::logRemoveShard(ClientBasic::getCurrent(), s.getName());
                     conn->remove( ShardType::ConfigNS , searchDoc );
 
                     errmsg = conn->getLastError();

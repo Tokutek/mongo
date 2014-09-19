@@ -834,6 +834,10 @@ static void buildOptionsDescriptions(po::options_description *pVisible,
     dbpathBuilder << "directory for datafiles - defaults to " << dbpath;
 
     general_options.add_options()
+    ("auditDestination", po::value<string>(), "Enables Audit. 'file' is the only valid option in V1")
+    ("auditFilter", po::value<string>(), "Audit query object to filter events")
+    ("auditFormat", po::value<string>(), "File type of Audit output file. 'JSON' is the only valid option in V1")
+    ("auditPath", po::value<string>(), "Destination directory and name of Audit files. Required for 'file' auditDestination option")
     ("auth", "run with security")
     ("cacheSize", po::value(&cmdLine.cacheSize), "tokumx cache size (in bytes) for data and indexes")
     ("checkpointPeriod", po::value<uint32_t>(), "tokumx time between checkpoints, 0 means never checkpoint")
@@ -1004,6 +1008,29 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
         }
         if (params.count("auth")) {
             noauth = false;
+        }
+        if (params.count("auditDestination")) {
+            cmdLine.auditDestination = params["auditDestination"].as<string>();
+            if ((cmdLine.auditDestination != "file")) {
+                out() << "--auditDestination can only be set to file for v1" << endl;
+                dbexit( EXIT_BADOPTIONS );
+            }
+        }
+        if (params.count("auditFilter")) {
+            cmdLine.auditFilter = params["auditFilter"].as<string>();
+        }
+        if (params.count("auditFormat")) {
+            cmdLine.auditFormat = params["auditFormat"].as<string>();
+            if ((cmdLine.auditFormat != "JSON")) {
+                out() << "--auditFormat can only be set to JSON for v1" << endl;
+                dbexit( EXIT_BADOPTIONS );
+            }
+        }
+        if (params.count("auditPath")) {
+            cmdLine.auditPath = params["auditPath"].as<string>();
+            if (cmdLine.auditPath[0] != '/') {
+                cmdLine.auditPath = cmdLine.cwd + "/" + cmdLine.auditPath;
+            }
         }
         if (params.count("quota")) {
             cmdLine.quota = true;

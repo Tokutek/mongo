@@ -83,7 +83,11 @@ namespace mongo {
     class LoggingManager {
     public:
         LoggingManager()
-            : _enabled(0) , _file(0) {
+            : _enabled(0) , _file(0), _auditLog(0) {
+        }
+
+        void setAuditLog(AuditLog * const auditLog) {
+            _auditLog = auditLog;
         }
 
         bool start( const string& lp , bool append ) {
@@ -145,6 +149,10 @@ namespace mongo {
             if ( ! _enabled ) {
                 cout << "logRotate is not possible: loggingManager not enabled" << endl;
                 return true;
+            }
+
+            if ( _auditLog ) {
+                _auditLog->rotate();
             }
 
             if ( _file ) {
@@ -214,11 +222,14 @@ namespace mongo {
             return true;
         }
 
+        
+
     private:
         bool _enabled;
         string _path;
         bool _append;
         FILE * _file;
+        AuditLog * _auditLog;
 
     } loggingManager;
 
@@ -229,6 +240,10 @@ namespace mongo {
 
     bool rotateLogs() {
         return loggingManager.rotate();
+    }
+
+    void setAuditLog(AuditLog * const auditLog) {
+        loggingManager.setAuditLog(auditLog);
     }
 
     // done *before* static initialization

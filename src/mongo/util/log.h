@@ -467,6 +467,14 @@ namespace mongo {
     bool initLogging( const string& logpath , bool append );
     bool rotateLogs();
 
+    class AuditLog {
+    public:
+        virtual void rotate() {};
+        virtual ~AuditLog() {};
+    };
+
+    void setAuditLog(AuditLog * const auditLog);
+
     std::string toUtf8String(const std::wstring& wide);
 
     /** output the error # and error message with prefix.
