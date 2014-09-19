@@ -16,7 +16,7 @@ doTest = function (signal, startPort, txnLimit) {
              {_id:1, host : host+":"+port[1]},
              {_id:2, host : host+":"+port[2]},
              {_id:3, host : host+":"+port[3]},
-             {_id:4, host : host+":"+port[4]},
+             {_id:4, host : host+":"+port[4], priority:0},
             ],
              };
 
@@ -41,11 +41,11 @@ doTest = function (signal, startPort, txnLimit) {
     replTest.stop(0);
     replTest.restart(0);
 
-    assert.soon(function() {var x = conns[0].getDB("admin").runCommand({replSetGetStatus:1}); printjson(x); return x["members"][4]["state"] == 2});
-    assert.soon(function() {var x = conns[0].getDB("admin").runCommand({replSetGetStatus:1}); printjson(x); return x["members"][3]["state"] == 2});
-    assert.soon(function() {var x = conns[0].getDB("admin").runCommand({replSetGetStatus:1}); printjson(x); return x["members"][2]["state"] == 2});
-    assert.soon(function() {var x = conns[0].getDB("admin").runCommand({replSetGetStatus:1}); printjson(x); return x["members"][1]["state"] == 2});
-    assert.soon(function() {var x = conns[0].getDB("admin").runCommand({replSetGetStatus:1}); printjson(x); return x["members"][0]["state"] == 1});
+    assert.soon(function() {var x = conns[4].getDB("admin").runCommand({replSetGetStatus:1}); printjson(x); return x["members"][4]["state"] == 2});
+    assert.soon(function() {var x = conns[4].getDB("admin").runCommand({replSetGetStatus:1}); printjson(x); return x["members"][3]["state"] == 2});
+    assert.soon(function() {var x = conns[4].getDB("admin").runCommand({replSetGetStatus:1}); printjson(x); return x["members"][2]["state"] == 2});
+    assert.soon(function() {var x = conns[4].getDB("admin").runCommand({replSetGetStatus:1}); printjson(x); return x["members"][1]["state"] == 2});
+    assert.soon(function() {var x = conns[4].getDB("admin").runCommand({replSetGetStatus:1}); printjson(x); return x["members"][0]["state"] == 1});
 
     print("priority.js SUCCESS");
     replTest.stopSet(signal);
