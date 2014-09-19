@@ -36,6 +36,7 @@
 
 #include "mongo/bson/util/atomic_int.h"
 
+#include "mongo/db/audit.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/databaseholder.h"
@@ -138,14 +139,17 @@ namespace mongo {
 
     void inProgCmd( Message &m, DbResponse &dbresponse ) {
         BSONObjBuilder b;
-
-        if (!cc().getAuthorizationManager()->checkAuthorization(
-                AuthorizationManager::SERVER_RESOURCE_NAME, ActionType::inprog)) {
+        DbMessage d(m);
+        QueryMessage q(d);
+        const bool isAuthorized = cc().getAuthorizationManager()->checkAuthorization(
+            AuthorizationManager::SERVER_RESOURCE_NAME, ActionType::inprog);
+        audit::logInProgAuthzCheck(&cc(),
+                                   q.query,
+                                   isAuthorized ? ErrorCodes::OK : ErrorCodes::Unauthorized);
+        if (!isAuthorized) {
             b.append("err", "unauthorized");
         }
         else {
-            DbMessage d(m);
-            QueryMessage q(d);
             bool all = q.query["$all"].trueValue();
             bool allMatching = q.query["$allMatching"].trueValue();
             vector<BSONObj> vals;
@@ -184,9 +188,15 @@ namespace mongo {
     }
 
     void killOp( Message &m, DbResponse &dbresponse ) {
+        DbMessage d(m);
+        QueryMessage q(d);
         BSONObj obj;
-        if (!cc().getAuthorizationManager()->checkAuthorization(
-                AuthorizationManager::SERVER_RESOURCE_NAME, ActionType::killop)) {
+        const bool isAuthorized = !cc().getAuthorizationManager()->checkAuthorization(
+            AuthorizationManager::SERVER_RESOURCE_NAME, ActionType::killop);
+        audit::logKillOpAuthzCheck(&cc(),
+                                   q.query,
+                                   isAuthorized ? ErrorCodes::OK : ErrorCodes::Unauthorized);
+        if (!isAuthorized) {
             obj = fromjson("{\"err\":\"unauthorized\"}");
         }
         /*else if( !dbMutexInfo.isLocked() )
@@ -224,8 +234,13 @@ namespace mongo {
             if (!NamespaceString::isCommand(d.getns())) {
                 // Auth checking for Commands happens later.
                 Status status = cc().getAuthorizationManager()->checkAuthForQuery(d.getns());
+                audit::logQueryAuthzCheck(&cc(),
+                                          NamespaceString(d.getns()), 
+                                          q.query, 
+                                          status.code());
                 uassert(16550, status.reason(), status.isOK());
             }
+
             dbresponse.exhaustNS = runQuery(m, q, op, *resp);
             verify( !resp->empty() );
         }
@@ -558,6 +573,13 @@ namespace mongo {
         const bool broadcast = flags & UpdateOption_Broadcast;
 
         Status status = cc().getAuthorizationManager()->checkAuthForUpdate(ns, upsert);
+        audit::logUpdateAuthzCheck(&cc(), 
+                                   NamespaceString(ns), 
+                                   query, 
+                                   updateobj, 
+                                   upsert, 
+                                   multi, 
+                                   status.code());
         uassert(16538, status.reason(), status.isOK());
 
         OpSettings settings;
@@ -586,6 +608,12 @@ namespace mongo {
         const char *ns = d.getns();
 
         Status status = cc().getAuthorizationManager()->checkAuthForDelete(ns);
+/***************
+        audit::logDeleteAuthzCheck(&cc(), 
+                                   NamespaceString(ns), 
+                                   pattern, 
+                                   status.code());
+***********/
         uassert(16542, status.reason(), status.isOK());
 
         op.debug().ns = ns;
@@ -662,6 +690,10 @@ namespace mongo {
                 uassert( 16258, str::stream() << "Invalid ns [" << ns << "]", NamespaceString::isValid(ns) );
 
                 Status status = cc().getAuthorizationManager()->checkAuthForGetMore(ns);
+                audit::logGetMoreAuthzCheck(&cc(), 
+                                            NamespaceString(ns), 
+                                            cursorid, 
+                                            status.code());
                 uassert(16543, status.reason(), status.isOK());
 
                 // I (Zardosht), am not crazy about this, but I cannot think of
@@ -923,6 +955,15 @@ namespace mongo {
         // Auth checking for index writes happens later.
         if (coll != "system.indexes") {
             Status status = cc().getAuthorizationManager()->checkAuthForInsert(ns);
+        // NOTE: <CER> We can't log inserts yet because we no longer have a BSON to print at this
+        // point in the code.  Authorization checks occur before we iterate through the BSON list.
+
+/**************************************************************
+            audit::logInsertAuthzCheck(&cc(), 
+                                       NamespaceString(ns), 
+                                       obj, 
+                                       status.code());
+***************************************************************/
             uassert(16544, status.reason(), status.isOK());
         }
 
@@ -1248,6 +1289,7 @@ namespace mongo {
     NOINLINE_DECL void dbexit( ExitCode rc, const char *why ) {
 
         Client * c = currentClient.get();
+        audit::logShutdown(c);
         {
             scoped_lock lk( exitMutex );
             if ( numExitCalls++ > 0 ) {

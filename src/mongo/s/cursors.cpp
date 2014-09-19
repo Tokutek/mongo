@@ -24,6 +24,7 @@
 #include <string>
 #include <vector>
 
+#include "mongo/db/audit.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
@@ -302,10 +303,15 @@ namespace mongo {
 
                 MapSharded::iterator i = _cursors.find( id );
                 if ( i != _cursors.end() ) {
-                    if (authManager->checkAuthorization(i->second->getNS(),
-                                                        ActionType::killCursors)) {
+                    bool isAuthorized = authManager->checkAuthorization(i->second->getNS(),
+                                                                        ActionType::killCursors);
+                    if (isAuthorized) {
                         _cursors.erase( i );
                     }
+                    audit::logKillCursorsAuthzCheck(ClientBasic::getCurrent(),
+                                                    NamespaceString(i->second->getNS()),
+                                                    id,
+                                                    isAuthorized ? ErrorCodes::OK : ErrorCodes::Unauthorized);
                     continue;
                 }
 
@@ -316,9 +322,15 @@ namespace mongo {
                     continue;
                 }
                 verify(refsNSIt != _refsNS.end());
-                if (!authManager->checkAuthorization(refsNSIt->second, ActionType::killCursors)) {
+                bool isAuthorized = authManager->checkAuthorization(refsNSIt->second, ActionType::killCursors);
+                audit::logKillCursorsAuthzCheck(ClientBasic::getCurrent(),
+                                                NamespaceString(refsNSIt->second),
+                                                id,
+                                                isAuthorized ? ErrorCodes::OK : ErrorCodes::Unauthorized);
+                if (isAuthorized == false) {
                     continue;
                 }
+
                 server = refsIt->second;
                 _refs.erase(refsIt);
                 _refsNS.erase(refsNSIt);

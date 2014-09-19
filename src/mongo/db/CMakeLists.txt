@@ -33,6 +33,7 @@ target_link_libraries(db_common LINK_PUBLIC
   )
 
 add_library(coredb STATIC
+  audit.cpp
   client_transaction
   opsettings
   commands.cpp

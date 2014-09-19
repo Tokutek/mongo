@@ -19,6 +19,7 @@
 
 #include "mongo/pch.h"
 
+#include "mongo/db/audit.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/database.h"
 #include "mongo/db/databaseholder.h"
@@ -196,6 +197,7 @@ namespace mongo {
         Database *d = cc().database();
         verify(d != NULL);
         verify(d->name() == name);
+        audit::logDropDatabase( currentClient.get(), name);
 
         // Disable dropDatabase in a multi-statement transaction until
         // we have the time/patience to test/debug it.

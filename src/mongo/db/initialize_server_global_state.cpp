@@ -25,6 +25,7 @@
 #include <sys/wait.h>
 #endif
 
+#include "mongo/db/audit.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/security_key.h"
 #include "mongo/db/cmdline.h"
@@ -167,6 +168,12 @@ namespace mongo {
             }
 
             noauth = false;
+        }
+
+        Status s = audit::initialize();
+        if (s != Status::OK()) {
+            cout << s.reason() << endl;
+            return false;
         }
 
         return true;

@@ -17,6 +17,7 @@
 
 #include "mongo/pch.h"
 
+#include "mongo/db/audit.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/collection.h"
 #include "mongo/db/collection_map.h"
@@ -83,6 +84,7 @@ namespace mongo {
                 // We would create it, but we're not write locked. Retry.
                 throw RetryWithWriteLock("creating new database " + _database);
             }
+            audit::logCreateDatabase( currentClient.get(), _database );
             CollectionMapRollback &rollback = cc().txn().collectionMapRollback();
             rollback.noteCreate(_database);
             _metadb.reset(new storage::Dictionary(_metadname, info, descriptor, true, false));

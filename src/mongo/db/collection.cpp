@@ -16,6 +16,7 @@
 
 #include "mongo/pch.h"
 
+#include "mongo/db/audit.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/base/init.h"
@@ -88,6 +89,7 @@ namespace mongo {
         }
         Collection *cl = cm->getCollection(ns);
         if (cl == NULL) {
+            audit::logCreateCollection( currentClient.get(), ns );
             TOKULOG(2) << "Didn't find ns " << ns << ", creating it." << endl;
             if (!Lock::isWriteLocked(ns)) {
                 throw RetryWithWriteLock();
@@ -1119,6 +1121,9 @@ namespace mongo {
 
         IndexDetails &idx = _cd->idx(idxNum);
 
+        // <CER> Why is this here?
+        audit::logDropIndex(currentClient.get(), idx.indexName(), idx.parentNS());
+
         // Remove this index from the system catalogs
         removeFromNamespacesCatalog(idx.indexNamespace());
         if (nsToCollectionSubstring(_ns) != "system.indexes") {
@@ -1191,6 +1196,8 @@ namespace mongo {
                 uasserted(12502, "can't drop system ns");
             }
         }
+
+        audit::logDropCollection(currentClient.get(), _ns);
 
         // Invalidate cursors, then drop all of the indexes.
         ClientCursor::invalidate(_ns);
@@ -1560,6 +1567,7 @@ namespace mongo {
                         !from_cl->indexBuildInProgress() );
 
         shared_ptr<CollectionRenamer> renamer = from_cl->getRenamer();
+        audit::logRenameCollection(currentClient.get(), from, to);
 
         // Kill open cursors before we close and rename the namespace
         ClientCursor::invalidate( from );

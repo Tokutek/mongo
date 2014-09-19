@@ -34,6 +34,7 @@
 #include "mongo/base/init.h"
 #include "mongo/base/status.h"
 #include "mongo/client/dbclientinterface.h"
+#include "mongo/db/audit.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
@@ -494,8 +495,16 @@ namespace mongo {
             ns = cursor->ns();
         }
 
+        NamespaceString nss( ns );
+
         // Can't be in a lock when checking authorization
-        if (!cc().getAuthorizationManager()->checkAuthorization(ns, ActionType::killCursors)) {
+        const bool isAuthorized = cc().getAuthorizationManager()->checkAuthorization(ns, ActionType::killCursors);
+        if (!isAuthorized)
+        {
+            audit::logKillCursorsAuthzCheck(currentClient.get(),
+                                            nss,
+                                            id,
+                                            ErrorCodes::Unauthorized);
             return false;
         }
 

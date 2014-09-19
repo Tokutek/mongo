@@ -17,6 +17,7 @@
 #include "mongo/pch.h"
 
 #include "mongo/base/string_data.h"
+#include "mongo/db/audit.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/client.h"
@@ -38,6 +39,9 @@ namespace mongo {
         if (!cc().creatingSystemUsers() &&
             !cc().upgradingDiskFormatVersion()) {
             std::string sourceNS = info["ns"].String();
+            // TODO: <CER> Need to add authorization check BEFORE calling audit. 
+            audit::logInsertAuthzCheck(&cc(), NamespaceString(cl->ns()), info,
+                                       ErrorCodes::OK);
             uassert(16548,
                     mongoutils::str::stream() << "not authorized to create index on " << sourceNS,
                     cc().getAuthorizationManager()->checkAuthorization(sourceNS,
@@ -125,6 +129,11 @@ namespace mongo {
 
     void CollectionBase::HotIndexer::build() {
         if (_indexer.get() != NULL) {
+            audit::logCreateIndex(&cc(),
+                                  &_info,
+                                  _info["name"].Stringdata(),
+                                  _info["ns"].Stringdata());
+
             const int r = _indexer->build();
             if (r != 0) {
                 storage::handle_ydb_error(r);
