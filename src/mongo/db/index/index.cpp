@@ -55,7 +55,9 @@ namespace mongo {
         return special;
     }
 
-    shared_ptr<IndexInterface> IndexInterface::make(const BSONObj &info, const bool may_create) {
+    shared_ptr<IndexInterface> IndexInterface::make(const BSONObj &info,
+                                                    const bool may_create,
+                                                    const bool use_memcmp_magic) {
         shared_ptr<IndexInterface> idx;
         const string special = findSpecialIndexName(info["key"].Obj());
         if (special == "hashed") {
@@ -72,7 +74,7 @@ namespace mongo {
             }
             idx.reset(new IndexInterface(info));
         }
-        bool ok = idx->open(may_create);
+        bool ok = idx->open(may_create, use_memcmp_magic);
         if (!ok) {
             // This signals Collection::make that we got ENOENT due to #673
             return shared_ptr<IndexInterface>();
@@ -121,7 +123,7 @@ namespace mongo {
     }
 
     // Open the dictionary. Creates it if necessary.
-    bool IndexInterface::open(const bool may_create) {
+    bool IndexInterface::open(const bool may_create, const bool use_memcmp_magic) {
         const string dname = indexNamespace();
 
         TOKULOG(1) << "Opening IndexDetails " << dname << endl;
@@ -129,7 +131,6 @@ namespace mongo {
             // We use the memcmp magic API only for single-key, ascending _id indexes,
             // because the _id field is always unique (and therefore we can simply
             // compare the OID fields if they exist and that will be sufficient)
-            const bool use_memcmp_magic = _keyPattern == BSON("_id" << 1);
             if (use_memcmp_magic) {
                 verify(_unique);
             }
