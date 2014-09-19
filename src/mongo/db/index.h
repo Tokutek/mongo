@@ -262,10 +262,12 @@ namespace mongo {
         // Currently, we have:
         // - Regular indexes
         // - Hashed indexes
+        // - Geo indexes
         // In the future:
-        // - Geo indexes?
         // - FTS indexes?
-        static shared_ptr<IndexDetailsBase> make(const BSONObj &info, const bool may_create = true);
+        static shared_ptr<IndexDetailsBase> make(const BSONObj &info,
+                                                 const bool may_create,
+                                                 const bool use_memcmp_magic);
 
         IndexDetailsBase(const BSONObj& info);
 
@@ -367,7 +369,7 @@ namespace mongo {
         // using _descriptor, which is set by subclass constructors.
         //
         // Only IndexDetailsBase::make() calls the constructor / open.
-        bool open(const bool may_create);
+        bool open(const bool may_create, const bool use_memcmp_magic);
 
         friend class CollectionBase;
         friend class BulkLoadedCollection;
