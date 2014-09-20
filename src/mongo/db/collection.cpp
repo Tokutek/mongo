@@ -136,7 +136,7 @@ namespace mongo {
     // (as all secondary indexes of CollectionBase were in 1.4.2) and we follow the
     // relevant steps of Collection::dropIndex and CollectionBase::dropIndexDetails
     void cleanupOrphanedIndex(const BSONObj& info) {
-        shared_ptr<IndexDetailsBase> idx(IndexDetailsBase::make(info, false, false));
+        shared_ptr<IndexDetailsBase> idx(IndexDetailsBase::make(info, false));
         StringData collns = info["ns"].Stringdata();
         // This code was taken from 1.4.1's implementation of Collection::dropIndex,
         // as that had the code for how to remove an index.
@@ -499,15 +499,7 @@ namespace mongo {
         // TODO: Find out why this code is in this constructor and not the SystemUsersCollection constructor
         for (std::vector<BSONElement>::iterator it = index_array.begin(); it != index_array.end(); it++) {
             const BSONObj &info = it->Obj();
-
-            // We do not intend to create the index here.
-            const bool may_create = false;
-            const bool isPK = info["key"].Obj() == _pk;
-            if (isPK) {
-                // Primary key should always be the first entry in the indexes array.
-                verify(it == index_array.begin());
-            }
-            shared_ptr<IndexDetailsBase> idx(IndexDetailsBase::make(info, may_create, isPK));
+            shared_ptr<IndexDetailsBase> idx(IndexDetailsBase::make(info, false));
             if (!idx && cc().upgradingSystemUsers() && isSystemUsersCollection(_ns) &&
                 oldSystemUsersKeyPattern == info["key"].Obj()) {
                 // This was already dropped, but because of #673 we held on to the info.
@@ -521,10 +513,8 @@ namespace mongo {
                 _nIndexes--;
                 continue;
             }
-
             _indexes.push_back(idx);
         }
-
         if (reserialize) {
             // only the system users collection should possibly need
             // reserializing, and that is the only constructor that pipes up this parameter

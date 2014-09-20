@@ -83,18 +83,9 @@ namespace mongo {
             massert(16923, "first index should be pk index", keyPattern == _cl->_pk);
         }
 
-        // The indexer intends to create.
-        const bool may_create = true;
-
-        // We use the memcmp magic optimization on an index if it's the primary key
-        // and the key pattern is exactly { _id: 1 }, because they commonly contain
-        // OID keys (which are memcmp'able) and never have extra bytes appended the
-        // way that secondary keys do.
-        const bool use_memcmp_magic = !_isSecondaryIndex && keyPattern == BSON("_id" << 1);
-        _idx = IndexDetailsBase::make(_info, may_create, use_memcmp_magic);
-
         // Store the index in the _indexes array so that others know an
         // index with this name / key pattern exists and is being built.
+        _idx = IndexDetailsBase::make(_info);
         _cl->_indexes.push_back(_idx);
         _cl->_indexBuildInProgress = true;
 
