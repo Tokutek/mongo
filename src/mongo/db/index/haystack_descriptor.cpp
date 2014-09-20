@@ -94,7 +94,7 @@ namespace mongo {
                 geoFieldIdx = allFields.end() - it;
             }
         }
-        massert(17365, "bug: haystack could not find geoField in Descriptor's field names",
+        massert(17374, "bug: haystack could not find geoField in Descriptor's field names",
                        geoFieldIdx >= 0);
         memcpy(&buf[baseDBT.size], &geoFieldIdx, sizeof(int));
 
