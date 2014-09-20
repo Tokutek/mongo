@@ -2,13 +2,13 @@ tokumx (2.1.0-pre-) UNRELEASED; urgency=low
 
   * see http://github.com/Tokutek/mongo/releases/tokumx-2.1.0
 
- -- Leif Walsh <leif.walsh@gmail.com>  Tue, 16 Sep 2014 15:28:15 +0000
+ -- Leif Walsh <leif.walsh@gmail.com>  Sat, 20 Sep 2014 21:58:37 +0000
 
-tokumx (2.0.0-rc.0) UNRELEASED; urgency=low
+tokumx (2.0.0-rc.1) UNRELEASED; urgency=low
 
   * see http://github.com/Tokutek/mongo/releases/tokumx-2.0.0
 
- -- Leif Walsh <leif.walsh@gmail.com>  Mon, 16 Sep 2014 19:35:16 +0000
+ -- Leif Walsh <leif.walsh@gmail.com>  Sat, 20 Sep 2014 21:47:46 +0000
 
 tokumx (1.5.1) unstable; urgency=low
 
