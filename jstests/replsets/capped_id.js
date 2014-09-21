@@ -108,7 +108,7 @@ for( testnum=0; testnum < numtests; testnum++ ){
                 "slave2 has an _id index on capped collection when autoIndexId is false");
 
         // now create the index and make sure it works
-        masterdb.getCollection( coll ).ensureIndex( { "_id" : 1 } );
+        masterdb.getCollection( coll ).ensureIndex( { "_id" : 1 }, { unique: true } );
         replTest.awaitReplication();
     }
 
