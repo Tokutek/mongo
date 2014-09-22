@@ -337,6 +337,7 @@ endif ()
 
 if (EXISTS "${CMAKE_SOURCE_DIR}/src/mongo/plugins/tokumx-backup-plugin/")
   set(TOKUMX_ENTERPRISE ON)
+  add_definitions(-DMONGO_ENTERPRISE_VERSION=1)
 else ()
   set(TOKUMX_ENTERPRISE OFF)
 endif ()

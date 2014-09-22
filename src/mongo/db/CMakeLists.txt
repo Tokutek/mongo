@@ -1,4 +1,7 @@
 add_subdirectory(auth)
+if (TOKUMX_ENTERPRISE)
+  add_subdirectory(audit)
+endif()
 
 add_library(mongohasher STATIC
   hasher
@@ -110,6 +113,10 @@ target_link_libraries(coredb LINK_PUBLIC
   foundation
   ${TokuKV_LIBRARIES}
   )
+
+if (TOKUMX_ENTERPRISE)
+  target_link_libraries(coredb LINK_PUBLIC audit-enterprise)
+endif()
 
 add_library(serveronly STATIC
   curop
