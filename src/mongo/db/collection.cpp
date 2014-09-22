@@ -1121,7 +1121,6 @@ namespace mongo {
 
         IndexDetails &idx = _cd->idx(idxNum);
 
-        // <CER> Why is this here?
         audit::logDropIndex(currentClient.get(), idx.indexName(), idx.parentNS());
 
         // Remove this index from the system catalogs

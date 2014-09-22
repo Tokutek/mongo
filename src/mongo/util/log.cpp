@@ -19,7 +19,6 @@
 
 #include "mongo/pch.h"
 
-#include "mongo/db/audit.h"
 #include "mongo/platform/posix_fadvise.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/concurrency/threadlocal.h"
@@ -81,10 +80,20 @@ namespace mongo {
         return Logstream::get().prolog();
     }
 
+    class AuditLog {
+    public:
+        virtual void rotate() {};
+        virtual ~AuditLog() {};
+    } DummyAuditLog;
+
     class LoggingManager {
     public:
         LoggingManager()
-            : _enabled(0) , _file(0) {
+            : _enabled(0) , _file(0), _auditLog(&DummyAuditLog) {
+        }
+
+        void setAuditLog(AuditLog * const auditLog) {
+            _auditLog = auditLog;
         }
 
         bool start( const string& lp , bool append ) {
@@ -147,6 +156,8 @@ namespace mongo {
                 cout << "logRotate is not possible: loggingManager not enabled" << endl;
                 return true;
             }
+
+            _auditLog->rotate();
 
             if ( _file ) {
 
@@ -215,11 +226,14 @@ namespace mongo {
             return true;
         }
 
+        
+
     private:
         bool _enabled;
         string _path;
         bool _append;
         FILE * _file;
+        AuditLog * _auditLog;
 
     } loggingManager;
 
@@ -229,7 +243,6 @@ namespace mongo {
     }
 
     bool rotateLogs() {
-        audit::rotateLog();
         return loggingManager.rotate();
     }
 

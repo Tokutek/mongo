@@ -25,9 +25,11 @@
 namespace mongo {
 namespace audit {
 
-    Status initialize() MONGO_AUDIT_STUB
-
-    void rotateLog() MONGO_AUDIT_STUB
+#if MONGO_ENTERPRISE_VERSION
+    Status initialize() ;
+#else
+    Status initialize() { return Status::OK(); }
+#endif
 
     void logAuthentication(ClientBasic* client,
                            const StringData& mechanism,

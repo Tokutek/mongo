@@ -44,11 +44,6 @@ namespace audit {
     Status initialize();
 
     /**
-     * Renames current log with timestamp, then creates new log.
-     */
-    void rotateLog();
-
-    /**
      * Logs the result of an authentication attempt.
      */
     void logAuthentication(ClientBasic* client,

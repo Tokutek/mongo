@@ -305,13 +305,14 @@ namespace mongo {
                 if ( i != _cursors.end() ) {
                     bool isAuthorized = authManager->checkAuthorization(i->second->getNS(),
                                                                         ActionType::killCursors);
-                    if (isAuthorized) {
-                        _cursors.erase( i );
-                    }
                     audit::logKillCursorsAuthzCheck(ClientBasic::getCurrent(),
                                                     NamespaceString(i->second->getNS()),
                                                     id,
                                                     isAuthorized ? ErrorCodes::OK : ErrorCodes::Unauthorized);
+                    if (isAuthorized) {
+                        _cursors.erase( i );
+                    }
+
                     continue;
                 }
 
@@ -327,7 +328,7 @@ namespace mongo {
                                                 NamespaceString(refsNSIt->second),
                                                 id,
                                                 isAuthorized ? ErrorCodes::OK : ErrorCodes::Unauthorized);
-                if (isAuthorized == false) {
+                if (!isAuthorized) {
                     continue;
                 }
 

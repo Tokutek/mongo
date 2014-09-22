@@ -146,6 +146,15 @@ namespace mongo {
             Logstream::useSyslog( sb.str().c_str() );
         }
 #endif
+
+        // We have to initialize audit before the LoggingManager is started.
+        Status s = audit::initialize();
+        if (s != Status::OK()) {
+            log() << "Could not initialize audit:" << s.reason() 
+                  << "Check further back in logs for more information." << endl;
+            return false;
+        }
+
         if (!cmdLine.logpath.empty() && !isMongodShutdownSpecialCase) {
             fassert(16448, !cmdLine.logWithSyslog);
             string absoluteLogpath = boost::filesystem::absolute(
@@ -168,12 +177,6 @@ namespace mongo {
             }
 
             noauth = false;
-        }
-
-        Status s = audit::initialize();
-        if (s != Status::OK()) {
-            cout << s.reason() << endl;
-            return false;
         }
 
         return true;

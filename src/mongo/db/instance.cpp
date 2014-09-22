@@ -606,20 +606,17 @@ namespace mongo {
     void receivedDelete(Message& m, CurOp& op) {
         DbMessage d(m);
         const char *ns = d.getns();
-
+        BSONObj pattern = d.nextJsObj();
         Status status = cc().getAuthorizationManager()->checkAuthForDelete(ns);
-/***************
         audit::logDeleteAuthzCheck(&cc(), 
                                    NamespaceString(ns), 
                                    pattern, 
                                    status.code());
-***********/
         uassert(16542, status.reason(), status.isOK());
 
         op.debug().ns = ns;
         int flags = d.pullInt();
         verify(d.moreJSObjs());
-        BSONObj pattern = d.nextJsObj();
 
         op.debug().query = pattern;
         op.setQuery(pattern);
@@ -952,20 +949,6 @@ namespace mongo {
         op.debug().ns = ns;
 
         StringData coll = nsToCollectionSubstring(ns);
-        // Auth checking for index writes happens later.
-        if (coll != "system.indexes") {
-            Status status = cc().getAuthorizationManager()->checkAuthForInsert(ns);
-        // NOTE: <CER> We can't log inserts yet because we no longer have a BSON to print at this
-        // point in the code.  Authorization checks occur before we iterate through the BSON list.
-
-/**************************************************************
-            audit::logInsertAuthzCheck(&cc(), 
-                                       NamespaceString(ns), 
-                                       obj, 
-                                       status.code());
-***************************************************************/
-            uassert(16544, status.reason(), status.isOK());
-        }
 
         if (!d.moreJSObjs()) {
             // strange.  should we complain?
@@ -973,8 +956,21 @@ namespace mongo {
         }
 
         vector<BSONObj> objs;
+        bool statusChecked = false;
         while (d.moreJSObjs()) {
-            objs.push_back(d.nextJsObj());
+            BSONObj obj = d.nextJsObj();
+            // Auth checking for index writes happens later.
+            if (coll != "system.indexes" && !statusChecked) {
+                Status status = cc().getAuthorizationManager()->checkAuthForInsert(ns);
+                audit::logInsertAuthzCheck(&cc(), 
+                                           NamespaceString(ns), 
+                                           obj, 
+                                           status.code());
+                uassert(16544, status.reason(), status.isOK());
+                statusChecked = true;
+            }
+
+            objs.push_back(obj);
         }
 
         const bool keepGoing = d.reservedField() & InsertOption_ContinueOnError;
