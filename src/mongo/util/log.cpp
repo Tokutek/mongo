@@ -80,11 +80,7 @@ namespace mongo {
         return Logstream::get().prolog();
     }
 
-    class AuditLog {
-    public:
-        virtual void rotate() {};
-        virtual ~AuditLog() {};
-    } DummyAuditLog;
+    AuditLog DummyAuditLog;
 
     class LoggingManager {
     public:
@@ -244,6 +240,10 @@ namespace mongo {
 
     bool rotateLogs() {
         return loggingManager.rotate();
+    }
+
+    void setAuditLog(AuditLog * const auditLog) {
+        loggingManager.setAuditLog(auditLog);
     }
 
     // done *before* static initialization
