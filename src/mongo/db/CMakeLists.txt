@@ -115,7 +115,7 @@ target_link_libraries(coredb LINK_PUBLIC
   )
 
 if (TOKUMX_ENTERPRISE)
-  target_link_libraries(coredb LINK_PUBLIC audit-enterprise)
+  target_link_libraries(coredb LINK_PUBLIC audit_enterprise)
 endif()
 
 add_library(serveronly STATIC

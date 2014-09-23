@@ -1,6 +1,7 @@
 
 /**
  *    Copyright (C) 2013 10gen Inc.
+ *    Copyright (C) 2014 Tokutek Inc.
  *
  *    This program is free software: you can redistribute it and/or  modify
  *    it under the terms of the GNU Affero General Public License, version 3,
@@ -31,10 +32,6 @@ namespace mongo {
     class NamespaceString;
     class ReplSetConfig;
     class StringData;
-
-namespace mutablebson {
-    class Document;
-}  // namespace mutablebson
 
 namespace audit {
 

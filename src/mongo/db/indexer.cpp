@@ -39,13 +39,15 @@ namespace mongo {
         if (!cc().creatingSystemUsers() &&
             !cc().upgradingDiskFormatVersion()) {
             std::string sourceNS = info["ns"].String();
-            // TODO: <CER> Need to add authorization check BEFORE calling audit. 
-            audit::logInsertAuthzCheck(&cc(), NamespaceString(cl->ns()), info,
-                                       ErrorCodes::OK);
+            // TODO: <CER> Need to add authorization check BEFORE calling audit.
+            const bool isAuthorized = cc().getAuthorizationManager()->checkAuthorization(sourceNS, ActionType::ensureIndex);
+            audit::logInsertAuthzCheck(&cc(), 
+                                       NamespaceString(cl->ns()), 
+                                       info,
+                                       isAuthorized ? ErrorCodes::OK : ErrorCodes::Unauthorized);
             uassert(16548,
                     mongoutils::str::stream() << "not authorized to create index on " << sourceNS,
-                    cc().getAuthorizationManager()->checkAuthorization(sourceNS,
-                                                                       ActionType::ensureIndex));
+                    isAuthorized);
         }
     }
 

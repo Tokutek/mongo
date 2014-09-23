@@ -153,7 +153,9 @@ namespace mongo {
                 return true;
             }
 
-            _auditLog->rotate();
+            if ( _auditLog ) {
+                _auditLog->rotate();
+            }
 
             if ( _file ) {
 
