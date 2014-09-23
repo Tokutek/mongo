@@ -459,6 +459,10 @@ set(CPACK_COMPONENTS_ALL
   )
 
 if (TOKUMX_ENTERPRISE)
+  list(APPEND CPACK_COMPONENTS_ALL tokumx_audit_libs_shared)
+endif()
+
+if (TOKUMX_ENTERPRISE)
   message(STATUS "Building TokuMX Enterprise ${CPACK_PACKAGE_VERSION}")
 else ()
   message(STATUS "Building TokuMX Community ${CPACK_PACKAGE_VERSION}")
