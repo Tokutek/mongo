@@ -39,7 +39,6 @@ namespace mongo {
         if (!cc().creatingSystemUsers() &&
             !cc().upgradingDiskFormatVersion()) {
             std::string sourceNS = info["ns"].String();
-            // TODO: <CER> Need to add authorization check BEFORE calling audit.
             const bool isAuthorized = cc().getAuthorizationManager()->checkAuthorization(sourceNS, ActionType::ensureIndex);
             audit::logInsertAuthzCheck(&cc(), 
                                        NamespaceString(cl->ns()), 

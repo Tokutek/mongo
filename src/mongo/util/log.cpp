@@ -80,12 +80,10 @@ namespace mongo {
         return Logstream::get().prolog();
     }
 
-    AuditLog DummyAuditLog;
-
     class LoggingManager {
     public:
         LoggingManager()
-            : _enabled(0) , _file(0), _auditLog(&DummyAuditLog) {
+            : _enabled(0) , _file(0), _auditLog(0) {
         }
 
         void setAuditLog(AuditLog * const auditLog) {
