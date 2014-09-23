@@ -28,19 +28,10 @@ doTest = function (signal, startPort, txnLimit, testGTID) {
     // load the plugin
     var pluginExists = conns[0].getDB("admin").runCommand({loadPlugin: 'pitr_plugin'});
     printjson(pluginExists);
-    if (!pluginExists.ok) {
-        print("plugin does not exist, must be community, returning");
-        replTest.stopSet(signal);
-        return;
-    }
+    assert(pluginExists.ok);
     pluginExists = conns[1].getDB("admin").runCommand({loadPlugin: 'pitr_plugin'});
     printjson(pluginExists);
-    if (!pluginExists.ok) {
-        print("plugin does not exist, must be community, returning");
-        replTest.stopSet(signal);
-        return;
-    }
-
+    assert(pluginExists.ok);
 
     // insert some data
     var a = conns[0].getDB("foo");
