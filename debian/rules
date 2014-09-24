@@ -76,6 +76,7 @@ install: build
 	  cmake -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/$(PRODUCT)-server/usr -D COMPONENT=tokumx_plugins -P cmake_install.cmake && \
 	  cmake -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/$(PRODUCT)-common/usr -D COMPONENT=tokukv_libs_shared -P cmake_install.cmake && \
 	  cmake -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/$(PRODUCT)-common/usr -D COMPONENT=tokubackup_libs_shared -P cmake_install.cmake && \
+	  cmake -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/$(PRODUCT)-common/usr -D COMPONENT=tokumx_audit_libs_shared -P cmake_install.cmake && \
 	  cmake -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/$(PRODUCT)-dev/usr -D COMPONENT=tokumx_client_headers -P cmake_install.cmake && \
 	  cmake -D CMAKE_INSTALL_PREFIX=$(CURDIR)/debian/$(PRODUCT)-dev/usr -D COMPONENT=tokumx_client_libs -P cmake_install.cmake)
 

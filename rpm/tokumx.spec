@@ -184,6 +184,7 @@ make -C opt %{?_smp_mflags}
   cmake -D COMPONENT=tokumx_plugins -P cmake_install.cmake && \
   cmake -D COMPONENT=tokukv_libs_shared -P cmake_install.cmake && \
   cmake -D COMPONENT=tokubackup_libs_shared -P cmake_install.cmake && \
+  cmake -D COMPONENT=tokumx_audit_libs_shared -P cmake_install.cmake && \
   cmake -D COMPONENT=tokumx_client_headers -P cmake_install.cmake && \
   cmake -D COMPONENT=tokumx_client_libs -P cmake_install.cmake)
 
