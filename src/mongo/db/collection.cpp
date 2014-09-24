@@ -90,12 +90,12 @@ namespace mongo {
         }
         Collection *cl = cm->getCollection(ns);
         if (cl == NULL) {
-            audit::logCreateCollection( currentClient.get(), ns );
             TOKULOG(2) << "Didn't find ns " << ns << ", creating it." << endl;
             if (!Lock::isWriteLocked(ns)) {
                 throw RetryWithWriteLock();
             }
 
+            audit::logCreateCollection( currentClient.get(), ns );
             shared_ptr<Collection> newCollection(Collection::make(ns, options));
             cm->add_ns(ns, newCollection);
 

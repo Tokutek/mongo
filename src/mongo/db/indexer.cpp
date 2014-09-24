@@ -21,13 +21,14 @@
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/client.h"
+#include "mongo/db/collection.h"
+#include "mongo/db/collection_map.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/cursor.h"
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/index.h"
 #include "mongo/db/jsobj.h"
-#include "mongo/db/collection.h"
-#include "mongo/db/collection_map.h"
+#include "mongo/db/namespacestring.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/progress_meter.h"
 #include "mongo/util/stringutils.h"
@@ -36,12 +37,12 @@ namespace mongo {
 
     CollectionBase::IndexerBase::IndexerBase(CollectionBase *cl, const BSONObj &info) :
         _cl(cl), _info(info), _isSecondaryIndex(_cl->_nIndexes > 0) {
+        const std::string sourceNS = info["ns"].String();
         if (!cc().creatingSystemUsers() &&
             !cc().upgradingDiskFormatVersion()) {
-            std::string sourceNS = info["ns"].String();
             const bool isAuthorized = cc().getAuthorizationManager()->checkAuthorization(sourceNS, ActionType::ensureIndex);
             audit::logInsertAuthzCheck(&cc(), 
-                                       NamespaceString(cl->ns()), 
+                                       NamespaceString(getSisterNS(sourceNS, "system.indexes")),
                                        info,
                                        isAuthorized ? ErrorCodes::OK : ErrorCodes::Unauthorized);
             uassert(16548,
