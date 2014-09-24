@@ -405,16 +405,16 @@ namespace mongo {
     PRIMARY_VOTE GTIDManager::acceptPossiblePrimary(uint64_t newPrimary, GTID remoteGTID) {
         boost::unique_lock<boost::mutex> lock(_lock);
         if (GTID::cmp(_lastLiveGTID, remoteGTID) > 0) {
-            log() << "Must veto possible primary, newPrimary " << \
-                newPrimary << " _highestKnownPossiblePrimary " << _highestKnownPossiblePrimary << \
-                "remoteGTID " << remoteGTID.toString() << " our GTID " << _lastLiveGTID.toString() << \
+            log() << "Must veto possible primary, newPrimary: " << \
+                newPrimary << ", _highestKnownPossiblePrimary: " << _highestKnownPossiblePrimary << \
+                ", remoteGTID: " << remoteGTID.toString() << ", our GTID: " << _lastLiveGTID.toString() << \
                 endl;
             return VOTE_VETO;
         }
         if (newPrimary <= _highestKnownPossiblePrimary) {
-            log() << "Must vote no for possible primary, newPrimary " << \
-                newPrimary << " _highestKnownPossiblePrimary " << _highestKnownPossiblePrimary << \
-                "remoteGTID " << remoteGTID.toString() << " our GTID " << _lastLiveGTID.toString() << \
+            log() << "Must vote no for possible primary, newPrimary: " << \
+                newPrimary << ", _highestKnownPossiblePrimary: " << _highestKnownPossiblePrimary << \
+                ", remoteGTID: " << remoteGTID.toString() << ", our GTID: " << _lastLiveGTID.toString() << \
                 endl;
             return VOTE_NO;
         }
