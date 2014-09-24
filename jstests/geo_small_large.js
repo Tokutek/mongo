@@ -1,6 +1,11 @@
 // SERVER-2386, general geo-indexing using very large and very small bounds
 
-load( "jstests/libs/geo_near_random.js" );
+var filename;
+if (TestData.testDir !== undefined) {
+    load(TestData.testDir + "/libs/geo_near_random.js");
+} else {
+    load("jstests/libs/geo_near_random.js");
+}
 
 // Do some random tests (for near queries) with very large and small ranges
 

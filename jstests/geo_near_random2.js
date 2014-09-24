@@ -1,5 +1,10 @@
 // this tests 1% of all points using $near and $nearSphere
-load("jstests/libs/geo_near_random.js");
+var filename;
+if (TestData.testDir !== undefined) {
+    load(TestData.testDir + "/libs/geo_near_random.js");
+} else {
+    load("jstests/libs/geo_near_random.js");
+}
 
 var test = new GeoNearRandomTest("geo_near_random2");
 
