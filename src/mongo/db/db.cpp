@@ -1013,7 +1013,7 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             cmdLine.auditDestination = params["auditDestination"].as<string>();
             if ((cmdLine.auditDestination != "file")) {
                 out() << "--auditDestination can only be set to file for v1" << endl;
-                dbexit( EXIT_BADOPTIONS );
+                ::_exit( EXIT_BADOPTIONS );
             }
         }
         if (params.count("auditFilter")) {
@@ -1023,7 +1023,7 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             cmdLine.auditFormat = params["auditFormat"].as<string>();
             if ((cmdLine.auditFormat != "JSON")) {
                 out() << "--auditFormat can only be set to JSON for v1" << endl;
-                dbexit( EXIT_BADOPTIONS );
+                ::_exit( EXIT_BADOPTIONS );
             }
         }
         if (params.count("auditPath")) {
