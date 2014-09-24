@@ -234,13 +234,25 @@ namespace mongo {
          * value as the provided doc matcher.
          */
         bool keyMatch( const Matcher &docMatcher ) const;
-        
+
         bool singleSimpleCriterion() const {
-            return false; // TODO SERVER-958
-//            // TODO Really check, especially if all basics are ok.
-//            // $all, etc
-//            // _orConstraints?
-//            return ( ( basics.size() + nRegex ) < 2 ) && !where && !_orMatchers.size() && !_norMatchers.size();
+            if ( _where ||
+                 _basics.size() > 1 ||
+                 _haveNeg ||
+                 _haveSize ||
+                 _regexs.size() > 0 )
+                return false;
+
+            if ( _jsobj.nFields() > 1 )
+                return false;
+
+            if ( _basics.size() != 1 )
+                return false;
+
+            if ( strchr( _jsobj.firstElement().fieldName(), '.' ) )
+                return false;
+
+            return _basics[0]._compareOp == BSONObj::Equality;
         }
 
         const BSONObj *getQuery() const { return &_jsobj; };
@@ -295,6 +307,8 @@ namespace mongo {
     class CoveredIndexMatcher : boost::noncopyable {
     public:
         CoveredIndexMatcher(const BSONObj &pattern, const BSONObj &indexKeyPattern);
+        bool matchesWithSingleKeyIndex( const BSONObj& key, const BSONObj& obj,
+                                        MatchDetails* details ) const;
         /**
          * This is the preferred method for matching against a cursor, as it
          * can handle both multi and single key cursors.

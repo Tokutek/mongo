@@ -116,11 +116,6 @@ mongo::DBClientBase *getDBConnection() {
     return connection;
 }
 
-void dropNS(const string ns) {
-    boost::scoped_ptr<mongo::DBClientBase> connection( getDBConnection() );
-    connection->dropCollection( ns );
-}
-
 void dropDB(const string db) {
     boost::scoped_ptr<mongo::DBClientBase> connection( getDBConnection() );
     connection->dropDatabase( db );

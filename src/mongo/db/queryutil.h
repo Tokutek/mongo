@@ -17,7 +17,7 @@
 #pragma once
 
 #include "mongo/db/jsobj.h"
-#include "mongo/db/keygenerator.h"
+#include "mongo/db/key_generator.h"
 #include "mongo/db/projection.h"
 
 namespace mongo {
@@ -433,9 +433,11 @@ namespace mongo {
          * @param frs The valid ranges for all fields, as defined by the query spec.  None of the
          * fields in the index's keyPattern may be empty() ranges of frs.
          * @param keyPattern The index key pattern
+         * @param keyGenerator A key generator for the index
          * @param direction The direction of index traversal
          */
-        FieldRangeVector( const FieldRangeSet &frs, const BSONObj &keyPattern, int direction );
+        FieldRangeVector( const FieldRangeSet &frs, const BSONObj &keyPattern,
+                          shared_ptr<KeyGenerator> keyGenerator, int direction );
 
         /** @return the number of index ranges represented by 'this' */
         unsigned size();
@@ -547,7 +549,7 @@ namespace mongo {
         friend class FieldRangeVectorIterator;
 
         vector<const char *> _fieldNames;
-        scoped_ptr<KeyGenerator> _keyGenerator;
+        shared_ptr<KeyGenerator> _keyGenerator;
     };
     
     /**

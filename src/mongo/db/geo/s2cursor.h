@@ -18,14 +18,13 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/cursor.h"
-#include "mongo/db/diskloc.h"
 #include "mongo/db/matcher.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/geo/geoquery.h"
 #include "mongo/db/geo/s2common.h"
 
 namespace mongo {
-    class BtreeCursor;
+    class IndexCursor;
 
     class S2Cursor : public Cursor {
     public:
@@ -34,26 +33,19 @@ namespace mongo {
         virtual ~S2Cursor(); 
         virtual CoveredIndexMatcher *matcher() const;
 
-        virtual bool supportYields()  { return true; }
-        virtual bool supportGetMore() { return true; }
         virtual bool isMultiKey() const { return true; }
         virtual bool autoDedup() const { return false; }
         virtual bool modifiedKeys() const { return true; }
-        virtual bool getsetdup(DiskLoc loc);
-        virtual void aboutToDeleteBucket(const DiskLoc& b);
-        virtual string toString() { return "S2Cursor"; }
-        BSONObj indexKeyPattern() { return _keyPattern; }
+        virtual bool getsetdup(const BSONObj &pk);
+        virtual string toString() const { return "S2Cursor"; }
+        BSONObj indexKeyPattern() const { return _keyPattern; }
         virtual bool ok();
-        virtual Record* _current();
         virtual BSONObj current();
-        virtual DiskLoc currLoc();
+        virtual BSONObj currPK() const;
         virtual bool advance();
         virtual BSONObj currKey() const;
-        virtual DiskLoc refLoc();
-        virtual void noteLocation();
-        virtual void checkLocation();
-        virtual long long nscanned();
-        virtual void explainDetails(BSONObjBuilder& b);
+        virtual long long nscanned() const;
+        virtual void explainDetails(BSONObjBuilder& b) const;
     private:
         // Make an object that describes the restrictions on all possible valid keys.
         // It's kind of a monstrous object.  Thanks, FieldRangeSet, for doing all the work
@@ -75,12 +67,12 @@ namespace mongo {
         BSONObj _keyPattern;
 
         // What have we checked so we don't repeat it and waste time?
-        set<DiskLoc> _seen;
-        // This really does all the work/points into the btree.
-        scoped_ptr<BtreeCursor> _btreeCursor;
+        set<BSONObj> _seen;
+        // This really does all the work/points into the index.
+        shared_ptr<Cursor> _cursor;
 
         // Stat counters/debug information goes below.
-        // How many items did we look at in the btree?
+        // How many items did we look at in the index?
         long long _nscanned;
         // How many did we try to match?
         long long _matchTested;

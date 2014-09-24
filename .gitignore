@@ -168,3 +168,7 @@ buildinfo.cpp
 
 dbg/
 opt/
+build/
+cmake_build/
+cmake_dbg/
+data/

@@ -1,3 +1,4 @@
+
 t = db.geo1
 t.drop();
 

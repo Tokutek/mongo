@@ -23,9 +23,14 @@
 
 #include "mongo/db/collection.h"
 #include "mongo/db/index.h"
+#include "mongo/db/index/2d.h"
+#include "mongo/db/index/hashed.h"
+#include "mongo/db/index/haystack.h"
+#include "mongo/db/index/partitioned.h"
+#include "mongo/db/index/s2.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/cursor.h"
-#include "mongo/db/keygenerator.h"
+#include "mongo/db/key_generator.h"
 #include "mongo/db/namespacestring.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/repl/rs.h"
@@ -36,135 +41,6 @@
 #include "mongo/util/stringutils.h"
 
 namespace mongo {
-
-    /* This is an index where the keys are hashes of a given field.
-     *
-     * Optional arguments:
-     *  "seed" : int (default = 0, a seed for the hash function)
-     *  "hashVersion : int (default = 0, determines which hash function to use)
-     *
-     * Example use in the mongo shell:
-     * > db.foo.ensureIndex({a : "hashed"}, {seed : 3, hashVersion : 0})
-     *
-     * LIMITATION: Only works with a single field. The HashedIndex
-     * constructor uses uassert to ensure that the spec has the form
-     * {<fieldname> : "hashed"}, and not, for example,
-     * { a : "hashed" , b : 1}
-     *
-     * LIMITATION: Cannot be used as a unique index.
-     * The HashedIndex constructor uses uassert to ensure that
-     * the spec does not contain {"unique" : true}
-     *
-     * LIMITATION: Cannot be used to index arrays.
-     * The getKeys function uasserts that value being inserted
-     * is not an array.  This index will not be built if any
-     * array values of the hashed field exist.
-     */
-    class HashedIndex : public IndexDetailsBase {
-    public:
-        HashedIndex(const BSONObj &info) :
-            IndexDetailsBase(info),
-            _hashedField(_keyPattern.firstElement().fieldName()),
-            // Default seed/version to 0 if not specified or not an integer.
-            _seed(_info["seed"].numberInt()),
-            _hashVersion(_info["hashVersion"].numberInt()),
-            _hashedNullObj(BSON("" << HashKeyGenerator::makeSingleKey(nullElt, _seed, _hashVersion))) {
-
-            // change these if single-field limitation lifted later
-            uassert( 16241, "Currently only single field hashed index supported.",
-                            _keyPattern.nFields() == 1 );
-            uassert( 16242, "Currently hashed indexes cannot guarantee uniqueness. Use a regular index.",
-                            !unique() );
-
-            // Create a descriptor with hashed = true and the appropriate hash seed.
-            _descriptor.reset(new Descriptor(_keyPattern, true, _seed, _sparse, _clustering));
-
-        }
-
-        // @return the "special" name for this index.
-        const string &getSpecialIndexName() const {
-            static string name = "hashed";
-            return name;
-        }
-
-        bool special() const {
-            return true;
-        }
-
-        Suitability suitability(const FieldRangeSet &queryConstraints,
-                                const BSONObj &order) const {
-            if (queryConstraints.isPointIntervalSet(_hashedField)) {
-                return HELPFUL;
-            }
-            return USELESS;
-        }
-
-        /* The newCursor method works for suitable queries by generating a IndexCursor
-         * using the hash of point-intervals parsed by FieldRangeSet.
-         * For unsuitable queries it just instantiates a cursor over the whole index.
-         */
-        shared_ptr<mongo::Cursor> newCursor(const BSONObj &query,
-                                            const BSONObj &order,
-                                            const int numWanted = 0) const {
-
-            // Use FieldRangeSet to parse the query into a vector of intervals
-            // These should be point-intervals if this cursor is ever used
-            // So the FieldInterval vector will be, e.g. <[1,1], [3,3], [6,6]>
-            FieldRangeSet frs("" , query , true, true);
-            const vector<FieldInterval> &intervals = frs.range(_hashedField.c_str()).intervals();
-
-            // Force a match of the query against the actual document by giving
-            // the cursor a matcher with an empty indexKeyPattern.  This insures the
-            // index is not used as a covered index.
-            // NOTE: this forcing is necessary due to potential hash collisions
-            const shared_ptr<CoveredIndexMatcher> forceDocMatcher(
-                    new CoveredIndexMatcher(query, BSONObj()));
-
-            Collection *cl = getCollection(parentNS());
-
-            // Construct a new query based on the hashes of the previous point-intervals
-            // e.g. {a : {$in : [ hash(1) , hash(3) , hash(6) ]}}
-            BSONObjBuilder newQueryBuilder;
-            BSONObjBuilder inObj(newQueryBuilder.subobjStart(_hashedField));
-            BSONArrayBuilder inArray(inObj.subarrayStart("$in"));
-            for (vector<FieldInterval>::const_iterator i = intervals.begin();
-                 i != intervals.end(); ++i ){
-                if (!i->equality()){
-                    const shared_ptr<mongo::Cursor> cursor =
-                        mongo::Cursor::make(cl, *this, 1);
-                    cursor->setMatcher(forceDocMatcher);
-                    return cursor;
-                }
-                inArray.append(HashKeyGenerator::makeSingleKey(i->_lower._bound, _seed, _hashVersion));
-            }
-            inArray.done();
-            inObj.done();
-
-            // Use the point-intervals of the new query to create an index cursor
-            const BSONObj newQuery = newQueryBuilder.obj();
-            FieldRangeSet newfrs("" , newQuery, true, true);
-            shared_ptr<FieldRangeVector> newVector(
-                    new FieldRangeVector(newfrs, _keyPattern, 1));
-
-            const shared_ptr<mongo::Cursor> cursor =
-                mongo::Cursor::make(cl, *this, newVector, false, 1, numWanted);
-            cursor->setMatcher(forceDocMatcher);
-            return cursor;
-        }
-
-        // A missing field is represented by a hashed null element.
-        virtual BSONElement missingField() const {
-            return _hashedNullObj.firstElement();
-        }
-
-    private:
-        const string _hashedField;
-        const HashSeed _seed;
-        // In case we have hashed indexes based on other hash functions in
-        // the future, we store a hashVersion number.
-        const HashVersion _hashVersion;
-        const BSONObj _hashedNullObj;
-    };
 
     static string findSpecialIndexName(const BSONObj &keyPattern) {
         string special = "";
@@ -179,23 +55,29 @@ namespace mongo {
         return special;
     }
 
-    shared_ptr<IndexDetailsBase> IndexDetailsBase::make(const BSONObj &info,
+    shared_ptr<IndexInterface> IndexInterface::make(const BSONObj &info,
                                                     const bool may_create,
                                                     const bool use_memcmp_magic) {
-        shared_ptr<IndexDetailsBase> idx;
+        shared_ptr<IndexInterface> idx;
         const string special = findSpecialIndexName(info["key"].Obj());
         if (special == "hashed") {
             idx.reset(new HashedIndex(info));
+        } else if (special == "2d") {
+            idx.reset(new TwoDIndex(info));
+        } else if (special == "2dsphere") {
+            idx.reset(new S2Index(info));
+        } else if (special == "geoHaystack") {
+            idx.reset(new HaystackIndex(info));
         } else {
             if (special != "") {
                 warning() << "cannot find special index [" << special << "]" << endl;
             }
-            idx.reset(new IndexDetailsBase(info));
+            idx.reset(new IndexInterface(info));
         }
         bool ok = idx->open(may_create, use_memcmp_magic);
         if (!ok) {
             // This signals Collection::make that we got ENOENT due to #673
-            return shared_ptr<IndexDetailsBase>();
+            return shared_ptr<IndexInterface>();
         }
         return idx;
     }
@@ -225,15 +107,23 @@ namespace mongo {
         if (isIdIndex() && !unique()) {
             uasserted(17365, "_id index cannot be non-unique");
         }
+
+        // Create a standard key generator for this index
+        vector<const char *> fieldNames;
+        for (BSONObjIterator it(_keyPattern); it.more(); ) {
+            const BSONElement e = it.next();
+            fieldNames.push_back(e.fieldName());
+        }
+        _keyGenerator.reset(new KeyGenerator(fieldNames, _sparse));
     }
 
-    IndexDetailsBase::IndexDetailsBase(const BSONObj& info) :
+    IndexInterface::IndexInterface(const BSONObj& info) :
         IndexDetails(info),
-        _descriptor(new Descriptor(_keyPattern, false, 0, _sparse, _clustering)) {
+        _descriptor(new Descriptor(_keyPattern, Descriptor::Basic, _sparse, _clustering)) {
     }
 
     // Open the dictionary. Creates it if necessary.
-    bool IndexDetailsBase::open(const bool may_create, const bool use_memcmp_magic) {
+    bool IndexInterface::open(const bool may_create, const bool use_memcmp_magic) {
         const string dname = indexNamespace();
 
         TOKULOG(1) << "Opening IndexDetails " << dname << endl;
@@ -253,7 +143,7 @@ namespace mongo {
                 keyPattern() == oldSystemUsersKeyPattern) {
                 // We're upgrading the system.users collection, and we are missing the old index.
                 // That's ok, we'll signal the caller about this by returning a NULL pointer from
-                // IndexDetailsBase::make.  See #673
+                // IndexInterface::make.  See #673
                 return false;
             }
             // This dictionary must exist on disk if we think it should exist.
@@ -268,7 +158,7 @@ namespace mongo {
     IndexDetails::~IndexDetails() {
     }
 
-    IndexDetailsBase::~IndexDetailsBase() {
+    IndexInterface::~IndexInterface() {
         try {
             close();
         } catch (DBException &ex) {
@@ -277,7 +167,7 @@ namespace mongo {
         }
     }
 
-    void IndexDetailsBase::close() {
+    void IndexInterface::close() {
         if (_db) {
             shared_ptr<storage::Dictionary> db = _db;
             _db.reset();
@@ -300,14 +190,14 @@ namespace mongo {
         return -1;
     }
 
-    void IndexDetailsBase::kill_idx() {
+    void IndexInterface::kill_idx() {
         const string ns = indexNamespace();
 
         close();
         storage::db_remove(ns);
     }
 
-    bool IndexDetailsBase::changeAttributes(const BSONObj &info, BSONObjBuilder &wasBuilder) {
+    bool IndexInterface::changeAttributes(const BSONObj &info, BSONObjBuilder &wasBuilder) {
         if (!_db->changeAttributes(info, wasBuilder)) {
             return false;
         }
@@ -336,8 +226,8 @@ namespace mongo {
         return true;
     }
 
-    void IndexDetailsBase::getKeysFromObject(const BSONObj &obj, BSONObjSet &keys) const {
-        _descriptor->generateKeys(obj, keys);
+    void IndexInterface::getKeysFromObject(const BSONObj &obj, BSONObjSet &keys) const {
+        _keyGenerator->getKeys(obj, keys);
     }
 
     IndexDetails::Suitability IndexDetails::suitability(const FieldRangeSet &queryConstraints,
@@ -362,7 +252,7 @@ namespace mongo {
         return IndexDetails::USELESS;
     }
 
-    int IndexDetailsBase::uniqueCheckCallback(const DBT *key, const DBT *val, void *extra) {
+    int IndexInterface::uniqueCheckCallback(const DBT *key, const DBT *val, void *extra) {
         UniqueCheckExtra *info = static_cast<UniqueCheckExtra *>(extra);
         try {
             if (key != NULL) {
@@ -385,7 +275,7 @@ namespace mongo {
         return -1;
     }
 
-    void IndexDetailsBase::uniqueCheck(const BSONObj &key, const BSONObj &pk) const {
+    void IndexInterface::uniqueCheck(const BSONObj &key, const BSONObj &pk) const {
         shared_ptr<storage::Cursor> c = getCursor(DB_SERIALIZABLE | DB_RMW);
         DBC *cursor = c->dbc();
 
@@ -416,20 +306,20 @@ namespace mongo {
         }
     }
 
-    void IndexDetailsBase::uassertedDupKey(const BSONObj &key) const {
+    void IndexInterface::uassertedDupKey(const BSONObj &key) const {
         uasserted(ASSERT_ID_DUPKEY, mongoutils::str::stream()
                                     << "E11000 duplicate key error, " << key
                                     << " already exists in unique index");
     }
 
-    void IndexDetailsBase::acquireTableLock() {
+    void IndexInterface::acquireTableLock() {
         const int r = db()->pre_acquire_table_lock(db(), cc().txn().db_txn());
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
     }
 
-    void IndexDetailsBase::updatePair(const BSONObj &key, const BSONObj *pk, const BSONObj &msg, uint64_t flags) {
+    void IndexInterface::updatePair(const BSONObj &key, const BSONObj *pk, const BSONObj &msg, uint64_t flags) {
         storage::Key skey(key, pk);
         DBT kdbt = skey.dbt();
         DBT vdbt = storage::dbt_make(msg.objdata(), msg.objsize());
@@ -443,7 +333,7 @@ namespace mongo {
                    << key << ", pk " << (pk ? *pk : BSONObj()) << ", msg " << msg << endl;
     }
 
-    enum toku_compression_method IndexDetailsBase::getCompressionMethod() const {
+    enum toku_compression_method IndexInterface::getCompressionMethod() const {
         enum toku_compression_method ret;
         int r = db()->get_compression_method(db(), &ret);
         if (r != 0) {
@@ -452,7 +342,7 @@ namespace mongo {
         return ret;
     }
 
-    uint32_t IndexDetailsBase::getFanout() const {
+    uint32_t IndexInterface::getFanout() const {
         uint32_t ret;
         int r = db()->get_fanout(db(), &ret);
         if (r != 0) {
@@ -461,7 +351,7 @@ namespace mongo {
         return ret;
     }
 
-    uint32_t IndexDetailsBase::getPageSize() const {
+    uint32_t IndexInterface::getPageSize() const {
         uint32_t ret;
         int r = db()->get_pagesize(db(), &ret);
         if (r != 0) {
@@ -470,7 +360,7 @@ namespace mongo {
         return ret;
     }
 
-    uint32_t IndexDetailsBase::getReadPageSize() const {
+    uint32_t IndexInterface::getReadPageSize() const {
         uint32_t ret;
         int r = db()->get_readpagesize(db(), &ret);
         if (r != 0) {
@@ -479,14 +369,14 @@ namespace mongo {
         return ret;
     }
 
-    void IndexDetailsBase::getStat64(DB_BTREE_STAT64* stats) const {
+    void IndexInterface::getStat64(DB_BTREE_STAT64* stats) const {
         int r = db()->stat64(db(), NULL, stats);
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
     }
 
-    int IndexDetailsBase::hot_optimize_callback(void *extra, float progress) {
+    int IndexInterface::hot_optimize_callback(void *extra, float progress) {
         struct hot_optimize_callback_extra *info =
                 reinterpret_cast<hot_optimize_callback_extra *>(extra);
 
@@ -508,7 +398,7 @@ namespace mongo {
         }
     }
 
-    void IndexDetailsBase::optimize(const storage::Key &leftSKey, const storage::Key &rightSKey,
+    void IndexInterface::optimize(const storage::Key &leftSKey, const storage::Key &rightSKey,
                                 const bool sendOptimizeMessage, const int timeout,
                                 uint64_t *loops_run) {
         if (sendOptimizeMessage) {
@@ -605,7 +495,7 @@ namespace mongo {
     
     /* ---------------------------------------------------------------------- */
 
-    IndexDetailsBase::Builder::Builder(IndexDetailsBase &idx)
+    IndexInterface::Builder::Builder(IndexInterface &idx)
             : _idx(idx),
               _db(_idx.db()),
               _loader(&_db, 1,
@@ -613,7 +503,7 @@ namespace mongo {
                                     << idx.parentNS() << ", key "
                                     << idx.keyPattern()) {}
 
-    void IndexDetailsBase::Builder::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val) {
+    void IndexInterface::Builder::insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val) {
         storage::Key skey(key, pk);
         DBT kdbt = skey.dbt();
         DBT vdbt = storage::dbt_make(NULL, 0);
@@ -626,66 +516,11 @@ namespace mongo {
         }
     }
 
-    void IndexDetailsBase::Builder::done() {
+    void IndexInterface::Builder::done() {
         const int r = _loader.close();
         if (r != 0) {
             storage::handle_ydb_error(r);
         }
-    }
-
-    
-    enum toku_compression_method PartitionedIndexDetails::getCompressionMethod() const {
-        return getIndexDetailsOfPartition(0).getCompressionMethod();
-    }
-
-    uint32_t PartitionedIndexDetails::getFanout() const {
-        return getIndexDetailsOfPartition(0).getFanout();
-    }
-
-    uint32_t PartitionedIndexDetails::getPageSize() const {
-        return getIndexDetailsOfPartition(0).getPageSize();
-    }
-
-    uint32_t PartitionedIndexDetails::getReadPageSize() const {
-        return getIndexDetailsOfPartition(0).getReadPageSize();
-    }
-
-    void PartitionedIndexDetails::getStat64(DB_BTREE_STAT64* stats) const {
-        DB_BTREE_STAT64 ret;
-        memset(&ret, 0, sizeof(ret));
-        // TODO: figure out what the proper way to set max is
-        ret.bt_verify_time_sec = (uint64_t)-1;
-        for (uint64_t i = 0; i < _pc->numPartitions(); i++) {
-            DB_BTREE_STAT64 curr;
-            getIndexDetailsOfPartition(i).getStat64(&curr);
-            ret.bt_nkeys += curr.bt_nkeys;
-            ret.bt_ndata += curr.bt_ndata;
-            ret.bt_dsize += curr.bt_dsize;
-            ret.bt_fsize += curr.bt_fsize;
-            if (curr.bt_create_time_sec > ret.bt_create_time_sec) {
-                ret.bt_create_time_sec = curr.bt_create_time_sec;
-            }
-            if (curr.bt_modify_time_sec > ret.bt_modify_time_sec) {
-                ret.bt_modify_time_sec = curr.bt_modify_time_sec;
-            }
-            if (curr.bt_verify_time_sec < ret.bt_verify_time_sec) {
-                ret.bt_verify_time_sec = curr.bt_verify_time_sec;
-            }
-        }
-        *stats = ret;
-    }
-    
-    // find a way to remove this eventually and have callers get
-    // access to IndexDetailsBase directly somehow
-    // This is a workaround to get going for now
-    shared_ptr<storage::Cursor> PartitionedIndexDetails::getCursor(const int flags) const {
-        uasserted(17243, "should not call getCursor on a PartitionedIndexDetails");
-    }
-    
-    IndexDetails& PartitionedIndexDetails::getIndexDetailsOfPartition(uint64_t i) const {
-        const int idxNum = _pc->findIndexByName(indexName());
-        verify(idxNum >= 0);
-        return _pc->getPartition(i)->idx(idxNum);
     }
 
 } // namespace mongo

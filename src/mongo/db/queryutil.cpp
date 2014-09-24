@@ -1171,20 +1171,16 @@ namespace mongo {
     }
 
 
-    FieldRangeVector::FieldRangeVector( const FieldRangeSet &frs, const BSONObj &keyPattern,
+    FieldRangeVector::FieldRangeVector( const FieldRangeSet &frs,
+                                        const BSONObj &keyPattern,
+                                        shared_ptr<KeyGenerator> keyGenerator,
                                         int direction ) :
         _keyPattern( keyPattern ),
         _direction( direction >= 0 ? 1 : -1 ),
         _hasAllIndexedRanges( true ) {
         verify(  frs.matchPossibleForIndex( _keyPattern ) );
         _queries = frs._queries;
-
-        // For key generation
-        for (BSONObjIterator it(_keyPattern); it.more(); ) {
-            const BSONElement &e = it.next();
-            _fieldNames.push_back(e.fieldName());
-        }    
-        _keyGenerator.reset(new KeyGenerator(_fieldNames, false));
+        _keyGenerator = keyGenerator;
 
         BSONObjIterator i( _keyPattern );
         map<string,BSONElement> topFieldElemMatchContexts;

@@ -16,10 +16,8 @@
 
 #include "mongo/db/geo/s2cursor.h"
 
-#include "mongo/db/btreecursor.h"
 #include "mongo/db/index.h"
 #include "mongo/db/matcher.h"
-#include "mongo/db/pdfile.h"
 #include "mongo/db/geo/s2common.h"
 
 namespace mongo {
@@ -43,33 +41,18 @@ namespace mongo {
     CoveredIndexMatcher* S2Cursor::matcher() const { return _matcher.get(); }
 
     bool S2Cursor::ok() {
-        if (NULL == _btreeCursor.get()) {
-            // FieldRangeVector needs an IndexSpec so we make it one.
-            BSONObjBuilder specBuilder;
-            BSONObjIterator i(_keyPattern);
-            while (i.more()) {
-                BSONElement e = i.next();
-                // Checked in AccessMethod already, so we know this spec has only numbers and 2dsphere
-                if ( e.type() == String ) {
-                    specBuilder.append( e.fieldName(), 1 );
-                }
-                else {
-                    specBuilder.append( e.fieldName(), e.numberInt() );
-                }
-            }
-            BSONObj spec = specBuilder.obj();
-            IndexSpec specForFRV(spec);
+        if (NULL == _cursor.get()) {
             // All the magic is in makeUnifiedFRS.  See below.
             // A lot of these arguments are opaque.
             BSONObj frsObj;
             if (!makeFRSObject(&frsObj)) { return false; }
             FieldRangeSet frs(_details->parentNS().c_str(), frsObj, false, false);
-            shared_ptr<FieldRangeVector> frv(new FieldRangeVector(frs, specForFRV, 1));
-            _btreeCursor.reset(BtreeCursor::make(nsdetails(_details->parentNS()),
-                                                 *_details, frv, 0, 1));
+            shared_ptr<FieldRangeVector> frv(new FieldRangeVector(frs, _keyPattern, _details->getKeyGenerator(), 1));
+            _cursor = Cursor::make(getCollection(_details->parentNS()),
+                                                 *_details, frv, 0, 1);
             return advance();
         }
-        return _btreeCursor->ok();
+        return _cursor->ok();
     }
 
     // Make the FieldRangeSet of keys we look for.  Uses coverAsBSON to go from
@@ -97,32 +80,25 @@ namespace mongo {
         return true;
     }
 
-    Record* S2Cursor::_current() { return _btreeCursor->currLoc().rec(); }
-    BSONObj S2Cursor::current() { return _btreeCursor->currLoc().obj(); }
-    DiskLoc S2Cursor::currLoc() { return _btreeCursor->currLoc(); }
-    BSONObj S2Cursor::currKey() const { return _btreeCursor->currKey(); }
-    DiskLoc S2Cursor::refLoc() { return DiskLoc(); }
-    long long S2Cursor::nscanned() { return _nscanned; }
-    bool S2Cursor::getsetdup(DiskLoc loc) { return _btreeCursor->getsetdup(loc); }
-    void S2Cursor::aboutToDeleteBucket(const DiskLoc& b) {
-        if (NULL != _btreeCursor) {
-            _btreeCursor->aboutToDeleteBucket(b);
-        }
-    }
+    BSONObj S2Cursor::current() { return _cursor->current(); }
+    BSONObj S2Cursor::currPK() const { return _cursor->currPK(); }
+    BSONObj S2Cursor::currKey() const { return _cursor->currKey(); }
+    long long S2Cursor::nscanned() const { return _nscanned; }
+    bool S2Cursor::getsetdup(const BSONObj &pk) { return _cursor->getsetdup(pk); }
 
     // This is the actual search.
     bool S2Cursor::advance() {
-        for (; _btreeCursor->ok(); _btreeCursor->advance()) {
+        for (; _cursor->ok(); _cursor->advance()) {
             ++_nscanned;
-            if (_seen.end() != _seen.find(_btreeCursor->currLoc())) { continue; }
-            _seen.insert(_btreeCursor->currLoc());
+            if (_seen.end() != _seen.find(_cursor->currPK())) { continue; }
+            _seen.insert(_cursor->currPK().getOwned());
 
             ++_matchTested;
             MatchDetails details;
-            bool matched = _matcher->matchesCurrent(_btreeCursor.get(), &details);
+            bool matched = _matcher->matchesCurrent(_cursor.get(), &details);
             if (!matched) { continue; }
 
-            const BSONObj &indexedObj = _btreeCursor->currLoc().obj();
+            const BSONObj &indexedObj = _cursor->current();
 
             ++_geoTested;
             size_t geoFieldsMatched = 0;
@@ -156,26 +132,7 @@ namespace mongo {
         return false;
     }
 
-    // This is called when we're supposed to yield.
-    void S2Cursor::noteLocation() {
-        _btreeCursor->noteLocation();
-        _seen.clear();
-    }
-
-    // Called when we're un-yielding.
-    void S2Cursor::checkLocation() {
-        _btreeCursor->checkLocation();
-        // We are pointing at a valid btree location now, but it may not be a valid result.
-        // This ensures that we're pointing at a valid result that satisfies the query.
-
-        // There is something subtle here: Say we point at something valid, and note the location
-        // (yield), then checkLocation (unyield), when we call advance, we don't go past the object
-        // that we were/are pointing at since we only do that if we've seen it before (that is, it's
-        // in _seen, which we clear when we yield).
-        advance();
-    }
-
-    void S2Cursor::explainDetails(BSONObjBuilder& b) {
+    void S2Cursor::explainDetails(BSONObjBuilder& b) const {
         b << "nscanned" << _nscanned;
         b << "matchTested" << _matchTested;
         b << "geoTested" << _geoTested;

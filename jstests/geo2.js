@@ -1,3 +1,4 @@
+
 t = db.geo2
 t.drop();
 

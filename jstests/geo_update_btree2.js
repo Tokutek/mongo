@@ -47,6 +47,12 @@ for( var i = 0; i < updateIds.length; i++ )
 
 status( "Counting final points..." )
 
-assert.eq( ( numPoints - 2 ) / 2, query.itcount() )
-
+if (false) {
+    // In MongoDB, the in-progress query sees removes because there is no snapshot isolation.
+    assert.eq( ( numPoints - 2 ) / 2, query.itcount() )
+} else {
+    // In TokuMX, we use snapshot isolation on queries by default, so the remove operations
+    // do not affect the query.
+    assert.eq( ( numPoints - 2 ), query.itcount() );
+}
 

@@ -21,14 +21,12 @@
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/privilege.h"
+#include "mongo/db/collection.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/jsobj.h"
-#include "mongo/db/namespace_details.h"
-#include "mongo/db/namespace-inl.h"
-#include "mongo/db/pdfile.h"
+#include "mongo/db/index/s2.h"
 #include "mongo/db/geo/2d.h"
 #include "mongo/db/geo/s2common.h"
-#include "mongo/db/geo/s2index.h"
 #include "mongo/db/geo/s2nearcursor.h"
 
 namespace mongo {
@@ -65,9 +63,9 @@ namespace mongo {
         isSpherical = cmdObj["spherical"].trueValue();
     }
 
-    class Geo2dFindNearCmd : public Command {
+    class Geo2dFindNearCmd : public QueryCommand {
     public:
-        Geo2dFindNearCmd() : Command("geoNear") {}
+        Geo2dFindNearCmd() : QueryCommand("geoNear") {}
 
         virtual LockType locktype() const { return READ; }
         bool slaveOk() const { return true; }
@@ -87,9 +85,9 @@ namespace mongo {
 
         bool run(const string& dbname, BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
             string ns = dbname + "." + cmdObj.firstElement().valuestr();
-            NamespaceDetails *d = nsdetails(ns);
+            Collection *cl = getCollection(ns);
 
-            if (NULL == d) {
+            if (NULL == cl) {
                 errmsg = "can't find ns";
                 return false;
             }
@@ -102,7 +100,7 @@ namespace mongo {
 
             vector<int> idxs;
 
-            d->findIndexByType("2d", idxs);
+            cl->findIndexByType("2d", idxs);
             if (idxs.size() > 1) {
                 errmsg = "more than one 2d index, not sure which to run geoNear on";
                 return false;
@@ -110,10 +108,10 @@ namespace mongo {
 
             if (1 == idxs.size()) {
                 result.append("ns", ns);
-                return run2DGeoNear(d->idx(idxs[0]), cmdObj, commonArgs, errmsg, result);
+                return run2DGeoNear(cl->idx(idxs[0]), cmdObj, commonArgs, errmsg, result);
             }
 
-            d->findIndexByType("2dsphere", idxs);
+            cl->findIndexByType("2dsphere", idxs);
             if (idxs.size() > 1) {
                 errmsg = "more than one 2dsphere index, not sure which to run geoNear on";
                 return false;
@@ -121,7 +119,7 @@ namespace mongo {
 
             if (1 == idxs.size()) {
                 result.append("ns", ns);
-                return run2DSphereGeoNear(d->idx(idxs[0]), cmdObj, commonArgs, errmsg, result);
+                return run2DSphereGeoNear(cl->idx(idxs[0]), cmdObj, commonArgs, errmsg, result);
             }
 
             errmsg = "no geo indices for geoNear";

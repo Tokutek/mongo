@@ -25,6 +25,7 @@
 #include "mongo/db/d_concurrency.h"
 #include "mongo/db/index.h"
 #include "mongo/db/index_set.h"
+#include "mongo/db/index/partitioned.h"
 #include "mongo/db/oplog_helpers.h"
 #include "mongo/db/relock.h"
 #include "mongo/db/server_parameters.h"
@@ -132,11 +133,11 @@ namespace mongo {
     // an index that is not referenced in the .ns file. We need to remove it.
     // We know for sure that it was an index belonging to a CollectionBase, because
     // partitioned collections could not have secondary indexes. Therefore, we
-    // can assume the secondary index can be managed with an IndexDetailsBase
+    // can assume the secondary index can be managed with an IndexInterface
     // (as all secondary indexes of CollectionBase were in 1.4.2) and we follow the
     // relevant steps of Collection::dropIndex and CollectionBase::dropIndexDetails
     void cleanupOrphanedIndex(const BSONObj& info) {
-        shared_ptr<IndexDetailsBase> idx(IndexDetailsBase::make(info, false, false));
+        shared_ptr<IndexInterface> idx(IndexInterface::make(info, false, false));
         StringData collns = info["ns"].Stringdata();
         // This code was taken from 1.4.1's implementation of Collection::dropIndex,
         // as that had the code for how to remove an index.
@@ -507,7 +508,7 @@ namespace mongo {
                 // Primary key should always be the first entry in the indexes array.
                 verify(it == index_array.begin());
             }
-            shared_ptr<IndexDetailsBase> idx(IndexDetailsBase::make(info, may_create, isPK));
+            shared_ptr<IndexInterface> idx(IndexInterface::make(info, may_create, isPK));
             if (!idx && cc().upgradingSystemUsers() && isSystemUsersCollection(_ns) &&
                 oldSystemUsersKeyPattern == info["key"].Obj()) {
                 // This was already dropped, but because of #673 we held on to the info.
@@ -568,7 +569,7 @@ namespace mongo {
             verify(!_indexBuildInProgress);
         }
         for (int i = 0; i < nIndexesBeingBuilt(); i++) {
-            IndexDetailsBase &idx = *_indexes[i];
+            IndexInterface &idx = *_indexes[i];
             idx.close();
         }
     }
@@ -733,7 +734,7 @@ namespace mongo {
             const bool doUniqueChecks = !(flags & Collection::NO_UNIQUE_CHECKS) &&
                                         !(isPK && (!pkUniqueChecks || (flags & Collection::NO_PK_UNIQUE_CHECKS)));
 
-            IndexDetailsBase &idx = *_indexes[i];
+            IndexInterface &idx = *_indexes[i];
             dbs[i] = idx.db();
 
             // Primary key uniqueness check will be done at the ydb layer.
@@ -787,7 +788,7 @@ namespace mongo {
         for (int i = 0; i < n; i++) {
             const DBT_ARRAY *array = &keyArrays[i];
             if (array->size > 0) {
-                IndexDetailsBase &idx = *_indexes[i];
+                IndexInterface &idx = *_indexes[i];
                 dassert(!isPKIndex(idx));
                 idx.noteInsert();
             }
@@ -810,7 +811,7 @@ namespace mongo {
         for (int i = 0; i < n; i++) {
             const bool isPK = i == 0;
             const bool prelocked = flags & Collection::NO_LOCKTREE;
-            IndexDetailsBase &idx = *_indexes[i];
+            IndexInterface &idx = *_indexes[i];
             dbs[i] = idx.db();
             del_flags[i] = DB_DELETE_ANY | (prelocked ? DB_PRELOCKED_WRITE : 0);
             DEV {
@@ -854,7 +855,7 @@ namespace mongo {
         for (int i = 0; i < n; i++) {
             const DBT_ARRAY *array = &keyArrays[i];
             if (array->size > 0) {
-                IndexDetailsBase &idx = *_indexes[i];
+                IndexInterface &idx = *_indexes[i];
                 dassert(!isPKIndex(idx));
                 idx.noteDelete();
             }
@@ -908,7 +909,7 @@ namespace mongo {
             const bool doUniqueChecks = !(flags & Collection::NO_UNIQUE_CHECKS) &&
                                         !(isPK && (flags & Collection::NO_PK_UNIQUE_CHECKS));
 
-            IndexDetailsBase &idx = *_indexes[i];
+            IndexInterface &idx = *_indexes[i];
             dbs[i] = idx.db();
             update_flags[i] = prelocked ? DB_PRELOCKED_WRITE : 0;
 
@@ -989,7 +990,7 @@ namespace mongo {
             b.append("q", query);
         }
 
-        IndexDetailsBase &pkIdx = getPKIndexBase();
+        IndexInterface &pkIdx = getPKIndexBase();
         pkIdx.updatePair(pk, NULL, b.done(), flags);
     }
 
@@ -1015,7 +1016,7 @@ namespace mongo {
         _multiKeyIndexBits |= x;
     }
 
-    void CollectionBase::checkIndexUniqueness(const IndexDetailsBase &idx) {
+    void CollectionBase::checkIndexUniqueness(const IndexInterface &idx) {
         shared_ptr<Cursor> c(Cursor::make(this, idx, 1, false));
         BSONObj prevKey = c->currKey().getOwned();
         c->advance();
@@ -1052,7 +1053,7 @@ namespace mongo {
             rollback.noteNs(_ns);
         }
 
-        IndexDetailsBase& idx = *_indexes[idxNum];
+        IndexInterface& idx = *_indexes[idxNum];
         idx.kill_idx();
         _indexes.erase(_indexes.begin() + idxNum);
         _nIndexes--;
@@ -1066,7 +1067,7 @@ namespace mongo {
         // Acquire full table locks on each index so that only this
         // transcation can write to them until the load/txn commits.
         for (int i = 0; i < nIndexes(); i++) {
-            IndexDetailsBase &idx = *_indexes[i];
+            IndexInterface &idx = *_indexes[i];
             idx.acquireTableLock();
         }
     }
@@ -1081,9 +1082,8 @@ namespace mongo {
     
     // index-scan
     shared_ptr<Cursor> CollectionBase::makeCursor(const IndexDetails &idx,
-                                    const int direction, 
-                                    const bool countCursor)
-    {
+                                                  const int direction, 
+                                                  const bool countCursor) {
         if (countCursor) {
             return shared_ptr<Cursor>(new IndexScanCountCursor(this, idx));
         } else {
@@ -1093,11 +1093,10 @@ namespace mongo {
     
     // index range scan between start/end
     shared_ptr<Cursor> CollectionBase::makeCursor(const IndexDetails &idx,
-                                   const BSONObj &startKey, const BSONObj &endKey,
-                                   const bool endKeyInclusive,
-                                   const int direction, const int numWanted,
-                                   const bool countCursor)
-    {
+                                                  const BSONObj &startKey, const BSONObj &endKey,
+                                                  const bool endKeyInclusive,
+                                                  const int direction, const int numWanted,
+                                                  const bool countCursor) {
         if (countCursor) {
             return shared_ptr<Cursor>(new IndexCountCursor(this, idx, startKey, endKey,
                                                            endKeyInclusive));
@@ -1109,11 +1108,10 @@ namespace mongo {
     
     // index range scan by field bounds
     shared_ptr<Cursor> CollectionBase::makeCursor(const IndexDetails &idx,
-                                   const shared_ptr<FieldRangeVector> &bounds,
-                                   const int singleIntervalLimit,
-                                   const int direction, const int numWanted,
-                                   const bool countCursor)
-    {
+                                                  const shared_ptr<FieldRangeVector> &bounds,
+                                                  const int singleIntervalLimit,
+                                                  const int direction, const int numWanted,
+                                                  const bool countCursor) {
         if (countCursor) {
             return shared_ptr<Cursor>(new IndexCountCursor(this, idx, bounds));
         } else {
@@ -1223,7 +1221,7 @@ namespace mongo {
     // - if there are options, change those options in the index and update the system catalog.
     // - otherwise, send an optimize message and run hot optimize.
     bool CollectionBase::rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &wasBuilder) {
-        IndexDetailsBase& idx = *_indexes[i];
+        IndexInterface& idx = *_indexes[i];
         if (options.isEmpty()) {
             LOG(1) << _ns << ": optimizing index " << idx.keyPattern() << endl;
             const bool ascending = !Ordering::make(idx.keyPattern()).descending(0);
@@ -1826,6 +1824,15 @@ namespace mongo {
             }
         }
         return -1;
+    }
+
+    void CollectionBase::findIndexByType(const string& name, vector<int> &matches) const {
+        for (IndexVector::const_iterator it = _indexes.begin(); it != _indexes.end(); ++it) {
+            const IndexDetails *index = it->get();
+            if (index->getSpecialIndexName() == name) {
+                matches.push_back(it - _indexes.begin());
+            }
+        }
     }
 
     IndexDetails &CollectionBase::findSmallestOneToOneIndex() const {
@@ -2451,7 +2458,7 @@ namespace mongo {
         // a unique check because we always generate a unique auto-increment pk.
         int start = checkPk ? 0 : 1;
         for (int i = start; i < nIndexes(); i++) {
-            IndexDetailsBase &idx = *_indexes[i];
+            IndexInterface &idx = *_indexes[i];
             if (idx.unique()) {
                 BSONObjSet keys;
                 idx.getKeysFromObject(obj, keys);
@@ -2592,7 +2599,7 @@ namespace mongo {
         _multiKeyTrackers.reset(new scoped_ptr<MultiKeyTracker>[n]);
 
         for (int i = 0; i < _nIndexes; i++) {
-            IndexDetailsBase &idx = *_indexes[i];
+            IndexInterface &idx = *_indexes[i];
             _dbs[i] = idx.db();
             _multiKeyTrackers[i].reset(new MultiKeyTracker(_dbs[i]));
         }
@@ -2621,7 +2628,7 @@ namespace mongo {
             }
             verify(!_indexBuildInProgress);
             for (int i = 0; i < _nIndexes; i++) {
-                IndexDetailsBase &idx = *_indexes[i];
+                IndexInterface &idx = *_indexes[i];
                 // The PK's uniqueness is verified on loader close, so we should not check it again.
                 if (!isPKIndex(idx) && idx.unique()) {
                     checkIndexUniqueness(idx);
@@ -2962,12 +2969,8 @@ namespace mongo {
             }
         }
         shared_ptr<PartitionedIndexDetails> details(
-            new PartitionedIndexDetails(
-                replaceNSField(info, _ns),
-                this,
-                _indexDetailsVector.size()
-                )
-            );
+            new PartitionedIndexDetails(replaceNSField(info, _ns), this)
+        );
         _indexDetailsVector.push_back(details);
         return true;
     }
@@ -3143,15 +3146,10 @@ namespace mongo {
     // after meta collection and partitions instantiated
     void PartitionedCollection::createIndexDetails() {
         for (int i = 0; i < nIndexes(); i++) {
-            shared_ptr<PartitionedIndexDetails> details;
-            BSONObj info = _partitions[0]->idx(i).info();
-            details.reset(
-                new PartitionedIndexDetails(
-                    replaceNSField(info, _ns),
-                    this,
-                    i
-                    )
-                );
+            const BSONObj info = _partitions[0]->idx(i).info();
+            shared_ptr<PartitionedIndexDetails> details(
+                new PartitionedIndexDetails(replaceNSField(info, _ns), this)
+            );
             _indexDetailsVector.push_back(details);
         }
         // initialize _ordering
@@ -3549,10 +3547,11 @@ namespace mongo {
             _options = newOptions.getOwned();
             // Update the IndexDetails with new info() which contains the new options, so that when
             // Collection::rebuildIndexes serializes us, we give it the right indexes info.
-            for (PartitionedIndexVector::iterator it = _indexDetailsVector.begin(); it != _indexDetailsVector.end(); ++it) {
+            for (vector< shared_ptr<IndexDetails> >::iterator it = _indexDetailsVector.begin();
+                 it != _indexDetailsVector.end(); ++it) {
                 size_t idxNum = it - _indexDetailsVector.begin();
-                BSONObj info = _partitions[0]->idx(idxNum).info();
-                it->reset(new PartitionedIndexDetails(replaceNSField(info, _ns), this, idxNum));
+                const BSONObj info = _partitions[0]->idx(idxNum).info();
+                it->reset(new PartitionedIndexDetails(replaceNSField(info, _ns), this));
             }
         }
         return changed;

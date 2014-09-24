@@ -91,7 +91,7 @@ namespace mongo {
         // OID keys (which are memcmp'able) and never have extra bytes appended the
         // way that secondary keys do.
         const bool use_memcmp_magic = !_isSecondaryIndex && keyPattern == BSON("_id" << 1);
-        _idx = IndexDetailsBase::make(_info, may_create, use_memcmp_magic);
+        _idx = IndexInterface::make(_info, may_create, use_memcmp_magic);
 
         // Store the index in the _indexes array so that others know an
         // index with this name / key pattern exists and is being built.
@@ -166,7 +166,7 @@ namespace mongo {
     void CollectionBase::ColdIndexer::build() {
         Lock::assertWriteLocked(_cl->_ns);
         if (_isSecondaryIndex) {
-            IndexDetailsBase::Builder builder(*_idx);
+            IndexInterface::Builder builder(*_idx);
 
             IndexDetails::Stats idxStats = _cl->getPKIndex().getStats();
             ProgressMeter pm(idxStats.count, 3, 1000, "estimated documents",

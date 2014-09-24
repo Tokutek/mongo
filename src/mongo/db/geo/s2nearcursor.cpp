@@ -14,10 +14,8 @@
 *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "mongo/db/btree.h"
 #include "mongo/db/index.h"
 #include "mongo/db/matcher.h"
-#include "mongo/db/pdfile.h"
 #include "third_party/s2/s2cap.h"
 #include "third_party/s2/s2regionintersection.h"
 #include "mongo/db/geo/s2common.h"
@@ -39,22 +37,7 @@ namespace mongo {
         _filteredQuery = query.filterFieldsUndotted(geoFieldsToNuke.obj(), false);
         _matcher.reset(new CoveredIndexMatcher(_filteredQuery, keyPattern));
 
-        // More indexing machinery.
-        BSONObjBuilder specBuilder;
         BSONObjIterator specIt(_keyPattern);
-        while (specIt.more()) {
-            BSONElement e = specIt.next();
-            // Checked in AccessMethod already, so we know this spec has only numbers and 2dsphere
-            if ( e.type() == String ) {
-                specBuilder.append( e.fieldName(), 1 );
-            }
-            else {
-                specBuilder.append( e.fieldName(), e.numberInt() );
-            }
-        }
-        BSONObj spec = specBuilder.obj();
-        _specForFRV = IndexSpec(spec);
-
         specIt = BSONObjIterator(_keyPattern);
         while (specIt.more()) {
             if (specIt.next().fieldName() == _nearQuery.field) { break; }
@@ -82,45 +65,21 @@ namespace mongo {
 
     CoveredIndexMatcher* S2NearCursor::matcher() const { return _matcher.get(); }
 
-    Record* S2NearCursor::_current() { return _results.top().loc.rec(); }
-    BSONObj S2NearCursor::current() { return _results.top().loc.obj(); }
-    DiskLoc S2NearCursor::currLoc() { return _results.top().loc; }
+    BSONObj S2NearCursor::current() { return _results.top().obj; }
     BSONObj S2NearCursor::currKey() const { return _results.top().key; }
-    DiskLoc S2NearCursor::refLoc() { return DiskLoc(); }
-    long long S2NearCursor::nscanned() { return _stats._nscanned; }
+    BSONObj S2NearCursor::currPK() const { return _results.top().pk; }
+    long long S2NearCursor::nscanned() const { return _stats._nscanned; }
 
     double S2NearCursor::currentDistance() const { return _results.top().distance; }
 
-    // This is called when we're about to yield.
-    void S2NearCursor::noteLocation() {
-        LOG(1) << "yielding, tossing " << _results.size() << " results" << endl;
-        _results = priority_queue<Result>();
-    }
-
-    // Called when we're un-yielding.
-    // Note that this is (apparently) a valid call sequence:
-    // 1. noteLocation()
-    // 2. ok()
-    // 3. checkLocation()
-    // As such we might have results and only want to fill the result queue if it's empty.
-    void S2NearCursor::checkLocation() {
-        LOG(1) << "unyielding, have " << _results.size() << " results in queue";
-        if (_results.empty()) {
-            LOG(1) << ", filling..." << endl;
-            fillResults();
-            LOG(1) << "now have " << _results.size() << " results in queue";
-        }
-        LOG(1) << endl;
-    }
-
-    void S2NearCursor::explainDetails(BSONObjBuilder& b) {
+    void S2NearCursor::explainDetails(BSONObjBuilder& b) const {
         b << "nscanned" << _stats._nscanned;
         b << "matchTested" << _stats._matchTested;
         b << "geoMatchTested" << _stats._geoMatchTested;
         b << "numShells" << _stats._numShells;
         b << "keyGeoSkip" << _stats._keyGeoSkip;
         b << "returnSkip" << _stats._returnSkip;
-        b << "btreeDups" << _stats._btreeDups;
+        b << "indexDups" << _stats._indexDups;
         b << "inAnnulusTested" << _stats._inAnnulusTested;
     }
 
@@ -155,7 +114,7 @@ namespace mongo {
 
         if (!_results.empty()) {
             _returnedDistance = _results.top().distance;
-            _returned.insert(_results.top().loc);
+            _returned.insert(_results.top().pk.getOwned());
             _results.pop();
             ++_stats._numReturned;
             // Safe to grow the radius as we've returned everything in our shell.  We don't do this
@@ -229,9 +188,9 @@ namespace mongo {
         do {
             // Some of these arguments are opaque, look at the definitions of the involved classes.
             FieldRangeSet frs(_details->parentNS().c_str(), makeFRSObject(), false, false);
-            shared_ptr<FieldRangeVector> frv(new FieldRangeVector(frs, _specForFRV, 1));
-            scoped_ptr<BtreeCursor> cursor(BtreeCursor::make(nsdetails(_details->parentNS()),
-                                                             *_details, frv, 0, 1));
+            shared_ptr<FieldRangeVector> frv(new FieldRangeVector(frs, _keyPattern, _details->getKeyGenerator(), 1));
+            shared_ptr<Cursor> cursor = Cursor::make(getCollection(_details->parentNS()),
+                                                     *_details, frv, 0, 1);
 
             // The cursor may return the same obj more than once for a given
             // FRS, so we make sure to only consider it once in any given annulus.
@@ -246,21 +205,21 @@ namespace mongo {
             // the distance from the query point to the indexed geo to be
             // within our 'current' annulus, and I want to dodge all yield
             // issues if possible.
-            unordered_set<DiskLoc, DiskLoc::Hasher> seen;
+            set<BSONObj> seen;
 
             LOG(1) << "looking at annulus from " << _innerRadius << " to " << _outerRadius << endl;
             LOG(1) << "Total # returned: " << _stats._numReturned << endl;
             // Do the actual search through this annulus.
             for (; cursor->ok(); cursor->advance()) {
                 // Don't bother to look at anything we've returned.
-                if (_returned.end() != _returned.find(cursor->currLoc())) {
+                if (_returned.end() != _returned.find(cursor->currPK())) {
                     ++_stats._returnSkip;
                      continue;
                 }
 
                 ++_stats._nscanned;
-                if (seen.end() != seen.find(cursor->currLoc())) {
-                    ++_stats._btreeDups;
+                if (seen.end() != seen.find(cursor->currPK())) {
+                    ++_stats._indexDups;
                     continue;
                 }
 
@@ -290,11 +249,11 @@ namespace mongo {
                 // A geometry may have several keys, one of which may be in our search shell and one
                 // of which may be outside of it.  We don't want to ignore a document just because
                 // one of its covers isn't inside this annulus.
-                seen.insert(cursor->currLoc());
+                seen.insert(cursor->currPK().getOwned());
 
                 // At this point forward, we will not examine the document again in this annulus.
 
-                const BSONObj& indexedObj = cursor->currLoc().obj();
+                const BSONObj& indexedObj = cursor->current();
 
                 // Match against indexed geo fields.
                 ++_stats._geoMatchTested;
@@ -348,8 +307,8 @@ namespace mongo {
                 // If the min. distance satisfies our distance criteria
                 if (minDistance >= _innerRadius && minDistance < _outerRadius) {
                     // The result is valid.  We have to de-dup ourselves here.
-                    if (_returned.end() == _returned.find(cursor->currLoc())) {
-                        _results.push(Result(cursor->currLoc(), cursor->currKey(),
+                    if (_returned.end() == _returned.find(cursor->currPK())) {
+                        _results.push(Result(cursor->currPK(), cursor->currKey(), cursor->current(),
                                              minDistance));
                     }
                 }
