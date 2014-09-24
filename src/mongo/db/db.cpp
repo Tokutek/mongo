@@ -1059,14 +1059,14 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             out() << "--journalCommitInterval deprecated, treating as --logFlushPeriod" << endl;
             if( cmdLine.logFlushPeriod > 300 ) {
                 out() << "--logFlushPeriod out of allowed range (0-300ms)" << endl;
-                dbexit( EXIT_BADOPTIONS );
+                ::_exit( EXIT_BADOPTIONS );
             }
         }
         if( params.count("logFlushPeriod") ) {
             cmdLine.logFlushPeriod = params["logFlushPeriod"].as<uint32_t>();
             if( cmdLine.logFlushPeriod > 300 ) {
                 out() << "--logFlushPeriod out of allowed range (0-300ms)" << endl;
-                dbexit( EXIT_BADOPTIONS );
+                ::_exit( EXIT_BADOPTIONS );
             }
         }
         if ( !(params.count("expireOplogHours") || params.count("expireOplogDays")) && params.count("replSet") ) {
@@ -1109,7 +1109,7 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             cmdLine.fsRedzone = params["fsRedzone"].as<int>();
             if (cmdLine.fsRedzone < 1 || cmdLine.fsRedzone > 99) {
                 out() << "--fsRedzone must be between 1 and 99." << endl;
-                dbexit( EXIT_BADOPTIONS );
+                ::_exit( EXIT_BADOPTIONS );
             }
         }
         if (params.count("logDir")) {
@@ -1139,7 +1139,7 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             uint64_t limit = (uint64_t) params["txnMemLimit"].as<BytesQuantity<uint64_t> >();
             if( limit > 1ULL<<21 ) {
                 out() << "--txnMemLimit cannot be greater than 2MB" << endl;
-                dbexit( EXIT_BADOPTIONS );
+                ::_exit( EXIT_BADOPTIONS );
             }
         }
         if (params.count("nohints")) {
@@ -1170,7 +1170,7 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             int x = params["diaglog"].as<int>();
             if ( x < 0 || x > 7 ) {
                 out() << "can't interpret --diaglog setting" << endl;
-                dbexit( EXIT_BADOPTIONS );
+                ::_exit( EXIT_BADOPTIONS );
             }
             _diaglog.setLevel(x);
         }
@@ -1203,7 +1203,7 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             if( params.count("replSet") ) {
                 out() << "--autoresync is not used with --replSet" << endl;
                 out() << "see http://dochub.mongodb.org/core/resyncingaverystalereplicasetmember" << endl;
-                dbexit( EXIT_BADOPTIONS );
+                ::_exit( EXIT_BADOPTIONS );
             }
         }
         if (params.count("source")) {
@@ -1216,11 +1216,11 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
         if (params.count("replSet")) {
             if (params.count("slavedelay")) {
                 out() << "--slavedelay cannot be used with --replSet" << endl;
-                dbexit( EXIT_BADOPTIONS );
+                ::_exit( EXIT_BADOPTIONS );
             }
             else if (params.count("only")) {
                 out() << "--only cannot be used with --replSet" << endl;
-                dbexit( EXIT_BADOPTIONS );
+                ::_exit( EXIT_BADOPTIONS );
             }
             /* seed list of hosts for the repl set */
             cmdLine._replSet = params["replSet"].as<string>().c_str();
@@ -1241,14 +1241,14 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             uint64_t x = (uint64_t) params["locktreeMaxMemory"].as<BytesQuantity<uint64_t> >();
             if (x < 65536) {
                 out() << "bad --locktreeMaxMemory arg (should never be less than 64kb)" << endl;
-                dbexit( EXIT_BADOPTIONS );
+                ::_exit( EXIT_BADOPTIONS );
             }
         }
         if (params.count("loaderMaxMemory")) {
             uint64_t x = (uint64_t) params["loaderMaxMemory"].as<BytesQuantity<uint64_t> >();
             if (x < 32 * 1024 * 1024) {
                 out() << "bad --loaderMaxMemory arg (should never be less than 32mb)" << endl;
-                dbexit( EXIT_BADOPTIONS );
+                ::_exit( EXIT_BADOPTIONS );
             }
         }
         if (params.count("port") == 0 ) {
@@ -1258,7 +1258,7 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             if( params.count("shardsvr") ) {
                 if( params.count("configsvr") ) {
                     log() << "can't do --shardsvr and --configsvr at the same time" << endl;
-                    dbexit( EXIT_BADOPTIONS );
+                    ::_exit( EXIT_BADOPTIONS );
                 }
                 cmdLine.port = CmdLine::ShardServerPort;
             }
@@ -1266,7 +1266,7 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
         else {
             if ( cmdLine.port <= 0 || cmdLine.port > 65535 ) {
                 out() << "bad --port number" << endl;
-                dbexit( EXIT_BADOPTIONS );
+                ::_exit( EXIT_BADOPTIONS );
             }
         }
         if ( params.count("configsvr" ) ) {
@@ -1301,7 +1301,7 @@ static void processCommandLineOptions(const std::vector<std::string>& argv) {
             out() << "Replica Pairs have been deprecated. Invalid options: --pairwith, --arbiter, and/or --opIdMem" << endl;
             out() << "<http://dochub.mongodb.org/core/replicapairs>" << endl;
             out() << "****" << endl;
-            dbexit( EXIT_BADOPTIONS );
+            ::_exit( EXIT_BADOPTIONS );
         }
 
         Module::configAll( params );
