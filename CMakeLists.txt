@@ -338,6 +338,7 @@ endif ()
 
 if (EXISTS "${CMAKE_SOURCE_DIR}/src/mongo/plugins/tokumx-backup-plugin/")
   set(TOKUMX_ENTERPRISE ON)
+  add_definitions(-DMONGO_ENTERPRISE_VERSION=1)
 else ()
   set(TOKUMX_ENTERPRISE OFF)
 endif ()
@@ -458,6 +459,10 @@ set(CPACK_COMPONENTS_ALL
   tokubackup_libs_shared
   tokumx_debuginfo
   )
+
+if (TOKUMX_ENTERPRISE)
+  list(APPEND CPACK_COMPONENTS_ALL tokumx_audit_libs_shared)
+endif()
 
 if (TOKUMX_ENTERPRISE)
   message(STATUS "Building TokuMX Enterprise ${CPACK_PACKAGE_VERSION}")

@@ -29,6 +29,7 @@
 #include "mongo/base/init.h"
 #include "mongo/base/status.h"
 #include "mongo/bson/util/builder.h"
+#include "mongo/db/audit.h"
 #include "mongo/db/auth/action_set.h"
 #include "mongo/db/auth/action_type.h"
 #include "mongo/db/auth/authorization_manager.h"
@@ -2151,6 +2152,10 @@ namespace mongo {
             std::vector<Privilege> privileges;
             c->addRequiredPrivileges(dbname, cmdObj, &privileges);
             Status status = client.getAuthorizationManager()->checkAuthForPrivileges(privileges);
+            audit::logCommandAuthzCheck(&client, 
+                                        c->parseNs(dbname, cmdObj), 
+                                        cmdObj,
+                                        status.code());
             if (!status.isOK()) {
                 log() << "command denied: " << cmdObj.toString() << endl;
                 appendCommandStatus(result, false, status.reason());

@@ -25,6 +25,7 @@
 #include <sys/wait.h>
 #endif
 
+#include "mongo/db/audit.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/auth/security_key.h"
 #include "mongo/db/cmdline.h"
@@ -145,6 +146,15 @@ namespace mongo {
             Logstream::useSyslog( sb.str().c_str() );
         }
 #endif
+
+        // We have to initialize audit before the LoggingManager is started.
+        Status s = audit::initialize();
+        if (s != Status::OK()) {
+            log() << "Could not initialize audit:" << s.reason() 
+                  << "Check further back in logs for more information." << endl;
+            return false;
+        }
+
         if (!cmdLine.logpath.empty() && !isMongodShutdownSpecialCase) {
             fassert(16448, !cmdLine.logWithSyslog);
             string absoluteLogpath = boost::filesystem::absolute(
