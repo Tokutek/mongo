@@ -6,6 +6,9 @@
 namespace mongo {
   const char *gitVersion() { return "${TOKUMX_GIT_VERSION}"; }
   const char *tokukvVersion() { return "${TOKUKV_GIT_VERSION}"; }
+#if MONGO_ENTERPRISE_VERSION
+  const char *tokumxAuditVersion() { return "${TOKUMX_AUDIT_ENTERPRISE_GIT_VERSION}"; }
+#endif
   const char *compiledJSEngine() { return "${TOKUMX_JS_ENGINE}"; }
   const char *loaderFlags() { return "${TOKUMX_LOADER_FLAGS}"; }
   const char *compilerFlags() { return "${TOKUMX_COMPILER_FLAGS}"; }

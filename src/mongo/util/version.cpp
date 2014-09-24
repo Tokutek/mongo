@@ -128,11 +128,18 @@ namespace mongo {
 
     void printTokukvVersion() { log() << "TokuKV version: " << tokukvVersion() << endl; }
 
+#if MONGO_ENTERPRISE_VERSION
+    void printTokumxAuditVersion() { log() << "TokuMX Enterprise Audit version: " << tokumxAuditVersion() << endl; }
+#endif
+
     void appendBuildInfo(BSONObjBuilder& result) {
         result << "version" << mongodbVersionString
                << "tokumxVersion" << tokumxVersionString
                << "gitVersion" << gitVersion()
                << "tokukvVersion" << tokukvVersion()
+#if MONGO_ENTERPRISE_VERSION
+               << "tokumxAuditVersion" << tokumxAuditVersion()
+#endif
                << "sysInfo" << sysInfo()
                << "loaderFlags" << loaderFlags()
                << "compilerFlags" << compilerFlags()

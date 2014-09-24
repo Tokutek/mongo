@@ -170,6 +170,9 @@ mkdir -p opt
 %if 0%{?tokukv_revision:1}
     -D TOKUKV_GIT_VERSION=%{tokukv_revision} \
 %endif
+%if 0%{?tokumx_audit_enterprise_revision:1}
+    -D TOKUMX_AUDIT_ENTERPRISE_GIT_VERSION=%{tokumx_audit_enterprise_revision} \
+%endif
     ..)
 make -C opt %{?_smp_mflags}
 

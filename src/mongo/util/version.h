@@ -54,6 +54,11 @@ namespace mongo {
     const char *tokukvVersion();
     void printTokukvVersion();
 
+#if MONGO_ENTERPRISE_VERSION
+    const char *tokumxAuditVersion();
+    void printTokumxAuditVersion();
+#endif
+
     void show_warnings();
 
 }  // namespace mongo

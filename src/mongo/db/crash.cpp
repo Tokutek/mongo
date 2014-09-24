@@ -119,6 +119,12 @@ namespace mongo {
             p = stpcpy(p, "tokukvVersion: ");
             p = stpcpy(p, tokukvVersion());
             rawOut(buf);
+#if MONGO_ENTERPRISE_VERSION
+            p = buf;
+            p = stpcpy(p, "tokumxAuditVersion: ");
+            p = stpcpy(p, tokumxAuditVersion());
+            rawOut(buf);
+#endif
             p = buf;
             p = stpcpy(p, "sysInfo: ");
             p = stpcpy(p, sysInfoCstr());
