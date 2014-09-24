@@ -104,9 +104,9 @@ namespace mongo {
             return false;
         }
 
-        log() << "Rollback needed! Our GTID" <<
+        log() << "Rollback needed! Our GTID: " <<
             theReplSet->gtidManager->getLiveState().toString() <<
-            " remote GTID: " << gtid.toString() << ". Attempting rollback." << rsLog;
+            ", remote GTID: " << gtid.toString() << ". Attempting rollback." << rsLog;
 
         *lastTS = ts;
         return true;
