@@ -274,6 +274,6 @@ doAutosplitTest = function() {
 }
 
 doAutosplitTest();
-//doTest(true);
-//doTest(false);
+doTest(true);
+doTest(false);
 
