@@ -141,9 +141,9 @@ namespace mongo {
         string pwd;
         Status status = ClientBasic::getCurrent()->getAuthorizationManager()->getPrivilegeDocument(
                 dbname, PrincipalName(user, dbname), &userObj);
-        // NOTE: There is no mechanism in this version of this method.
         audit::logAuthentication(ClientBasic::getCurrent(),
-                                 "",
+                                 dbname,
+                                 "MONGODB-CR",
                                  user,
                                  status.code());
                                  

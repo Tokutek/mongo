@@ -33,6 +33,7 @@ namespace audit {
 #endif
 
     void logAuthentication(ClientBasic* client,
+                           const StringData& dbname,
                            const StringData& mechanism,
                            const std::string& user,
                            ErrorCodes::Error result) MONGO_AUDIT_STUB
@@ -99,9 +100,6 @@ namespace audit {
                                const StringData& msg) MONGO_AUDIT_STUB
 
     void logShutdown(ClientBasic* client) MONGO_AUDIT_STUB
-
-    void logAuditLogRotate(ClientBasic* client,
-                           const StringData& file) MONGO_AUDIT_STUB
 
     void logCreateIndex(ClientBasic* client,
                         const BSONObj* indexSpec,

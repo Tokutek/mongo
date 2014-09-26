@@ -44,6 +44,7 @@ namespace audit {
      * Logs the result of an authentication attempt.
      */
     void logAuthentication(ClientBasic* client,
+                           const StringData& dbname,
                            const StringData& mechanism,
                            // Will be `const UserName& user' once we backport that code,
                            const std::string& user,
@@ -162,12 +163,6 @@ namespace audit {
      * Logs the result of a shutdown command.
      */
     void logShutdown(ClientBasic* client);
-
-    /**
-     * Logs the result of an AuditLogRotate command.
-     */
-    void logAuditLogRotate(ClientBasic* client,
-                           const StringData& file);
 
     /**
      * Logs the result of a createIndex command.
