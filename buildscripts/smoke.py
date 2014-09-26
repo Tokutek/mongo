@@ -771,6 +771,7 @@ suiteGlobalConfig = {"js": ("[!_]*.js", True),
                      "multiVersion": ("multiVersion/*.js", True),
                      "failPoint": ("fail_point/*.js", False),
                      "ssl": ("ssl/*.js", True),
+                     "backup": ("backup/*.js", False),
                      "pitr": ("pitr/*.js", False),
                      }
 
