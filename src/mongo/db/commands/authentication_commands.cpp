@@ -78,6 +78,14 @@ namespace mongo {
         SecureRandom* _random;
     } cmdGetNonce;
 
+    static void _auditFailedAuthentication(const string &dbname, const string &user) {
+        audit::logAuthentication(ClientBasic::getCurrent(),
+                                 dbname,
+                                 "MONGODB-CR",
+                                 user,
+                                 ErrorCodes::AuthenticationFailed);
+    }
+
     bool CmdAuthenticate::run(const string& dbname , BSONObj& cmdObj, int, string& errmsg, BSONObjBuilder& result, bool fromRepl) {
 
         log() << " authenticate db: " << dbname << " " << cmdObj << endl;
@@ -89,6 +97,7 @@ namespace mongo {
             // cluster members may communicate with each other.
             if (dbname != StringData("local", StringData::LiteralTag()) ||
                 user != internalSecurity.user) {
+                _auditFailedAuthentication(dbname, user);
                 errmsg = _nonceAuthenticateCommandsDisabledMessage;
                 result.append(saslCommandCodeFieldName, ErrorCodes::AuthenticationFailed);
                 return false;
@@ -99,6 +108,7 @@ namespace mongo {
         string received_nonce = cmdObj.getStringField("nonce");
 
         if( user.empty() || key.empty() || received_nonce.empty() ) {
+            _auditFailedAuthentication(dbname, user);
             log() << "field missing/wrong type in received authenticate command "
                   << dbname
                   << endl;
@@ -129,6 +139,7 @@ namespace mongo {
             client->resetAuthenticationSession(NULL);
 
             if ( reject ) {
+                _auditFailedAuthentication(dbname, user);
                 log() << "auth: bad nonce received or getnonce not called. could be a driver bug or a security attack. db:" << dbname << endl;
                 errmsg = "auth fails";
                 sleepmillis(30);
@@ -141,13 +152,9 @@ namespace mongo {
         string pwd;
         Status status = ClientBasic::getCurrent()->getAuthorizationManager()->getPrivilegeDocument(
                 dbname, PrincipalName(user, dbname), &userObj);
-        audit::logAuthentication(ClientBasic::getCurrent(),
-                                 dbname,
-                                 "MONGODB-CR",
-                                 user,
-                                 status.code());
                                  
         if (!status.isOK()) {
+            _auditFailedAuthentication(dbname, user);
             log() << status.reason() << std::endl;
             errmsg = "auth fails";
             result.append(saslCommandCodeFieldName, ErrorCodes::AuthenticationFailed);
@@ -168,7 +175,13 @@ namespace mongo {
 
         string computed = digestToString( d );
 
-        if ( key != computed ) {
+        const bool authenticated = key == computed;
+        audit::logAuthentication(ClientBasic::getCurrent(),
+                                 dbname,
+                                 "MONGODB-CR",
+                                 user,
+                                 authenticated ? ErrorCodes::OK : ErrorCodes::AuthenticationFailed);
+        if ( !authenticated ) {
             log() << "auth: key mismatch " << user << ", ns:" << dbname << endl;
             errmsg = "auth fails";
             result.append(saslCommandCodeFieldName, ErrorCodes::AuthenticationFailed);
