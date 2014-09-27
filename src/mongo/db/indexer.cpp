@@ -177,6 +177,11 @@ namespace mongo {
     void CollectionBase::ColdIndexer::build() {
         Lock::assertWriteLocked(_cl->_ns);
         if (_isSecondaryIndex) {
+            audit::logCreateIndex(&cc(),
+                                  &_info,
+                                  _info["name"].Stringdata(),
+                                  _info["ns"].Stringdata());
+
             IndexInterface::Builder builder(*_idx);
 
             IndexDetails::Stats idxStats = _cl->getPKIndex().getStats();
