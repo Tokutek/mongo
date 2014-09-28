@@ -9,12 +9,13 @@ var auditTest = function(name, fn, serverParams) {
 
     loudTestEcho(name + ' STARTING ');
     removeFile(auditPath);
+    var dbpath = TestData.testDir !== undefined ? 
+                 TestData.testDir : '/data/db';
     var port = allocatePorts(1);
     m = MongoRunner.runMongod(
         Object.merge({
             port: port,
-            // TODO: This is bad
-            dbpath: '/home/esmet/git/tokutek/mongo/smokedata',
+            dbpath: dbpath,
             auditDestination: 'file',
             auditPath: auditPath,
             auditFormat: 'JSON'
