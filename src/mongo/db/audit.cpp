@@ -96,9 +96,6 @@ namespace audit {
                             const BSONObj* oldConfig,
                             const BSONObj* newConfig) MONGO_AUDIT_STUB
 
-    void logApplicationMessage(ClientBasic* client,
-                               const StringData& msg) MONGO_AUDIT_STUB
-
     void logShutdown(ClientBasic* client) MONGO_AUDIT_STUB
 
     void logCreateIndex(ClientBasic* client,

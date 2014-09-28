@@ -154,12 +154,6 @@ namespace audit {
                             const BSONObj* newConfig);
 
     /**
-     * Logs the result of an ApplicationMessage command.
-     */
-    void logApplicationMessage(ClientBasic* client,
-                               const StringData& msg);
-
-    /**
      * Logs the result of a shutdown command.
      */
     void logShutdown(ClientBasic* client);
