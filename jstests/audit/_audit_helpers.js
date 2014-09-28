@@ -1,5 +1,3 @@
-var auditPath = 'auditLog.json';
-
 var auditTest = function(name, fn, serverParams) {
     var loudTestEcho = function(msg) {
         s = '----------------------------- AUDIT UNIT TEST: ' + msg + '-----------------------------';
@@ -11,6 +9,8 @@ var auditTest = function(name, fn, serverParams) {
     removeFile(auditPath);
     var dbpath = TestData.testDir !== undefined ? 
                  TestData.testDir : '/data/db';
+    var auditPath = dbpath + '/auditLog.json';
+    removeFile(auditPath);
     var port = allocatePorts(1);
     var startServer = function(extraParams) {
         params = Object.merge(serverParams, extraParams);
@@ -39,11 +39,38 @@ var auditTest = function(name, fn, serverParams) {
     loudTestEcho(name + ' PASSED ');
 }
 
+var auditTestRepl = function(name, fn, serverParams) {
+    var loudTestEcho = function(msg) {
+        s = '----------------------------- AUDIT REPL UNIT TEST: ' + msg + '-----------------------------';
+        print(Array(s.length + 1).join('-'));
+        print(s);
+    }
+
+    loudTestEcho(name + ' STARTING ');
+    var replTest = new ReplSetTest({ name: 'auditTestReplSet', nodes: 2 });
+    replTest.startSet();
+    var config = {
+        _id: 'auditTestReplSet',
+        members: [
+            { _id: 0, host: getHostName() + ":" + replTest.ports[0], priority: 2 },
+            { _id: 1, host: getHostName() + ":" + replTest.ports[1], priority: 1 },
+        ]
+    };
+    replTest.initiate(config);
+    try {
+        fn(replTest);
+    } finally {
+        replTest.stopSet();
+    }
+    loudTestEcho(name + ' PASSED ');
+}
+
 // Drop the existing audit events collection, import
 // the audit json file, then return the new collection.
 var getAuditEventsCollection = function(m) {
     // the audit log is specifically parsable by mongoimport,
     // so we use that to conveniently read its contents.
+    var auditPath = m.getDB('admin').runCommand('getCmdLineOpts').auditPath;
     var localDB = m.getDB('local');
     var auditCollectionName = 'auditCollection';
     runMongoProgram('mongoimport',
