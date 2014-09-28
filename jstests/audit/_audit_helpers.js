@@ -12,17 +12,27 @@ var auditTest = function(name, fn, serverParams) {
     var dbpath = TestData.testDir !== undefined ? 
                  TestData.testDir : '/data/db';
     var port = allocatePorts(1);
-    m = MongoRunner.runMongod(
-        Object.merge({
-            port: port,
-            dbpath: dbpath,
-            auditDestination: 'file',
-            auditPath: auditPath,
-            auditFormat: 'JSON'
-        }, serverParams)
-    );
+    var startServer = function(extraParams) {
+        params = Object.merge(serverParams, extraParams);
+        return MongoRunner.runMongod(
+            Object.merge({
+                port: port,
+                dbpath: dbpath,
+                auditDestination: 'file',
+                auditPath: auditPath,
+                auditFormat: 'JSON'
+            }, params)
+        );
+    }
+    var stopServer = function() {
+        MongoRunner.stopMongod(port);
+    }
+    var restartServer = function() {
+        stopServer();
+        return startServer({ noCleanData: true });
+    }
     try {
-        fn(m);
+        fn(startServer(), restartServer);
     } finally {
         MongoRunner.stopMongod(port);
     }
@@ -60,9 +70,9 @@ var getAuditEventsCollection = function(m) {
     return auditCollection;
 }
 
-// Get a query that matches any timestamp generated in the last few seconds
-var withinTheLastFewSeconds = function() {
+// Get a query that matches any timestamp generated in the last few (or n) seconds
+var withinTheLastFewSeconds = function(n) {
     now = Date.now();
-    fewSecondsAgo = now - (3 * 1000);
+    fewSecondsAgo = now - ((n !== undefined ? n : 3) * 1000);
     return { '$gte' : new Date(fewSecondsAgo), '$lte': new Date(now) };
 }
