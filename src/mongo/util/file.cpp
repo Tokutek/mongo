@@ -63,12 +63,14 @@ namespace mongo {
         return -1;
     }
 
-    void File::fsync() const {
+    int File::fsyncReturningError() const {
         if (FlushFileBuffers(_handle) == 0) {
             DWORD dosError = GetLastError();
             log() << "In File::fsync(), FlushFileBuffers for '" << _name
                   << "' failed with " << errnoWithDescription(dosError) << std::endl;
+            return (int) dosError;
         }
+        return 0;
     }
 
     bool File::is_open() const { return _handle != INVALID_HANDLE_VALUE; }
@@ -153,7 +155,7 @@ namespace mongo {
         }
     }
 
-    void File::write(fileofs o, const char* data, unsigned len) {
+    int File::writeReturningError(fileofs o, const char* data, unsigned len) {
         LARGE_INTEGER li;
         li.QuadPart = o;
         if (SetFilePointerEx(_handle, li, NULL, FILE_BEGIN) == 0) {
@@ -162,7 +164,7 @@ namespace mongo {
             log() << "In File::write(), SetFilePointerEx for '" << _name
                   << "' tried to set the file pointer to " << o
                   << " but failed with " << errnoWithDescription(dosError) << std::endl;
-            return;
+            return (int) dosError;
         }
         DWORD bytesWritten;
         if (WriteFile(_handle, data, len, &bytesWritten, NULL) == 0) {
@@ -172,7 +174,9 @@ namespace mongo {
                   << "' tried to write " << len
                   << " bytes but only wrote " << bytesWritten
                   << " bytes, failing with " << errnoWithDescription(dosError) << std::endl;
+            return (int) dosError;
         }
+        return 0;
     }
 
 #else // _WIN32
@@ -197,11 +201,14 @@ namespace mongo {
         return -1;
     }
 
-    void File::fsync() const {
+    int File::fsyncReturningError() const {
         if (::fsync(_fd)) {
+            int _errno = errno;
             log() << "In File::fsync(), ::fsync for '" << _name
                   << "' failed with " << errnoWithDescription() << std::endl;
+            return _errno;
         }
+        return 0;
     }
 
     bool File::is_open() const { return _fd > 0; }
@@ -268,15 +275,18 @@ namespace mongo {
         }
     }
 
-    void File::write(fileofs o, const char *data, unsigned len) {
+    int File::writeReturningError(fileofs o, const char *data, unsigned len) {
         ssize_t bytesWritten = ::pwrite(_fd, data, len, o);
         if (bytesWritten != static_cast<ssize_t>(len)) {
             _bad = true;
+            int _errno = errno;
             log() << "In File::write(), ::pwrite for '" << _name
                   << "' tried to write " << len
                   << " bytes but only wrote " << bytesWritten
                   << " bytes, failing with " << errnoWithDescription() << std::endl;
+            return _errno;
         }
+        return 0;
     }
 
 #endif // _WIN32
