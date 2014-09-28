@@ -36,13 +36,19 @@ namespace mongo {
         ~File();
 
         bool bad() const { return _bad; }
-        void fsync() const;
+        int fsyncReturningError() const;
+        inline void fsync() const {
+            (void) fsyncReturningError();
+        }
         bool is_open() const;
         fileofs len();
         void open(const char* filename, bool readOnly = false, bool direct = false);
         void read(fileofs o, char* data, unsigned len);
         void truncate(fileofs size);
-        void write(fileofs o, const char* data, unsigned len);
+        int writeReturningError(fileofs o, const char* data, unsigned len);
+        inline void write(fileofs o, const char* data, unsigned len) {
+            (void) writeReturningError(o, data, len);
+        }
 
         static boost::intmax_t freeSpace(const std::string& path);
 
