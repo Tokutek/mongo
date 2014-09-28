@@ -773,6 +773,7 @@ suiteGlobalConfig = {"js": ("[!_]*.js", True),
                      "ssl": ("ssl/*.js", True),
                      "backup": ("backup/*.js", False),
                      "pitr": ("pitr/*.js", False),
+                     "audit": ("audit/*.js", False),
                      }
 
 def expand_suites(suites,expandUseDB=True):
