@@ -206,6 +206,7 @@ namespace {
         clusterAdminRoleWriteActions.addAction(ActionType::fsync);
         clusterAdminRoleWriteActions.addAction(ActionType::inprog);
         clusterAdminRoleWriteActions.addAction(ActionType::killop);
+        clusterAdminRoleWriteActions.addAction(ActionType::logApplicationMessage);
         clusterAdminRoleWriteActions.addAction(ActionType::logReplInfo);
         clusterAdminRoleWriteActions.addAction(ActionType::moveChunk);
         clusterAdminRoleWriteActions.addAction(ActionType::movePrimary);

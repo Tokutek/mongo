@@ -60,6 +60,7 @@
 "listDatabases",
 "listShards",
 "loaderCommands",
+"logApplicationMessage",
 "logReplInfo",
 "logRotate",
 "mapReduceShardedFinish",
