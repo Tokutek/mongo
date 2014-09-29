@@ -29,6 +29,8 @@
 
 namespace QueryUtilTests {
 
+    using boost::shared_ptr;
+
     namespace FieldIntervalTests {
         class ToString {
         public:
