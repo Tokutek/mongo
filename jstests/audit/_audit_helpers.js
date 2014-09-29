@@ -47,8 +47,8 @@ var auditTestRepl = function(name, fn, serverParams) {
     }
 
     loudTestEcho(name + ' STARTING ');
-    var replTest = new ReplSetTest({ name: 'auditTestReplSet', nodes: 2 });
-    replTest.startSet();
+    var replTest = new ReplSetTest({ name: 'auditTestReplSet', cleanData: true, nodes: 2 });
+    replTest.startSet({ auditDestination: 'file' });
     var config = {
         _id: 'auditTestReplSet',
         members: [
@@ -57,11 +57,7 @@ var auditTestRepl = function(name, fn, serverParams) {
         ]
     };
     replTest.initiate(config);
-    try {
-        fn(replTest);
-    } finally {
-        replTest.stopSet();
-    }
+    fn(replTest);
     loudTestEcho(name + ' PASSED ');
 }
 
@@ -106,15 +102,18 @@ var auditTestShard = function(name, fn, serverParams) {
 
 // Drop the existing audit events collection, import
 // the audit json file, then return the new collection.
-var getAuditEventsCollection = function(m) {
-    var auditPath = m.getDB('admin').runCommand('getCmdLineOpts').auditPath;
+var getAuditEventsCollection = function(m, primary) {
+    // the audit log is specifically parsable by mongoimport,
+    // so we use that to conveniently read its contents.
+    var auditOptions = m.getDB('admin').runCommand('auditGetOptions');
+    var auditPath = auditOptions.path;
     var auditCollectionName = 'auditCollection';
-    return loadAuditEventsIntoColl(m, auditPath, 'local', auditCollectionName);
+    return loadAuditEventsIntoCollection(m, auditPath, 'local', auditCollectionName, primary);
 }
 
 // Load any file into a named collection.
-var loadAuditEventsIntoCollection = function(m, filename, dbname, collname) {
-    var db = m.getDB(dbname);
+var loadAuditEventsIntoCollection = function(m, filename, dbname, collname, primary) {
+    var db = primary !== undefined ? primary.getDB(dbname) : m.getDB(dbname);
     // the audit log is specifically parsable by mongoimport,
     // so we use that to conveniently read its contents.
     runMongoProgram('mongoimport',

@@ -15,7 +15,11 @@ auditTestShard(
         var hostandport = 'localhost' + ':' + port;
         assert.commandWorked(st.s0.adminCommand({addshard: hostandport, name: 'removable'}));
 
-        assert.commandWorked(st.s0.adminCommand({removeShard: 'removable'}));
+        var removeRet;
+        do {
+            removeRet = st.s0.adminCommand({removeShard: 'removable'});
+            assert.commandWorked(removeRet);
+        } while (removeRet.state != 'completed');
 
         auditColl = loadAuditEventsIntoCollection(st.s0, '/data/db/auditLog-s0.json', jsTestName(), 'auditEvents');
         assert.eq(1, auditColl.count({
