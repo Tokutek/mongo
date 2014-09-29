@@ -66,15 +66,6 @@ namespace mongo {
 
         Listener::globalTicketHolder.resize( cmdLine.maxConns );
 
-        // We have to initialize audit before the LoggingManager is started and before forking
-        // (because we change cwd when we fork).
-        Status s = audit::initialize();
-        if (s != Status::OK()) {
-            log() << "Could not initialize audit:" << s.reason()
-                  << "Check further back in logs for more information." << endl;
-            return false;
-        }
-
 #ifndef _WIN32
         if (!fs::is_directory(cmdLine.socket)) {
             cout << cmdLine.socket << " must be a directory" << endl;
@@ -155,6 +146,14 @@ namespace mongo {
             Logstream::useSyslog( sb.str().c_str() );
         }
 #endif
+
+        // We have to initialize audit before the LoggingManager is started.
+        Status s = audit::initialize();
+        if (s != Status::OK()) {
+            log() << "Could not initialize audit:" << s.reason() 
+                  << "Check further back in logs for more information." << endl;
+            return false;
+        }
 
         if (!cmdLine.logpath.empty() && !isMongodShutdownSpecialCase) {
             fassert(16448, !cmdLine.logWithSyslog);
