@@ -65,26 +65,70 @@ var auditTestRepl = function(name, fn, serverParams) {
     loudTestEcho(name + ' PASSED ');
 }
 
+var auditTestShard = function(name, fn, serverParams) {
+    var loudTestEcho = function(msg) {
+        s = '----------------------------- AUDIT SHARDED UNIT TEST: ' + msg + '-----------------------------';
+        print(Array(s.length + 1).join('-'));
+        print(s);
+    }
+
+    loudTestEcho(name + ' STARTING ');
+    var st = new ShardingTest({ name: 'auditTestSharding',
+                                verbose: 1,
+                                mongos: [
+                                    Object.merge({
+                                        auditPath: '/data/db/auditLog-s0.json',
+                                        auditDestination: 'file',
+                                        auditFormat: 'JSON'
+                                    }, serverParams),
+                                    Object.merge({
+                                        auditPath: '/data/db/auditLog-s1.json',
+                                        auditDestination: 'file',
+                                        auditFormat: 'JSON'
+                                    }, serverParams),
+                                ],
+                                shards: 2,
+                                config: 1,
+                                other: {
+                                    shardOptions: Object.merge({
+                                        auditDestination: 'file',
+                                        auditFormat: 'JSON'
+                                    }, serverParams),
+                                },
+                              });
+    try {
+        fn(st);
+    } finally {
+        st.stop();
+    }
+    loudTestEcho(name + ' PASSED ');
+}
+
 // Drop the existing audit events collection, import
 // the audit json file, then return the new collection.
 var getAuditEventsCollection = function(m) {
+    var auditPath = m.getDB('admin').runCommand('getCmdLineOpts').auditPath;
+    var auditCollectionName = 'auditCollection';
+    return loadAuditEventsIntoColl(m, auditPath, 'local', auditCollectionName);
+}
+
+// Load any file into a named collection.
+var loadAuditEventsIntoCollection = function(m, filename, dbname, collname) {
+    var db = m.getDB(dbname);
     // the audit log is specifically parsable by mongoimport,
     // so we use that to conveniently read its contents.
-    var auditPath = m.getDB('admin').runCommand('getCmdLineOpts').auditPath;
-    var localDB = m.getDB('local');
-    var auditCollectionName = 'auditCollection';
     runMongoProgram('mongoimport',
-                    '--db', 'local',
-                    '--collection', auditCollectionName,
+                    '--db', dbname,
+                    '--collection', collname,
                     '--drop',
-                    '--host', localDB.hostInfo().system.hostname,
-                    '--file', auditPath);
+                    '--host', db.hostInfo().system.hostname,
+                    '--file', filename);
 
     // should get as many entries back as there are non-empty
     // strings in the audit log
-    auditCollection = localDB.getCollection(auditCollectionName)
+    auditCollection = db.getCollection(collname)
     assert.eq(auditCollection.count(),
-              cat(auditPath).split('\n').filter(function(o) { return o != "" }).length,
+              cat(filename).split('\n').filter(function(o) { return o != "" }).length,
               "getAuditEventsCollection has different count than the audit log length");
 
     // there should be no duplicate audit log lines
@@ -92,7 +136,7 @@ var getAuditEventsCollection = function(m) {
         { atype: 1, ts: 1, local: 1, remote: 1, users: 1, params: 1, result: 1 },
         { unique: true }
     );
-    assert.eq(null, localDB.getLastError());
+    assert.eq(null, db.getLastError());
 
     return auditCollection;
 }
