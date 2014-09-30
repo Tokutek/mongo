@@ -116,7 +116,8 @@ namespace mongo {
                 const BSONObj updateObj = msg["o"].Obj();
                 BSONElement queryElement = msg["q"];
                 const BSONObj query = queryElement.ok() ? queryElement.Obj() : BSONObj();
-                const uint32_t fastUpdateFlags = msg["f"].Int();
+                BSONElement flagsElement = msg["f"];
+                const uint32_t fastUpdateFlags = flagsElement.ok() ? flagsElement.Int() : 0;
                 runUpdateMods(db, key, old_val, updateObj, query, fastUpdateFlags, set_val, set_extra);
                 return 0;
             } catch (const std::exception &ex) {
