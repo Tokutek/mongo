@@ -144,7 +144,7 @@ namespace mongo {
         // are listed here. We don't want a future version's flag to somehow
         // erroneously make it here (e.g., a future upsert flag)
         verify(fastUpdateFlags < UpdateFlags::MAX);
-        if (oldObj.isEmpty()) {
+        if (oldObj.isEmpty() && !fastUpdateFlags & UpdateFlags::UPSERT) {
             // if this update message is allowed to not have an old obj
             // we simply return false, otherwise, we uassert
             if (fastUpdateFlags & UpdateFlags::NO_OLDOBJ_OK) {
@@ -154,21 +154,37 @@ namespace mongo {
         }
         try {
             ModSet mods(msg);
-            verify(!mods.hasDynamicArray());
-            if (!query.isEmpty()) {
-                // note, the mods used should not have hasDynamicArray()
-                // be false, making this code ok. This fact is asserted above
-                ResultDetails queryResult;
-                Matcher matcher(query);
-                bool matches = matcher.matches(oldObj, &queryResult.matchDetails);
-                if (!matches) {
-                    return false;
-                }
+            // upsert case, that is, we are doing an insertion
+            // because the object does not exist. If this was
+            // not an upsert, we should have exited
+            // this function already
+            if (oldObj.isEmpty()) {
+                // this should be true thanks to the if clause right
+                // above this try block
+                verify(fastUpdateFlags & UpdateFlags::UPSERT);
+                // upserts must pass in the query
+                // tryFastUpdate ensures this
+                verify(!query.isEmpty());
+                newObj = mods.createNewFromQuery(query);
             }
-            // The update message is simply an update object, supplied by the user.
-            auto_ptr<ModSetState> mss = mods.prepare(oldObj, false);
-            newObj = mss->createNewFromMods();
-            checkTooLarge(newObj);
+            // normal update case
+            else {
+                verify(!mods.hasDynamicArray());
+                if (!query.isEmpty()) {
+                    // note, the mods used should not have hasDynamicArray()
+                    // be false, making this code ok. This fact is asserted above
+                    ResultDetails queryResult;
+                    Matcher matcher(query);
+                    bool matches = matcher.matches(oldObj, &queryResult.matchDetails);
+                    if (!matches) {
+                        return false;
+                    }
+                }
+                // The update message is simply an update object, supplied by the user.
+                auto_ptr<ModSetState> mss = mods.prepare(oldObj, false);
+                newObj = mss->createNewFromMods();
+                checkTooLarge(newObj);
+            }
             return true;
         } catch (const std::exception &ex) {
             // if a fast update has been performed, it is possible the user performed
@@ -283,9 +299,6 @@ namespace mongo {
         )
     {
         *eligible = false;
-        if (upsert) {
-            return false;
-        }
         if (!isOperatorUpdate) {
             return false;
         }
@@ -294,6 +307,9 @@ namespace mongo {
             return false;
         }
         verify(!forceLogFullUpdate(cl, mods));
+        if (upsert && cl->nIndexesBeingBuilt() > 1) {
+            return false;
+        }
         *eligible = true;
         if (!fastUpdatesEnabled) {
             return false;
@@ -320,10 +336,18 @@ namespace mongo {
         
         // a little optimization to get rid of the query, if we can
         const bool singleQueryField = query.nFields() == 1; // TODO: Optimize?
-        const BSONObj queryToUse = singleQueryField ? BSONObj() : query;
+        // upserts require the query to be there, so that we
+        // can generated the proper document in case
+        // it is an insert. We may be able to do without it for upserts,
+        // but easier to just put it in.
+        // To see upsert's needing it, look at ApplyUpdateMessage::applyMods
+        const BSONObj queryToUse = (singleQueryField && !upsert) ? BSONObj() : query;
         uint32_t fastUpdateFlags = UpdateFlags::FAST_UPDATE_PERFORMED;
         if (oldObjMayNotExist) {
             fastUpdateFlags |= UpdateFlags::NO_OLDOBJ_OK;
+        }
+        if (upsert) {
+            fastUpdateFlags |= UpdateFlags::UPSERT;
         }
         bool success = updateOneObjectWithMods(cl, pk, updateobj, queryToUse, fastUpdateFlags, fromMigrate, 0, mods);
         verify(success);
@@ -435,7 +459,7 @@ namespace mongo {
                 continue;
             }
             bool eligibleForFastUpdate = false;
-            bool canBeFast = canRunFastUpdate(cl, upsert, mods.get(), isOperatorUpdate, &eligibleForFastUpdate);
+            bool canBeFast = canRunFastUpdate(cl, false, mods.get(), isOperatorUpdate, &eligibleForFastUpdate);
 
             if (!isOperatorUpdate) {
                 verify(!multi); // should be uasserted above
@@ -480,7 +504,7 @@ namespace mongo {
                     currPK,
                     BSONObj(), // no query needed
                     updateobj,
-                    upsert,
+                    false,
                     fromMigrate,
                     mods.get(),
                     isOperatorUpdate,

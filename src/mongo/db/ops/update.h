@@ -31,7 +31,8 @@ namespace mongo {
     namespace UpdateFlags {
         static const uint64_t FAST_UPDATE_PERFORMED = 1 << 0; // really just for diagnostics and testing. Has no practical usage
         static const uint64_t NO_OLDOBJ_OK = 1 << 1; // skip acquiring locktree row locks
-        static const uint64_t MAX = 1 << 2; // Simply notes that this is the maximum
+        static const uint64_t UPSERT = 1 << 2; // skip acquiring locktree row locks
+        static const uint64_t MAX = 1 << 3; // Simply notes that this is the maximum
     }
     
     struct UpdateResult {
