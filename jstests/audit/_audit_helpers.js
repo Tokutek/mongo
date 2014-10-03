@@ -107,8 +107,6 @@ var getAuditEventsCollection = function(m, primary, useAuth) {
     if (auth) {
         var adminDB = m.getDB('admin');
         adminDB.auth('admin','admin');
-        var localDB = m.getDB('local');
-        localDB.auth('admin','admin');
     }
 
     // the audit log is specifically parsable by mongoimport,
@@ -170,9 +168,11 @@ var withinTheLastFewSeconds = function(n) {
 // Create Admin user.  Used for authz tests.
 var createAdminUserForAudit = function (m) {
     var adminDB = m.getDB('admin');
-    adminDB.addUser( {'user':'admin', 'pwd':'admin', 'roles' : ['readWriteAnyDatabase',
-                                                                'userAdminAnyDatabase',
-                                                                'clusterAdmin']} );
+    adminDB.addUser( {'user':'admin', 
+                      'pwd':'admin', 
+                      'roles' : ['readWriteAnyDatabase',
+                                 'userAdminAnyDatabase',
+                                 'clusterAdmin']} );
 }
 
 // Creates a User with limited permissions. Used for authz tests.
