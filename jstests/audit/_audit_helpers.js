@@ -102,26 +102,44 @@ var auditTestShard = function(name, fn, serverParams) {
 
 // Drop the existing audit events collection, import
 // the audit json file, then return the new collection.
-var getAuditEventsCollection = function(m, primary) {
+var getAuditEventsCollection = function(m, primary, useAuth) {
+    var auth = ((useAuth !== undefined) && (useAuth != false)) ? true : false;
+    if (auth) {
+        var adminDB = m.getDB('admin');
+        adminDB.auth('admin','admin');
+    }
+
     // the audit log is specifically parsable by mongoimport,
     // so we use that to conveniently read its contents.
     var auditOptions = m.getDB('admin').runCommand('auditGetOptions');
     var auditPath = auditOptions.path;
     var auditCollectionName = 'auditCollection';
-    return loadAuditEventsIntoCollection(m, auditPath, 'local', auditCollectionName, primary);
+    return loadAuditEventsIntoCollection(m, auditPath, 'local', auditCollectionName, primary, auth);
 }
 
 // Load any file into a named collection.
-var loadAuditEventsIntoCollection = function(m, filename, dbname, collname, primary) {
+var loadAuditEventsIntoCollection = function(m, filename, dbname, collname, primary, auth) {
     var db = primary !== undefined ? primary.getDB(dbname) : m.getDB(dbname);
     // the audit log is specifically parsable by mongoimport,
     // so we use that to conveniently read its contents.
-    runMongoProgram('mongoimport',
-                    '--db', dbname,
-                    '--collection', collname,
-                    '--drop',
-                    '--host', db.hostInfo().system.hostname,
-                    '--file', filename);
+    if (auth) {
+        runMongoProgram('mongoimport',
+                        '--username', 'admin',
+                        '--password', 'admin',
+                        '--authenticationDatabase', 'admin',
+                        '--db', dbname,
+                        '--collection', collname,
+                        '--drop',
+                        '--host', db.hostInfo().system.hostname,
+                        '--file', filename);
+    } else {
+        runMongoProgram('mongoimport',
+                        '--db', dbname,
+                        '--collection', collname,
+                        '--drop',
+                        '--host', db.hostInfo().system.hostname,
+                        '--file', filename);
+    }
 
     // should get as many entries back as there are non-empty
     // strings in the audit log
@@ -145,4 +163,24 @@ var withinTheLastFewSeconds = function(n) {
     now = Date.now();
     fewSecondsAgo = now - ((n !== undefined ? n : 3) * 1000);
     return { '$gte' : new Date(fewSecondsAgo), '$lte': new Date(now) };
+}
+
+// Create Admin user.  Used for authz tests.
+var createAdminUserForAudit = function (m) {
+    var adminDB = m.getDB('admin');
+    adminDB.addUser( {'user':'admin', 
+                      'pwd':'admin', 
+                      'roles' : ['readWriteAnyDatabase',
+                                 'userAdminAnyDatabase',
+                                 'clusterAdmin']} );
+}
+
+// Creates a User with limited permissions. Used for authz tests.
+var createNoPermissionUserForAudit = function (m, db) {
+    var passwordUserNameUnion = 'tom';
+    var adminDB = m.getDB('admin');
+    adminDB.auth('admin','admin');
+    db.addUser( {'user':'tom', 'pwd':'tom', 'roles':[]} );
+    adminDB.logout();
+    return passwordUserNameUnion;
 }
