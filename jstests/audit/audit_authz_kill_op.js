@@ -41,6 +41,7 @@ auditTest(
         assert.eq(1, auditColl.count({
             atype: "authCheck",
             ts: withinTheLastFewSeconds(),
+            users: [ { user:'tom', db:testDBName} ],
             'params.command': 'killOp',
             result: 13, // <-- Unauthorized error, see error_codes.err...
         }), "FAILED, audit log: " + tojson(auditColl.find().toArray()));

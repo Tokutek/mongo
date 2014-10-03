@@ -39,6 +39,7 @@ auditTest(
         assert.eq(1, auditColl.count({
             atype: "authCheck",
             ts: withinTheLastFewSeconds(),
+            users: [ { user:'tom', db:testDBName} ],
             'params.ns': testDBName + '.' + 'foo',
             'params.command': 'update',
             result: 13, // <-- Unauthorized error, see error_codes.err...
