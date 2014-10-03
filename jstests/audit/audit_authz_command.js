@@ -1,4 +1,4 @@
-// test that authzInProg gets called.
+// test that authzCommand gets called.
 
 if (TestData.testData !== undefined) {
     load(TestData.testData + '/audit/_audit_helpers.js');
@@ -6,10 +6,10 @@ if (TestData.testData !== undefined) {
     load('jstests/audit/_audit_helpers.js');
 }
 
-var testDBName = 'audit_authz_in_prog';
+var testDBName = 'audit_authz_command';
 
 auditTest(
-    'authzInProg',
+    'authzCommand',
     function(m) {
         createAdminUserForAudit(m);
         var testDB = m.getDB(testDBName);
