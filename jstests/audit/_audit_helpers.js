@@ -103,7 +103,7 @@ var auditTestShard = function(name, fn, serverParams) {
 // Drop the existing audit events collection, import
 // the audit json file, then return the new collection.
 var getAuditEventsCollection = function(m, primary, useAuth) {
-    var auth = useAuth !== undefined ? true : false;
+    var auth = ((useAuth !== undefined) && (useAuth != false)) ? true : false;
     if (auth) {
         var adminDB = m.getDB('admin');
         adminDB.auth('admin','admin');
