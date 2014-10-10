@@ -200,7 +200,7 @@ doRollbackTest = function (signal, startPort) {
     print("shutting down secondary");
     replTest.stop(1);
     print("restarting secondary in replset");
-    replTest.restart(1, { rs_maintenance : ""});
+    replTest.restart(1, { rsMaintenance : ""});
     // sleep for 30 seconds, the max time it would normally take to start up
     print("starting sleep for 30 seconds\n");
     sleep(30000);
