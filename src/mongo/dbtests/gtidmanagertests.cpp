@@ -204,6 +204,7 @@ namespace mongo {
             ASSERT(GTID::cmp(p, GTID(2,3)) == 0);
             ASSERT(GTID::cmp(mgr._lastLiveGTID, GTID(2,3)) == 0);
             ASSERT(mgr.getHighestKnownPrimary() == 2);
+            mgr.noteLiveGTIDDone(p);
             // simulate a normal GTID coming in that bumps up the highestKnownPrimary
             mgr.noteGTIDAdded(GTID(5,0), 2, 2);
             ASSERT(mgr.getHighestKnownPrimary() == 5);
@@ -240,11 +241,11 @@ namespace mongo {
             ASSERT(mgr.acceptPossiblePrimary(8, GTID(5,2)) == VOTE_YES);
             ASSERT(!mgr.canAcknowledgeGTID());
             ASSERT(mgr.getHighestKnownPrimary()== 8);
-            mgr.noteGTIDAdded(GTID(6,0), 2, 2);
+            mgr.noteGTIDAdded(GTID(6,2), 2, 2);
             ASSERT(!mgr.canAcknowledgeGTID());
-            mgr.noteGTIDAdded(GTID(7,0), 2, 2);
+            mgr.noteGTIDAdded(GTID(7,2), 2, 2);
             ASSERT(!mgr.canAcknowledgeGTID());
-            mgr.noteGTIDAdded(GTID(8,0), 2, 2);
+            mgr.noteGTIDAdded(GTID(8,2), 2, 2);
             ASSERT(mgr.canAcknowledgeGTID());
             mgr.noteApplyingGTID(GTID(6,2));
             mgr.noteGTIDApplied(GTID(6,2));
