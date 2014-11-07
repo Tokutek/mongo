@@ -175,7 +175,7 @@ namespace mongo {
             // Initializes a storage key that will ignore the appended primary key.
             // This is useful because we only want to compare the secondary key prefix.
             const storage::Key sKey(reinterpret_cast<char *>(key->data), false);
-            const int c = sKey.woCompare(info->endSKeyPrefix, info->ordering);
+            const int c = sKey.woCompare(info->endSKeyPrefix);
             TOKULOG(5) << "count getf got " << sKey.key() << ", c = " << c << endl;
             if (c > 0 || (c == 0 && !info->endKeyInclusive)) {
                 // out of bounds, count is finished.
