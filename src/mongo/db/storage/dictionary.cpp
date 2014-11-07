@@ -59,7 +59,7 @@ namespace mongo {
                                                     const char* dname,
                                                     const bool hot_index) {
             const DBT *desc = &((*db)->descriptor->dbt);
-            if (desc->data != NULL && desc->size >= 4) {
+            if (desc->data == NULL || desc->size < 4) {
                 set_db_descriptor(db, descriptor, dname, hot_index);
             } else if (desc->size == 4) {
                 // existing descriptor is from before descriptors were even versioned.

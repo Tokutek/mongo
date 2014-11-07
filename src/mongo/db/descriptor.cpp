@@ -57,9 +57,9 @@ namespace mongo {
 
     Descriptor::Descriptor(const char *data, const size_t size) :
         _data(data), _size(size) {
-        verify(_data != NULL);
+        //verify(_data != NULL);
         // Strictly greater, since there should be at least one field.
-        verify(_size > (size_t) FixedSize);
+        //verify(_size > (size_t) FixedSize);
     }
 
     size_t Descriptor::serializedSize(const BSONObj &keyPattern) {
