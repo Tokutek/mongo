@@ -60,8 +60,9 @@ namespace mongo {
 
         UpdateCallback *_updateCallback;
 
-        static int dbt_key_compare(DB *db, const DBT *dbt1, const DBT *dbt2) {
+        static int dbt_key_compare(/*DB *db, */const DBT *dbt1, const DBT *dbt2) {
             try {
+                /*
                 const DBT *desc = &db->cmp_descriptor->dbt;
                 verify(desc->data != NULL);
 
@@ -69,6 +70,8 @@ namespace mongo {
                 Key key1(dbt1);
                 Key key2(dbt2);
                 return descriptor.compareKeys(key1, key2);
+                */
+                return 0;
             } catch (std::exception &e) {
                 // We don't have a way to return an error from a comparison (through the ydb), and the ydb isn't exception-safe.
                 // Of course, if a comparison throws, something is very wrong anyway.
@@ -155,7 +158,7 @@ namespace mongo {
                 return 0;
             }
             try {
-                const DBT *desc = &dest_db->cmp_descriptor->dbt;
+                const DBT *desc = &dest_db->descriptor->dbt;
                 Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
 
                 const Key sPK(src_key);
@@ -209,7 +212,7 @@ namespace mongo {
                 return r;
             }
 
-            const DBT *desc = &dest_db->cmp_descriptor->dbt;
+            const DBT *desc = &dest_db->descriptor->dbt;
             Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
             if (dest_vals != NULL) {
                 // TODO: This copies each value once, which is not good. Find a way to avoid that.
@@ -890,8 +893,8 @@ namespace mongo {
         static BSONObj pretty_key(const DBT *key, DB *db) {
             BSONObjBuilder b;
             const Key sKey(key);
-            const DBT *desc = (db != NULL && db->cmp_descriptor != NULL)
-                              ? &db->cmp_descriptor->dbt
+            const DBT *desc = (db != NULL && db->descriptor != NULL)
+                              ? &db->descriptor->dbt
                               : NULL;
             if (desc != NULL && desc->data != NULL && desc->size > 0) {
                 Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);

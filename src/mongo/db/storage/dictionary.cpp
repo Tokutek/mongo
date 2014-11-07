@@ -30,22 +30,37 @@ namespace mongo {
     namespace storage {
 
         // set a descriptor for the given dictionary.
-        static void set_db_descriptor(DB *db, const Descriptor &descriptor,
+        static void set_db_descriptor(DB **db, const Descriptor &descriptor,
+                                      const char* dname,
                                       const bool hot_index) {
-            const int flags = DB_UPDATE_CMP_DESCRIPTOR | (hot_index ? DB_IS_HOT_INDEX : 0);
+            int r = (*db)->close(*db, 0);
+            *db = NULL;
+            const int flags = (hot_index ? DB_IS_HOT_INDEX : 0);
             DBT desc = descriptor.dbt();
-            const int r = db->change_descriptor(db, cc().txn().db_txn(), &desc, flags);
+            r = env->db_change_descriptor(env, cc().txn().db_txn(), dname, &desc);
             if (r != 0) {
                 handle_ydb_error_fatal(r);
             }
+            
+            // reopen db
+            r = db_create(db, env, 0);
+            if (r != 0) {
+                handle_ydb_error(r);
+            }
+            r = (*db)->open(*db, cc().txn().db_txn(), dname, NULL,
+                                    DB_BTREE,
+                                    flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+            if (r != 0) {
+                handle_ydb_error(r);
+            }
         }
 
-        static void verify_or_upgrade_db_descriptor(DB *db, const Descriptor &descriptor,
+        static void verify_or_upgrade_db_descriptor(DB **db, const Descriptor &descriptor,
                                                     const bool hot_index) {
-            const DBT *desc = &db->cmp_descriptor->dbt;
-            verify(desc->data != NULL && desc->size >= 4);
-
-            if (desc->size == 4) {
+            const DBT *desc = &((*db)->descriptor->dbt);
+            if (desc->data != NULL && desc->size >= 4) {
+                set_db_descriptor(db, descriptor, hot_index);
+            } else if (desc->size == 4) {
                 // existing descriptor is from before descriptors were even versioned.
                 // it's only an ordering. make sure it matches, then upgrade.
                 const Ordering &ordering(*reinterpret_cast<const Ordering *>(desc->data));
@@ -169,9 +184,9 @@ namespace mongo {
             if (r != 0) {
                 handle_ydb_error(r);
             }
-            if (may_create) {
-                set_db_descriptor(_db, descriptor, hot_index);
-            }
+            // if we've just created the dictionary, the descriptor
+            // will not have been set yet, and will be set with
+            // this function call
             verify_or_upgrade_db_descriptor(_db, descriptor, hot_index);
 
             if (altTxn.get() != NULL) {
