@@ -28,8 +28,8 @@ namespace mongo {
     */
     class Ordering {
         unsigned bits;
-        Ordering(unsigned b) : bits(b) { }
     public:
+        Ordering(unsigned b) : bits(b) { }
         Ordering(const Ordering& r) : bits(r.bits) { }
         void operator=(const Ordering& r) {
             bits = r.bits;

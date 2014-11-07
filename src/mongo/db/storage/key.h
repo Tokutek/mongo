@@ -144,7 +144,8 @@ namespace mongo {
                 _size = keySize + (hasPK ? BSONObj(_buf + keySize).objsize() : 0);
             }
 
-            static int woCompare(const Key &key1, const Key &key2, const Ordering &ordering) {
+            static int woCompare(const Key &key1, const Key &key2) {
+                const Ordering ordering(0);
                 // Interpret the beginning of the Key's buf as KeyV1. The size of the Key
                 // must be at least as big as the size of the KeyV1 (otherwise format error).
                 dassert(key1.buf());
@@ -199,7 +200,8 @@ namespace mongo {
             // The real comparison function is a function of two keys
             // and an ordering, which is a bit more clear.
             int woCompare(const Key &key, const Ordering &ordering) const {
-                return woCompare(*this, key, ordering);
+                // TODO: FIX THIS!!!!!!!
+                return woCompare(*this, key);
             }
 
             DBT dbt() const {
