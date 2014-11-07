@@ -62,16 +62,9 @@ namespace mongo {
 
         static int dbt_key_compare(/*DB *db, */const DBT *dbt1, const DBT *dbt2) {
             try {
-                /*
-                const DBT *desc = &db->cmp_descriptor->dbt;
-                verify(desc->data != NULL);
-
-                Descriptor descriptor(reinterpret_cast<const char *>(desc->data), desc->size);
                 Key key1(dbt1);
                 Key key2(dbt2);
-                return descriptor.compareKeys(key1, key2);
-                */
-                return 0;
+                return Key::woCompare(key1, key2);
             } catch (std::exception &e) {
                 // We don't have a way to return an error from a comparison (through the ydb), and the ydb isn't exception-safe.
                 // Of course, if a comparison throws, something is very wrong anyway.
