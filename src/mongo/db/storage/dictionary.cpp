@@ -56,22 +56,23 @@ namespace mongo {
         }
 
         static void verify_or_upgrade_db_descriptor(DB **db, const Descriptor &descriptor,
+                                                    const char* dname,
                                                     const bool hot_index) {
             const DBT *desc = &((*db)->descriptor->dbt);
             if (desc->data != NULL && desc->size >= 4) {
-                set_db_descriptor(db, descriptor, hot_index);
+                set_db_descriptor(db, descriptor, dname, hot_index);
             } else if (desc->size == 4) {
                 // existing descriptor is from before descriptors were even versioned.
                 // it's only an ordering. make sure it matches, then upgrade.
                 const Ordering &ordering(*reinterpret_cast<const Ordering *>(desc->data));
                 const Ordering &expected(descriptor.ordering());
                 verify(memcmp(&ordering, &expected, 4) == 0);
-                set_db_descriptor(db, descriptor, hot_index);
+                set_db_descriptor(db, descriptor, dname, hot_index);
             } else {
                 const Descriptor existing(reinterpret_cast<const char *>(desc->data), desc->size);
                 if (existing.version() < descriptor.version()) {
                     // existing descriptor is out-dated. upgrade to the current version.
-                    set_db_descriptor(db, descriptor, hot_index);
+                    set_db_descriptor(db, descriptor, dname, hot_index);
                 } else if (existing.version() > descriptor.version()) {
                     problem() << "Detected a \"dictionary descriptor\" version that is too new: "
                               << existing.version() << ". The highest known version is " << descriptor.version()
@@ -187,7 +188,7 @@ namespace mongo {
             // if we've just created the dictionary, the descriptor
             // will not have been set yet, and will be set with
             // this function call
-            verify_or_upgrade_db_descriptor(_db, descriptor, hot_index);
+            verify_or_upgrade_db_descriptor(&_db, descriptor, _dname.c_str(), hot_index);
 
             if (altTxn.get() != NULL) {
                 altTxn->commit();
