@@ -440,6 +440,129 @@ namespace mongo {
         }
 
         Status upgradeToVersion(VersionID targetVersion) {
+            if (_currentVersion + 1 != targetVersion) {
+                return Status(ErrorCodes::BadValue, "bad version in upgrade");
+            }
+
+            std::stringstream upgradeLogPrefixStream;
+            upgradeLogPrefixStream << "Running upgrade of disk format version " << static_cast<int>(_currentVersion)
+                                   << " to " << static_cast<int>(targetVersion);
+            std::string upgradeLogPrefix = upgradeLogPrefixStream.str();
+            log() << upgradeLogPrefix << "." << endl;
+
+            // This is pretty awkward.  We want a static member to point to a stack
+            // ProgressMeterHolder so it can be used by other static member callback functions, but
+            // not longer than that object exists.  TODO: maybe it would be easier to pass a mem_fn
+            // to applyToDatabaseNames, but this isn't too crazy yet.
+            class ScopedPMH : boost::noncopyable {
+                ProgressMeterHolder *&_pmhp;
+              public:
+                ScopedPMH(ProgressMeterHolder *&pmhp, ProgressMeterHolder *val) : _pmhp(pmhp) {
+                    _pmhp = val;
+                }
+                ~ScopedPMH() {
+                    _pmhp = NULL;
+                }
+            };
+
+            switch (targetVersion) {
+                case DISK_VERSION_INVALID:
+                case DISK_VERSION_1:
+                case DISK_VERSION_NEXT: {
+                    warning() << "should not be trying to upgrade to " << static_cast<int>(targetVersion) << startupWarningsLog;
+                    return Status(ErrorCodes::BadValue, "bad version in upgrade");
+                }
+
+                case DISK_VERSION_2: {
+                    // Due to #879, we need to look at each existing database and remove
+                    // entries from the collection map which were dropped but their entries
+                    // weren't removed.
+                    verify(Lock::isW());
+                    verify(cc().hasTxn());
+
+                    ProgressMeter pmObj(_numNamespaces, 3, 1, "databases", upgradeLogPrefix);
+                    ProgressMeterHolder pm(pmObj);
+                    ScopedPMH scpmh(_pm, &pm);
+
+                    Status s = applyToDatabaseNames(&DiskFormatVersion::removeZombieNamespaces);
+                    if (!s.isOK()) {
+                        return s;
+                    }
+
+                    break;
+                }
+
+                case DISK_VERSION_3: {
+                    // We used to do this (force upgrade of system.users collections in a write
+                    // lock) in initAndListen but it should really be in the upgrade path, and this
+                    // way we won't do it on every startup, just one more time on upgrade to version
+                    // 3.
+                    verify(Lock::isW());
+                    verify(cc().hasTxn());
+
+                    ProgressMeter pmObj(_numNamespaces, 3, 1, "databases", upgradeLogPrefix);
+                    ProgressMeterHolder pm(pmObj);
+                    ScopedPMH scpmh(_pm, &pm);
+
+                    Status s = applyToDatabaseNames(&DiskFormatVersion::upgradeSystemUsersCollection);
+                    if (!s.isOK()) {
+                        return s;
+                    }
+
+                    break;
+                }
+
+                case DISK_VERSION_4: {
+                    verify(Lock::isW());
+                    verify(cc().hasTxn());
+
+                    ProgressMeter pmObj(_numNamespaces, 3, 1, "databases", upgradeLogPrefix);
+                    ProgressMeterHolder pm(pmObj);
+                    ScopedPMH scpmh(_pm, &pm);
+
+                    Status s = applyToDatabaseNames(&DiskFormatVersion::cleanupPartitionedNamespacesEntries);
+                    if (!s.isOK()) {
+                        return s;
+                    }
+
+                    break;
+                }
+                case DISK_VERSION_5: {
+                    verify(Lock::isW());
+                    verify(cc().hasTxn());
+
+                    ProgressMeter pmObj(_numNamespaces, 3, 1, "databases", upgradeLogPrefix);
+                    ProgressMeterHolder pm(pmObj);
+                    ScopedPMH scpmh(_pm, &pm);
+
+                    Status s = applyToDatabaseNames(&DiskFormatVersion::fixMissingIndexesInNS);
+                    if (!s.isOK()) {
+                        return s;
+                    }
+
+                    break;
+                }
+            }
+
+            verify(Lock::isW());
+            verify(cc().hasTxn());
+            Client::Context lctx(versionNs);
+            updateObjects(versionNs.c_str(),
+                          BSON(versionIdValue << valueField(targetVersion)),
+                          BSON(versionIdValue),
+                          true,    // upsert
+                          false   // multi
+                          );  // logop
+
+            // Keep a little history of what we've done
+            insertObject(versionNs.c_str(), BSON(upgradedToField(targetVersion) <<
+                                                 upgradedAtField(jsTime()) <<
+                                                 upgradedByField(BSON(tokumxVersionField(tokumxVersionString) <<
+                                                                      mongodbVersionField(mongodbVersionString) <<
+                                                                      tokumxGitField(gitVersion()) <<
+                                                                      tokukvGitField(tokukvVersion())))),
+                         0, false, false);
+            _currentVersion = targetVersion;
             return Status::OK();
         }
 
@@ -495,7 +618,6 @@ namespace mongo {
 
         Status upgradeToCurrent() {
             Status s = Status::OK();
-/*
             if (_currentVersion < DISK_VERSION_CURRENT) {
                 s = applyToDatabaseNames(&DiskFormatVersion::countNamespaces);
                 log() << "Need to upgrade from disk format version " << static_cast<int>(_currentVersion)
@@ -505,7 +627,6 @@ namespace mongo {
             while (_currentVersion < DISK_VERSION_CURRENT && s.isOK()) {
                 s = upgradeToVersion(static_cast<VersionID>(static_cast<int>(_currentVersion) + 1));
             }
-            */
             return s;
         }
     };
