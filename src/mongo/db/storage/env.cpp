@@ -82,7 +82,7 @@ namespace mongo {
 
         static BSONObj pretty_key(const DBT *key, DB *db);
 
-        static void runUpdateMods(DB *db, const DBT *key, const DBT *old_val, const BSONObj& updateObj, const BSONObj& query, const uint32_t fastUpdateFlags,
+        static void runUpdateMods(const DBT *key, const DBT *old_val, const BSONObj& updateObj, const BSONObj& query, const uint32_t fastUpdateFlags,
                                    void (*set_val)(const DBT *new_val, void *set_extra),
                                    void *set_extra) {
             BSONObj oldObj;
@@ -99,7 +99,7 @@ namespace mongo {
             }
         }
 
-        static int update_callback(DB *db, const DBT *key, const DBT *old_val, const DBT *extra,
+        static int update_callback(const DBT *key, const DBT *old_val, const DBT *extra,
                                    void (*set_val)(const DBT *new_val, void *set_extra),
                                    void *set_extra) {
             try {
@@ -114,11 +114,11 @@ namespace mongo {
                 const BSONObj query = queryElement.ok() ? queryElement.Obj() : BSONObj();
                 BSONElement flagsElement = msg["f"];
                 const uint32_t fastUpdateFlags = flagsElement.ok() ? flagsElement.Int() : 0;
-                runUpdateMods(db, key, old_val, updateObj, query, fastUpdateFlags, set_val, set_extra);
+                runUpdateMods(key, old_val, updateObj, query, fastUpdateFlags, set_val, set_extra);
                 return 0;
             } catch (const std::exception &ex) {
                 problem() << "Caught exception in ydb update callback, ex: " << ex.what()
-                          << "key: " << (key != NULL ? pretty_key(key, db) : BSONObj())
+                          << "key: TODO: PRINT SOMETHING GOOD!!! "
                           << "oldObj: " << (old_val != NULL ? BSONObj(static_cast<char *>(old_val->data)) : BSONObj())
                           << "msg: " << (extra != NULL ? BSONObj(static_cast<char *>(extra->data)) : BSONObj())
                           << endl;
