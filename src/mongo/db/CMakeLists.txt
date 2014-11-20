@@ -1,5 +1,5 @@
 add_subdirectory(auth)
-if (TOKUMX_ENTERPRISE)
+if (TOKUMX_ENTERPRISE AND NOT TOKUMX_ENTERPRISE_USE_EXPORTS)
   add_subdirectory(audit)
 endif()
 
