@@ -8,9 +8,11 @@ target_link_libraries(plugins LINK_PUBLIC
   dl
   )
 
-file(GLOB dentries RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" *)
-foreach (dentry ${dentries})
-  if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${dentry}/")
-    add_subdirectory("${dentry}")
-  endif ()
-endforeach ()
+if (NOT TOKUMX_ENTERPRISE_USE_EXPORTS)
+  file(GLOB dentries RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" *)
+  foreach (dentry ${dentries})
+    if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${dentry}/")
+      add_subdirectory("${dentry}")
+    endif ()
+  endforeach ()
+endif ()
