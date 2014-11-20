@@ -1,0 +1,6 @@
+get_property(_exports_install_location TARGET @_exports_install_target@ PROPERTY LOCATION)
+install(PROGRAMS ${_exports_install_location}
+  DESTINATION @_exports_install_destination@
+  COMPONENT @_exports_install_component@
+  )
+unset(_exports_install_location)
