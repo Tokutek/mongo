@@ -858,18 +858,24 @@ namespace mongo {
 
     bool _tryQueryByPKHack(const char *ns, const BSONObj &query,
                            const ParsedQuery &pq, CurOp &curop, Message &result) {
-        BSONObj resObject;
-
-        bool found = false;
         Collection *cl = getCollection(ns);
         if (cl == NULL) {
             return false; // ns doesn't exist, fall through to optimizer for legacy reasons
         }
+
         const BSONObj &pk = cl->getSimplePKFromQuery(query);
         if (pk.isEmpty()) {
             return false; // unable to query by PK - resort to using the optimizer
         }
-        found = queryByPKHack(cl, pk, query, resObject);
+
+        ResultDetails resDetails;
+        if ( pq.getFields() && pq.getFields()->getArrayOpType() == Projection::ARRAY_OP_POSITIONAL ) {
+            // field projection specified, and contains an array operator
+            resDetails.matchDetails.requestElemMatchKey();
+        }
+
+        BSONObj resObject;
+        bool found = queryByPKHack(cl, pk, query, resObject, &resDetails);
 
         if ( shardingState.needShardChunkManager( ns ) ) {
             ShardChunkManagerPtr m = shardingState.getShardChunkManager( ns );
@@ -886,7 +892,7 @@ namespace mongo {
         bb.skip(sizeof(QueryResult));
 
         if ( found ) {
-            fillQueryResultFromObj( bb , pq.getFields() , resObject );
+            fillQueryResultFromObj( bb , pq.getFields() , resObject, &resDetails.matchDetails );
         }
 
         auto_ptr< QueryResult > qr( (QueryResult *) bb.buf() );

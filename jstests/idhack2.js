@@ -29,3 +29,13 @@ for (val = 0; val < 2; val++) {
     checkQuery(1, { a: val, b: val, _id: { $in: [ val ] } });
     checkQuery(1, { b: val, b: val, _id: { $in: [ val ] } });
 }
+
+// Check that array position projections still work with the query by pk hack
+t.insert({ _id: 5, v: [ { a: 'cats' }, { a: 'dogs' } ] });
+
+// with an _id in the query
+assert.eq('cats', t.findOne({ _id: 5, 'v.a': 'cats' }, { 'v.$': 1 }).v[0].a);
+assert.eq('dogs', t.findOne({ _id: 5, 'v.a': 'dogs' }, { 'v.$': 1 }).v[0].a);
+// no _id in the query
+assert.eq('cats', t.findOne({ 'v.a': 'cats' }, { 'v.$': 1 }).v[0].a);
+assert.eq('dogs', t.findOne({ 'v.a': 'dogs' }, { 'v.$': 1 }).v[0].a);
