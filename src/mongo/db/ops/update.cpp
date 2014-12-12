@@ -62,6 +62,9 @@ namespace mongo {
         return cl->isPKHidden();
     }
 
+    // returns true if we are not allowed to run Collection::updateObjectMods,
+    // and must instead perform an update using the entire pre-image and
+    // post-image
     bool doFullUpdate(Collection* cl, ModSet* useMods) {
         bool modsAreIndexed = useMods->isIndexed() > 0;
 

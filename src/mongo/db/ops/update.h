@@ -30,8 +30,8 @@ namespace mongo {
 
     namespace UpdateFlags {
         static const uint64_t FAST_UPDATE_PERFORMED = 1 << 0; // really just for diagnostics and testing. Has no practical usage
-        static const uint64_t NO_OLDOBJ_OK = 1 << 1; // skip acquiring locktree row locks
-        static const uint64_t UPSERT = 1 << 2; // skip acquiring locktree row locks
+        static const uint64_t NO_OLDOBJ_OK = 1 << 1; // possible for the old object to not exist. Should not be treated as error
+        static const uint64_t UPSERT = 1 << 2; // if the old object does not exist, perform an insert
         static const uint64_t MAX = 1 << 3; // Simply notes that this is the maximum
     }
     
