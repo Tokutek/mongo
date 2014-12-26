@@ -568,6 +568,9 @@ namespace mongo {
         //         and the primary key does not contain the full shard key.
         bool fastupdatesOk();
 
+        // @return true, if upserts can be fast on this collection
+        bool fastUpsertsOk();
+
         // update an object in the namespace by pk, described by the updateObj's $ operators
         //
         // handles logging

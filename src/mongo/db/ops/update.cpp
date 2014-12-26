@@ -310,7 +310,7 @@ namespace mongo {
             return false;
         }
         verify(!forceLogFullUpdate(cl, mods));
-        if (upsert && cl->nIndexesBeingBuilt() > 1) {
+        if (upsert && !cl->fastUpsertsOk()) {
             return false;
         }
         *eligible = true;

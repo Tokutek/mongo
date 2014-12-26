@@ -137,6 +137,17 @@ namespace mongo {
             return isIdIndexPattern( keyPattern() );
         }
 
+        // returns true if key pattern is just the _id. That is, returns true
+        // for {_id : 1}, {_id : -1}, {_id : hashed}
+        bool isIdBased() const {
+            if (keyPattern().nFields() != 1) {
+                return false;
+            }
+            BSONObjIterator i(keyPattern());
+            BSONElement e = i.next();
+            return strcmp(e.fieldName(), "_id") == 0;
+        }
+
         /* gets not our namespace name (indexNamespace for that),
            but the collection we index, its name.
            */

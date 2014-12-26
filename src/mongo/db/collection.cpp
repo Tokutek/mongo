@@ -472,6 +472,33 @@ namespace mongo {
         return ok;
     }
 
+    bool Collection::fastUpsertsOk() {
+        verify(nIndexesBeingBuilt() > 0);
+        if (nIndexesBeingBuilt() != nIndexes()) {
+            return false;
+        }
+        if (nIndexesBeingBuilt() > 2) {
+            return false;
+        }
+        if (nIndexesBeingBuilt() == 1) {
+            return true;
+        }
+        // we have exactly two indexes,
+        // return true iff the PK is the _id index
+        // and the secondary is a hashed id index
+
+        // if the PK is not the _id index, return false
+        if (!getPKIndex().isIdIndex()) {
+            return false;
+        }
+        for (int i = 0; i < nIndexesBeingBuilt(); i++) {
+            if (!idx(i).isIdBased()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     // ------------------------------------------------------------------------
 
     CollectionBase::CollectionBase(const StringData &ns, const BSONObj &pkIndexPattern, const BSONObj &options) :
