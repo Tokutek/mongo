@@ -390,7 +390,7 @@ namespace mongo {
         b_id.append("a", apply);
         b_id.done();
 
-        rsOplogDetails->updateObjectMods(pk, b.done(), BSONObj(), 0, false, flags);
+        rsOplogDetails->updateObjectMods(pk, b.done(), BSONObj(), 0, false, flags, false);
     }
     
     // takes an entry that was written _logTransactionOps
