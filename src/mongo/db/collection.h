@@ -211,7 +211,7 @@ namespace mongo {
         virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj,
                                       const BSONObj &query, const uint32_t fastUpdateFlags,
                                       const bool fromMigrate,
-                                      uint64_t flags) = 0;
+                                      uint64_t flags, bool upsert) = 0;
 
         // rebuild the given index, online.
         // - if there are options, change those options in the index and update the system catalog.
@@ -577,8 +577,8 @@ namespace mongo {
         void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
                               const BSONObj &query, const uint32_t fastUpdateFlags,
                               const bool fromMigrate,
-                              uint64_t flags = 0) {
-            _cd->updateObjectMods(pk, updateObj, query, fastUpdateFlags, fromMigrate, flags);
+                              uint64_t flags, bool upsert) {
+            _cd->updateObjectMods(pk, updateObj, query, fastUpdateFlags, fromMigrate, flags, upsert);
         }
 
         // Rebuild indexes. Details are implementation specific. This is typically an online operation.
@@ -837,7 +837,7 @@ namespace mongo {
         virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj, 
                                       const BSONObj &query, const uint32_t fastUpdateFlags,
                                       const bool fromMigrate,
-                                      uint64_t flags);
+                                      uint64_t flags, bool upsert);
         
         void setIndexIsMultikey(const int idxNum, bool* indexBitChanged);
 
@@ -1126,7 +1126,7 @@ namespace mongo {
         void updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
                               const BSONObj &query, const uint32_t fastUpdateFlags,
                               const bool fromMigrate,
-                              uint64_t flags);
+                              uint64_t flags, bool upsert);
     };
 
     // Capped collections have natural order insert semantics but borrow (ie: copy)
@@ -1168,7 +1168,7 @@ namespace mongo {
         void updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
                               const BSONObj &query, const uint32_t fastUpdateFlags,
                               const bool fromMigrate,
-                              uint64_t flags);
+                              uint64_t flags, bool upsert);
 
         // Hacked interface for handling oplogging and replaying ops from a secondary.
         void insertObjectAndLogOps(const BSONObj &obj, uint64_t flags, bool* indexBitChanged);
@@ -1253,7 +1253,7 @@ namespace mongo {
         void updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
                               const BSONObj &query, const uint32_t fastUpdateFlags,
                               const bool fromMigrate,
-                              uint64_t flags);
+                              uint64_t flags, bool upsert);
 
     private:
         void createIndex(const BSONObj &idx_info);
@@ -1284,7 +1284,7 @@ namespace mongo {
         void updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
                               const BSONObj &query, const uint32_t fastUpdateFlags,
                               const bool fromMigrate,
-                              uint64_t flags);
+                              uint64_t flags, bool upsert);
 
         void empty();
 
@@ -1426,9 +1426,9 @@ namespace mongo {
         virtual void updateObjectMods(const BSONObj &pk, const BSONObj &updateObj,
                                       const BSONObj &query, const uint32_t fastUpdateFlags,
                                       const bool fromMigrate,
-                                      uint64_t flags) {
+                                      uint64_t flags, bool upsert) {
             uint64_t whichPartition = partitionWithPK(pk);
-            _partitions[whichPartition]->updateObjectMods(pk, updateObj, query, fastUpdateFlags, fromMigrate, flags);
+            _partitions[whichPartition]->updateObjectMods(pk, updateObj, query, fastUpdateFlags, fromMigrate, flags, upsert);
         }
 
         virtual bool rebuildIndex(int i, const BSONObj &options, BSONObjBuilder &result);

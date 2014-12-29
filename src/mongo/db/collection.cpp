@@ -1004,7 +1004,7 @@ namespace mongo {
 
     void CollectionBase::updateObjectMods(const BSONObj &pk, const BSONObj &updateObj,
         const BSONObj &query, const uint32_t fastUpdateFlags,
-        const bool fromMigrate, uint64_t flags)
+        const bool fromMigrate, uint64_t flags, bool upsert)
     {
         verify(!updateObj.isEmpty());
         // TODO: anyway to avoid a malloc with this builder?
@@ -2237,7 +2237,7 @@ namespace mongo {
     void SystemUsersCollection::updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
         const BSONObj &query, const uint32_t fastUpdateFlags,
         const bool fromMigrate,
-        uint64_t flags) {
+        uint64_t flags, bool upsert) {
         // updating the system users collection requires calling
         // AuthorizationManager::checkValidPrivilegeDocument. See above.
         // As a result, updateObject should be called
@@ -2393,7 +2393,7 @@ namespace mongo {
     void CappedCollection::updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
         const BSONObj &query, const uint32_t fastUpdateFlags,
         const bool fromMigrate,
-        uint64_t flags) {
+        uint64_t flags, bool upsert) {
         msgasserted(17217, "bug: cannot (fast) update a capped collection, "
                            " should have been enforced higher in the stack" );
     }
@@ -2595,7 +2595,7 @@ namespace mongo {
     void ProfileCollection::updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
         const BSONObj &query, const uint32_t fastUpdateFlags,
         const bool fromMigrate,
-        uint64_t flags) {
+        uint64_t flags, bool upsert) {
         msgasserted( 17219, "bug: The profile collection should not be updated." );
     }
 
@@ -2693,7 +2693,7 @@ namespace mongo {
     void BulkLoadedCollection::updateObjectMods(const BSONObj &pk, const BSONObj &updateobj,
         const BSONObj &query, const uint32_t fastUpdateFlags,
         const bool fromMigrate,
-        uint64_t flags) {
+        uint64_t flags, bool upsert) {
         uasserted( 17218, "Cannot update a collection under-going bulk load." );
     }
 

@@ -94,7 +94,7 @@ namespace mongo {
             // - operator style update gets applied as an update message
             // - does not maintain sencondary indexes so we can only do it
             // when no indexes were affected
-            cl->updateObjectMods(pk, updateobj, query, fastUpdateFlags, fromMigrate, flags);
+            cl->updateObjectMods(pk, updateobj, query, fastUpdateFlags, fromMigrate, flags, fastUpdateFlags & UpdateFlags::UPSERT);
             cl->notifyOfWriteOp();
             return true;
         }
