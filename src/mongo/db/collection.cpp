@@ -41,6 +41,7 @@
 #include "mongo/db/storage/assert_ids.h"
 #include "mongo/db/queryutil.h"
 #include "mongo/db/storage/exception.h"
+#include "mongo/db/ops/update.h"
 
 namespace mongo {
 
@@ -1006,18 +1007,33 @@ namespace mongo {
         const BSONObj &query, const uint32_t fastUpdateFlags,
         const bool fromMigrate, uint64_t flags, bool upsert)
     {
-        verify(!updateObj.isEmpty());
-        // TODO: anyway to avoid a malloc with this builder?
-        BSONObjBuilder b;
-        b.append("t", "u");
-        b.append("o", updateObj);
-        b.append("f", fastUpdateFlags);
-        if (!query.isEmpty()) {
-            b.append("q", query);
-        }
+        for (int i = 0; i < nIndexesBeingBuilt(); i++) {
+            if (i > 0 && !upsert) {
+                break;
+            }
 
-        IndexDetailsBase &pkIdx = getPKIndexBase();
-        pkIdx.updatePair(pk, NULL, b.done(), flags);
+            IndexDetailsBase &currIdx = *_indexes[i];
+
+            verify(!updateObj.isEmpty());
+            // TODO: anyway to avoid a malloc with this builder?
+            BSONObjBuilder b;
+            b.append("t", "u");
+            b.append("o", updateObj);
+            b.append("f", i > 0 && currIdx.clustering() ? fastUpdateFlags : fastUpdateFlags | UpdateFlags::NON_CLUSTERING);
+            if (!query.isEmpty()) {
+                b.append("q", query);
+            }
+            if (i > 0) {
+                BSONObjSet idxKeys;
+                BSONObj filledPK = fillPKWithFieldsWithPattern(pk, getPKIndex().keyPattern());
+                currIdx.getKeysFromObject(filledPK, idxKeys);
+                verify(idxKeys.size() == 1);
+                currIdx.updatePair(idxKeys[0], pk, b.done(), flags);
+            }
+            else {
+                currIdx.updatePair(pk, NULL, b.done(), flags);
+            }
+        }
     }
 
     bool CollectionBase::_allowSetMultiKeyInMSTForTests = false;
