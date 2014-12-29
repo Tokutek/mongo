@@ -1028,7 +1028,7 @@ namespace mongo {
                 BSONObj filledPK = fillPKWithFieldsWithPattern(pk, getPKIndex().keyPattern());
                 currIdx.getKeysFromObject(filledPK, idxKeys);
                 verify(idxKeys.size() == 1);
-                currIdx.updatePair(idxKeys[0], pk, b.done(), flags);
+                currIdx.updatePair(*idxKeys.begin(), &pk, b.done(), flags);
             }
             else {
                 currIdx.updatePair(pk, NULL, b.done(), flags);
