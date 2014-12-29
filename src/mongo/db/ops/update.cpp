@@ -171,7 +171,9 @@ namespace mongo {
                 // upserts must pass in the query
                 // tryFastUpdate ensures this
                 verify(!query.isEmpty());
-                newObj = mods.createNewFromQuery(query);
+                if (!(fastUpdateFlags & UpdateFlags::NON_CLUSTERING)) {
+                    newObj = mods.createNewFromQuery(query);
+                }
             }
             // normal update case
             else {

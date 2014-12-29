@@ -98,8 +98,16 @@ namespace mongo {
             bool setVal = _updateCallback->applyMods(oldObj, updateObj, query, fastUpdateFlags, newObj);
             // Set the new value
             if (setVal) {
-                DBT new_val = dbt_make(newObj.objdata(), newObj.objsize());
-                set_val(&new_val, set_extra);
+                // an empty obj means we are doing an insert into a 
+                // non clustering secondary index, which means
+                // an empty val
+                if (newObj.isEmpty()) {
+                    set_val(NULL, set_extra);
+                }
+                else {
+                    DBT new_val = dbt_make(newObj.objdata(), newObj.objsize());
+                    set_val(&new_val, set_extra);
+                }
             }
         }
 

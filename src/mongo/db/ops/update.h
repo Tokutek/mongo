@@ -32,7 +32,8 @@ namespace mongo {
         static const uint64_t FAST_UPDATE_PERFORMED = 1 << 0; // really just for diagnostics and testing. Has no practical usage
         static const uint64_t NO_OLDOBJ_OK = 1 << 1; // possible for the old object to not exist. Should not be treated as error
         static const uint64_t UPSERT = 1 << 2; // if the old object does not exist, perform an insert
-        static const uint64_t MAX = 1 << 3; // Simply notes that this is the maximum
+        static const uint64_t NON_CLUSTERING = 1 << 3; // used for non-clustering secondary key message injections
+        static const uint64_t MAX = 1 << 4; // Simply notes that this is the maximum
     }
     
     struct UpdateResult {
