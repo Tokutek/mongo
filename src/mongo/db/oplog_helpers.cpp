@@ -683,7 +683,13 @@ namespace mongo {
                 ApplyUpdateMessage storageUpdateCallback;
                 bool applied = storageUpdateCallback.applyMods(oldObj, updateobj, query, fastUpdateFlags, newObj);
                 if (applied) {
-                    updateOneObject(cl, pk, oldObj, newObj, false, flags);
+                    if (found) {
+                        updateOneObject(cl, pk, oldObj, newObj, false, flags);
+                    }
+                    else {
+                        verify(fastUpdateFlags & UpdateFlags::UPSERT);
+                        insertOneObject(cl, newObj, flags);
+                    }
                     slowUpdatesByPKPerformed.increment();
                 }
             }

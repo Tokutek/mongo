@@ -65,8 +65,11 @@ namespace mongo {
     // returns true if we are not allowed to run Collection::updateObjectMods,
     // and must instead perform an update using the entire pre-image and
     // post-image
-    bool doFullUpdate(Collection* cl, ModSet* useMods) {
+    bool doFullUpdate(Collection* cl, bool upsert, ModSet* useMods) {
         bool modsAreIndexed = useMods->isIndexed() > 0;
+        if (upsert) {
+            return cl->fastUpsertsOk();
+        }
 
         // adding cl->indexBuildInProgress() as a check below due to #1085
         // This is a little heavyweight, as we whould be able to have modsAreIndexed
@@ -87,7 +90,7 @@ namespace mongo {
                          uint64_t flags,
                          ModSet* useMods)
     {
-        if (!doFullUpdate(cl, useMods)) {
+        if (!doFullUpdate(cl, fastUpdateFlags & UpdateFlags::UPSERT, useMods)) {
             // - operator style update gets applied as an update message
             // - does not maintain sencondary indexes so we can only do it
             // when no indexes were affected
@@ -306,13 +309,10 @@ namespace mongo {
             return false;
         }
         verify(mods);
-        if (doFullUpdate(cl, mods) || logOfPreImageRequired(cl) || !cl->fastupdatesOk()) {
+        if (doFullUpdate(cl, upsert, mods) || logOfPreImageRequired(cl) || !cl->fastupdatesOk()) {
             return false;
         }
         verify(!forceLogFullUpdate(cl, mods));
-        if (upsert && !cl->fastUpsertsOk()) {
-            return false;
-        }
         *eligible = true;
         if (!fastUpdatesEnabled) {
             return false;
