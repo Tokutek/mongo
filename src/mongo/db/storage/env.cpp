@@ -102,7 +102,8 @@ namespace mongo {
                 // non clustering secondary index, which means
                 // an empty val
                 if (newObj.isEmpty()) {
-                    set_val(NULL, set_extra);
+                    DBT new_val = dbt_make(NULL, 0);
+                    set_val(&new_val, set_extra);
                 }
                 else {
                     DBT new_val = dbt_make(newObj.objdata(), newObj.objsize());
