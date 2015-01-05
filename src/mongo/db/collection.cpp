@@ -1019,7 +1019,7 @@ namespace mongo {
             BSONObjBuilder b;
             b.append("t", "u");
             b.append("o", updateObj);
-            b.append("f", i > 0 && currIdx.clustering() ? fastUpdateFlags : fastUpdateFlags | UpdateFlags::NON_CLUSTERING);
+            b.append("f", i == 0 || currIdx.clustering() ? fastUpdateFlags : fastUpdateFlags | UpdateFlags::NON_CLUSTERING);
             if (!query.isEmpty()) {
                 b.append("q", query);
             }
