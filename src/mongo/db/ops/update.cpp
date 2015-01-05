@@ -68,7 +68,7 @@ namespace mongo {
     bool doFullUpdate(Collection* cl, bool upsert, ModSet* useMods) {
         bool modsAreIndexed = useMods->isIndexed() > 0;
         if (upsert) {
-            return cl->fastUpsertsOk();
+            return !cl->fastUpsertsOk();
         }
 
         // adding cl->indexBuildInProgress() as a check below due to #1085
