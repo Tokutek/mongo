@@ -47,6 +47,17 @@ assertUpdateFast = function(wdb, localdb) {
     assert.eq(undefined, y["ops"][0]["o"]);
 }
 
+assertUpsertFast = function(wdb, localdb) {
+    x = wdb.runCommand({getLastError : 1});
+    assert.eq(x.ok, 1);
+    assert.eq(x.updatedExisting, true);
+    assert.eq(x.n, 1);
+    y = localdb.oplog.rs.find().sort({$natural : -1}).next();
+    assert(y["ops"][0]["f"] > 5); // means that update was not fast. 1 or 3 is fast
+    assert.eq(y["ops"][0]["op"], "ur");
+    assert.eq(undefined, y["ops"][0]["o"]);
+}
+
 getLastOp = function(localdb) {
     return localdb.oplog.rs.find().sort({$natural : -1}).next();
 }
@@ -215,7 +226,55 @@ doIDPKTest = function (signal, txnLimit, startPort, secondaryHasIndex) {
     assert(friendlyEqual({_id : 5, a : 5}, lastOp["ops"][0]["q"])); // verify query is in oplog
 
     // these set of tests verify that updates that shouldn't be fast are not fast
-    // this is handles in updateRepl.js    
+    // this is handles in updateRepl.js
+
+    // simple upsert test
+    assert.eq(0, wdb.foo.count({_id : 6})); // sanity check
+    wdb.getLastError();
+    oldOplogCount = localdb.oplog.rs.count();
+    wdb.foo.update({_id : 6}, { $inc : {a : 1}}, {upsert : 1});
+    assertUpsertFast(wdb, localdb);
+    replTest.awaitReplication();
+    assert( dbs_match(wdb,swdb), "server data sets do not match after rollback, something is wrong");
+    assert.eq(1, wdb.foo.count({_id : 6})); // sanity check that doc exists
+    val = wdb.foo.find({_id : 6}).next();
+    assert(val.a == 1);
+    newOplogCount = localdb.oplog.rs.count();
+    assert.eq(newOplogCount, oldOplogCount+1); // assert something was logged
+    lastOp = getLastOp(localdb);
+    // check that an upsert that is an update works
+    wdb.foo.update({_id : 6}, { $inc : {a : 1}}, {upsert : 1});
+    assertUpsertFast(wdb, localdb);
+    replTest.awaitReplication();
+    assert( dbs_match(wdb,swdb), "server data sets do not match after rollback, something is wrong");
+    assert.eq(1, wdb.foo.count({_id : 6})); // sanity check that doc still doesn't exist
+    val = wdb.foo.find({_id : 6}).next();
+    assert(val.a == 2);
+
+    wdb.foo.ensureIndex({_id : "hashed"}); // add a hashed id index, and make sure that upsert still works
+
+    assert.eq(0, wdb.foo.count({_id : 7})); // sanity check
+    wdb.getLastError();
+    oldOplogCount = localdb.oplog.rs.count();
+    wdb.foo.update({_id : 7}, { $inc : {a : 1}}, {upsert : 1});
+    assertUpsertFast(wdb, localdb);
+    replTest.awaitReplication();
+    assert( dbs_match(wdb,swdb), "server data sets do not match after rollback, something is wrong");
+    assert.eq(1, wdb.foo.count({_id : 7})); // sanity check that doc exists
+    val = wdb.foo.find({_id : 7}).next();
+    assert(val.a == 1);
+    newOplogCount = localdb.oplog.rs.count();
+    assert.eq(newOplogCount, oldOplogCount+1); // assert something was logged
+    lastOp = getLastOp(localdb);
+    // check that an upsert that is an update works
+    wdb.foo.update({_id : 7}, { $inc : {a : 1}}, {upsert : 1});
+    assertUpsertFast(wdb, localdb);
+    replTest.awaitReplication();
+    assert( dbs_match(wdb,swdb), "server data sets do not match after rollback, something is wrong");
+    assert.eq(1, wdb.foo.count({_id : 7})); // sanity check that doc still doesn't exist
+    val = wdb.foo.find({_id : 7}).next();
+    assert(val.a == 2);
+
 
     print("fastUpdateRepl.js SUCCESS");
     replTest.stopSet(signal);
@@ -569,9 +628,9 @@ doSecondaryKeyTest = function (signal, txnLimit, startPort, secondaryHasIndex) {
     replTest.stopSet(signal);
 };
 
-doCustomPKTest(15, 1000000, 31000, true);
-doCustomPKTest(15, 1000000, 31000, false);
+//doCustomPKTest(15, 1000000, 31000, true);
+//doCustomPKTest(15, 1000000, 31000, false);
 doIDPKTest(15, 1000000, 31000, true);
 doIDPKTest(15, 1000000, 31000, false);
-doSecondaryKeyTest(15, 1000000, 31000, true);
-doSecondaryKeyTest(15, 1000000, 31000, false);
+//doSecondaryKeyTest(15, 1000000, 31000, true);
+//doSecondaryKeyTest(15, 1000000, 31000, false);
