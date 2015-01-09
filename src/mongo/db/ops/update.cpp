@@ -150,7 +150,7 @@ namespace mongo {
         // are listed here. We don't want a future version's flag to somehow
         // erroneously make it here (e.g., a future upsert flag)
         verify(fastUpdateFlags < UpdateFlags::MAX);
-        if (oldObj.isEmpty() && !fastUpdateFlags & UpdateFlags::UPSERT) {
+        if (oldObj.isEmpty() && ((fastUpdateFlags & UpdateFlags::UPSERT) == 0)) {
             // if this update message is allowed to not have an old obj
             // we simply return false, otherwise, we uassert
             if (fastUpdateFlags & UpdateFlags::NO_OLDOBJ_OK) {

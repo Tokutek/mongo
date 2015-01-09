@@ -90,7 +90,7 @@ namespace mongo {
                                    void (*set_val)(const DBT *new_val, void *set_extra),
                                    void *set_extra) {
             BSONObj oldObj;
-            if (old_val && old_val->data) {
+            if (old_val && old_val->size > 0 && old_val->data) {
                 oldObj = BSONObj(reinterpret_cast<char *>(old_val->data));
             }
             // Apply the update mods            
