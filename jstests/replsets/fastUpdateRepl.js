@@ -1,5 +1,5 @@
 
-function dbs_match(a, b) {
+function dbs_match(a, b, use_index) {
     print("dbs_match, but not checking namespaces!");
 
     var c = a.getCollectionNames();
@@ -9,6 +9,12 @@ function dbs_match(a, b) {
             if( !friendlyEqual( a[c[i]].find().sort({_id:1}).toArray(), b[c[i]].find().sort({_id:1}).toArray() ) ) { 
                 print("dbs_match: collections don't match " + c[i]);
                 return false;
+            }
+            if (use_index) {
+                if( !friendlyEqual( a[c[i]].find().hint({_id : "hashed"}).sort({_id:1}).toArray(), b[c[i]].find().hint({_id : "hashed"}).sort({_id:1}).toArray() ) ) { 
+                    print("dbs_match: collections don't match " + c[i]);
+                    return false;
+                }
             }
         }
     }
@@ -250,6 +256,11 @@ doIDPKTest = function (signal, txnLimit, startPort, secondaryHasIndex) {
     assert.eq(1, wdb.foo.count({_id : 6})); // sanity check that doc still doesn't exist
     val = wdb.foo.find({_id : 6}).next();
     assert(val.a == 2);
+    wdb.foo.update({_id : 6, b : 100}, { $inc : {a : 1}}, {upsert : 1}); // should be no-op
+    assertUpsertFast(wdb, localdb);
+    replTest.awaitReplication();
+    val = wdb.foo.find({_id : 6}).next();
+    assert(val.a == 2);
 
     wdb.foo.ensureIndex({_id : "hashed"}); // add a hashed id index, and make sure that upsert still works
 
@@ -260,6 +271,7 @@ doIDPKTest = function (signal, txnLimit, startPort, secondaryHasIndex) {
     assertUpsertFast(wdb, localdb);
     replTest.awaitReplication();
     assert( dbs_match(wdb,swdb), "server data sets do not match after rollback, something is wrong");
+    assert( dbs_match(wdb,swdb, true), "server data sets do not match after rollback, something is wrong");
     assert.eq(1, wdb.foo.count({_id : 7})); // sanity check that doc exists
     val = wdb.foo.find({_id : 7}).next();
     assert(val.a == 1);
@@ -271,10 +283,17 @@ doIDPKTest = function (signal, txnLimit, startPort, secondaryHasIndex) {
     assertUpsertFast(wdb, localdb);
     replTest.awaitReplication();
     assert( dbs_match(wdb,swdb), "server data sets do not match after rollback, something is wrong");
+    assert( dbs_match(wdb,swdb, true), "server data sets do not match after rollback, something is wrong");
     assert.eq(1, wdb.foo.count({_id : 7})); // sanity check that doc still doesn't exist
     val = wdb.foo.find({_id : 7}).next();
     assert(val.a == 2);
-
+    wdb.foo.update({_id : 7, b : 100}, { $inc : {a : 1}}, {upsert : 1}); // should be no-op
+    assertUpsertFast(wdb, localdb);
+    replTest.awaitReplication();
+    val = wdb.foo.find({_id : 7}).next();
+    assert(val.a == 2);
+    assert( dbs_match(wdb,swdb), "server data sets do not match after rollback, something is wrong");
+    assert( dbs_match(wdb,swdb, true), "server data sets do not match after rollback, something is wrong");
 
     print("fastUpdateRepl.js SUCCESS");
     replTest.stopSet(signal);
