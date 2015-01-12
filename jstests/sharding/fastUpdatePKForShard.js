@@ -7,6 +7,15 @@ assertUpdateFast = function(wdb, localdb) {
     assert.eq(undefined, y["ops"][0]["o"]);
 }
 
+assertUpsertFast = function(wdb, localdb) {
+    y = localdb.oplog.rs.find().sort({$natural : -1}).next();
+    printjson(y);
+    assert(y["ops"][0]["f"] >= 5); // means that update was not fast. 1 or 3 is fast
+    assert.eq(y["ops"][0]["op"], "ur");
+    assert.eq(undefined, y["ops"][0]["o"]);
+}
+
+
 assertUpdateSlow = function(wdb) {
     x = wdb.runCommand({getLastError : 1});
     assert.eq(x.ok, 1);
@@ -64,6 +73,9 @@ assert.commandWorked(db.adminCommand({ shardCollection: 'foo.foo', key: { b : 1 
 db.foo.update({_id : 0}, { $inc : {a : 102}});
 db.getLastError();
 assertOplogEntrySlow(localdb); // verify the slow update, because the shard key, b, is not included in the pk
+db.foo.update({_id : 110}, { $inc : {a : 102}}, {upsert : true});
+db.getLastError();
+assertOplogEntrySlow(localdb); // verify the slow update, because the shard key, b, is not included in the pk
 db.foo.drop();
 
 // now lets show that when the pk has the shard key, we can do a fast update
@@ -72,6 +84,9 @@ db.foo.insert({_id : 0, a : 0, b : 1});
 db.foo.update({_id : 0, a : 0}, { $inc : {b : 100}});
 db.getLastError();
 assertUpdateFast(db, localdb);
+db.foo.update({_id : 0, a : 0}, { $inc : {b : 100}}, {upsert : true});
+db.getLastError();
+assertOplogEntrySlow(localdb);
 db.foo.drop();
 
 assert.commandWorked(db.adminCommand({ shardCollection: 'foo.foo', key: { _id : "hashed" }, clustering: false}));
@@ -81,6 +96,11 @@ db.getLastError();
 x = db.foo.find({_id : 0}).next();
 assert.eq(x.a, 100);
 assertUpdateFast(db, localdb);
+db.foo.update({_id : 10}, { $inc : {a : 100}}, {upsert : true});
+db.getLastError();
+assertUpdateFast(db, localdb);
+x = db.foo.find({_id : 10}).next();
+assert.eq(x.a, 100);
 db.foo.drop();
 
 st.stop();
