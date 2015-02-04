@@ -1397,10 +1397,12 @@ namespace mongo {
 
     bool CollectionBase::ensureIndex(const BSONObj &info) {
         const BSONObj keyPattern = info["key"].Obj();
-        const int i = findIndexByKeyPattern(keyPattern);
+        int i = findIndexByKeyPattern(keyPattern);
         if (i >= 0) {
             return false;
         }
+        i = findIndexByName(info["name"].Stringdata());
+        uassert(17375, mongoutils::str::stream() << "index with name " << info["name"].Stringdata() << " already exists", i < 0);
         createIndex(info);
         return true;
     }
