@@ -371,7 +371,7 @@ namespace mongo {
         /** for tailable cursors to get a fresh value for minUnsafeKey from a TailableCollection */
         void refreshMinUnsafeEndKey();
 
-        static bool cursor_check_interrupt(void* extra);
+        static bool cursor_check_interrupt(void* extra, uint64_t deleted_rows);
         /**
          * Attempt to locate the next index key matching _bounds.  This may mean advancing to the
          * next successive key in the index, or skipping to a new position in the index.  If an
