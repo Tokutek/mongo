@@ -244,7 +244,7 @@ namespace mongo {
         _idx.noteQuery(_nscanned, _nscannedObjects);
     }
 
-    bool IndexCursor::cursor_check_interrupt(void* extra) {
+    bool IndexCursor::cursor_check_interrupt(void* extra, uint64_t deleted_rows) {
         ExceptionSaver *info = static_cast<ExceptionSaver *>(extra);
         try {
             killCurrentOp.checkForInterrupt(); // uasserts if we should stop
