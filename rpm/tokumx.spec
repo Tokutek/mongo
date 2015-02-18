@@ -31,8 +31,10 @@ Source6: %{product_name}.service
 
 %if 0%{?fedora} >= 15
 BuildRequires: boost-devel
-%endif
 BuildRequires: cmake
+%else
+BuildRequires: cmake28
+%endif
 BuildRequires: gcc
 BuildRequires: gcc-c++
 BuildRequires: make
