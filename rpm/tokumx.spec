@@ -32,6 +32,10 @@ Source6: %{product_name}.service
 %if 0%{?fedora} >= 15
 BuildRequires: boost-devel
 %endif
+BuildRequires: cmake
+BuildRequires: gcc
+BuildRequires: gcc-c++
+BuildRequires: make
 BuildRequires: readline-devel
 BuildRequires: libpcap-devel
 %if 0%{?fedora} >= 15
