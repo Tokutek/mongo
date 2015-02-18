@@ -1,6 +1,27 @@
 tokumx news
 ===========
 
+tokumx 2.0.1
+------------
+Release date: TBD
+
+General
+~~~~~~~
+
+    - This release is focused on bug fixes since 2.0.0.
+
+
+Bug fixes
+~~~~~~~~~
+
+    - Fixes incorrect results from the projection operator when querying
+      by primary key.
+      (https://tokutek.atlassian.net/browse/MX-1311[MX-1311])
+
+    - Enforce uniqueness of index names when creating a new index.
+      (https://tokutek.atlassian.net/browse/MX-1314[MX-1314])
+
+
 tokumx 2.0.0
 ------------
 Release date: 2014-09-30
