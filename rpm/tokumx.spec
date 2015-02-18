@@ -19,7 +19,7 @@ License: AGPLv3 and zlib and ASL 2.0 and GPLv2
 Vendor: Tokutek, Inc.
 URL: http://www.tokutek.com/products/tokumx-for-mongodb
 Group: Applications/Databases
-BuildRoot: %{buildroot}
+BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 Source0: %{name}-%{version}.tar.gz
 Source1: %{product_name}.init
