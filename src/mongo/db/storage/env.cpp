@@ -997,7 +997,7 @@ namespace mongo {
                 vector<BSONObj> &_txns;
               public:
                 iterate_transactions(vector<BSONObj> &txns) : _txns(txns) { }
-                static int callback(uint64_t txnid, uint64_t client_id,
+                static int callback(DB_TXN *txn,
                                     iterate_row_locks_callback iterate_locks,
                                     void *locks_extra, void *extra) {
                     iterate_transactions *info = reinterpret_cast<iterate_transactions *>(extra);
@@ -1005,7 +1005,7 @@ namespace mongo {
                         // We ignore client_id because txnid is sufficient for finding
                         // the associated operation in db.currentOp()
                         BSONObjBuilder status;
-                        status.appendNumber("txnid", txnid);
+                        status.appendNumber("txnid", txn->id64(txn));
                         BSONArrayBuilder locks(status.subarrayStart("rowLocks"));
                         {
                             DB *db;
