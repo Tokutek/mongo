@@ -346,7 +346,6 @@ namespace mongo {
                 BSONObj result;
                 const bool foundMinUnapplied = Collection::findOne(rsReplInfo, BSON("_id" << "minUnapplied"), result);
                 verify(foundMinUnapplied);
-                GTID minUnappliedGTID;
                 minUnappliedGTID = getGTIDFromBSON("GTID", result);
             }
             // now we need to read the oplog forward
