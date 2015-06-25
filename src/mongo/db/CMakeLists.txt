@@ -144,7 +144,7 @@ if (TOKUMX_ENTERPRISE)
   target_link_libraries(coredb LINK_PUBLIC audit_enterprise)
 endif()
 
-add_library(serveronly STATIC
+set(serveronly_sources
   curop
   kill_current_op
   interrupt_status_mongod
@@ -246,6 +246,18 @@ add_library(serveronly STATIC
   ../s/d_chunk_manager
   module
   )
+
+## Only add the custom sasl commands if
+## we intend to use the sasl-enabled client.
+if (USE_SASL_CLIENT)
+  include_directories(commands/authentication)
+  list(APPEND serveronly_sources
+    commands/authentication/sasl_server_commands
+    commands/authentication/sasl_authentication_session)
+endif ()
+
+add_library(serveronly STATIC ${serveronly_sources})
+
 add_dependencies(serveronly generate_error_codes generate_action_types install_tdb_h)
 target_link_libraries(serveronly LINK_PUBLIC
   client_parallel
