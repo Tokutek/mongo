@@ -230,11 +230,54 @@ DB.prototype._addUser = function(userObj, replicatedTo, timeout) {
     }
 }
 
+// For adding users that are only authenticated remotely on an external
+// service (like LDAP via SASL).
+DB.prototype._addExternalUser = function(userObj, replicatedTo, timeout) {
+    var rolesArray = userObj['roles'];
+    var userName = userObj['user'];
+    if (rolesArray == null) {
+        throw Error("'roles' field must be provided");
+    }
+
+    if (userName == null) {
+        throw Error("'user' field must be provided");
+    }
+
+    // Note: We add an 'external' boolean flag here to
+    // disable a specific, and unnecessary, password
+    // check in the server.
+    userObj.external = true;
+
+    // Call regular _addUser for each role entry, for this user.
+    var length = rolesArray.length;
+    for (var i = 0; i < length; ++i) {
+        var roleObj = rolesArray[i];
+        if (roleObj == null) {
+            throw Error("Found empty 'roles' entry.");
+        }
+
+        var databaseName = roleObj.db;
+        var roles = roleObj.role;
+        if (databaseName == null || roles == null) {
+            throw Error("'roles' object field must have both a 'db' field and a 'role' field.");
+        }
+
+        // Get the desired database target from the parent Mongo object.
+        var database = this.getSiblingDB(databaseName);
+        userObj.roles = roles;
+        // TODO: Is it ok to remove password for external users?  What is the consequence?
+        userObj.pwd = null;
+        database._addUser(userObj, replicatedTo, timeout);
+    }
+}
+
 DB.prototype.addUser = function() {
     if (arguments.length == 0) {
         throw Error("No arguments provided to addUser");
     }
-    if (typeof arguments[0] == "object") {
+    if (this._name == "$external") {
+        this._addExternalUser.apply(this, arguments);
+    } else if (typeof arguments[0] == "object") {
         this._addUser.apply(this, arguments);
     } else {
         this._addUserV22.apply(this, arguments);

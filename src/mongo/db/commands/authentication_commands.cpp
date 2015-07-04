@@ -152,6 +152,18 @@ namespace mongo {
         string pwd;
         Status status = ClientBasic::getCurrent()->getAuthorizationManager()->getPrivilegeDocument(
                 dbname, PrincipalName(user, dbname), &userObj);
+
+        // HACK: We added an external flag to the principal field for external authentication.  If
+        // it is present here, then the user is trying to authenticate locally, and there is no
+        // password stored locally for this user.  So we must exit.
+        const bool isExternal = userObj.getBoolField("external");
+        if (isExternal) {
+            _auditFailedAuthentication(dbname, user);
+            log() << "cannot locally authenticate an external user" << std::endl;
+            errmsg = "auth fails";
+            result.append(saslCommandCodeFieldName, ErrorCodes::AuthenticationFailed);
+            return false;
+        }
                                  
         if (!status.isOK()) {
             _auditFailedAuthentication(dbname, user);

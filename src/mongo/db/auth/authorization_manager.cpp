@@ -337,8 +337,12 @@ namespace {
                              0);
         }
 
+        // HACK: We don't need, or want, a valid password if we use external authentication.  So
+        // skip the password check here if the external field is present.
+        const bool isExternal = doc.getBoolField("external");
+
         // Validate the "pwd" element, if present.
-        if (!passwordElement.eoo()) {
+        if (!passwordElement.eoo() && !isExternal) {
             if (passwordElement.type() != String)
                 return _badValue("system.users entry needs 'pwd' field to be a string", 14052);
             if (makeStringDataFromBSONElement(passwordElement).empty())
