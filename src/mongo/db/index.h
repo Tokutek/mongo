@@ -24,9 +24,8 @@
 #include <db.h>
 #include <vector>
 
-#include "mongo/db/client.h"
 #include "mongo/db/descriptor.h"
-#include "mongo/db/keygenerator.h"
+#include "mongo/db/key_generator.h"
 #include "mongo/db/storage/builder.h"
 #include "mongo/db/storage/cursor.h"
 #include "mongo/db/storage/dictionary.h"
@@ -41,8 +40,7 @@ namespace mongo {
     class Cursor; 
     class Collection;
     class FieldRangeSet;
-    class IndexDetailsBase;
-    class PartitionedCollection;
+    class IndexInterface;
 
     // Represents an index of a collection.
     class IndexDetails : boost::noncopyable {
@@ -58,9 +56,13 @@ namespace mongo {
             return name;
         }
 
-        // Is this index special? True for subclasses of IndexDetails.
-        virtual bool special() const {
-            return false;
+        bool special() const {
+            return getSpecialIndexName().size() != 0;
+        }
+
+        // Geo indexes (2d) override this
+        virtual BSONObj fixKey(const BSONObj &obj) const {
+            return obj;
         }
 
         // How suitable is this index for a given query and sort order?
@@ -86,6 +88,10 @@ namespace mongo {
 
         BSONObj getKeyFromQuery(const BSONObj& query) const {
             return query.extractFieldsUnDotted(_keyPattern);
+        }
+
+        const shared_ptr<KeyGenerator> getKeyGenerator() const {
+            return _keyGenerator;
         }
 
         /* get the key pattern for this object.
@@ -235,7 +241,7 @@ namespace mongo {
         virtual void getStat64(DB_BTREE_STAT64* stats) const = 0;
 
         // find a way to remove this eventually and have callers get
-        // access to IndexDetailsBase directly somehow
+        // access to IndexInterface directly somehow
         // This is a workaround to get going for now
         virtual shared_ptr<storage::Cursor> getCursor(const int flags) const = 0;
 
@@ -251,11 +257,14 @@ namespace mongo {
         const bool _sparse;
         const bool _clustering;
 
+        // Precomuted keyGenerator, useful since it's only method is const
+        shared_ptr<KeyGenerator> _keyGenerator;
+
     private:
         mutable AccessStats _accessStats;
     };
 
-    class IndexDetailsBase : public IndexDetails {
+    class IndexInterface : public IndexDetails {
     public:
         // Creates an IndexDetails subclass of the appropriate type.
         //
@@ -265,25 +274,28 @@ namespace mongo {
         // - Geo indexes
         // In the future:
         // - FTS indexes?
-        static shared_ptr<IndexDetailsBase> make(const BSONObj &info,
-                                                 const bool may_create,
-                                                 const bool use_memcmp_magic);
+        static shared_ptr<IndexInterface> make(const BSONObj &info,
+                                               const bool may_create,
+                                               const bool use_memcmp_magic);
 
-        IndexDetailsBase(const BSONObj& info);
+        IndexInterface(const BSONObj& info);
 
-        virtual ~IndexDetailsBase();
+        virtual ~IndexInterface();
 
         // Closes the underlying ydb dictionary.
         void close();
+
         /** delete this index. */
         void kill_idx();
 
+        // TODO: Deprecate in favor of the caller utilizing a KeyGenerator via getKeyGenerator
         /* pull out the relevant key objects from obj, so we
            can index them.  Note that the set is multiple elements
            only when it's a "multikey" array.
            keys will be left empty if key not found in the object.
         */
         void getKeysFromObject(const BSONObj &obj, BSONObjSet &keys) const;
+
         // Send an update message.
         void updatePair(const BSONObj &key, const BSONObj *pk, const BSONObj &msg, uint64_t flags);
         
@@ -313,14 +325,14 @@ namespace mongo {
 
         class Builder {
         public:
-            Builder(IndexDetailsBase &idx);
+            Builder(IndexInterface &idx);
 
             void insertPair(const BSONObj &key, const BSONObj *pk, const BSONObj &val);
 
             void done();
 
         private:
-            IndexDetailsBase &_idx;
+            IndexInterface &_idx;
             DB *_db;
             storage::Loader _loader;
         };
@@ -368,7 +380,7 @@ namespace mongo {
         // Must be called after constructor. Opens the ydb dictionary
         // using _descriptor, which is set by subclass constructors.
         //
-        // Only IndexDetailsBase::make() calls the constructor / open.
+        // Only IndexInterface::make() calls the constructor / open.
         bool open(const bool may_create, const bool use_memcmp_magic);
 
         friend class CollectionBase;
@@ -376,7 +388,7 @@ namespace mongo {
     };
 
     template<class Callback>
-    void IndexDetailsBase::getKeyAfterBytes(const storage::Key &startKey, uint64_t skipLen, Callback &cb) const {
+    void IndexInterface::getKeyAfterBytes(const storage::Key &startKey, uint64_t skipLen, Callback &cb) const {
         class CallbackWrapper {
             Callback &_cb;
           public:
@@ -437,31 +449,6 @@ namespace mongo {
     private:
         DB *_db;
         bool _multiKey;
-    };
-
-    // IndexDetails class for PartitionedCollections
-    class PartitionedIndexDetails : public IndexDetails {
-    public:
-        PartitionedIndexDetails(const BSONObj &info, PartitionedCollection* pc, int idxNum) : 
-            IndexDetails(info),
-            _pc(pc)
-        {
-        }
-        virtual enum toku_compression_method getCompressionMethod() const;
-        virtual uint32_t getFanout() const;
-        virtual uint32_t getPageSize() const;
-        virtual uint32_t getReadPageSize() const;
-        virtual void getStat64(DB_BTREE_STAT64* stats) const;
-
-        // find a way to remove this eventually and have callers get
-        // access to IndexDetailsBase directly somehow
-        // This is a workaround to get going for now
-        virtual shared_ptr<storage::Cursor> getCursor(const int flags) const;
-    private:
-        IndexDetails& getIndexDetailsOfPartition(uint64_t i)  const;
-        // This cannot be a shared_ptr, as this is a circular reference
-        // _pic has a reference to this as well.
-        PartitionedCollection* _pc;
     };
 
 } // namespace mongo

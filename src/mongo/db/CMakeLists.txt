@@ -32,6 +32,22 @@ target_link_libraries(db_common LINK_PUBLIC
   foundation
   )
 
+add_library(geometry STATIC
+  geo/hash
+  geo/shapes
+  )
+target_link_libraries(geometry LINK_PUBLIC bson)
+
+add_library(geoparser STATIC
+  geo/geoparser
+  )
+target_link_libraries(geoparser LINK_PUBLIC bson geometry s2)
+
+add_library(geoquery STATIC
+  geo/geoquery
+  )
+target_link_libraries(geoquery LINK_PUBLIC geometry s2) 
+
 add_library(coredb STATIC
   client_transaction
   opsettings
@@ -51,7 +67,11 @@ add_library(coredb STATIC
   dbpath
   dbwebserver
   keypattern
-  keygenerator
+  key_generator
+  index/2d_key_generator
+  index/hashed_key_generator
+  index/haystack_key_generator
+  index/s2_key_generator
   matcher
   spillable_vector
   txn_context
@@ -91,6 +111,10 @@ add_library(coredb STATIC
   stats/timer_stats
   stats/top
   descriptor
+  index/2d_descriptor
+  index/hashed_descriptor
+  index/haystack_descriptor
+  index/s2_descriptor
   storage/cursor
   storage/txn
   storage/env
@@ -106,6 +130,8 @@ target_link_libraries(coredb LINK_PUBLIC
   coreserver
   plugins
   server_parameters
+  geoparser
+  geoquery
   foundation
   ${TokuKV_LIBRARIES}
   )
@@ -159,7 +185,12 @@ add_library(serveronly STATIC
   query_plan
   query_plan_selection_policy
   parsed_query
-  index
+  index/index
+  index/hashed
+  index/haystack
+  index/partitioned
+  index/s2
+  index/2d
   scanandorder
   explain
   ops/count
@@ -168,6 +199,12 @@ add_library(serveronly STATIC
   ops/update
   ops/update_internal
   ops/insert
+  geo/2d.cpp
+  geo/geonear
+  geo/haystack
+  geo/s2common
+  geo/s2cursor
+  geo/s2nearcursor
 
   # most commands are only for mongod
   dbcommands
@@ -209,6 +246,8 @@ target_link_libraries(serveronly LINK_PUBLIC
   db_common
   dbcmdline
   defaultversion
+  geoparser
+  geoquery
   index_set
   ${TokuKV_LIBRARIES}
   )

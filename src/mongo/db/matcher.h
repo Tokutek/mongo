@@ -23,7 +23,7 @@
 
 #include "jsobj.h"
 #include "pcrecpp.h"
-#include "geo/shapes.h"
+#include "mongo/db/geo/geoquery.h"
 
 namespace mongo {
 
@@ -51,92 +51,19 @@ namespace mongo {
         RegexMatcher() : _isNot() {}
     };
 
-    class GeoMatcher {
-    private:
-        GeoMatcher(const string& field) : _isBox(false), _isCircle(false), _isPolygon(false),
-                                          _fieldName(field) {}
-        bool _isBox;
-        Box _box;
-
-        bool _isCircle;
-        Point _center;
-        double _radius;
-
-        bool _isPolygon;
-        Polygon _polygon;
-
-        string _fieldName;
+    struct GeoMatcher {
     public:
-        const string& getFieldName() const { return _fieldName; }
+        GeoMatcher(GeoQuery query, bool negated) : geoQuery(query), isNot(negated) {}
 
-        static GeoMatcher makeBox(const string& field, const BSONObj &min, const BSONObj &max) {
-            GeoMatcher m(field);
-            m._isBox = true;
-            uassert(16511, "Malformed coord: " + min.toString(), pointFrom(min, &m._box._min));
-            uassert(16512, "Malformed coord: " + max.toString(), pointFrom(max, &m._box._max));
-            return m;
+        string getField() const { return geoQuery.getField(); }
+
+        bool matches(const GeometryContainer &container) const {
+            bool satisfied = geoQuery.satisfiesPredicate(container);
+            if (isNot) { return !satisfied; }
+            else { return satisfied; }
         }
-
-        static GeoMatcher makeCircle(const string& field, const BSONObj &center, double rad) {
-            GeoMatcher m(field);
-            m._isCircle = true;
-            uassert(16513, "Malformed coord: " + center.toString(), pointFrom(center, &m._center));
-            m._radius = rad;
-            return m;
-        }
-
-        static GeoMatcher makePolygon(const string& field, const BSONObj &poly) {
-            GeoMatcher m(field);
-            vector<Point> points;
-
-            m._isPolygon = true;
-            BSONObjIterator coordIt(poly);
-            while (coordIt.more()) {
-                BSONElement coord = coordIt.next();
-                BSONObj obj = coord.Obj();
-                Point p;
-                uassert(16514, "Malformed coord: " + obj.toString(), pointFrom(obj, &p));
-                points.push_back(p);
-            }
-            m._polygon = Polygon(points);
-            return m;
-        }
-
-        bool containsPoint(Point p) const {
-            if (_isBox) {
-                return _box.inside(p, 0);
-            } else if (_isCircle) {
-                return p.distance(_center) <= _radius;
-            } else if (_isPolygon) {
-                return _polygon.contains(p);
-            } else {
-                return false;
-            }
-        }
-
-        string toString() const {
-            stringstream ss;
-            if (_isBox) {
-                ss << "GeoMatcher Box: " << _box.toString();
-            } else if (_isCircle) {
-                ss << "GeoMatcher Circle @ " << _center.toString() << " r = " << _radius;
-            } else {
-                ss << "GeoMatcher UNKNOWN";
-            }
-            return ss.str();
-        }
-
-        static bool pointFrom(const BSONObj o, Point *p) {
-            BSONObjIterator i(o);
-            if (!i.more()) { return false; }
-            BSONElement xe = i.next();
-            if (!i.more()) { return false; }
-            BSONElement ye = i.next();
-            if (!xe.isNumber() || !ye.isNumber()) { return false; }
-            p->_x = xe.number();
-            p->_y = ye.number();
-            return true;
-        }
+        GeoQuery geoQuery;
+        bool isNot;
     };
 
     struct element_lt {
@@ -307,13 +234,25 @@ namespace mongo {
          * value as the provided doc matcher.
          */
         bool keyMatch( const Matcher &docMatcher ) const;
-        
+
         bool singleSimpleCriterion() const {
-            return false; // TODO SERVER-958
-//            // TODO Really check, especially if all basics are ok.
-//            // $all, etc
-//            // _orConstraints?
-//            return ( ( basics.size() + nRegex ) < 2 ) && !where && !_orMatchers.size() && !_norMatchers.size();
+            if ( _where ||
+                 _basics.size() > 1 ||
+                 _haveNeg ||
+                 _haveSize ||
+                 _regexs.size() > 0 )
+                return false;
+
+            if ( _jsobj.nFields() > 1 )
+                return false;
+
+            if ( _basics.size() != 1 )
+                return false;
+
+            if ( strchr( _jsobj.firstElement().fieldName(), '.' ) )
+                return false;
+
+            return _basics[0]._compareOp == BSONObj::Equality;
         }
 
         const BSONObj *getQuery() const { return &_jsobj; };
@@ -368,6 +307,8 @@ namespace mongo {
     class CoveredIndexMatcher : boost::noncopyable {
     public:
         CoveredIndexMatcher(const BSONObj &pattern, const BSONObj &indexKeyPattern);
+        bool matchesWithSingleKeyIndex( const BSONObj& key, const BSONObj& obj,
+                                        MatchDetails* details ) const;
         /**
          * This is the preferred method for matching against a cursor, as it
          * can handle both multi and single key cursors.

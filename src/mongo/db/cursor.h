@@ -21,8 +21,6 @@
 
 #include "mongo/db/jsobj.h"
 #include "mongo/db/matcher.h"
-#include "mongo/db/projection.h"
-#include "mongo/db/client.h"
 #include "mongo/db/index.h"
 #include "mongo/db/storage/key.h"
 #include "mongo/db/collection.h"
@@ -31,6 +29,7 @@ namespace mongo {
 
     class Collection;
     class CoveredIndexMatcher;
+    class Projection;
 
     /**
      * Query cursors, base class.  This is for our internal cursors.  "ClientCursor" is a separate
@@ -154,6 +153,8 @@ namespace mongo {
         }
 
         virtual long long nscanned() const = 0;
+
+        virtual bool autoDedup() const { return true; }
 
         // The implementation may return different matchers depending on the
         // position of the cursor.  If matcher() is nonzero at the start,

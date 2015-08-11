@@ -324,6 +324,8 @@ env.StaticLibrary("coredb", [
                            'db/common',
                            'plugins/plugins',
                            'server_parameters',
+                           'geoparser',
+                           'geoquery',
                            '$BUILD_DIR/mongo/foundation'])
 
 coreServerFiles = [ "db/client_basic.cpp",
@@ -427,6 +429,14 @@ serverOnlyFiles = [ "db/curop.cpp",
                     "db/index.cpp",
                     "db/scanandorder.cpp",
                     "db/explain.cpp",
+                    "db/geo/2d.cpp",
+                    "db/geo/geonear.cpp",
+                    "db/geo/geoquery.cpp",
+                    "db/geo/haystack.cpp",
+                    "db/geo/s2common.cpp",
+                    "db/geo/s2cursor.cpp",
+                    "db/geo/s2index.cpp",
+                    "db/geo/s2nearcursor.cpp",
                     "db/ops/count.cpp",
                     "db/ops/delete.cpp",
                     "db/ops/query.cpp",
@@ -567,12 +577,28 @@ serverOnlyFiles += [ "s/d_logic.cpp",
 
 env.StaticLibrary("defaultversion", "s/default_version.cpp")
 
+env.StaticLibrary("geometry", [ "db/geo/hash.cpp", "db/geo/shapes.cpp", ], LIBDEPS = [ "bson" ])
+env.StaticLibrary("geoparser", [ "db/geo/geoparser.cpp", ],
+                  LIBDEPS = [ "bson",
+                              "geometry",
+                              '$BUILD_DIR/third_party/s2/s2' ])
+env.StaticLibrary("geoquery", [ "db/geo/geoquery.cpp", ],
+                  LIBDEPS = [ "bson",
+                              "geometry",
+                              '$BUILD_DIR/third_party/s2/s2' ])
+
+env.CppUnitTest("hash_test", [ "db/geo/hash_test.cpp" ], LIBDEPS = ["geometry" ])
+env.CppUnitTest("geojsonparser_test", [ "db/geo/geojsonparser_test.cpp" ], LIBDEPS = ["geojson"])
+env.CppUnitTest("s2r2_test", [ "db/geo/s2r2_test.cpp" ], LIBDEPS = ["geojson"])
+
 env.StaticLibrary("serveronly", serverOnlyFiles,
                   LIBDEPS=["coreshard",
                            "db/auth/authmongod",
                            "db/common",
                            "dbcmdline",
                            "defaultversion",
+                           "geoparser",
+                           "geoquery",
                            "index_set"])
 
 # These files go into mongos and mongod only, not into the shell or any tools.

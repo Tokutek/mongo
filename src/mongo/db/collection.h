@@ -165,6 +165,8 @@ namespace mongo {
         // @return offset in indexes[]
         virtual int findIndexByKeyPattern(const BSONObj& keyPattern) const = 0;
 
+        virtual void findIndexByType(const string& name, vector<int> &matches) const = 0;
+
         // -1 means not found
         virtual int findIdIndex() const = 0;
 
@@ -491,6 +493,11 @@ namespace mongo {
             return _cd->findIndexByKeyPattern(keyPattern);
         }
 
+        // @return offset in indexes[]
+        void findIndexByType(const string& name, vector<int> &matches) const {
+            _cd->findIndexByType(name, matches);
+        }
+
         /* Returns the index entry for the first index whose prefix contains
          * 'keyPattern'. If 'requireSingleKey' is true, skip indices that contain
          * array attributes. Otherwise, returns NULL.
@@ -744,6 +751,8 @@ namespace mongo {
         // @return offset in indexes[]
         int findIndexByKeyPattern(const BSONObj& keyPattern) const;
 
+        void findIndexByType(const string& type, vector<int> &matches) const;
+
         /* @return -1 = not found
            generally id is first index, so not that expensive an operation (assuming present).
         */
@@ -763,8 +772,8 @@ namespace mongo {
             return isPK;
         }
 
-        IndexDetailsBase &getPKIndexBase() const {
-            IndexDetailsBase &idx = *_indexes[0];
+        IndexInterface &getPKIndexBase() const {
+            IndexInterface &idx = *_indexes[0];
             dassert(idx.keyPattern() == _pk);
             return idx;
         }
@@ -866,7 +875,7 @@ namespace mongo {
             virtual void _commit() { }
 
             CollectionBase *_cl;
-            shared_ptr<IndexDetailsBase> _idx;
+            shared_ptr<IndexInterface> _idx;
             const BSONObj &_info;
             const bool _isSecondaryIndex;
         };
@@ -983,7 +992,7 @@ namespace mongo {
         explicit CollectionBase(const BSONObj &serialized, bool* reserializeNeeded = NULL);
 
         virtual void createIndex(const BSONObj &info);
-        void checkIndexUniqueness(const IndexDetailsBase &idx);
+        void checkIndexUniqueness(const IndexInterface &idx);
 
         void insertIntoIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags, bool* indexBitChanged);
         void deleteFromIndexes(const BSONObj &pk, const BSONObj &obj, uint64_t flags);
@@ -991,7 +1000,7 @@ namespace mongo {
         // uassert on duplicate key
         void checkUniqueIndexes(const BSONObj &pk, const BSONObj &obj);
 
-        typedef std::vector<shared_ptr<IndexDetailsBase> > IndexVector;
+        typedef std::vector<shared_ptr<IndexInterface> > IndexVector;
         IndexVector _indexes;
 
         bool _indexBuildInProgress;
@@ -1349,10 +1358,8 @@ namespace mongo {
         }
 
         virtual int idxNo(const IndexDetails& idx) const {
-            for (PartitionedIndexVector::const_iterator it = _indexDetailsVector.begin(); 
-                 it != _indexDetailsVector.end();
-                 ++it)
-            {
+            for (vector< shared_ptr<IndexDetails> >::const_iterator it = _indexDetailsVector.begin();
+                 it != _indexDetailsVector.end(); ++it) {
                 const IndexDetails *index = it->get();
                 if (index == &idx) {
                     return it - _indexDetailsVector.begin();
@@ -1368,6 +1375,10 @@ namespace mongo {
 
         virtual int findIndexByKeyPattern(const BSONObj& keyPattern) const {
             return _partitions[0]->findIndexByKeyPattern(keyPattern);
+        }
+
+        virtual void findIndexByType(const string& name, vector<int> &matches) const {
+            return _partitions[0]->findIndexByType(name, matches);
         }
 
         virtual int findIdIndex() const {
@@ -1636,9 +1647,7 @@ namespace mongo {
         IndexCollVector _partitions;
         // Collection storing metadata about the PartitionedCollection
         shared_ptr<IndexedCollection> _metaCollection;
-
-        typedef std::vector<shared_ptr<PartitionedIndexDetails> > PartitionedIndexVector;
-        PartitionedIndexVector _indexDetailsVector; // one per index, which at this time means only one total
+        vector< shared_ptr<IndexDetails> > _indexDetailsVector; // one per index, which at this time means only one total
 
         // vector storing the ids of the partitions
         // This information is also stored in _metaCollection, but is cached

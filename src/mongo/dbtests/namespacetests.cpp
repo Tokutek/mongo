@@ -32,16 +32,16 @@ namespace NamespaceTests {
         class Base {
             Lock::GlobalWrite lk;
             Client::Context _context;
-            shared_ptr<IndexDetailsBase> _idx;
+            shared_ptr<IndexInterface> _idx;
         public:
-            IndexDetailsBase &idx() { return *_idx; }
+            IndexInterface &idx() { return *_idx; }
             Base() : lk(mongo::unittest::EMPTY_STRING), _context(ns()), _idx() {
             }
             virtual ~Base() {
             }
         protected:
             void create() {
-                _idx.reset(new IndexDetailsBase(info()));
+                _idx.reset(new IndexInterface(info()));
             }
             virtual bool isSparse() const {
                 return false;

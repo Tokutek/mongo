@@ -158,8 +158,9 @@ namespace mongo {
         _cl(cl),
         _idx(idx),
         _ordering(Ordering::make(_idx.keyPattern())),
-        _startKey(startKey),
-        _endKey(endKey),
+        // Geo indexes (2d) require that we massage the start/end key before using them
+        _startKey(idx.fixKey(startKey)),
+        _endKey(idx.fixKey(endKey)),
         _endKeyInclusive(endKeyInclusive),
         _multiKey(cl->isMultiKey(cl->idxNo(idx))),
         _direction(direction),
@@ -201,6 +202,7 @@ namespace mongo {
         _getf_iteration(0)
     {
         verify( _cl != NULL );
+        verify( _bounds );
         _boundsIterator.reset( new FieldRangeVectorIterator( *_bounds , singleIntervalLimit ) );
         _boundsIterator->prepDive();
         _startKey = _bounds->startKey();

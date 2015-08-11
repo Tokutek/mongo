@@ -359,53 +359,21 @@ namespace mongo {
             flags = fe.valuestrsafe();
             break;
         }
+        case BSONObj::opGEO_INTERSECTS:
         case BSONObj::opWITHIN: {
-            BSONObj shapeObj = fe.embeddedObject();
-            BSONObjIterator argIt(shapeObj);
-            uassert(16515, "Empty obj for $within: " + shapeObj.toString(), argIt.more());
-
-            BSONElement elt = argIt.next();
-            uassert(16516, "Within must be provided a BSONObj: " + elt.toString(),
-                    elt.isABSONObj());
-            BSONObj obj = elt.Obj();
-            BSONObjIterator coordIt(elt.Obj());
-            uassert(16517, "Malformed $within: ", coordIt.more());
-
-            if (str::equals(elt.fieldName(), "$box")) {
-                BSONElement minE = coordIt.next();
-                uassert(16518, "Malformed $box: " + obj.toString(), minE.isABSONObj());
-                uassert(16519, "Malformed $box: " + obj.toString(), coordIt.more());
-                BSONElement maxE = coordIt.next();
-                uassert(16520, "Malformed $box: " + obj.toString(), minE.isABSONObj());
-                _geo.push_back(GeoMatcher::makeBox(e.fieldName(), minE.Obj(), maxE.Obj()));
-            } else if (str::equals(elt.fieldName(), "$center")) {
-                BSONElement center = coordIt.next();
-                uassert(16521, "Malformed $center: " + obj.toString(), center.isABSONObj());
-                uassert(16522, "Malformed $center: " + obj.toString(), coordIt.more());
-                BSONElement radius = coordIt.next();
-                uassert(16523, "Malformed $center: " + obj.toString(), radius.isNumber());
-                _geo.push_back(
-                        GeoMatcher::makeCircle(e.fieldName(), center.Obj(), radius.number()));
-            } else if (str::equals(elt.fieldName(), "$polygon")) {
-                while (coordIt.more()) {
-                    BSONElement coord = coordIt.next();
-                    uassert(16524, "Malformed $polygon: " + obj.toString(), coord.isABSONObj());
-                    BSONObjIterator numIt(coord.Obj());
-                    uassert(16525, "Malformed $polygon: " + obj.toString(), numIt.more());
-                    BSONElement x = numIt.next();
-                    uassert(16526, "Malformed $polygon: " + obj.toString(), x.isNumber());
-                    uassert(16527, "Malformed $polygon: " + obj.toString(), numIt.more());
-                    BSONElement y = numIt.next();
-                    uassert(16528, "Malformed $polygon: " + obj.toString(), y.isNumber());
-                }
-                _geo.push_back(GeoMatcher::makePolygon(e.fieldName(), elt.Obj()));
-            } else {
-                uasserted(16529, "Couldn't pull any geometry out of $within query: " + obj.toString());
+            uassert(16516, "Within must be provided a BSONObj", e.isABSONObj());
+            BSONObj queryObj = e.Obj();
+            if (isNot) {
+                // Get to the $within/$geoIntersects hiding inside the $not.
+                queryObj = queryObj.firstElement().embeddedObject();
             }
+            GeoQuery query(e.fieldName());
+            uassert(16677, "Malformed geo query: " + queryObj.toString(),
+                    query.parseFrom(queryObj));
+            _geo.push_back(GeoMatcher(query, isNot));
             break;
         }
         case BSONObj::opNEAR:
-        case BSONObj::opGEO_INTERSECTS:
         case BSONObj::opMAX_DISTANCE:
             break;
         default:
@@ -985,13 +953,22 @@ namespace mongo {
         for (vector<GeoMatcher>::const_iterator it = _geo.begin(); it != _geo.end(); ++it) {
             verify(_constrainIndexKey.isEmpty());
             BSONElementSet s;
-            jsobj.getFieldsDotted(it->getFieldName().c_str(), s, false);
+            jsobj.getFieldsDotted(it->getField().c_str(), s, false);
             int matches = 0;
             for (BSONElementSet::const_iterator i = s.begin(); i != s.end(); ++i) {
-                if (!i->isABSONObj()) { continue; }
-                Point p;
-                if (!GeoMatcher::pointFrom(i->Obj(), &p)) { continue; }
-                if (it->containsPoint(p)) { ++matches; break; }
+                if (!i->isABSONObj()) { return false; }
+                GeometryContainer container;
+                if (container.parseFrom(i->Obj()) && it->matches(container)) {
+                    ++matches; break;
+                }
+                // Maybe it's an array of geometries.
+                BSONObjIterator geoIt(i->Obj());
+                while (geoIt.more()) {
+                    BSONElement e = geoIt.next();
+                    if (!e.isABSONObj()) { return false; }
+                    if (!container.parseFrom(e.embeddedObject())) { return false; }
+                    if (it->matches(container)) { ++matches; break; }
+                }
             }
             if (0 == matches) { return false; }
         }

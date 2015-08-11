@@ -187,7 +187,7 @@ doneCheckOrder:
         if ( !_scanAndOrderRequired &&
                 ( optimalIndexedQueryCount == _frs.numNonUniversalRanges() ) )
             _utility = Optimal;
-        _frv.reset( new FieldRangeVector( _frs, idxKey, _direction ) );
+        _frv.reset( new FieldRangeVector( _frs, idxKey, _index->getKeyGenerator(), _direction ) );
 
         if ( // If all field range constraints are on indexed fields and ...
              _utility == Optimal &&
@@ -204,6 +204,7 @@ doneCheckOrder:
         if ( originalFrsp ) {
             _originalFrv.reset( new FieldRangeVector( originalFrsp->frsForIndex( _cl, _idxNo ),
                                                       idxKey,
+                                                      _index->getKeyGenerator(),
                                                       _direction ) );
         }
         else {
@@ -238,7 +239,7 @@ doneCheckOrder:
 
     shared_ptr<Cursor> QueryPlan::newCursor(const bool requestCountingCursor) const {
 
-        if ( _index != NULL && _index->special() ) {
+        if ( _index != NULL && !_special.empty() ) {
             // hopefully safe to use original query in these contexts - don't think we can mix type
             // with $or clause separation yet
             int numWanted = 0;
