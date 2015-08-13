@@ -112,7 +112,7 @@ improvements to replication performance in TokuMX, including significantly
 reduced I/O load due to writes on secondaries.
 
 The details of the replication oplog are different in TokuMX.
-Applications that read the oplog and rely on the format its contents will
+Applications that read the oplog and rely on the format of its contents will
 need to change.  Therefore, "mixed" replica sets containing MongoDB and
 TokuMX nodes do not work.
 
