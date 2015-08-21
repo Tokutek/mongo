@@ -80,16 +80,10 @@ namespace mongo {
             return;
         }
 
-        // if we noticed that we were primary and that there was a second
-        // primary, we used to automatically step down and let an
-        // election decide who the new primary should be. With the
-        // new election protocol. This is not necessary.
-        // Consensus::shouldRelinquish will notice that someone 
-        // has a higher known primary, and will cause this machine
-        // to step down. Therefore, we just ignore the second primary.
-        if (!rs->box.getState().primary()) {
-            rs->box.noteRemoteIsPrimary(m);
+        if (rs->box.getState().primary()) {
+            rs->relinquish();
         }
+        rs->box.noteRemoteIsPrimary(m);
     }
 
     void Manager::checkElectableSet() {
