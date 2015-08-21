@@ -88,18 +88,22 @@ doTest = function (signal) {
     replTest.awaitReplication();
 
     print("disconnect primary from everywhere");
-    replTest.partition(newMasterID, origMasterID);
-    // make arbiter not be able to see primary, but allow primary
-    // to see arbiter (C). This way, primary still sees majority of set
-    // (itself and C), but because neither C nor B see A, C and B
-    // should elect a new primary
-    replTest.partition(2,origMasterID,false);
+    replTest.partition(2,origMasterID); // arbiter can no longer HB the orig master...
+    replTest.partition(newMasterID,origMasterID,false); // now the new master cannot see orig, causing election...
+    print("replRest partitioned arbiter from original master!");
+
     // wait for b to become master
     print("wait for new master");
     assert.soon(function() { return conns[newMasterID].getDB("admin").isMaster().ismaster; });
 
     print("connect B back");
-    replTest.unPartition(2,origMasterID,false);
+    replTest.unPartition(newMasterID,origMasterID,false);
+    print("B is now back");
+    print("sleeping 15 seconds before restoring arbiter's connection to orig master");
+    sleep(15 * 1000);
+    replTest.unPartition(2,origMasterID);
+    print("sleeping 60 seconds to see if state resolves itself");
+    sleep(60 * 1000);
 
     // let's verify that what was the original master is now secondary
     assert.soon(function() {var x = arb_conn.getDB("admin").runCommand({replSetGetStatus:1}); printjson(x); return x["members"][origMasterID]["state"] == 2});
@@ -108,8 +112,8 @@ doTest = function (signal) {
 
     pause("rollback_two_primaries.js SUCCESS");
     replTest.stopSet(signal);
-    };
+};
 
-    print("rollback_majority_bug.js");
+print("rollback_majority_bug.js");
 
-    doTest( 15 );
+doTest( 15 );
