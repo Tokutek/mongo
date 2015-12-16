@@ -32,29 +32,6 @@
 #include "mongo/db/query_optimizer.h"
 #include "mongo/db/commands/server_status.h"
 
-// BSON fields for oplog entries
-static const char *KEY_STR_OP_NAME = "op";
-static const char *KEY_STR_NS = "ns";
-static const char *KEY_STR_ROW = "o";
-static const char *KEY_STR_OLD_ROW = "o";
-static const char *KEY_STR_NEW_ROW = "o2";
-static const char *KEY_STR_MODS = "m";
-static const char *KEY_STR_QUERY = "q";
-static const char *KEY_STR_FLAGS = "f";
-static const char *KEY_STR_PK = "pk";
-static const char *KEY_STR_COMMENT = "o";
-static const char *KEY_STR_MIGRATE = "fromMigrate";
-
-// values for types of operations in oplog
-static const char OP_STR_INSERT[] = "i"; // normal insert
-static const char OP_STR_CAPPED_INSERT[] = "ci"; // insert into capped collection
-static const char OP_STR_UPDATE[] = "u"; // normal update with full pre-image and full post-image
-static const char OP_STR_UPDATE_ROW_WITH_MOD[] = "ur"; // update with full pre-image and mods to generate post-image
-static const char OP_STR_DELETE[] = "d"; // delete with full pre-image
-static const char OP_STR_CAPPED_DELETE[] = "cd"; // delete from capped collection
-static const char OP_STR_COMMENT[] = "n"; // a no-op
-static const char OP_STR_COMMAND[] = "c"; // command
-
 namespace mongo {
     static Counter64 slowUpdatesByPKPerformed;
     static ServerStatusMetricField<Counter64> fastupdatesPerformedPKDisplay("fastUpdates.performed.slowOnSecondary", &slowUpdatesByPKPerformed);

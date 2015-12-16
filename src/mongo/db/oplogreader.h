@@ -48,6 +48,18 @@ namespace mongo {
         }
         shared_ptr<DBClientConnection> conn_shared() { return _conn; }
         DBClientConnection* conn() { return _conn.get(); }
+
+        // NOTE: This method (getLastOp(const char *)) was removed/simplified in a previous commit
+        // and has been re-added for supporting the toku2mongo tool.  That original change was
+        // presumably made because many of the callers can safely assume that the namespace of the
+        // OpLog they want is in the global singleton string variable 'rsoplog' (hence the hardcoded
+        // reference in the newer implementation.)  As of TokuMX 2.0.2 this variable is currently
+        // set to "local.oplog.rs".  However, older tools _can_ have different namespaces, though
+        // the default for toku2mongo is clearly set to "local.oplog.rs".
+        BSONObj getLastOp(const char *ns) {
+            return conn()->findOne(ns, Query().sort(reverseIDObj), 0, QueryOption_SlaveOk);
+        }
+
         BSONObj getLastOp() {
             return conn()->findOne(rsoplog, Query().sort(reverseIDObj), 0, QueryOption_SlaveOk);
         }

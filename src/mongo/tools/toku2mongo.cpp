@@ -27,8 +27,8 @@
 #include "mongo/db/gtid.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/namespacestring.h"
+#include "mongo/db/oplog_helpers.h"
 #include "mongo/db/oplogreader.h"
-#include "mongo/db/oplog_field_names.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/log.h"
 #include "mongo/util/password.h"
@@ -62,33 +62,33 @@ class TokuOplogTool : public Tool {
         verify(opsArray.type() == mongo::Array);
         for (BSONObjIterator it(opsArray.Obj()); it.more(); ++it) {
             const BSONObj op = (*it).Obj();
-            const StringData type = op[KEY_STR_OP_NAME].Stringdata();
-            if (type == OP_STR_COMMENT) {
+            const StringData type = op[OplogHelpers::KEY_STR_OP_NAME].Stringdata();
+            if (type == OplogHelpers::OP_STR_COMMENT) {
                 // noop
                 continue;
             }
-            if (op[KEY_STR_NS].type() != String) {
+            if (op[OplogHelpers::KEY_STR_NS].type() != String) {
                 error() << "invalid ns in op " << op << endl;
                 return false;
             }
-            const char *ns = op[KEY_STR_NS].valuestrsafe();
-            if (type == OP_STR_INSERT || type == OP_STR_CAPPED_INSERT) {
-                const BSONObj obj = op[KEY_STR_ROW].Obj();
+            const char *ns = op[OplogHelpers::KEY_STR_NS].valuestrsafe();
+            if (type == OplogHelpers::OP_STR_INSERT || type == OplogHelpers::OP_STR_CAPPED_INSERT) {
+                const BSONObj obj = op[OplogHelpers::KEY_STR_ROW].Obj();
                 _conn->insert(ns, obj);
-            } else if (type == OP_STR_UPDATE) {
-                const BSONObj oldObj = op[KEY_STR_OLD_ROW].Obj();
-                const BSONObj newObj = op[KEY_STR_NEW_ROW].Obj();
+            } else if (type == OplogHelpers::OP_STR_UPDATE) {
+                const BSONObj oldObj = op[OplogHelpers::KEY_STR_OLD_ROW].Obj();
+                const BSONObj newObj = op[OplogHelpers::KEY_STR_NEW_ROW].Obj();
                 _conn->remove(ns, oldObj, true);
                 _conn->insert(ns, newObj);
-            } else if (type == OP_STR_UPDATE_ROW_WITH_MOD) {
-                const BSONObj id = primaryKeyToIdKey(op[KEY_STR_PK].Obj());
-                const BSONObj mods = op[KEY_STR_MODS].Obj();
+            } else if (type == OplogHelpers::OP_STR_UPDATE_ROW_WITH_MOD) {
+                const BSONObj id = primaryKeyToIdKey(op[OplogHelpers::KEY_STR_PK].Obj());
+                const BSONObj mods = op[OplogHelpers::KEY_STR_MODS].Obj();
                 _conn->update(ns, id, mods);
-            } else if (type == OP_STR_DELETE || type == OP_STR_CAPPED_DELETE) {
-                const BSONObj obj = op[KEY_STR_ROW].Obj();
+            } else if (type == OplogHelpers::OP_STR_DELETE || type == OplogHelpers::OP_STR_CAPPED_DELETE) {
+                const BSONObj obj = op[OplogHelpers::KEY_STR_ROW].Obj();
                 _conn->remove(ns, obj);
-            } else if (type == OP_STR_COMMAND) {
-                const BSONObj cmd = op[KEY_STR_ROW].Obj();
+            } else if (type == OplogHelpers::OP_STR_COMMAND) {
+                const BSONObj cmd = op[OplogHelpers::KEY_STR_ROW].Obj();
                 if (nsToCollectionSubstring(ns) != "$cmd") {
                     error() << "invalid command op " << op << endl;
                     return false;

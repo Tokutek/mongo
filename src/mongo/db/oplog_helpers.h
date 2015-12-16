@@ -53,6 +53,28 @@ namespace mongo {
     };
 
     namespace OplogHelpers {
+        // BSON fields for oplog entries
+        const char *const KEY_STR_OP_NAME = "op";
+        const char *const KEY_STR_NS = "ns";
+        const char *const KEY_STR_ROW = "o";
+        const char *const KEY_STR_OLD_ROW = "o";
+        const char *const KEY_STR_NEW_ROW = "o2";
+        const char *const KEY_STR_MODS = "m";
+        const char *const KEY_STR_QUERY = "q";
+        const char *const KEY_STR_FLAGS = "f";
+        const char *const KEY_STR_PK = "pk";
+        const char *const KEY_STR_COMMENT = "o";
+        const char *const KEY_STR_MIGRATE = "fromMigrate";
+
+        // values for types of operations in oplog
+        const char OP_STR_INSERT[] = "i"; // normal insert
+        const char OP_STR_CAPPED_INSERT[] = "ci"; // insert into capped collection
+        const char OP_STR_UPDATE[] = "u"; // normal update with full pre-image and full post-image
+        const char OP_STR_UPDATE_ROW_WITH_MOD[] = "ur"; // update with full pre-image and mods to generate post-image
+        const char OP_STR_DELETE[] = "d"; // delete with full pre-image
+        const char OP_STR_CAPPED_DELETE[] = "cd"; // delete from capped collection
+        const char OP_STR_COMMENT[] = "n"; // a no-op
+        const char OP_STR_COMMAND[] = "c"; // command
 
         // helper functions for sharding
         bool shouldLogOpForSharding(const char *opstr);
