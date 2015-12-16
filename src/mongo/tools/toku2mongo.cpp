@@ -46,6 +46,18 @@ using namespace mongo;
 namespace po = boost::program_options;
 
 class TokuOplogTool : public Tool {
+
+    BSONObj primaryKeyToIdKey(const BSONObj &pk) {
+        /* The last field of any primary key _must_ be the _id field. */
+        BSONElement e;
+        for (BSONObjIterator it(pk); it.more(); ++it) {
+            e = *it;
+        }
+        BSONObj o = BSON("_id" << e);
+        log() << "primaryKeyToIdKey: pk = " << pk << ", o = " << o << endl;
+        return o;
+    }
+
     bool applyOps(BSONElement opsArray) {
         verify(opsArray.type() == mongo::Array);
         for (BSONObjIterator it(opsArray.Obj()); it.more(); ++it) {
@@ -69,9 +81,9 @@ class TokuOplogTool : public Tool {
                 _conn->remove(ns, oldObj, true);
                 _conn->insert(ns, newObj);
             } else if (type == OP_STR_UPDATE_ROW_WITH_MOD) {
-                const BSONObj pk = op[KEY_STR_PK].Obj();
+                const BSONObj id = primaryKeyToIdKey(op[KEY_STR_PK].Obj());
                 const BSONObj mods = op[KEY_STR_MODS].Obj();
-                _conn->update(ns, pk, mods);
+                _conn->update(ns, id, mods);
             } else if (type == OP_STR_DELETE || type == OP_STR_CAPPED_DELETE) {
                 const BSONObj obj = op[KEY_STR_ROW].Obj();
                 _conn->remove(ns, obj);
