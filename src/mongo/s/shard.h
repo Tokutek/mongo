@@ -297,6 +297,9 @@ namespace mongo {
         // Controls whether we throw on initially failing to set a version
         static bool ignoreInitialVersionFailure;
 
+        // Use for settings timeout for connections between mongos and mongod
+        static double shardConnectionTimeout;
+
         /** checks all of my thread local connections for the version of this ns */
         static void checkMyConnectionVersions( const string & ns );
 

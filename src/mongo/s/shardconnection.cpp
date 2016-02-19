@@ -36,12 +36,21 @@
 namespace mongo {
 
     bool ShardConnection::ignoreInitialVersionFailure( false );
+    double ShardConnection::shardConnectionTimeout(1.0);
+
     ExportedServerParameter<bool>
         _ignoreInitialVersionFailure( ServerParameterSet::getGlobal(),
                                       "ignoreInitialVersionFailure",
                                       &ShardConnection::ignoreInitialVersionFailure,
                                       true,
                                       true );
+
+    ExportedServerParameter<double>
+        _shardConnectionTimeout( ServerParameterSet::getGlobal(),
+                                 "shardConnectionTimeout",
+                                 &ShardConnection::shardConnectionTimeout,
+                                 true,
+                                 true );
 
     DBConnectionPool shardConnectionPool;
 
@@ -171,7 +180,7 @@ namespace mongo {
                 s->avail = 0;
                 shardConnectionPool.onHandedOut( c.get() ); // May throw an exception
             } else {
-                c.reset( shardConnectionPool.get( addr ) );
+                c.reset( shardConnectionPool.get( addr, ShardConnection::shardConnectionTimeout ) );
                 s->created++; // After, so failed creation doesn't get counted
             }
             return c.release();
@@ -249,7 +258,7 @@ namespace mongo {
                     Status* s = _getStatus( sconnString );
 
                     if( ! s->avail ) {
-                        s->avail = shardConnectionPool.get( sconnString );
+                        s->avail = shardConnectionPool.get( sconnString, ShardConnection::shardConnectionTimeout );
                         s->created++; // After, so failed creation doesn't get counted
                     }
 
