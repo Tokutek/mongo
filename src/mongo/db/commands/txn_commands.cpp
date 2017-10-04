@@ -73,7 +73,7 @@ namespace mongo {
             else {
                 string iso = isoBSON.String();
                 if (iso == "serializable") {
-                    iso_flags = 0;
+                    iso_flags = DB_SERIALIZABLE;
                     uassert(16807, "Cannot set multi statement transaction to serializable on machine that is not primary", (!theReplSet || theReplSet->isPrimary()));
                 }
                 else if (iso == "mvcc") {
