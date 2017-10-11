@@ -377,6 +377,11 @@ if (TOKUMX_ENTERPRISE_USE_EXPORTS)
     include(${f})
   endforeach ()
   unset(_installer_scripts)
+
+elseif (TOKUMX_USE_GIT_VERSION_EXPORTS)
+
+  include(exported_git_versions.cmake)
+
 else ()
 
   git_version(TOKUMX "${CMAKE_SOURCE_DIR}")
